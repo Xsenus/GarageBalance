@@ -17,6 +17,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Garage> Garages => Set<Garage>();
     public DbSet<SupplierGroup> SupplierGroups => Set<SupplierGroup>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
+    public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
+    public DbSet<Tariff> Tariffs => Set<Tariff>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,6 +135,39 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany(group => group.Suppliers)
                 .HasForeignKey(supplier => supplier.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<IncomeType>(entity =>
+        {
+            entity.ToTable("income_types");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Code).HasMaxLength(80);
+            entity.HasIndex(item => item.Name).IsUnique();
+            entity.HasIndex(item => item.Code);
+        });
+
+        modelBuilder.Entity<ExpenseType>(entity =>
+        {
+            entity.ToTable("expense_types");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Code).HasMaxLength(80);
+            entity.HasIndex(item => item.Name).IsUnique();
+            entity.HasIndex(item => item.Code);
+        });
+
+        modelBuilder.Entity<Tariff>(entity =>
+        {
+            entity.ToTable("tariffs");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.CalculationBase).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.Rate).HasPrecision(18, 4);
+            entity.Property(item => item.Comment).HasMaxLength(1000);
+            entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique();
+            entity.HasIndex(item => item.CalculationBase);
+            entity.HasIndex(item => item.EffectiveFrom);
         });
     }
 }

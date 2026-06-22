@@ -131,6 +131,72 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("income-types")]
+    [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes(CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetIncomeTypesAsync(cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("income-types")]
+    [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountingTypeDto>> CreateIncomeType(UpsertAccountingTypeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateIncomeTypeAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetIncomeTypes), result.Value);
+    }
+
+    [HttpGet("expense-types")]
+    [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetExpenseTypes(CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetExpenseTypesAsync(cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("expense-types")]
+    [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountingTypeDto>> CreateExpenseType(UpsertAccountingTypeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateExpenseTypeAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetExpenseTypes), result.Value);
+    }
+
+    [HttpGet("tariffs")]
+    [ProducesResponseType<IReadOnlyList<TariffDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetTariffsAsync(search, cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("tariffs")]
+    [ProducesResponseType<TariffDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TariffDto>> CreateTariff(UpsertTariffRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateTariffAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetTariffs), new { search = result.Value!.Name }, result.Value);
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
@@ -147,7 +213,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.ErrorCode switch
         {
             "owner_not_found" or "garage_not_found" or "supplier_not_found" => NotFound(problem),
-            "garage_number_duplicate" or "supplier_group_duplicate" => Conflict(problem),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "income_type_duplicate" or "expense_type_duplicate" or "tariff_duplicate" => Conflict(problem),
             _ => BadRequest(problem)
         };
     }

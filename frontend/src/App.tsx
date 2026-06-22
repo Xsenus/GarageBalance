@@ -19,7 +19,7 @@ import {
 import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { dictionariesApi } from './services/dictionariesApi'
-import type { DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -63,6 +63,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлены финансовые справочники: виды поступлений, виды выплат и тарифы с датой начала действия.',
   'Добавлено управление пользователями: администратор может создать сотрудника, назначить роль и увидеть статус доступа.',
   'Добавлен контур входа: создание администратора, обычный вход и отображение текущего пользователя.',
   'Backend получил контроллеры авторизации, JWT, роли, права и audit-события.',
@@ -399,10 +400,16 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [groups, setGroups] = useState<SupplierGroupDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
+  const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [ownerForm, setOwnerForm] = useState({ lastName: '', firstName: '', phone: '' })
   const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '' })
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
+  const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
+  const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
+  const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -415,17 +422,23 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       setLoading(true)
       setError(null)
       try {
-        const [loadedOwners, loadedGarages, loadedGroups, loadedSuppliers] = await Promise.all([
+        const [loadedOwners, loadedGarages, loadedGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
           dictionaryClient.getOwners(auth.accessToken),
           dictionaryClient.getGarages(auth.accessToken),
           dictionaryClient.getSupplierGroups(auth.accessToken),
           dictionaryClient.getSuppliers(auth.accessToken),
+          dictionaryClient.getIncomeTypes(auth.accessToken),
+          dictionaryClient.getExpenseTypes(auth.accessToken),
+          dictionaryClient.getTariffs(auth.accessToken),
         ])
         if (!ignore) {
           setOwners(loadedOwners)
           setGarages(loadedGarages)
           setGroups(loadedGroups)
           setSuppliers(loadedSuppliers)
+          setIncomeTypes(loadedIncomeTypes)
+          setExpenseTypes(loadedExpenseTypes)
+          setTariffs(loadedTariffs)
         }
       } catch (caught) {
         if (!ignore) {
@@ -488,6 +501,33 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       })
       setSuppliers((items) => [supplier, ...items])
       setSupplierForm({ name: '', groupId: defaultGroupId, inn: '', startingBalance: 0 })
+    })
+  }
+
+  async function saveIncomeType(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('income-type', async () => {
+      const incomeType = await dictionaryClient.createIncomeType(auth.accessToken, incomeTypeForm)
+      setIncomeTypes((items) => [incomeType, ...items])
+      setIncomeTypeForm({ name: '', code: '' })
+    })
+  }
+
+  async function saveExpenseType(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('expense-type', async () => {
+      const expenseType = await dictionaryClient.createExpenseType(auth.accessToken, expenseTypeForm)
+      setExpenseTypes((items) => [expenseType, ...items])
+      setExpenseTypeForm({ name: '', code: '' })
+    })
+  }
+
+  async function saveTariff(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('tariff', async () => {
+      const tariff = await dictionaryClient.createTariff(auth.accessToken, tariffForm)
+      setTariffs((items) => [tariff, ...items])
+      setTariffForm((value) => ({ ...value, name: '', rate: 1 }))
     })
   }
 
@@ -578,6 +618,50 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           </form>
           <DictionaryList items={suppliers.map((supplier) => ({ id: supplier.id, title: supplier.name, meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''}` }))} emptyText="Поставщиков пока нет" />
         </div>
+      </div>
+
+      <div className="finance-settings-grid" aria-label="Финансовые настройки">
+        <form className="dictionary-form" onSubmit={saveIncomeType}>
+          <h3>Виды поступлений</h3>
+          <input aria-label="Название вида поступления" placeholder="Членский взнос" value={incomeTypeForm.name} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, name: event.target.value })} required />
+          <input aria-label="Код вида поступления" placeholder="Код" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} />
+          <button className="secondary-button" type="submit" disabled={saving === 'income-type'}>
+            <Plus size={16} />
+            <span>Добавить</span>
+          </button>
+          <DictionaryList items={incomeTypes.map((item) => ({ id: item.id, title: item.name, meta: item.code ?? 'код не указан' }))} emptyText="Видов поступлений пока нет" />
+        </form>
+
+        <form className="dictionary-form" onSubmit={saveExpenseType}>
+          <h3>Виды выплат</h3>
+          <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
+          <input aria-label="Код вида выплаты" placeholder="Код" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} />
+          <button className="secondary-button" type="submit" disabled={saving === 'expense-type'}>
+            <Plus size={16} />
+            <span>Добавить</span>
+          </button>
+          <DictionaryList items={expenseTypes.map((item) => ({ id: item.id, title: item.name, meta: item.code ?? 'код не указан' }))} emptyText="Видов выплат пока нет" />
+        </form>
+
+        <form className="dictionary-form" onSubmit={saveTariff}>
+          <h3>Тарифы</h3>
+          <input aria-label="Название тарифа" placeholder="Вода" value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
+          <select aria-label="База расчета тарифа" value={tariffForm.calculationBase} onChange={(event) => setTariffForm({ ...tariffForm, calculationBase: event.target.value })}>
+            <option value="fixed">Фиксированно</option>
+            <option value="people">По людям</option>
+            <option value="meter_water">По счетчику воды</option>
+            <option value="meter_electricity">По счетчику электричества</option>
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
+            <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
+          </div>
+          <button className="secondary-button" type="submit" disabled={saving === 'tariff'}>
+            <Plus size={16} />
+            <span>Добавить</span>
+          </button>
+          <DictionaryList items={tariffs.map((item) => ({ id: item.id, title: item.name, meta: `${item.rate} с ${item.effectiveFrom}` }))} emptyText="Тарифов пока нет" />
+        </form>
       </div>
     </section>
   )

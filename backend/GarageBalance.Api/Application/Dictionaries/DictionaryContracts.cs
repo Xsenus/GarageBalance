@@ -70,3 +70,25 @@ public sealed record UpsertSupplierRequest(
     [property: EmailAddress, MaxLength(320)] string? Email,
     decimal StartingBalance,
     [property: MaxLength(1000)] string? Comment);
+
+public sealed record AccountingTypeDto(Guid Id, string Name, string? Code, bool IsSystem, bool IsArchived);
+
+public sealed record UpsertAccountingTypeRequest(
+    [property: Required, MaxLength(200)] string Name,
+    [property: MaxLength(80)] string? Code);
+
+public sealed record TariffDto(
+    Guid Id,
+    string Name,
+    string CalculationBase,
+    decimal Rate,
+    DateOnly EffectiveFrom,
+    string? Comment,
+    bool IsArchived);
+
+public sealed record UpsertTariffRequest(
+    [property: Required, MaxLength(200)] string Name,
+    [property: Required, MaxLength(80)] string CalculationBase,
+    [property: Range(0.0001, 999999999)] decimal Rate,
+    DateOnly EffectiveFrom,
+    [property: MaxLength(1000)] string? Comment);

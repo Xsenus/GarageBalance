@@ -45,6 +45,24 @@ export type SupplierDto = {
   isArchived: boolean
 }
 
+export type AccountingTypeDto = {
+  id: string
+  name: string
+  code: string | null
+  isSystem: boolean
+  isArchived: boolean
+}
+
+export type TariffDto = {
+  id: string
+  name: string
+  calculationBase: string
+  rate: number
+  effectiveFrom: string
+  comment: string | null
+  isArchived: boolean
+}
+
 export type UpsertOwnerRequest = {
   lastName: string
   firstName: string
@@ -80,6 +98,19 @@ export type UpsertSupplierRequest = {
   comment?: string
 }
 
+export type UpsertAccountingTypeRequest = {
+  name: string
+  code?: string
+}
+
+export type UpsertTariffRequest = {
+  name: string
+  calculationBase: string
+  rate: number
+  effectiveFrom: string
+  comment?: string
+}
+
 export type DictionaryClient = {
   getOwners(accessToken: string, search?: string): Promise<OwnerDto[]>
   createOwner(accessToken: string, request: UpsertOwnerRequest): Promise<OwnerDto>
@@ -89,6 +120,12 @@ export type DictionaryClient = {
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   getSuppliers(accessToken: string, groupId?: string, search?: string): Promise<SupplierDto[]>
   createSupplier(accessToken: string, request: UpsertSupplierRequest): Promise<SupplierDto>
+  getIncomeTypes(accessToken: string): Promise<AccountingTypeDto[]>
+  createIncomeType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
+  getExpenseTypes(accessToken: string): Promise<AccountingTypeDto[]>
+  createExpenseType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
+  getTariffs(accessToken: string, search?: string): Promise<TariffDto[]>
+  createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
@@ -147,5 +184,23 @@ export const dictionariesApi: DictionaryClient = {
   },
   createSupplier(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/suppliers', { method: 'POST', body: JSON.stringify(request) })
+  },
+  getIncomeTypes(accessToken) {
+    return requestJson(accessToken, '/api/dictionaries/income-types')
+  },
+  createIncomeType(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/income-types', { method: 'POST', body: JSON.stringify(request) })
+  },
+  getExpenseTypes(accessToken) {
+    return requestJson(accessToken, '/api/dictionaries/expense-types')
+  },
+  createExpenseType(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/expense-types', { method: 'POST', body: JSON.stringify(request) })
+  },
+  getTariffs(accessToken, search) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search }))
+  },
+  createTariff(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/tariffs', { method: 'POST', body: JSON.stringify(request) })
   },
 }

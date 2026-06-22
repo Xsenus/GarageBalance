@@ -49,6 +49,9 @@ npm run dev
 - `GET/POST /api/dictionaries/garages` - гаражи.
 - `GET/POST /api/dictionaries/supplier-groups` - группы поставщиков.
 - `GET/POST /api/dictionaries/suppliers` - поставщики.
+- `GET/POST /api/dictionaries/income-types` - виды поступлений.
+- `GET/POST /api/dictionaries/expense-types` - виды выплат.
+- `GET/POST /api/dictionaries/tariffs` - тарифы с датой действия.
 
 Docker-заготовка:
 

@@ -265,6 +265,107 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.IncomeTypes.AsNoTracking()
+            .Where(item => !item.IsArchived)
+            .OrderBy(item => item.Name)
+            .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var name = request.Name.Trim();
+        if (await dbContext.IncomeTypes.AnyAsync(item => item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
+        }
+
+        var incomeType = new IncomeType
+        {
+            Name = name,
+            Code = NormalizeOptional(request.Code)
+        };
+
+        dbContext.IncomeTypes.Add(incomeType);
+        AddAudit(actorUserId, "dictionary.income_type_created", "income_type", incomeType.Id, $"Создан вид поступления {incomeType.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+    }
+
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.ExpenseTypes.AsNoTracking()
+            .Where(item => !item.IsArchived)
+            .OrderBy(item => item.Name)
+            .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var name = request.Name.Trim();
+        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
+        }
+
+        var expenseType = new ExpenseType
+        {
+            Name = name,
+            Code = NormalizeOptional(request.Code)
+        };
+
+        dbContext.ExpenseTypes.Add(expenseType);
+        AddAudit(actorUserId, "dictionary.expense_type_created", "expense_type", expenseType.Id, $"Создан вид выплаты {expenseType.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
+    }
+
+    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken)
+    {
+        var query = dbContext.Tariffs.AsNoTracking().Where(item => !item.IsArchived);
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item =>
+                item.Name.ToLower().Contains(normalizedSearch) ||
+                item.CalculationBase.ToLower().Contains(normalizedSearch));
+        }
+
+        return await query
+            .OrderByDescending(item => item.EffectiveFrom)
+            .ThenBy(item => item.Name)
+            .Take(ListLimit)
+            .Select(item => ToTariffDto(item))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<TariffDto>> CreateTariffAsync(UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var name = request.Name.Trim();
+        var calculationBase = request.CalculationBase.Trim();
+        if (await dbContext.Tariffs.AnyAsync(item => item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
+        }
+
+        var tariff = new Tariff
+        {
+            Name = name,
+            CalculationBase = calculationBase,
+            Rate = request.Rate,
+            EffectiveFrom = request.EffectiveFrom,
+            Comment = NormalizeOptional(request.Comment)
+        };
+
+        dbContext.Tariffs.Add(tariff);
+        AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
+    }
+
     private async Task<Owner?> FindOwnerOrNullAsync(Guid? ownerId, CancellationToken cancellationToken)
     {
         return ownerId is null
@@ -329,5 +430,17 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             supplier.StartingBalance,
             supplier.Comment,
             supplier.IsArchived);
+    }
+
+    private static TariffDto ToTariffDto(Tariff tariff)
+    {
+        return new TariffDto(
+            tariff.Id,
+            tariff.Name,
+            tariff.CalculationBase,
+            tariff.Rate,
+            tariff.EffectiveFrom,
+            tariff.Comment,
+            tariff.IsArchived);
     }
 }

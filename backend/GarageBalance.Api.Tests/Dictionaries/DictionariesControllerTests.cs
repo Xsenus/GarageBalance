@@ -58,6 +58,23 @@ public sealed class DictionariesControllerTests
         Assert.Equal(actorUserId, service.LastActorUserId);
     }
 
+    [Fact]
+    public async Task CreateTariff_ReturnsConflictForDuplicateTariff()
+    {
+        var controller = CreateController(new FakeDictionaryService
+        {
+            CreateTariffResult = DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.")
+        });
+
+        var result = await controller.CreateTariff(
+            new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 7, 1), null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("tariff_duplicate", problem.Title);
+    }
+
     private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
     {
         var controller = new DictionariesController(service);
@@ -75,6 +92,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> CreateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> UpdateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken)
         {
@@ -132,6 +150,37 @@ public sealed class DictionariesControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(UpdateSupplierResult);
+        }
+
+        public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
+        }
+
+        public Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Duplicate."));
+        }
+
+        public Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
+        }
+
+        public Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Duplicate."));
+        }
+
+        public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<TariffDto>>([]);
+        }
+
+        public Task<DictionaryResult<TariffDto>> CreateTariffAsync(UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateTariffResult);
         }
     }
 }

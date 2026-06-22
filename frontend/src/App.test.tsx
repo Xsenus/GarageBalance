@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
-import type { DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
@@ -37,6 +37,8 @@ describe('App', () => {
     expect(within(dictionaryPanel).getAllByText('Иванов Иван').length).toBeGreaterThan(0)
     expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Членский взнос')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Тариф воды')).toBeInTheDocument()
   })
 
   it('adds managed user from protected workspace', async () => {
@@ -87,6 +89,34 @@ describe('App', () => {
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000')).toBeInTheDocument()
+  })
+
+  it('adds income type, expense type and tariff from dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createStatefulDictionaryClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название вида поступления'), 'Целевой взнос')
+    await user.type(within(dictionaryPanel).getByLabelText('Код вида поступления'), 'target')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[3])
+    expect(await within(dictionaryPanel).findByText('Целевой взнос')).toBeInTheDocument()
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название вида выплаты'), 'Вывоз мусора')
+    await user.type(within(dictionaryPanel).getByLabelText('Код вида выплаты'), 'trash')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[4])
+    expect(await within(dictionaryPanel).findByText('Вывоз мусора')).toBeInTheDocument()
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название тарифа'), 'Мусор')
+    await user.selectOptions(within(dictionaryPanel).getByLabelText('База расчета тарифа'), 'people')
+    await user.clear(within(dictionaryPanel).getByLabelText('Ставка тарифа'))
+    await user.type(within(dictionaryPanel).getByLabelText('Ставка тарифа'), '150')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[5])
+    expect(await within(dictionaryPanel).findByText('Мусор')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('150 с 2026-07-01')).toBeInTheDocument()
   })
 
   it('shows login errors without opening protected workspace', async () => {
@@ -203,6 +233,9 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   const garage = createGarage({ id: 'garage-1', number: '12', ownerId: owner.id, ownerName: owner.fullName })
   const group = createGroup({ id: 'group-1', name: 'Коммунальные услуги' })
   const supplier = createSupplier({ id: 'supplier-1', name: 'Водоканал', groupId: group.id, groupName: group.name, inn: '5401' })
+  const incomeType = createAccountingType({ id: 'income-type-1', name: 'Членский взнос', code: 'membership' })
+  const expenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
+  const tariff = createTariff({ id: 'tariff-1', name: 'Тариф воды', calculationBase: 'meter_water', rate: 50, effectiveFrom: '2026-07-01' })
 
   return {
     getOwners: async () => [owner],
@@ -213,6 +246,12 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     createSupplierGroup: async () => group,
     getSuppliers: async () => [supplier],
     createSupplier: async () => supplier,
+    getIncomeTypes: async () => [incomeType],
+    createIncomeType: async () => incomeType,
+    getExpenseTypes: async () => [expenseType],
+    createExpenseType: async () => expenseType,
+    getTariffs: async () => [tariff],
+    createTariff: async () => tariff,
     ...overrides,
   }
 }
@@ -255,6 +294,19 @@ function createStatefulDictionaryClient(): DictionaryClient {
         inn: request.inn ?? null,
       })
     },
+    getIncomeTypes: async () => [],
+    createIncomeType: async (_token, request) => createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null }),
+    getExpenseTypes: async () => [],
+    createExpenseType: async (_token, request) => createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null }),
+    getTariffs: async () => [],
+    createTariff: async (_token, request) =>
+      createTariff({
+        id: crypto.randomUUID(),
+        name: request.name,
+        calculationBase: request.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+      }),
   }
 }
 
@@ -349,6 +401,30 @@ function createSupplier(overrides: Partial<SupplierDto>): SupplierDto {
     phone: null,
     email: null,
     startingBalance: 0,
+    comment: null,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createAccountingType(overrides: Partial<AccountingTypeDto>): AccountingTypeDto {
+  return {
+    id: 'accounting-type',
+    name: 'Тип',
+    code: null,
+    isSystem: false,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createTariff(overrides: Partial<TariffDto>): TariffDto {
+  return {
+    id: 'tariff',
+    name: 'Тариф',
+    calculationBase: 'fixed',
+    rate: 1,
+    effectiveFrom: '2026-07-01',
     comment: null,
     isArchived: false,
     ...overrides,

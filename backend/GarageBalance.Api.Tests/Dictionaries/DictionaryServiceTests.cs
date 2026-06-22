@@ -149,6 +149,63 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Коммунальные услуги", supplier.GroupName);
     }
 
+    [Fact]
+    public async Task CreateIncomeTypeAsync_RejectsDuplicateName()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership"), null, CancellationToken.None);
+
+        var result = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership2"), null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("income_type_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExpenseTypeAsync_WritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Электроэнергия", result.Value!.Name);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.expense_type_created" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task CreateTariffAsync_RejectsDuplicateNameAndDate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var effectiveFrom = new DateOnly(2026, 7, 1);
+        await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50.25m, effectiveFrom, null), null, CancellationToken.None);
+
+        var result = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 60m, effectiveFrom, null), null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetTariffsAsync_SearchesAndOrdersByEffectiveDate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100m, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
+        await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 120m, new DateOnly(2026, 2, 1), null), null, CancellationToken.None);
+        await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
+
+        var result = await service.GetTariffsAsync("people", CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(new DateOnly(2026, 2, 1), result[0].EffectiveFrom);
+        Assert.Equal(120m, result[0].Rate);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
