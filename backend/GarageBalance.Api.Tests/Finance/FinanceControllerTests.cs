@@ -61,6 +61,41 @@ public sealed class FinanceControllerTests
         Assert.Equal("garage_not_found", problem.Title);
     }
 
+    [Fact]
+    public async Task CreateAccrual_ReturnsConflictForDuplicateAccrual()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateAccrualResult = FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Начисление уже внесено.")
+        });
+
+        var result = await controller.CreateAccrual(
+            new CreateAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), 100m, "regular", null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("accrual_duplicate", problem.Title);
+    }
+
+    [Fact]
+    public async Task CreateAccrual_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            CreateAccrualResult = FinanceResult<AccrualDto>.Success(CreateAccrual())
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateAccrual(
+            new CreateAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), 100m, "regular", null),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
     private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
     {
         var controller = new FinanceController(service);
@@ -94,20 +129,42 @@ public sealed class FinanceControllerTests
             false);
     }
 
+    private static AccrualDto CreateAccrual()
+    {
+        return new AccrualDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "12",
+            "Иванов Иван",
+            Guid.NewGuid(),
+            "Членский взнос",
+            new DateOnly(2026, 6, 1),
+            100m,
+            "regular",
+            null,
+            false);
+    }
+
     private sealed class FakeFinanceService : IFinanceService
     {
         public Guid? LastActorUserId { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlyList<FinancialOperationDto>>([]);
         }
 
+        public Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<AccrualDto>>([]);
+        }
+
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new FinanceSummaryDto(0, 0, 0, 0));
+            return Task.FromResult(new FinanceSummaryDto(0, 0, 0, 0, 0, 0, 0));
         }
 
         public Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -120,6 +177,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateExpenseResult);
+        }
+
+        public Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateAccrualResult);
         }
     }
 }

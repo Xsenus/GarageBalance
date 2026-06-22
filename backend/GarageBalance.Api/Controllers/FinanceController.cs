@@ -23,6 +23,17 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetOperationsAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search), cancellationToken));
     }
 
+    [HttpGet("accruals")]
+    [ProducesResponseType<IReadOnlyList<AccrualDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AccrualDto>>> GetAccruals(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetAccrualsAsync(new AccrualListRequest(monthFrom, monthTo, search), cancellationToken));
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType<FinanceSummaryDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinanceSummaryDto>> GetSummary(
@@ -63,6 +74,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
             : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("accruals")]
+    [ProducesResponseType<AccrualDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccrualDto>> CreateAccrual(CreateAccrualRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateAccrualAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetAccruals), new { search = result.Value!.GarageNumber }, result.Value)
+            : ToError(result);
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
@@ -79,7 +104,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" => NotFound(problem),
-            "operation_duplicate" => Conflict(problem),
+            "operation_duplicate" or "accrual_duplicate" => Conflict(problem),
             _ => BadRequest(problem)
         };
     }

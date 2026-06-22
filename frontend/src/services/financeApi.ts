@@ -21,8 +21,25 @@ export type FinancialOperationDto = {
 export type FinanceSummaryDto = {
   incomeTotal: number
   expenseTotal: number
+  accrualTotal: number
   balance: number
+  debt: number
   operationCount: number
+  accrualCount: number
+}
+
+export type AccrualDto = {
+  id: string
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  incomeTypeId: string
+  incomeTypeName: string
+  accountingMonth: string
+  amount: number
+  source: 'manual' | 'regular'
+  comment: string | null
+  isCanceled: boolean
 }
 
 export type CreateIncomeOperationRequest = {
@@ -45,11 +62,22 @@ export type CreateExpenseOperationRequest = {
   comment?: string
 }
 
+export type CreateAccrualRequest = {
+  garageId: string
+  incomeTypeId: string
+  accountingMonth: string
+  amount: number
+  source: 'manual' | 'regular'
+  comment?: string
+}
+
 export type FinanceClient = {
   getOperations(accessToken: string): Promise<FinancialOperationDto[]>
+  getAccruals(accessToken: string): Promise<AccrualDto[]>
   getSummary(accessToken: string): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
+  createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
@@ -76,6 +104,9 @@ export const financeApi: FinanceClient = {
   getOperations(accessToken) {
     return requestJson(accessToken, '/api/finance/operations')
   },
+  getAccruals(accessToken) {
+    return requestJson(accessToken, '/api/finance/accruals')
+  },
   getSummary(accessToken) {
     return requestJson(accessToken, '/api/finance/summary')
   },
@@ -84,5 +115,8 @@ export const financeApi: FinanceClient = {
   },
   createExpense(accessToken, request) {
     return requestJson(accessToken, '/api/finance/expense', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createAccrual(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })
   },
 }

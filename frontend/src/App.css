@@ -421,13 +421,13 @@ h1 {
 
 .finance-grid {
   display: grid;
-  grid-template-columns: 320px 320px minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(250px, 320px));
   gap: 12px;
 }
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -581,6 +581,7 @@ h1 {
 
 .operation-list {
   overflow: hidden;
+  grid-column: span 1;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
   background: #fcfcfd;
@@ -614,7 +615,8 @@ h1 {
 }
 
 .money-income,
-.money-expense {
+.money-expense,
+.money-accrual {
   font-weight: 750;
   text-align: right;
 }
@@ -625,6 +627,10 @@ h1 {
 
 .money-expense {
   color: #b42318;
+}
+
+.money-accrual {
+  color: #1849a9;
 }
 
 .status-active,

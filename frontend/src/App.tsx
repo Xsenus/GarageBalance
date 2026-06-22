@@ -21,7 +21,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -66,6 +66,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлены ручные начисления по гаражам: месяц учета, вид начисления, сумма, комментарий и расчет задолженности.',
   'Добавлен первый рабочий учет денег: поступления по гаражам, выплаты поставщикам, итоги и последние операции.',
   'Добавлены финансовые справочники: виды поступлений, виды выплат и тарифы с датой начала действия.',
   'Добавлено управление пользователями: администратор может создать сотрудника, назначить роль и увидеть статус доступа.',
@@ -302,9 +303,11 @@ function FinancePanel({
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
-  const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, balance: 0, operationCount: 0 })
+  const [accruals, setAccruals] = useState<AccrualDto[]>([])
+  const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0 })
   const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
+  const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, comment: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -315,12 +318,13 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedOperations, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedOperations, loadedAccruals, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken),
           dictionaryClient.getSuppliers(auth.accessToken),
           dictionaryClient.getIncomeTypes(auth.accessToken),
           dictionaryClient.getExpenseTypes(auth.accessToken),
           financeClient.getOperations(auth.accessToken),
+          financeClient.getAccruals(auth.accessToken),
           financeClient.getSummary(auth.accessToken),
         ])
         if (!ignore) {
@@ -329,9 +333,11 @@ function FinancePanel({
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
           setOperations(loadedOperations)
+          setAccruals(loadedAccruals)
           setSummary(loadedSummary)
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+          setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         }
       } catch (caught) {
         if (!ignore) {
@@ -382,6 +388,28 @@ function FinancePanel({
     })
   }
 
+  async function saveAccrual(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('accrual', async () => {
+      const accrual = await financeClient.createAccrual(auth.accessToken, {
+        garageId: accrualForm.garageId,
+        incomeTypeId: accrualForm.incomeTypeId,
+        accountingMonth: accrualForm.accountingMonth,
+        amount: accrualForm.amount,
+        source: 'manual',
+        comment: accrualForm.comment,
+      })
+      setAccruals((items) => [accrual, ...items])
+      setSummary((value) => ({
+        ...value,
+        accrualTotal: value.accrualTotal + accrual.amount,
+        debt: value.debt + accrual.amount,
+        accrualCount: value.accrualCount + 1,
+      }))
+      setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
+    })
+  }
+
   function addOperation(operation: FinancialOperationDto) {
     setOperations((items) => [operation, ...items])
     setSummary((value) => {
@@ -391,7 +419,10 @@ function FinancePanel({
         incomeTotal: value.incomeTotal + incomeDelta,
         expenseTotal: value.expenseTotal + expenseDelta,
         balance: value.balance + incomeDelta - expenseDelta,
+        debt: value.debt - incomeDelta,
         operationCount: value.operationCount + 1,
+        accrualTotal: value.accrualTotal,
+        accrualCount: value.accrualCount,
       }
     })
   }
@@ -424,6 +455,14 @@ function FinancePanel({
         <div>
           <span>Поступления</span>
           <strong>{formatMoney(summary.incomeTotal)}</strong>
+        </div>
+        <div>
+          <span>Начислено</span>
+          <strong>{formatMoney(summary.accrualTotal)}</strong>
+        </div>
+        <div>
+          <span>Задолженность</span>
+          <strong>{formatMoney(summary.debt)}</strong>
         </div>
         <div>
           <span>Выплаты</span>
@@ -508,6 +547,39 @@ function FinancePanel({
           </button>
         </form>
 
+        <form className="dictionary-form" onSubmit={saveAccrual}>
+          <h3>Ручное начисление</h3>
+          <select aria-label="Гараж для начисления" value={accrualForm.garageId} onChange={(event) => setAccrualForm({ ...accrualForm, garageId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите гараж
+            </option>
+            {garages.map((garage) => (
+              <option value={garage.id} key={garage.id}>
+                Гараж {garage.number}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Вид начисления" value={accrualForm.incomeTypeId} onChange={(event) => setAccrualForm({ ...accrualForm, incomeTypeId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите вид
+            </option>
+            {incomeTypes.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Месяц начисления" type="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setAccrualForm({ ...accrualForm, accountingMonth: `${event.target.value}-01` })} required />
+            <input aria-label="Сумма начисления" type="number" min="0.01" step="0.01" value={accrualForm.amount} onChange={(event) => setAccrualForm({ ...accrualForm, amount: Number(event.target.value) })} required />
+          </div>
+          <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
+          <button className="secondary-button" type="submit" disabled={saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
+            <Plus size={16} />
+            <span>Начислить</span>
+          </button>
+        </form>
+
         <div className="operation-list" role="table" aria-label="Последние платежи">
           <div className="operation-row header" role="row">
             <span role="columnheader">Дата</span>
@@ -525,6 +597,27 @@ function FinancePanel({
               <span role="cell" className={operation.operationKind === 'income' ? 'money-income' : 'money-expense'}>
                 {operation.operationKind === 'income' ? '+' : '-'}
                 {formatMoney(operation.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="Последние начисления">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Месяц</span>
+            <span role="columnheader">Начисление</span>
+            <span role="columnheader">Сумма</span>
+          </div>
+          {accruals.length === 0 ? <p className="empty-state">Начислений пока нет</p> : null}
+          {accruals.slice(0, 8).map((accrual) => (
+            <div className="operation-row" role="row" key={accrual.id}>
+              <span role="cell">{accrual.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">
+                <strong>{accrual.incomeTypeName}</strong>
+                <small>Гараж {accrual.garageNumber}</small>
+              </span>
+              <span role="cell" className="money-accrual">
+                {formatMoney(accrual.amount)}
               </span>
             </div>
           ))}

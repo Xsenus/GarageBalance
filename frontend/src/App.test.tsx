@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
@@ -43,6 +43,8 @@ describe('App', () => {
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     expect(within(financePanel).getAllByText('1 500,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
@@ -148,6 +150,24 @@ describe('App', () => {
 
     expect(await within(financePanel).findByText('-500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
+  })
+
+  it('creates manual accrual and updates debt from payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
+    await user.click(within(financePanel).getByRole('button', { name: 'Начислить' }))
+
+    expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
+    expect(within(financePanel).getByRole('table', { name: 'Последние начисления' })).toBeInTheDocument()
   })
 
   it('shows login errors without opening protected workspace', async () => {
@@ -300,27 +320,33 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     garageNumber: '12',
     incomeTypeName: 'Членский взнос',
   })
+  const accrual = createAccrual({ id: 'accrual-1', amount: 2000, garageNumber: '12', incomeTypeName: 'Членский взнос' })
 
   return {
     getOperations: async () => [operation],
-    getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, balance: 1500, operationCount: 1 }),
+    getAccruals: async () => [accrual],
+    getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1 }),
     createIncome: async () => operation,
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
+    createAccrual: async () => accrual,
     ...overrides,
   }
 }
 
 function createStatefulFinanceClient(): FinanceClient {
   let operations: FinancialOperationDto[] = []
+  let accruals: AccrualDto[] = []
 
   function summary(): FinanceSummaryDto {
     const incomeTotal = operations.filter((item) => item.operationKind === 'income').reduce((sum, item) => sum + item.amount, 0)
     const expenseTotal = operations.filter((item) => item.operationKind === 'expense').reduce((sum, item) => sum + item.amount, 0)
-    return { incomeTotal, expenseTotal, balance: incomeTotal - expenseTotal, operationCount: operations.length }
+    const accrualTotal = accruals.reduce((sum, item) => sum + item.amount, 0)
+    return { incomeTotal, expenseTotal, accrualTotal, balance: incomeTotal - expenseTotal, debt: accrualTotal - incomeTotal, operationCount: operations.length, accrualCount: accruals.length }
   }
 
   return {
     getOperations: async () => operations,
+    getAccruals: async () => accruals,
     getSummary: async () => summary(),
     createIncome: async (_token, request) => {
       const operation = createFinancialOperation({
@@ -346,6 +372,19 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       operations = [operation, ...operations]
       return operation
+    },
+    createAccrual: async (_token, request) => {
+      const accrual = createAccrual({
+        id: crypto.randomUUID(),
+        garageId: request.garageId,
+        incomeTypeId: request.incomeTypeId,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        source: request.source,
+        comment: request.comment ?? null,
+      })
+      accruals = [accrual, ...accruals]
+      return accrual
     },
   }
 }
@@ -543,6 +582,23 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     supplierName: null,
     expenseTypeId: null,
     expenseTypeName: null,
+    isCanceled: false,
+    ...overrides,
+  }
+}
+
+function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
+  return {
+    id: 'accrual',
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    incomeTypeId: 'income-type-1',
+    incomeTypeName: 'Членский взнос',
+    accountingMonth: '2026-06-01',
+    amount: 100,
+    source: 'manual',
+    comment: null,
     isCanceled: false,
     ...overrides,
   }

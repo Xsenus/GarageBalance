@@ -22,6 +22,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
+    public DbSet<Accrual> Accruals => Set<Accrual>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -201,6 +202,27 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(operation => operation.ExpenseType)
                 .WithMany()
                 .HasForeignKey(operation => operation.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Accrual>(entity =>
+        {
+            entity.ToTable("accruals");
+            entity.HasKey(accrual => accrual.Id);
+            entity.Property(accrual => accrual.Amount).HasPrecision(18, 2);
+            entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
+            entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
+            entity.HasIndex(accrual => accrual.AccountingMonth);
+            entity.HasIndex(accrual => accrual.GarageId);
+            entity.HasIndex(accrual => accrual.IncomeTypeId);
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source }).IsUnique();
+            entity.HasOne(accrual => accrual.Garage)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(accrual => accrual.IncomeType)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.IncomeTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

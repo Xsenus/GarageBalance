@@ -19,18 +19,31 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
+    {
+        return await ApplyAccrualFilters(QueryAccruals(), request)
+            .OrderByDescending(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.Garage.Number)
+            .Take(ListLimit)
+            .Select(accrual => ToDto(accrual))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {
         var operations = ApplyFilters(dbContext.FinancialOperations.AsNoTracking().Where(operation => !operation.IsCanceled), request);
+        var accruals = ApplyAccrualFilters(dbContext.Accruals.AsNoTracking().Where(accrual => !accrual.IsCanceled), new AccrualListRequest(request.DateFrom, request.DateTo, request.Search));
         var incomeTotal = await operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
             .SumAsync(operation => operation.Amount, cancellationToken);
         var expenseTotal = await operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense)
             .SumAsync(operation => operation.Amount, cancellationToken);
+        var accrualTotal = await accruals.SumAsync(accrual => accrual.Amount, cancellationToken);
         var operationCount = await operations.CountAsync(cancellationToken);
+        var accrualCount = await accruals.CountAsync(cancellationToken);
 
-        return new FinanceSummaryDto(incomeTotal, expenseTotal, incomeTotal - expenseTotal, operationCount);
+        return new FinanceSummaryDto(incomeTotal, expenseTotal, accrualTotal, incomeTotal - expenseTotal, accrualTotal - incomeTotal, operationCount, accrualCount);
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -113,6 +126,62 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<FinancialOperationDto>.Success(ToDto(operation));
     }
 
+    public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var source = request.Source.Trim();
+        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_comment_required", "Для ручного начисления нужен комментарий.");
+        }
+
+        if (source is not AccrualSources.Manual and not AccrualSources.Regular)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_source_invalid", "Источник начисления должен быть manual или regular.");
+        }
+
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
+        }
+
+        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
+        }
+
+        var month = NormalizeMonth(request.AccountingMonth);
+        if (await dbContext.Accruals.AnyAsync(
+            accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garage.Id &&
+                accrual.IncomeTypeId == incomeType.Id &&
+                accrual.AccountingMonth == month &&
+                accrual.Source == source,
+            cancellationToken))
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
+        }
+
+        var accrual = new Accrual
+        {
+            GarageId = garage.Id,
+            Garage = garage,
+            IncomeTypeId = incomeType.Id,
+            IncomeType = incomeType,
+            AccountingMonth = month,
+            Amount = request.Amount,
+            Source = source,
+            Comment = NormalizeOptional(request.Comment)
+        };
+
+        dbContext.Accruals.Add(accrual);
+        AddAudit(actorUserId, "finance.accrual_created", "accrual", accrual.Id, $"Создано начисление {accrual.Amount:N2} по гаражу {garage.Number} за {accrual.AccountingMonth:MM.yyyy}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+    }
+
     private IQueryable<FinancialOperation> QueryOperations()
     {
         return dbContext.FinancialOperations.AsNoTracking()
@@ -122,6 +191,15 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .Include(operation => operation.Supplier)
             .Include(operation => operation.ExpenseType)
             .Where(operation => !operation.IsCanceled);
+    }
+
+    private IQueryable<Accrual> QueryAccruals()
+    {
+        return dbContext.Accruals.AsNoTracking()
+            .Include(accrual => accrual.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Include(accrual => accrual.IncomeType)
+            .Where(accrual => !accrual.IsCanceled);
     }
 
     private static IQueryable<FinancialOperation> ApplyFilters(IQueryable<FinancialOperation> query, FinancialOperationListRequest request)
@@ -155,6 +233,30 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return query;
     }
 
+    private static IQueryable<Accrual> ApplyAccrualFilters(IQueryable<Accrual> query, AccrualListRequest request)
+    {
+        if (request.MonthFrom is not null)
+        {
+            query = query.Where(accrual => accrual.AccountingMonth >= NormalizeMonth(request.MonthFrom.Value));
+        }
+
+        if (request.MonthTo is not null)
+        {
+            query = query.Where(accrual => accrual.AccountingMonth <= NormalizeMonth(request.MonthTo.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLowerInvariant();
+            query = query.Where(accrual =>
+                accrual.Garage.Number.ToLower().Contains(search) ||
+                accrual.IncomeType.Name.ToLower().Contains(search) ||
+                (accrual.Comment != null && accrual.Comment.ToLower().Contains(search)));
+        }
+
+        return query;
+    }
+
     private async Task<bool> HasDocumentDuplicateAsync(string operationKind, string? documentNumber, DateOnly operationDate, CancellationToken cancellationToken)
     {
         var normalized = NormalizeOptional(documentNumber);
@@ -169,12 +271,17 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
     private void AddAudit(Guid? actorUserId, string action, Guid operationId, string summary)
     {
+        AddAudit(actorUserId, action, "financial_operation", operationId, summary);
+    }
+
+    private void AddAudit(Guid? actorUserId, string action, string entityType, Guid entityId, string summary)
+    {
         dbContext.AuditEvents.Add(new AuditEvent
         {
             ActorUserId = actorUserId,
             Action = action,
-            EntityType = "financial_operation",
-            EntityId = operationId.ToString(),
+            EntityType = entityType,
+            EntityId = entityId.ToString(),
             Summary = summary
         });
     }
@@ -209,5 +316,21 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             operation.ExpenseTypeId,
             operation.ExpenseType?.Name,
             operation.IsCanceled);
+    }
+
+    private static AccrualDto ToDto(Accrual accrual)
+    {
+        return new AccrualDto(
+            accrual.Id,
+            accrual.GarageId,
+            accrual.Garage.Number,
+            accrual.Garage.Owner?.FullName,
+            accrual.IncomeTypeId,
+            accrual.IncomeType.Name,
+            accrual.AccountingMonth,
+            accrual.Amount,
+            accrual.Source,
+            accrual.Comment,
+            accrual.IsCanceled);
     }
 }

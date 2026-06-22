@@ -75,13 +75,17 @@ public sealed class FinanceServiceTests
         var service = new FinanceService(database.Context);
         await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "1", null), null, CancellationToken.None);
         await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "2", null), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
 
         var result = await service.GetSummaryAsync(new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, null), CancellationToken.None);
 
         Assert.Equal(1500m, result.IncomeTotal);
         Assert.Equal(400m, result.ExpenseTotal);
+        Assert.Equal(2000m, result.AccrualTotal);
         Assert.Equal(1100m, result.Balance);
+        Assert.Equal(500m, result.Debt);
         Assert.Equal(2, result.OperationCount);
+        Assert.Equal(1, result.AccrualCount);
     }
 
     [Fact]
@@ -100,6 +104,73 @@ public sealed class FinanceServiceTests
         Assert.Equal("income", garageResult[0].OperationKind);
         Assert.Single(supplierResult);
         Assert.Equal("expense", supplierResult[0].OperationKind);
+    }
+
+    [Fact]
+    public async Task CreateAccrualAsync_CreatesManualAccrualAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 15), 700m, "manual", "Целевой сбор"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
+        Assert.Equal("manual", result.Value.Source);
+        Assert.Equal("12", result.Value.GarageNumber);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.accrual_created" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task CreateAccrualAsync_RequiresCommentForManualAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("accrual_comment_required", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateAccrualAsync_RejectsDuplicateGarageTypeMonthAndSource()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var request = new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null);
+        await service.CreateAccrualAsync(request, null, CancellationToken.None);
+
+        var result = await service.CreateAccrualAsync(request with { Amount = 800m }, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("accrual_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetAccrualsAsync_SearchesAndOrdersByMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 5, 1), 500m, "regular", null), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 600m, "manual", "garage monthly adjustment"), null, CancellationToken.None);
+
+        var result = await service.GetAccrualsAsync(new AccrualListRequest(null, null, "garage"), CancellationToken.None);
+
+        Assert.Single(result);
+        Assert.Equal(new DateOnly(2026, 6, 1), result[0].AccountingMonth);
+        Assert.Equal(600m, result[0].Amount);
     }
 
     private sealed class TestDatabase : IAsyncDisposable
