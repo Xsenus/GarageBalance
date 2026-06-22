@@ -22,6 +22,8 @@ import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto } from './services/financeApi'
+import { importApi } from './services/importApi'
+import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -30,6 +32,7 @@ type AppProps = {
   authClient?: AuthClient
   dictionaryClient?: DictionaryClient
   financeClient?: FinanceClient
+  importClient?: ImportClient
   userClient?: UserManagementClient
 }
 
@@ -66,6 +69,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлен dry-run импорта Access: можно загрузить .accdb/.mdb, получить отчет первичных проверок и сохранить историю запуска без изменения данных.',
   'Добавлено создание регулярных начислений по тарифам: фиксированные суммы, расчет по людям и счетчикам воды/электричества можно сформировать за месяц одним действием.',
   'Добавлены показания счетчиков воды и электричества: система считает расход и показывает предупреждение по разрыву истории.',
   'Добавлены ручные начисления по гаражам: месяц учета, вид начисления, сумма, комментарий и расчет задолженности.',
@@ -77,7 +81,7 @@ const updates = [
   'Добавлены справочники владельцев, гаражей, групп поставщиков и поставщиков с тестами и миграцией.',
 ]
 
-function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
 
   return (
@@ -114,7 +118,7 @@ function App({ authClient = authApi, dictionaryClient = dictionariesApi, finance
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} userClient={userClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} userClient={userClient} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -201,12 +205,14 @@ function Workspace({
   auth,
   dictionaryClient,
   financeClient,
+  importClient,
   userClient,
   onLogout,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
+  importClient: ImportClient
   userClient: UserManagementClient
   onLogout: () => void
 }) {
@@ -260,6 +266,8 @@ function Workspace({
       <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
 
       <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+
+      <ImportPanel auth={auth} importClient={importClient} />
 
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
         {roadmap.map((item) => {
@@ -761,6 +769,136 @@ function FinancePanel({
                 {reading.consumption}
               </span>
             </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient: ImportClient }) {
+  const [runs, setRuns] = useState<AccessImportRunDto[]>([])
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const loadedRuns = await importClient.getAccessRuns(auth.accessToken)
+        if (!ignore) {
+          setRuns(loadedRuns)
+          setCurrentRun(loadedRuns[0] ?? null)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить историю импорта.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, importClient])
+
+  async function runDryRun(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    if (!selectedFile) {
+      setError('Выберите файл Access для проверки.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const run = await importClient.dryRunAccess(auth.accessToken, selectedFile)
+      setCurrentRun(run)
+      setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)])
+      setSelectedFile(null)
+      form.reset()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось выполнить dry-run импорта.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="dictionary-panel" aria-label="Импорт Access">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Импорт</p>
+          <h2>Проверка старой базы Access перед переносом</h2>
+        </div>
+        <span>{loading ? 'Загрузка...' : `${runs.length} запусков`}</span>
+      </div>
+
+      {error ? <div className="form-error">{error}</div> : null}
+
+      <div className="finance-grid">
+        <form className="dictionary-form" onSubmit={runDryRun}>
+          <h3>Dry-run Access</h3>
+          <input aria-label="Файл Access" type="file" accept=".accdb,.mdb" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} />
+          <button className="secondary-button" type="submit" disabled={saving || !selectedFile}>
+            <DatabaseZap size={16} />
+            <span>Проверить файл</span>
+          </button>
+          {selectedFile ? <p className="empty-state">{selectedFile.name}</p> : null}
+        </form>
+
+        <div className="operation-list" role="table" aria-label="Проверки импорта">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Проверка</span>
+            <span role="columnheader">Статус</span>
+            <span role="columnheader">Итог</span>
+          </div>
+          {!currentRun ? <p className="empty-state">Проверок пока нет</p> : null}
+          {currentRun?.checks.map((check) => (
+            <div className="operation-row" role="row" key={check.code}>
+              <span role="cell">
+                <strong>{check.title}</strong>
+                <small>{check.message}</small>
+              </span>
+              <span role="cell" className={check.status === 'passed' ? 'status-active' : check.status === 'warning' ? 'warning-text' : 'status-disabled'}>
+                {check.status}
+              </span>
+              <span role="cell">{currentRun.originalFileName}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="История импорта Access">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Файл</span>
+            <span role="columnheader">Статус</span>
+            <span role="columnheader">Проверки</span>
+          </div>
+          {runs.length === 0 ? <p className="empty-state">Истории импорта пока нет</p> : null}
+          {runs.slice(0, 8).map((run) => (
+            <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
+              <span role="cell">
+                <strong>{run.originalFileName}</strong>
+                <small>{run.summary}</small>
+              </span>
+              <span role="cell" className={run.status === 'completed' ? 'status-active' : 'status-disabled'}>
+                {run.status}
+              </span>
+              <span role="cell">
+                {run.passedChecks}/{run.totalChecks}
+              </span>
+            </button>
           ))}
         </div>
       </div>

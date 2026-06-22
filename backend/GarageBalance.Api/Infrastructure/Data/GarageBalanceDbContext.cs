@@ -2,6 +2,7 @@ using System.Text.Json;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -24,6 +25,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -244,6 +246,22 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(reading => reading.GarageId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AccessImportRun>(entity =>
+        {
+            entity.ToTable("access_import_runs");
+            entity.HasKey(run => run.Id);
+            entity.Property(run => run.Mode).HasMaxLength(40).IsRequired();
+            entity.Property(run => run.Status).HasMaxLength(40).IsRequired();
+            entity.Property(run => run.OriginalFileName).HasMaxLength(260).IsRequired();
+            entity.Property(run => run.FileExtension).HasMaxLength(20).IsRequired();
+            entity.Property(run => run.ContentSha256).HasMaxLength(64).IsRequired();
+            entity.Property(run => run.Summary).HasMaxLength(1000).IsRequired();
+            entity.Property(run => run.ReportJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(run => run.StartedAtUtc);
+            entity.HasIndex(run => run.Status);
+            entity.HasIndex(run => run.ContentSha256);
         });
     }
 }

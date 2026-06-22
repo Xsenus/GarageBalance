@@ -4,11 +4,12 @@ import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto } from './services/financeApi'
+import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
   it('shows auth gate before workspace is available', () => {
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={createUserClient()} />)
 
     expect(screen.getByText('GarageBalance')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
@@ -19,7 +20,7 @@ describe('App', () => {
 
   it('creates first administrator and opens the workspace with users and dictionaries', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.clear(screen.getByLabelText('Пароль'))
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -52,7 +53,7 @@ describe('App', () => {
   it('adds managed user from protected workspace', async () => {
     const user = userEvent.setup()
     const userClient = createStatefulUserClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={userClient} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -72,7 +73,7 @@ describe('App', () => {
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -102,7 +103,7 @@ describe('App', () => {
   it('adds income type, expense type and tariff from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -130,7 +131,7 @@ describe('App', () => {
   it('creates income and expense operations from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -156,7 +157,7 @@ describe('App', () => {
   it('creates manual accrual and updates debt from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -177,7 +178,7 @@ describe('App', () => {
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [createTariff({ id: 'tariff-fixed', name: 'Членский тариф', calculationBase: 'fixed', rate: 300, effectiveFrom: '2026-01-01' })],
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -194,7 +195,7 @@ describe('App', () => {
   it('creates meter reading and shows calculated consumption', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -209,6 +210,25 @@ describe('App', () => {
     expect(within(financePanel).getByRole('table', { name: 'Последние показания' })).toBeInTheDocument()
   })
 
+  it('runs Access import dry-run and shows checks history', async () => {
+    const user = userEvent.setup()
+    const importClient = createStatefulImportClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    const file = new File(['garage owner payment'], 'ГСК.accdb', { type: 'application/octet-stream' })
+
+    await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
+    await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл' }))
+
+    expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.')).toBeInTheDocument()
+    expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
+    expect(within(importPanel).getByText('Формат файла')).toBeInTheDocument()
+    expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
+  })
+
   it('shows login errors without opening protected workspace', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
@@ -216,7 +236,7 @@ describe('App', () => {
         throw new Error('Неверный email или пароль.')
       },
     })
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.click(screen.getByRole('button', { name: 'Вход' }))
     await user.type(screen.getByLabelText('Пароль'), 'WrongPass123')
@@ -228,7 +248,7 @@ describe('App', () => {
 
   it('shows first release notes for authenticated users', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -255,6 +275,11 @@ describe('App', () => {
             throw new Error('Нет доступа к платежам.')
           },
         })}
+        importClient={createImportClient({
+          getAccessRuns: async () => {
+            throw new Error('Нет доступа к импорту.')
+          },
+        })}
         userClient={createUserClient({
           getUsers: async () => {
             throw new Error('Нет доступа к пользователям.')
@@ -269,6 +294,7 @@ describe('App', () => {
     expect(await screen.findByText('Нет доступа к пользователям.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к справочникам.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к платежам.')).toBeInTheDocument()
+    expect(await screen.findByText('Нет доступа к импорту.')).toBeInTheDocument()
   })
 })
 
@@ -373,6 +399,33 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     createMeterReading: async () => meterReading,
     ...overrides,
+  }
+}
+
+function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient {
+  const run = createAccessImportRun()
+
+  return {
+    getAccessRuns: async () => [],
+    dryRunAccess: async () => run,
+    ...overrides,
+  }
+}
+
+function createStatefulImportClient(): ImportClient {
+  let runs: AccessImportRunDto[] = []
+
+  return {
+    getAccessRuns: async () => runs,
+    dryRunAccess: async (_token, file) => {
+      const run = createAccessImportRun({
+        id: crypto.randomUUID(),
+        originalFileName: file.name,
+        fileSizeBytes: file.size,
+      })
+      runs = [run, ...runs]
+      return run
+    },
   }
 }
 
@@ -696,6 +749,31 @@ function createRegularAccrualGenerationResult(overrides: Partial<RegularAccrualG
     totalAmount: 300,
     createdAccruals: [createAccrual({ amount: 300, source: 'regular' })],
     skippedGarages: [],
+    ...overrides,
+  }
+}
+
+function createAccessImportRun(overrides: Partial<AccessImportRunDto> = {}): AccessImportRunDto {
+  return {
+    id: 'access-run',
+    mode: 'dry_run',
+    status: 'completed',
+    originalFileName: 'ГСК.accdb',
+    fileExtension: '.accdb',
+    fileSizeBytes: 1024,
+    contentSha256: 'a'.repeat(64),
+    startedAtUtc: new Date(Date.now() - 60_000).toISOString(),
+    finishedAtUtc: new Date().toISOString(),
+    totalChecks: 3,
+    passedChecks: 2,
+    warningCount: 1,
+    errorCount: 0,
+    summary: 'Dry-run завершен с предупреждениями.',
+    checks: [
+      { code: 'extension', title: 'Формат файла', status: 'passed', message: 'Расширение поддерживается.' },
+      { code: 'signature', title: 'Сигнатура Access', status: 'passed', message: 'Файл похож на Access.' },
+      { code: 'native_reader', title: 'Драйвер чтения .accdb', status: 'warning', message: 'Нужен ACE-драйвер или конвертация.' },
+    ],
     ...overrides,
   }
 }

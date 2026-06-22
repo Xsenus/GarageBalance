@@ -591,6 +591,20 @@ h1 {
   grid-template-columns: 110px minmax(170px, 1fr) 130px;
 }
 
+button.operation-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.operation-row:hover {
+  background: #f8fafc;
+}
+
 .user-table-row.header,
 .operation-row.header {
   border-top: 0;
