@@ -1,0 +1,125 @@
+using System.Security.Claims;
+using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Controllers;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GarageBalance.Api.Tests.Finance;
+
+public sealed class FinanceControllerTests
+{
+    [Fact]
+    public async Task CreateIncome_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operation = CreateOperation("income");
+        var service = new FakeFinanceService
+        {
+            CreateIncomeResult = FinanceResult<FinancialOperationDto>.Success(operation)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateIncome(
+            new CreateIncomeOperationRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100m, "1", null),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CreateExpense_ReturnsConflictForDuplicateOperation()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateExpenseResult = FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция уже внесена.")
+        });
+
+        var result = await controller.CreateExpense(
+            new CreateExpenseOperationRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100m, "1", null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("operation_duplicate", problem.Title);
+    }
+
+    [Fact]
+    public async Task CreateIncome_ReturnsNotFoundForMissingGarage()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateIncomeResult = FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж не найден.")
+        });
+
+        var result = await controller.CreateIncome(
+            new CreateIncomeOperationRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100m, null, null),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("garage_not_found", problem.Title);
+    }
+
+    private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
+    {
+        var controller = new FinanceController(service);
+        var claims = actorUserId is null ? [] : new[] { new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString()) };
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
+        };
+        return controller;
+    }
+
+    private static FinancialOperationDto CreateOperation(string kind)
+    {
+        return new FinancialOperationDto(
+            Guid.NewGuid(),
+            kind,
+            new DateOnly(2026, 6, 19),
+            new DateOnly(2026, 6, 1),
+            100m,
+            "1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false);
+    }
+
+    private sealed class FakeFinanceService : IFinanceService
+    {
+        public Guid? LastActorUserId { get; private set; }
+        public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+
+        public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<FinancialOperationDto>>([]);
+        }
+
+        public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new FinanceSummaryDto(0, 0, 0, 0));
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateIncomeResult);
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateExpenseResult);
+        }
+    }
+}

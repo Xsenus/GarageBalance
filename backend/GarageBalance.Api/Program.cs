@@ -1,6 +1,7 @@
 using System.Text;
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
@@ -22,6 +23,7 @@ builder.Services.AddDbContext<GarageBalanceDbContext>(options =>
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
+builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, JwtTokenService>();

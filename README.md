@@ -52,6 +52,10 @@ npm run dev
 - `GET/POST /api/dictionaries/income-types` - виды поступлений.
 - `GET/POST /api/dictionaries/expense-types` - виды выплат.
 - `GET/POST /api/dictionaries/tariffs` - тарифы с датой действия.
+- `GET /api/finance/operations` - последние финансовые операции с фильтрами.
+- `GET /api/finance/summary` - итоги поступлений, выплат и баланса.
+- `POST /api/finance/income` - внесение поступления по гаражу.
+- `POST /api/finance/expense` - внесение выплаты поставщику.
 
 Docker-заготовка:
 

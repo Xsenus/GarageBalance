@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -20,6 +21,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
+    public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -168,6 +170,38 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique();
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
+        });
+
+        modelBuilder.Entity<FinancialOperation>(entity =>
+        {
+            entity.ToTable("financial_operations");
+            entity.HasKey(operation => operation.Id);
+            entity.Property(operation => operation.OperationKind).HasMaxLength(20).IsRequired();
+            entity.Property(operation => operation.Amount).HasPrecision(18, 2);
+            entity.Property(operation => operation.DocumentNumber).HasMaxLength(120);
+            entity.Property(operation => operation.Comment).HasMaxLength(1000);
+            entity.HasIndex(operation => operation.OperationDate);
+            entity.HasIndex(operation => operation.AccountingMonth);
+            entity.HasIndex(operation => operation.OperationKind);
+            entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.DocumentNumber });
+            entity.HasIndex(operation => operation.GarageId);
+            entity.HasIndex(operation => operation.SupplierId);
+            entity.HasOne(operation => operation.Garage)
+                .WithMany()
+                .HasForeignKey(operation => operation.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.IncomeType)
+                .WithMany()
+                .HasForeignKey(operation => operation.IncomeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.Supplier)
+                .WithMany()
+                .HasForeignKey(operation => operation.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.ExpenseType)
+                .WithMany()
+                .HasForeignKey(operation => operation.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

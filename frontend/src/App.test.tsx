@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
+import type { FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
   it('shows auth gate before workspace is available', () => {
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
 
     expect(screen.getByText('GarageBalance')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
@@ -18,7 +19,7 @@ describe('App', () => {
 
   it('creates first administrator and opens the workspace with users and dictionaries', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
 
     await user.clear(screen.getByLabelText('Пароль'))
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -39,12 +40,16 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Членский взнос')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Тариф воды')).toBeInTheDocument()
+
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    expect(within(financePanel).getAllByText('1 500,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
   it('adds managed user from protected workspace', async () => {
     const user = userEvent.setup()
     const userClient = createStatefulUserClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={userClient} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -64,7 +69,7 @@ describe('App', () => {
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -94,7 +99,7 @@ describe('App', () => {
   it('adds income type, expense type and tariff from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -119,6 +124,32 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('150 с 2026-07-01')).toBeInTheDocument()
   })
 
+  it('creates income and expense operations from payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
+    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '2000')
+    await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-1')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+
+    expect(await within(financePanel).findByText('+2 000,00')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
+
+    await user.clear(within(financePanel).getByLabelText('Сумма выплаты'))
+    await user.type(within(financePanel).getByLabelText('Сумма выплаты'), '500')
+    await user.type(within(financePanel).getByLabelText('Документ выплаты'), 'RKO-1')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
+
+    expect(await within(financePanel).findByText('-500,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
+  })
+
   it('shows login errors without opening protected workspace', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
@@ -126,7 +157,7 @@ describe('App', () => {
         throw new Error('Неверный email или пароль.')
       },
     })
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
 
     await user.click(screen.getByRole('button', { name: 'Вход' }))
     await user.type(screen.getByLabelText('Пароль'), 'WrongPass123')
@@ -138,7 +169,7 @@ describe('App', () => {
 
   it('shows first release notes for authenticated users', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -160,6 +191,11 @@ describe('App', () => {
             throw new Error('Нет доступа к справочникам.')
           },
         })}
+        financeClient={createFinanceClient({
+          getOperations: async () => {
+            throw new Error('Нет доступа к платежам.')
+          },
+        })}
         userClient={createUserClient({
           getUsers: async () => {
             throw new Error('Нет доступа к пользователям.')
@@ -173,6 +209,7 @@ describe('App', () => {
 
     expect(await screen.findByText('Нет доступа к пользователям.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к справочникам.')).toBeInTheDocument()
+    expect(await screen.findByText('Нет доступа к платежам.')).toBeInTheDocument()
   })
 })
 
@@ -253,6 +290,63 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     getTariffs: async () => [tariff],
     createTariff: async () => tariff,
     ...overrides,
+  }
+}
+
+function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceClient {
+  const operation = createFinancialOperation({
+    id: 'operation-1',
+    amount: 1500,
+    garageNumber: '12',
+    incomeTypeName: 'Членский взнос',
+  })
+
+  return {
+    getOperations: async () => [operation],
+    getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, balance: 1500, operationCount: 1 }),
+    createIncome: async () => operation,
+    createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
+    ...overrides,
+  }
+}
+
+function createStatefulFinanceClient(): FinanceClient {
+  let operations: FinancialOperationDto[] = []
+
+  function summary(): FinanceSummaryDto {
+    const incomeTotal = operations.filter((item) => item.operationKind === 'income').reduce((sum, item) => sum + item.amount, 0)
+    const expenseTotal = operations.filter((item) => item.operationKind === 'expense').reduce((sum, item) => sum + item.amount, 0)
+    return { incomeTotal, expenseTotal, balance: incomeTotal - expenseTotal, operationCount: operations.length }
+  }
+
+  return {
+    getOperations: async () => operations,
+    getSummary: async () => summary(),
+    createIncome: async (_token, request) => {
+      const operation = createFinancialOperation({
+        id: crypto.randomUUID(),
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        documentNumber: request.documentNumber ?? null,
+      })
+      operations = [operation, ...operations]
+      return operation
+    },
+    createExpense: async (_token, request) => {
+      const operation = createFinancialOperation({
+        id: crypto.randomUUID(),
+        operationKind: 'expense',
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        documentNumber: request.documentNumber ?? null,
+        supplierName: 'Водоканал',
+        expenseTypeName: 'Вода',
+      })
+      operations = [operation, ...operations]
+      return operation
+    },
   }
 }
 
@@ -427,6 +521,29 @@ function createTariff(overrides: Partial<TariffDto>): TariffDto {
     effectiveFrom: '2026-07-01',
     comment: null,
     isArchived: false,
+    ...overrides,
+  }
+}
+
+function createFinancialOperation(overrides: Partial<FinancialOperationDto>): FinancialOperationDto {
+  return {
+    id: 'operation',
+    operationKind: 'income',
+    operationDate: '2026-06-19',
+    accountingMonth: '2026-06-01',
+    amount: 100,
+    documentNumber: null,
+    comment: null,
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    incomeTypeId: 'income-type-1',
+    incomeTypeName: 'Членский взнос',
+    supplierId: null,
+    supplierName: null,
+    expenseTypeId: null,
+    expenseTypeName: null,
+    isCanceled: false,
     ...overrides,
   }
 }

@@ -20,6 +20,8 @@ import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
+import { financeApi } from './services/financeApi'
+import type { FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -27,6 +29,7 @@ import './App.css'
 type AppProps = {
   authClient?: AuthClient
   dictionaryClient?: DictionaryClient
+  financeClient?: FinanceClient
   userClient?: UserManagementClient
 }
 
@@ -63,6 +66,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлен первый рабочий учет денег: поступления по гаражам, выплаты поставщикам, итоги и последние операции.',
   'Добавлены финансовые справочники: виды поступлений, виды выплат и тарифы с датой начала действия.',
   'Добавлено управление пользователями: администратор может создать сотрудника, назначить роль и увидеть статус доступа.',
   'Добавлен контур входа: создание администратора, обычный вход и отображение текущего пользователя.',
@@ -70,7 +74,7 @@ const updates = [
   'Добавлены справочники владельцев, гаражей, групп поставщиков и поставщиков с тестами и миграцией.',
 ]
 
-function App({ authClient = authApi, dictionaryClient = dictionariesApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
 
   return (
@@ -107,7 +111,7 @@ function App({ authClient = authApi, dictionaryClient = dictionariesApi, userCli
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} dictionaryClient={dictionaryClient} userClient={userClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} userClient={userClient} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -193,11 +197,13 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 function Workspace({
   auth,
   dictionaryClient,
+  financeClient,
   userClient,
   onLogout,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
+  financeClient: FinanceClient
   userClient: UserManagementClient
   onLogout: () => void
 }) {
@@ -250,6 +256,8 @@ function Workspace({
 
       <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
 
+      <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
         {roadmap.map((item) => {
           const Icon = item.icon
@@ -275,6 +283,254 @@ function Workspace({
         </ul>
       </section>
     </>
+  )
+}
+
+function FinancePanel({
+  auth,
+  dictionaryClient,
+  financeClient,
+}: {
+  auth: AuthResponse
+  dictionaryClient: DictionaryClient
+  financeClient: FinanceClient
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+  const month = `${today.slice(0, 7)}-01`
+  const [garages, setGarages] = useState<GarageDto[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
+  const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [operations, setOperations] = useState<FinancialOperationDto[]>([])
+  const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, balance: 0, operationCount: 0 })
+  const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
+  const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedOperations, loadedSummary] = await Promise.all([
+          dictionaryClient.getGarages(auth.accessToken),
+          dictionaryClient.getSuppliers(auth.accessToken),
+          dictionaryClient.getIncomeTypes(auth.accessToken),
+          dictionaryClient.getExpenseTypes(auth.accessToken),
+          financeClient.getOperations(auth.accessToken),
+          financeClient.getSummary(auth.accessToken),
+        ])
+        if (!ignore) {
+          setGarages(loadedGarages)
+          setSuppliers(loadedSuppliers)
+          setIncomeTypes(loadedIncomeTypes)
+          setExpenseTypes(loadedExpenseTypes)
+          setOperations(loadedOperations)
+          setSummary(loadedSummary)
+          setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить платежи.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, dictionaryClient, financeClient])
+
+  async function saveIncome(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('income', async () => {
+      const operation = await financeClient.createIncome(auth.accessToken, {
+        garageId: incomeForm.garageId,
+        incomeTypeId: incomeForm.incomeTypeId,
+        operationDate: incomeForm.operationDate,
+        accountingMonth: incomeForm.accountingMonth,
+        amount: incomeForm.amount,
+        documentNumber: incomeForm.documentNumber,
+      })
+      addOperation(operation)
+      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '' }))
+    })
+  }
+
+  async function saveExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('expense', async () => {
+      const operation = await financeClient.createExpense(auth.accessToken, {
+        supplierId: expenseForm.supplierId,
+        expenseTypeId: expenseForm.expenseTypeId,
+        operationDate: expenseForm.operationDate,
+        accountingMonth: expenseForm.accountingMonth,
+        amount: expenseForm.amount,
+        documentNumber: expenseForm.documentNumber,
+      })
+      addOperation(operation)
+      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '' }))
+    })
+  }
+
+  function addOperation(operation: FinancialOperationDto) {
+    setOperations((items) => [operation, ...items])
+    setSummary((value) => {
+      const incomeDelta = operation.operationKind === 'income' ? operation.amount : 0
+      const expenseDelta = operation.operationKind === 'expense' ? operation.amount : 0
+      return {
+        incomeTotal: value.incomeTotal + incomeDelta,
+        expenseTotal: value.expenseTotal + expenseDelta,
+        balance: value.balance + incomeDelta - expenseDelta,
+        operationCount: value.operationCount + 1,
+      }
+    })
+  }
+
+  async function runSaving(scope: string, action: () => Promise<void>) {
+    setSaving(scope)
+    setError(null)
+    try {
+      await action()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось сохранить финансовую операцию.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <section className="finance-panel" aria-label="Платежи">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Платежи</p>
+          <h2>Поступления владельцев и выплаты поставщикам</h2>
+        </div>
+        <span>{loading ? 'Загрузка...' : `${summary.operationCount} операций`}</span>
+      </div>
+
+      {error ? <div className="form-error">{error}</div> : null}
+
+      <div className="summary-strip" aria-label="Итоги платежей">
+        <div>
+          <span>Поступления</span>
+          <strong>{formatMoney(summary.incomeTotal)}</strong>
+        </div>
+        <div>
+          <span>Выплаты</span>
+          <strong>{formatMoney(summary.expenseTotal)}</strong>
+        </div>
+        <div>
+          <span>Баланс</span>
+          <strong>{formatMoney(summary.balance)}</strong>
+        </div>
+      </div>
+
+      <div className="finance-grid">
+        <form className="dictionary-form" onSubmit={saveIncome}>
+          <h3>Новое поступление</h3>
+          <select aria-label="Гараж для поступления" value={incomeForm.garageId} onChange={(event) => setIncomeForm({ ...incomeForm, garageId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите гараж
+            </option>
+            {garages.map((garage) => (
+              <option value={garage.id} key={garage.id}>
+                Гараж {garage.number}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Вид поступления для платежа" value={incomeForm.incomeTypeId} onChange={(event) => setIncomeForm({ ...incomeForm, incomeTypeId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите вид
+            </option>
+            {incomeTypes.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Дата поступления" type="date" value={incomeForm.operationDate} onChange={(event) => setIncomeForm({ ...incomeForm, operationDate: event.target.value })} required />
+            <input aria-label="Месяц поступления" type="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(event) => setIncomeForm({ ...incomeForm, accountingMonth: `${event.target.value}-01` })} required />
+          </div>
+          <div className="inline-fields">
+            <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />
+            <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
+          </div>
+          <button className="secondary-button" type="submit" disabled={saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
+            <Plus size={16} />
+            <span>Провести</span>
+          </button>
+        </form>
+
+        <form className="dictionary-form" onSubmit={saveExpense}>
+          <h3>Новая выплата</h3>
+          <select aria-label="Поставщик для выплаты" value={expenseForm.supplierId} onChange={(event) => setExpenseForm({ ...expenseForm, supplierId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите поставщика
+            </option>
+            {suppliers.map((supplier) => (
+              <option value={supplier.id} key={supplier.id}>
+                {supplier.name}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Вид выплаты для платежа" value={expenseForm.expenseTypeId} onChange={(event) => setExpenseForm({ ...expenseForm, expenseTypeId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите вид
+            </option>
+            {expenseTypes.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Дата выплаты" type="date" value={expenseForm.operationDate} onChange={(event) => setExpenseForm({ ...expenseForm, operationDate: event.target.value })} required />
+            <input aria-label="Месяц выплаты" type="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(event) => setExpenseForm({ ...expenseForm, accountingMonth: `${event.target.value}-01` })} required />
+          </div>
+          <div className="inline-fields">
+            <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />
+            <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
+          </div>
+          <button className="secondary-button" type="submit" disabled={saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
+            <Plus size={16} />
+            <span>Провести</span>
+          </button>
+        </form>
+
+        <div className="operation-list" role="table" aria-label="Последние платежи">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Дата</span>
+            <span role="columnheader">Операция</span>
+            <span role="columnheader">Сумма</span>
+          </div>
+          {operations.length === 0 ? <p className="empty-state">Операций пока нет</p> : null}
+          {operations.slice(0, 8).map((operation) => (
+            <div className="operation-row" role="row" key={operation.id}>
+              <span role="cell">{operation.operationDate}</span>
+              <span role="cell">
+                <strong>{operation.operationKind === 'income' ? operation.incomeTypeName : operation.expenseTypeName}</strong>
+                <small>{operation.operationKind === 'income' ? `Гараж ${operation.garageNumber}` : operation.supplierName}</small>
+              </span>
+              <span role="cell" className={operation.operationKind === 'income' ? 'money-income' : 'money-expense'}>
+                {operation.operationKind === 'income' ? '+' : '-'}
+                {formatMoney(operation.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -682,6 +938,10 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
       ))}
     </ul>
   )
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
 }
 
 export default App

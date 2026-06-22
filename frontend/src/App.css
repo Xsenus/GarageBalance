@@ -368,7 +368,8 @@ h1 {
   padding-left: 10px;
 }
 
-.dictionary-panel {
+.dictionary-panel,
+.finance-panel {
   margin-top: 12px;
   border: 1px solid #dce3ee;
   border-radius: 8px;
@@ -416,6 +417,39 @@ h1 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.finance-grid {
+  display: grid;
+  grid-template-columns: 320px 320px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.summary-strip div {
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+  padding: 12px;
+}
+
+.summary-strip span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+}
+
+.summary-strip strong {
+  display: block;
+  margin-top: 4px;
+  color: #101828;
+  font-size: 18px;
 }
 
 .user-management-grid {
@@ -533,7 +567,8 @@ h1 {
   background: #fcfcfd;
 }
 
-.user-table-row {
+.user-table-row,
+.operation-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.4fr) minmax(160px, 1fr) 110px;
   gap: 10px;
@@ -544,7 +579,19 @@ h1 {
   font-size: 14px;
 }
 
-.user-table-row.header {
+.operation-list {
+  overflow: hidden;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+
+.operation-row {
+  grid-template-columns: 110px minmax(170px, 1fr) 130px;
+}
+
+.user-table-row.header,
+.operation-row.header {
   border-top: 0;
   background: #f2f4f7;
   color: #667085;
@@ -554,13 +601,30 @@ h1 {
 }
 
 .user-table-row strong,
-.user-table-row small {
+.user-table-row small,
+.operation-row strong,
+.operation-row small {
   display: block;
 }
 
-.user-table-row small {
+.user-table-row small,
+.operation-row small {
   margin-top: 3px;
   color: #667085;
+}
+
+.money-income,
+.money-expense {
+  font-weight: 750;
+  text-align: right;
+}
+
+.money-income {
+  color: #027a48;
+}
+
+.money-expense {
+  color: #b42318;
 }
 
 .status-active,
@@ -609,7 +673,9 @@ h1 {
   }
 
   .dictionary-grid,
-  .finance-settings-grid {
+  .finance-settings-grid,
+  .finance-grid,
+  .summary-strip {
     grid-template-columns: 1fr;
   }
 
@@ -617,7 +683,8 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .user-table-row {
+  .user-table-row,
+  .operation-row {
     grid-template-columns: 1fr;
   }
 }
