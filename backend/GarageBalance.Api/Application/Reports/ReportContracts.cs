@@ -14,6 +14,14 @@ public sealed record IncomeReportRequest(
     IReadOnlyCollection<Guid> IncomeTypeIds,
     string? RowMode);
 
+public sealed record ExpenseReportRequest(
+    DateOnly? DateFrom,
+    DateOnly? DateTo,
+    string? Search,
+    IReadOnlyCollection<Guid> SupplierIds,
+    IReadOnlyCollection<Guid> ExpenseTypeIds,
+    string? RowMode);
+
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,
     DateOnly PeriodTo,
@@ -70,5 +78,28 @@ public sealed record IncomeReportRowDto(
     decimal AccrualAmount,
     decimal IncomeAmount,
     decimal Debt,
+    string? DocumentNumber,
+    string? Comment);
+
+public sealed record ExpenseReportDto(
+    DateOnly DateFrom,
+    DateOnly DateTo,
+    decimal AccrualTotal,
+    decimal ExpenseTotal,
+    decimal Difference,
+    int RowCount,
+    IReadOnlyList<ExpenseReportRowDto> Rows);
+
+public sealed record ExpenseReportRowDto(
+    string RowType,
+    DateOnly Date,
+    DateOnly AccountingMonth,
+    Guid SupplierId,
+    string SupplierName,
+    Guid ExpenseTypeId,
+    string ExpenseTypeName,
+    decimal AccrualAmount,
+    decimal ExpenseAmount,
+    decimal Difference,
     string? DocumentNumber,
     string? Comment);

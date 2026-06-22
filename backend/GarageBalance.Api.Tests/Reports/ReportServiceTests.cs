@@ -139,6 +139,95 @@ public sealed class ReportServiceTests
         Assert.Equal("period_invalid", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task GetExpenseReportAsync_ReturnsPaymentRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "all"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0m, result.Value!.AccrualTotal);
+        Assert.Equal(400m, result.Value.ExpenseTotal);
+        Assert.Equal(-400m, result.Value.Difference);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("payments", row.RowType);
+        Assert.Equal("Vodokanal", row.SupplierName);
+        Assert.Equal("RKO-1", row.DocumentNumber);
+        Assert.Equal(400m, row.ExpenseAmount);
+    }
+
+    [Fact]
+    public async Task GetExpenseReportAsync_FiltersBySupplierExpenseTypeAndSearch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId };
+        var secondExpenseType = new ExpenseType { Name = "Связь", Code = "internet" };
+        database.Context.Suppliers.Add(secondSupplier);
+        database.Context.ExpenseTypes.Add(secondExpenseType);
+        await database.Context.SaveChangesAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(secondSupplier.Id, secondExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 900m, "RKO-2", null), null, CancellationToken.None);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 30),
+                "Online",
+                [secondSupplier.Id],
+                [secondExpenseType.Id],
+                "payments"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var row = Assert.Single(result.Value!.Rows);
+        Assert.Equal("Siberia Online", row.SupplierName);
+        Assert.Equal("Связь", row.ExpenseTypeName);
+        Assert.Equal(900m, result.Value.ExpenseTotal);
+        Assert.Equal(-900m, result.Value.Difference);
+    }
+
+    [Fact]
+    public async Task GetExpenseReportAsync_ReturnsEmptyRowsForAccrualModeUntilSupplierAccrualsExist()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "accruals"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Value!.Rows);
+        Assert.Equal(0m, result.Value.ExpenseTotal);
+    }
+
+    [Fact]
+    public async Task GetExpenseReportAsync_ReturnsErrorForInvalidPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all"),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("period_invalid", result.ErrorCode);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

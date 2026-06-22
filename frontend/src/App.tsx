@@ -25,7 +25,7 @@ import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDt
 import { importApi } from './services/importApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
-import type { ConsolidatedReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
@@ -977,13 +977,19 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const month = `${today.slice(0, 7)}-01`
   const [filters, setFilters] = useState({ monthFrom: month, monthTo: month, search: '' })
   const [incomeFilters, setIncomeFilters] = useState({ dateFrom: month, dateTo: today, search: '', incomeTypeId: '', rowMode: 'all' })
+  const [expenseFilters, setExpenseFilters] = useState({ dateFrom: month, dateTo: today, search: '', supplierId: '', expenseTypeId: '', rowMode: 'all' })
   const [report, setReport] = useState<ConsolidatedReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
+  const [expenseReport, setExpenseReport] = useState<ExpenseReportDto | null>(null)
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [loading, setLoading] = useState(true)
   const [incomeLoading, setIncomeLoading] = useState(true)
+  const [expenseLoading, setExpenseLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [incomeError, setIncomeError] = useState<string | null>(null)
+  const [expenseError, setExpenseError] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -1049,6 +1055,46 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
   }, [auth.accessToken, dictionaryClient, incomeFilters, reportClient])
 
+  useEffect(() => {
+    let ignore = false
+    async function loadExpenseReport() {
+      setExpenseLoading(true)
+      setExpenseError(null)
+      try {
+        const [loadedSuppliers, loadedExpenseTypes, loadedExpenseReport] = await Promise.all([
+          dictionaryClient.getSuppliers(auth.accessToken),
+          dictionaryClient.getExpenseTypes(auth.accessToken),
+          reportClient.getExpenseReport(auth.accessToken, {
+            dateFrom: expenseFilters.dateFrom,
+            dateTo: expenseFilters.dateTo,
+            search: expenseFilters.search,
+            supplierIds: expenseFilters.supplierId ? [expenseFilters.supplierId] : [],
+            expenseTypeIds: expenseFilters.expenseTypeId ? [expenseFilters.expenseTypeId] : [],
+            rowMode: expenseFilters.rowMode,
+          }),
+        ])
+        if (!ignore) {
+          setSuppliers(loadedSuppliers)
+          setExpenseTypes(loadedExpenseTypes)
+          setExpenseReport(loadedExpenseReport)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setExpenseError(caught instanceof Error ? caught.message : 'Не удалось сформировать отчет по выплатам.')
+        }
+      } finally {
+        if (!ignore) {
+          setExpenseLoading(false)
+        }
+      }
+    }
+
+    void loadExpenseReport()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, dictionaryClient, expenseFilters, reportClient])
+
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -1067,6 +1113,19 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       dateTo: String(form.get('dateTo') ?? today),
       search: String(form.get('search') ?? ''),
       incomeTypeId: String(form.get('incomeTypeId') ?? ''),
+      rowMode: String(form.get('rowMode') ?? 'all'),
+    })
+  }
+
+  function applyExpenseFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setExpenseFilters({
+      dateFrom: String(form.get('dateFrom') ?? today),
+      dateTo: String(form.get('dateTo') ?? today),
+      search: String(form.get('search') ?? ''),
+      supplierId: String(form.get('supplierId') ?? ''),
+      expenseTypeId: String(form.get('expenseTypeId') ?? ''),
       rowMode: String(form.get('rowMode') ?? 'all'),
     })
   }
@@ -1232,6 +1291,86 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
             <span role="cell" className={row.rowType === 'payments' ? 'money-income' : 'money-accrual'}>
               {row.rowType === 'payments' ? '+' : ''}{formatMoney(row.rowType === 'payments' ? row.incomeAmount : row.accrualAmount)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="subsection-heading">
+        <div>
+          <h3>Отчет по выплатам</h3>
+          <p>Фактические выплаты поставщикам по датам, видам расходов и документам.</p>
+        </div>
+        <span>{expenseLoading ? 'Формируем...' : `${expenseReport?.rowCount ?? 0} строк`}</span>
+      </div>
+
+      {expenseError ? <div className="form-error">{expenseError}</div> : null}
+
+      <form className="compact-form report-filter" onSubmit={applyExpenseFilters}>
+        <input aria-label="Начало отчета по выплатам" name="dateFrom" type="date" defaultValue={expenseFilters.dateFrom} required />
+        <input aria-label="Конец отчета по выплатам" name="dateTo" type="date" defaultValue={expenseFilters.dateTo} required />
+        <input aria-label="Поиск в выплатах" name="search" placeholder="Поставщик, вид, документ" defaultValue={expenseFilters.search} />
+        <select aria-label="Поставщик в отчете по выплатам" name="supplierId" defaultValue={expenseFilters.supplierId}>
+          <option value="">Все поставщики</option>
+          {suppliers.map((supplier) => (
+            <option value={supplier.id} key={supplier.id}>
+              {supplier.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Вид выплаты в отчете" name="expenseTypeId" defaultValue={expenseFilters.expenseTypeId}>
+          <option value="">Все виды</option>
+          {expenseTypes.map((expenseType) => (
+            <option value={expenseType.id} key={expenseType.id}>
+              {expenseType.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Тип строк отчета по выплатам" name="rowMode" defaultValue={expenseFilters.rowMode}>
+          <option value="all">Начисления и выплаты</option>
+          <option value="accruals">Только начисления</option>
+          <option value="payments">Только выплаты</option>
+        </select>
+        <button className="secondary-button" type="submit">
+          <Search size={16} />
+          <span>Показать</span>
+        </button>
+      </form>
+
+      <div className="summary-strip" aria-label="Итоги отчета по выплатам">
+        <div>
+          <span>Начислено</span>
+          <strong>{formatMoney(expenseReport?.accrualTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Выплачено</span>
+          <strong>{formatMoney(expenseReport?.expenseTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Разница</span>
+          <strong>{formatMoney(expenseReport?.difference ?? 0)}</strong>
+        </div>
+      </div>
+
+      <div className="operation-list" role="table" aria-label="Отчет по выплатам">
+        <div className="operation-row header" role="row">
+          <span role="columnheader">Дата</span>
+          <span role="columnheader">Поставщик и вид</span>
+          <span role="columnheader">Сумма</span>
+        </div>
+        {expenseReport?.rows.length === 0 ? <p className="empty-state">По выбранному фильтру выплат нет</p> : null}
+        {expenseReport?.rows.slice(0, 16).map((row) => (
+          <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
+            <span role="cell">
+              <strong>{row.date}</strong>
+              <small>{row.rowType === 'accruals' ? 'начисление' : 'выплата'}</small>
+            </span>
+            <span role="cell">
+              <strong>{row.supplierName} · {row.expenseTypeName}</strong>
+              <small>{row.documentNumber ?? 'документ не указан'}</small>
+            </span>
+            <span role="cell" className={row.rowType === 'payments' ? 'money-expense' : 'money-accrual'}>
+              {row.rowType === 'payments' ? '-' : ''}{formatMoney(row.rowType === 'payments' ? row.expenseAmount : row.accrualAmount)}
             </span>
           </div>
         ))}

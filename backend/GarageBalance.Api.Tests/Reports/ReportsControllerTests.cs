@@ -74,6 +74,43 @@ public sealed class ReportsControllerTests
         Assert.Equal("period_invalid", problem.Title);
     }
 
+    [Fact]
+    public async Task GetExpenseReport_ReturnsOk()
+    {
+        var report = CreateExpenseReport();
+        var controller = new ReportsController(new FakeReportService
+        {
+            ExpenseResult = ReportResult<ExpenseReportDto>.Success(report)
+        });
+
+        var result = await controller.GetExpenseReport(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "Vodokanal",
+            [Guid.NewGuid()],
+            [],
+            "payments",
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(report, ok.Value);
+    }
+
+    [Fact]
+    public async Task GetExpenseReport_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            ExpenseResult = ReportResult<ExpenseReportDto>.Failure("period_invalid", "Период неверный.")
+        });
+
+        var result = await controller.GetExpenseReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all", CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
     private static ConsolidatedReportDto CreateReport()
     {
         var month = new DateOnly(2026, 6, 1);
@@ -109,11 +146,29 @@ public sealed class ReportsControllerTests
             ]);
     }
 
+    private static ExpenseReportDto CreateExpenseReport()
+    {
+        var supplierId = Guid.NewGuid();
+        var expenseTypeId = Guid.NewGuid();
+        return new ExpenseReportDto(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            0m,
+            400m,
+            -400m,
+            1,
+            [
+                new ExpenseReportRowDto("payments", new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), supplierId, "Vodokanal", expenseTypeId, "Вода", 0m, 400m, -400m, "RKO-1", null)
+            ]);
+    }
+
     private sealed class FakeReportService : IReportService
     {
         public ReportResult<ConsolidatedReportDto> Result { get; init; } = ReportResult<ConsolidatedReportDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<IncomeReportDto> IncomeResult { get; init; } = ReportResult<IncomeReportDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ExpenseReportDto> ExpenseResult { get; init; } = ReportResult<ExpenseReportDto>.Failure("not_configured", "Not configured.");
 
         public Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
         {
@@ -123,6 +178,11 @@ public sealed class ReportsControllerTests
         public Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)
         {
             return Task.FromResult(IncomeResult);
+        }
+
+        public Task<ReportResult<ExpenseReportDto>> GetExpenseReportAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ExpenseResult);
         }
     }
 }

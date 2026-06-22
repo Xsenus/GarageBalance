@@ -62,6 +62,31 @@ export type IncomeReportDto = {
   rows: IncomeReportRowDto[]
 }
 
+export type ExpenseReportRowDto = {
+  rowType: string
+  date: string
+  accountingMonth: string
+  supplierId: string
+  supplierName: string
+  expenseTypeId: string
+  expenseTypeName: string
+  accrualAmount: number
+  expenseAmount: number
+  difference: number
+  documentNumber: string | null
+  comment: string | null
+}
+
+export type ExpenseReportDto = {
+  dateFrom: string
+  dateTo: string
+  accrualTotal: number
+  expenseTotal: number
+  difference: number
+  rowCount: number
+  rows: ExpenseReportRowDto[]
+}
+
 export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<ConsolidatedReportDto>
   getIncomeReport(
@@ -76,6 +101,17 @@ export type ReportClient = {
       rowMode?: string
     },
   ): Promise<IncomeReportDto>
+  getExpenseReport(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      supplierIds?: string[]
+      expenseTypeIds?: string[]
+      rowMode?: string
+    },
+  ): Promise<ExpenseReportDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
@@ -135,5 +171,28 @@ export const reportsApi: ReportClient = {
     }
     const query = searchParams.toString()
     return requestJson(accessToken, `/api/reports/income${query ? `?${query}` : ''}`)
+  },
+  getExpenseReport(accessToken, params = {}) {
+    const searchParams = new URLSearchParams()
+    if (params.dateFrom) {
+      searchParams.set('dateFrom', params.dateFrom)
+    }
+    if (params.dateTo) {
+      searchParams.set('dateTo', params.dateTo)
+    }
+    if (params.search) {
+      searchParams.set('search', params.search)
+    }
+    if (params.rowMode) {
+      searchParams.set('rowMode', params.rowMode)
+    }
+    for (const supplierId of params.supplierIds ?? []) {
+      searchParams.append('supplierIds', supplierId)
+    }
+    for (const expenseTypeId of params.expenseTypeIds ?? []) {
+      searchParams.append('expenseTypeIds', expenseTypeId)
+    }
+    const query = searchParams.toString()
+    return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`)
   },
 }

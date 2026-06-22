@@ -9,6 +9,9 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     private const string IncomeReportAllRows = "all";
     private const string IncomeReportAccrualRows = "accruals";
     private const string IncomeReportPaymentRows = "payments";
+    private const string ExpenseReportAllRows = "all";
+    private const string ExpenseReportAccrualRows = "accruals";
+    private const string ExpenseReportPaymentRows = "payments";
 
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
@@ -229,6 +232,98 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             rows);
 
         return ReportResult<IncomeReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<ExpenseReportDto>> GetExpenseReportAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
+    {
+        var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
+        if (dateTo < dateFrom)
+        {
+            return ReportResult<ExpenseReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        var rowMode = string.IsNullOrWhiteSpace(request.RowMode)
+            ? ExpenseReportAllRows
+            : request.RowMode.Trim().ToLowerInvariant();
+        if (rowMode is not (ExpenseReportAllRows or ExpenseReportAccrualRows or ExpenseReportPaymentRows))
+        {
+            return ReportResult<ExpenseReportDto>.Failure("row_mode_invalid", "Режим строк отчета по выплатам неизвестен.");
+        }
+
+        var supplierIds = request.SupplierIds.ToHashSet();
+        var expenseTypeIds = request.ExpenseTypeIds.ToHashSet();
+        var rows = new List<ExpenseReportRowDto>();
+
+        if (rowMode is ExpenseReportAllRows or ExpenseReportPaymentRows)
+        {
+            var paymentsQuery = dbContext.FinancialOperations.AsNoTracking()
+                .Include(operation => operation.Supplier)
+                .Include(operation => operation.ExpenseType)
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FinancialOperationKinds.Expense &&
+                    operation.SupplierId != null &&
+                    operation.ExpenseTypeId != null &&
+                    operation.OperationDate >= dateFrom &&
+                    operation.OperationDate <= dateTo);
+
+            if (supplierIds.Count > 0)
+            {
+                paymentsQuery = paymentsQuery.Where(operation => operation.SupplierId != null && supplierIds.Contains(operation.SupplierId.Value));
+            }
+
+            if (expenseTypeIds.Count > 0)
+            {
+                paymentsQuery = paymentsQuery.Where(operation => operation.ExpenseTypeId != null && expenseTypeIds.Contains(operation.ExpenseTypeId.Value));
+            }
+
+            var paymentRows = await paymentsQuery
+                .OrderBy(operation => operation.OperationDate)
+                .ThenBy(operation => operation.Supplier!.Name)
+                .ToListAsync(cancellationToken);
+
+            rows.AddRange(paymentRows.Select(operation => new ExpenseReportRowDto(
+                ExpenseReportPaymentRows,
+                operation.OperationDate,
+                operation.AccountingMonth,
+                operation.SupplierId!.Value,
+                operation.Supplier!.Name,
+                operation.ExpenseTypeId!.Value,
+                operation.ExpenseType!.Name,
+                0m,
+                operation.Amount,
+                -operation.Amount,
+                operation.DocumentNumber,
+                operation.Comment)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var normalizedSearch = request.Search.Trim();
+            rows = rows
+                .Where(row =>
+                    row.SupplierName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    row.ExpenseTypeName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (row.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        rows = rows
+            .OrderBy(row => row.Date)
+            .ThenBy(row => row.SupplierName)
+            .ThenBy(row => row.RowType)
+            .ToList();
+
+        var report = new ExpenseReportDto(
+            dateFrom,
+            dateTo,
+            rows.Sum(row => row.AccrualAmount),
+            rows.Sum(row => row.ExpenseAmount),
+            rows.Sum(row => row.Difference),
+            rows.Count,
+            rows);
+
+        return ReportResult<ExpenseReportDto>.Success(report);
     }
 
     private async Task<IReadOnlyList<GarageReportRowDto>> BuildGarageRowsAsync(string? search, DateOnly periodFrom, DateOnly periodTo, CancellationToken cancellationToken)

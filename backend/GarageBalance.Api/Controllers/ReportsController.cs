@@ -53,4 +53,31 @@ public sealed class ReportsController(IReportService reportService) : Controller
             ? Ok(result.Value)
             : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
     }
+
+    [HttpGet("expense")]
+    [ProducesResponseType<ExpenseReportDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ExpenseReportDto>> GetExpenseReport(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        [FromQuery] Guid[]? supplierIds,
+        [FromQuery] Guid[]? expenseTypeIds,
+        [FromQuery] string? rowMode,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.GetExpenseReportAsync(
+            new ExpenseReportRequest(
+                dateFrom,
+                dateTo,
+                search,
+                supplierIds ?? [],
+                expenseTypeIds ?? [],
+                rowMode),
+            cancellationToken);
+
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+    }
 }

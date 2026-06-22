@@ -5,7 +5,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
-import type { ConsolidatedReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
@@ -267,10 +267,32 @@ describe('App', () => {
 
     await user.selectOptions(within(reportsPanel).getByLabelText('Тип строк отчета по поступлениям'), 'payments')
     await user.selectOptions(within(reportsPanel).getByLabelText('Вид поступления в отчете'), 'income-type-1')
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать' }))
+    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[0])
 
-    expect(await within(reportsPanel).findByText('1 строк')).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('+1 500,00')).toBeInTheDocument()
+    expect((await within(reportsPanel).findAllByText('1 строк')).length).toBeGreaterThan(0)
+    expect((await within(reportsPanel).findAllByText('1 500,00')).length).toBeGreaterThan(0)
+  })
+
+  it('shows expense report and applies expense filters', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    expect(await within(reportsPanel).findByText('Отчет по выплатам')).toBeInTheDocument()
+    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })).toBeInTheDocument()
+    expect(within(reportsPanel).getByText(/Водоканал · Вода/)).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('RKO-1')).toBeInTheDocument()
+
+    await user.selectOptions(within(reportsPanel).getByLabelText('Тип строк отчета по выплатам'), 'payments')
+    await user.selectOptions(within(reportsPanel).getByLabelText('Поставщик в отчете по выплатам'), 'supplier-1')
+    await user.selectOptions(within(reportsPanel).getByLabelText('Вид выплаты в отчете'), 'expense-type-1')
+    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[1])
+
+    expect((await within(reportsPanel).findAllByText('400,00')).length).toBeGreaterThan(0)
   })
 
   it('shows login errors without opening protected workspace', async () => {
@@ -504,6 +526,19 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
           accrualTotal: 0,
           incomeTotal: 1500,
           debt: -1500,
+          rowCount: 1,
+          rows: report.rows.filter((row) => row.rowType === 'payments'),
+        })
+      }
+      return report
+    },
+    getExpenseReport: async (_token, params) => {
+      const report = createExpenseReport()
+      if (params?.rowMode === 'payments') {
+        return createExpenseReport({
+          accrualTotal: 0,
+          expenseTotal: 400,
+          difference: -400,
           rowCount: 1,
           rows: report.rows.filter((row) => row.rowType === 'payments'),
         })
@@ -977,6 +1012,34 @@ function createIncomeReport(overrides: Partial<IncomeReportDto> = {}): IncomeRep
         debt: -1500,
         documentNumber: 'PKO-1',
         comment: 'Оплата за июнь',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createExpenseReport(overrides: Partial<ExpenseReportDto> = {}): ExpenseReportDto {
+  return {
+    dateFrom: '2026-06-01',
+    dateTo: '2026-06-30',
+    accrualTotal: 0,
+    expenseTotal: 400,
+    difference: -400,
+    rowCount: 1,
+    rows: [
+      {
+        rowType: 'payments',
+        date: '2026-06-12',
+        accountingMonth: '2026-06-01',
+        supplierId: 'supplier-1',
+        supplierName: 'Водоканал',
+        expenseTypeId: 'expense-type-1',
+        expenseTypeName: 'Вода',
+        accrualAmount: 0,
+        expenseAmount: 400,
+        difference: -400,
+        documentNumber: 'RKO-1',
+        comment: 'Оплата воды',
       },
     ],
     ...overrides,
