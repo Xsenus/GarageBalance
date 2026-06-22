@@ -411,6 +411,12 @@ h1 {
   gap: 12px;
 }
 
+.user-management-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 12px;
+}
+
 .dictionary-form {
   display: grid;
   align-content: start;
@@ -513,6 +519,62 @@ h1 {
   padding-top: 10px;
 }
 
+.user-table {
+  overflow: hidden;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+
+.user-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(160px, 1fr) 110px;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #e4e7ec;
+  padding: 10px 12px;
+  color: #344054;
+  font-size: 14px;
+}
+
+.user-table-row.header {
+  border-top: 0;
+  background: #f2f4f7;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.user-table-row strong,
+.user-table-row small {
+  display: block;
+}
+
+.user-table-row small {
+  margin-top: 3px;
+  color: #667085;
+}
+
+.status-active,
+.status-disabled {
+  border-radius: 999px;
+  padding: 5px 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-active {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.status-disabled {
+  background: #f2f4f7;
+  color: #667085;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -540,6 +602,14 @@ h1 {
   }
 
   .dictionary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-table-row {
     grid-template-columns: 1fr;
   }
 }

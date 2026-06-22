@@ -42,6 +42,9 @@ npm run dev
 - `POST /api/auth/bootstrap-admin` - создание первого администратора.
 - `POST /api/auth/login` - вход по email и паролю.
 - `GET /api/auth/me` - текущий пользователь.
+- `GET /api/users/roles` - доступные системные роли.
+- `GET/POST /api/users` - список и создание пользователей.
+- `PUT /api/users/{id}` - изменение пользователя, ролей, активности и пароля.
 - `GET/POST /api/dictionaries/owners` - владельцы.
 - `GET/POST /api/dictionaries/garages` - гаражи.
 - `GET/POST /api/dictionaries/supplier-groups` - группы поставщиков.

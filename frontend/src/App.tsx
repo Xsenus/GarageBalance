@@ -20,11 +20,14 @@ import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto } from './services/dictionariesApi'
+import { usersApi } from './services/usersApi'
+import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
 
 type AppProps = {
   authClient?: AuthClient
   dictionaryClient?: DictionaryClient
+  userClient?: UserManagementClient
 }
 
 const navigation = [
@@ -60,12 +63,13 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлено управление пользователями: администратор может создать сотрудника, назначить роль и увидеть статус доступа.',
   'Добавлен контур входа: создание администратора, обычный вход и отображение текущего пользователя.',
   'Backend получил контроллеры авторизации, JWT, роли, права и audit-события.',
   'Добавлены справочники владельцев, гаражей, групп поставщиков и поставщиков с тестами и миграцией.',
 ]
 
-function App({ authClient = authApi, dictionaryClient = dictionariesApi }: AppProps) {
+function App({ authClient = authApi, dictionaryClient = dictionariesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
 
   return (
@@ -102,7 +106,7 @@ function App({ authClient = authApi, dictionaryClient = dictionariesApi }: AppPr
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} dictionaryClient={dictionaryClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} dictionaryClient={dictionaryClient} userClient={userClient} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -188,10 +192,12 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 function Workspace({
   auth,
   dictionaryClient,
+  userClient,
   onLogout,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
+  userClient: UserManagementClient
   onLogout: () => void
 }) {
   return (
@@ -239,6 +245,8 @@ function Workspace({
         </div>
       </section>
 
+      <UserManagementPanel auth={auth} userClient={userClient} />
+
       <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
 
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
@@ -266,6 +274,123 @@ function Workspace({
         </ul>
       </section>
     </>
+  )
+}
+
+function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
+  const [roles, setRoles] = useState<ManagedRoleDto[]>([])
+  const [users, setUsers] = useState<ManagedUserDto[]>([])
+  const [form, setForm] = useState({ email: '', displayName: '', password: '', roleCode: 'operator' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [loadedRoles, loadedUsers] = await Promise.all([
+          userClient.getRoles(auth.accessToken),
+          userClient.getUsers(auth.accessToken),
+        ])
+        if (!ignore) {
+          setRoles(loadedRoles)
+          setUsers(loadedUsers)
+          setForm((value) => ({ ...value, roleCode: loadedRoles.find((role) => role.code === value.roleCode)?.code ?? loadedRoles[0]?.code ?? '' }))
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, userClient])
+
+  async function saveUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const user = await userClient.createUser(auth.accessToken, {
+        email: form.email,
+        displayName: form.displayName,
+        password: form.password,
+        roleCodes: [form.roleCode],
+        isActive: true,
+      })
+      setUsers((items) => [user, ...items])
+      setForm((value) => ({ email: '', displayName: '', password: '', roleCode: value.roleCode }))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось создать пользователя.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="dictionary-panel" aria-label="Пользователи">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Пользователи</p>
+          <h2>Доступ в систему и роли сотрудников</h2>
+        </div>
+        <span>{loading ? 'Загрузка...' : `${users.length} пользователей`}</span>
+      </div>
+
+      {error ? <div className="form-error">{error}</div> : null}
+
+      <div className="user-management-grid">
+        <form className="dictionary-form" onSubmit={saveUser}>
+          <h3>Новый сотрудник</h3>
+          <input aria-label="Email пользователя" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
+          <input aria-label="Имя пользователя" placeholder="Имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
+          <input aria-label="Пароль пользователя" placeholder="Пароль" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" minLength={8} required />
+          <select aria-label="Роль пользователя" value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })} required>
+            {roles.map((role) => (
+              <option value={role.code} key={role.code}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+          <button className="secondary-button" type="submit" disabled={saving || roles.length === 0}>
+            <Plus size={16} />
+            <span>Добавить</span>
+          </button>
+        </form>
+
+        <div className="user-table" role="table" aria-label="Список пользователей">
+          <div className="user-table-row header" role="row">
+            <span role="columnheader">Сотрудник</span>
+            <span role="columnheader">Роли</span>
+            <span role="columnheader">Статус</span>
+          </div>
+          {users.length === 0 ? <p className="empty-state">Пользователей пока нет</p> : null}
+          {users.slice(0, 8).map((user) => (
+            <div className="user-table-row" role="row" key={user.id}>
+              <span role="cell">
+                <strong>{user.displayName}</strong>
+                <small>{user.email}</small>
+              </span>
+              <span role="cell">{user.roles.join(', ')}</span>
+              <span role="cell" className={user.isActive ? 'status-active' : 'status-disabled'}>
+                {user.isActive ? 'Активен' : 'Отключен'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 

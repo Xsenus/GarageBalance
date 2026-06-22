@@ -3,10 +3,11 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto } from './services/dictionariesApi'
+import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
   it('shows auth gate before workspace is available', () => {
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
 
     expect(screen.getByText('GarageBalance')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
@@ -15,18 +16,22 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Панель' })).toBeDisabled()
   })
 
-  it('creates first administrator and opens the workspace with dictionaries', async () => {
+  it('creates first administrator and opens the workspace with users and dictionaries', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
 
     await user.clear(screen.getByLabelText('Пароль'))
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     expect(await screen.findByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
-    expect(screen.getByText('Администратор')).toBeInTheDocument()
-    expect(screen.getByText('administrator')).toBeInTheDocument()
+    expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
+
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    expect(within(usersPanel).getByText('Администратор ГСК')).toBeInTheDocument()
+    expect(within(usersPanel).getByText('admin@example.com')).toBeInTheDocument()
 
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(within(dictionaryPanel).getAllByText('Иванов Иван').length).toBeGreaterThan(0)
@@ -34,34 +39,54 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
   })
 
-  it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
+  it('adds managed user from protected workspace', async () => {
     const user = userEvent.setup()
-    const dictionaryClient = createStatefulDictionaryClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} />)
+    const userClient = createStatefulUserClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
-    await screen.findByRole('region', { name: 'Справочники' })
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
-    await user.type(screen.getByLabelText('Фамилия владельца'), 'Петров')
-    await user.type(screen.getByLabelText('Имя владельца'), 'Петр')
-    await user.type(screen.getByLabelText('Телефон владельца'), '+7 913')
-    await user.click(screen.getAllByRole('button', { name: 'Добавить' })[0])
-    expect((await screen.findAllByText('Петров Петр')).length).toBeGreaterThan(0)
+    await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(usersPanel).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(usersPanel).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.selectOptions(within(usersPanel).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
 
-    await user.type(screen.getByLabelText('Номер гаража'), '21')
-    await user.selectOptions(screen.getByLabelText('Владелец гаража'), screen.getByRole('option', { name: 'Петров Петр' }))
-    await user.click(screen.getAllByRole('button', { name: 'Добавить' })[1])
-    expect(await screen.findByText('Гараж 21')).toBeInTheDocument()
-    expect(screen.getAllByText('Петров Петр').length).toBeGreaterThan(0)
+    expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
+    expect(within(usersPanel).getByText('operator@example.com')).toBeInTheDocument()
+    expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
+  })
 
-    await user.type(screen.getByLabelText('Группа поставщиков'), 'Связь')
-    await user.click(screen.getByRole('button', { name: 'Добавить группу' }))
-    await user.type(screen.getByLabelText('Название поставщика'), 'Сибирь Онлайн')
-    await user.type(screen.getByLabelText('ИНН поставщика'), '5401000000')
-    await user.click(screen.getAllByRole('button', { name: 'Добавить' })[2])
-    expect(await screen.findByText('Сибирь Онлайн')).toBeInTheDocument()
-    expect(screen.getByText('Связь, ИНН 5401000000')).toBeInTheDocument()
+  it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createStatefulDictionaryClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), 'Петров')
+    await user.type(within(dictionaryPanel).getByLabelText('Имя владельца'), 'Петр')
+    await user.type(within(dictionaryPanel).getByLabelText('Телефон владельца'), '+7 913')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[0])
+    expect((await within(dictionaryPanel).findAllByText('Петров Петр')).length).toBeGreaterThan(0)
+
+    await user.type(within(dictionaryPanel).getByLabelText('Номер гаража'), '21')
+    await user.selectOptions(within(dictionaryPanel).getByLabelText('Владелец гаража'), within(dictionaryPanel).getByRole('option', { name: 'Петров Петр' }))
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[1])
+    expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getAllByText('Петров Петр').length).toBeGreaterThan(0)
+
+    await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), 'Связь')
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
+    await user.type(within(dictionaryPanel).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
+    await user.type(within(dictionaryPanel).getByLabelText('ИНН поставщика'), '5401000000')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
+    expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000')).toBeInTheDocument()
   })
 
   it('shows login errors without opening protected workspace', async () => {
@@ -71,7 +96,7 @@ describe('App', () => {
         throw new Error('Неверный email или пароль.')
       },
     })
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
 
     await user.click(screen.getByRole('button', { name: 'Вход' }))
     await user.type(screen.getByLabelText('Пароль'), 'WrongPass123')
@@ -83,18 +108,19 @@ describe('App', () => {
 
   it('shows first release notes for authenticated users', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
     expect(within(releasePanel).getByText('Журнал обновлений включен с первого дня')).toBeInTheDocument()
+    expect(within(releasePanel).getByText(/управление пользователями/)).toBeInTheDocument()
     expect(within(releasePanel).getByText(/контур входа/)).toBeInTheDocument()
     expect(within(releasePanel).getByText(/справочники владельцев/)).toBeInTheDocument()
   })
 
-  it('shows dictionary loading errors inside workspace', async () => {
+  it('shows workspace loading errors inside the related panel', async () => {
     const user = userEvent.setup()
     render(
       <App
@@ -104,12 +130,18 @@ describe('App', () => {
             throw new Error('Нет доступа к справочникам.')
           },
         })}
+        userClient={createUserClient({
+          getUsers: async () => {
+            throw new Error('Нет доступа к пользователям.')
+          },
+        })}
       />,
     )
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
+    expect(await screen.findByText('Нет доступа к пользователям.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к справочникам.')).toBeInTheDocument()
   })
 })
@@ -119,6 +151,50 @@ function createAuthClient(overrides: Partial<AuthClient> = {}): AuthClient {
     bootstrapAdmin: async () => createAuthResponse(),
     login: async () => createAuthResponse(),
     ...overrides,
+  }
+}
+
+function createUserClient(overrides: Partial<UserManagementClient> = {}): UserManagementClient {
+  const roles = createRoles()
+  const admin = createManagedUser({
+    id: 'admin-user',
+    email: 'admin@example.com',
+    displayName: 'Администратор ГСК',
+    roles: ['administrator'],
+    permissions: ['users.manage'],
+  })
+
+  return {
+    getRoles: async () => roles,
+    getUsers: async () => [admin],
+    createUser: async () => admin,
+    updateUser: async () => admin,
+    ...overrides,
+  }
+}
+
+function createStatefulUserClient(): UserManagementClient {
+  const roles = createRoles()
+
+  return {
+    getRoles: async () => roles,
+    getUsers: async () => [],
+    createUser: async (_token, request) =>
+      createManagedUser({
+        id: crypto.randomUUID(),
+        email: request.email,
+        displayName: request.displayName,
+        roles: request.roleCodes,
+        permissions: roles.find((role) => role.code === request.roleCodes[0])?.permissions ?? [],
+      }),
+    updateUser: async (_token, userId, request) =>
+      createManagedUser({
+        id: userId,
+        email: 'updated@example.com',
+        displayName: request.displayName,
+        isActive: request.isActive,
+        roles: request.roleCodes,
+      }),
   }
 }
 
@@ -155,13 +231,12 @@ function createStatefulDictionaryClient(): DictionaryClient {
     getGarages: async () => [],
     createGarage: async (_token, request) => {
       const owner = lastOwner?.id === request.ownerId ? lastOwner : null
-      const garage = createGarage({
+      return createGarage({
         id: crypto.randomUUID(),
         number: request.number,
         ownerId: owner?.id ?? null,
         ownerName: owner?.fullName ?? null,
       })
-      return garage
     },
     getSupplierGroups: async () => [],
     createSupplierGroup: async (_token, request) => {
@@ -172,14 +247,13 @@ function createStatefulDictionaryClient(): DictionaryClient {
     getSuppliers: async () => [],
     createSupplier: async (_token, request) => {
       const group = lastGroup?.id === request.groupId ? lastGroup : createGroup({ id: request.groupId, name: 'Поставщики' })
-      const supplier = createSupplier({
+      return createSupplier({
         id: crypto.randomUUID(),
         name: request.name,
         groupId: group.id,
         groupName: group.name,
         inn: request.inn ?? null,
       })
-      return supplier
     },
   }
 }
@@ -195,6 +269,28 @@ function createAuthResponse(): AuthResponse {
       roles: ['administrator'],
       permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'payments.read'],
     },
+  }
+}
+
+function createRoles(): ManagedRoleDto[] {
+  return [
+    { code: 'administrator', name: 'Администратор', permissions: ['users.manage'] },
+    { code: 'operator', name: 'Оператор', permissions: ['dictionaries.read', 'payments.write'] },
+    { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.write', 'payments.write'] },
+  ]
+}
+
+function createManagedUser(overrides: Partial<ManagedUserDto>): ManagedUserDto {
+  return {
+    id: 'user',
+    email: 'user@example.com',
+    displayName: 'Пользователь',
+    isActive: true,
+    createdAtUtc: new Date(Date.now() - 60_000).toISOString(),
+    lastLoginAtUtc: null,
+    roles: ['operator'],
+    permissions: ['dictionaries.read'],
+    ...overrides,
   }
 }
 

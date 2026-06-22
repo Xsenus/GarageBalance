@@ -1,0 +1,110 @@
+using System.Security.Claims;
+using GarageBalance.Api.Application.Users;
+using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Domain.Security;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GarageBalance.Api.Tests.Users;
+
+public sealed class UsersControllerTests
+{
+    [Fact]
+    public async Task CreateUser_ReturnsConflictForDuplicateEmail()
+    {
+        var controller = CreateController(new FakeUserManagementService
+        {
+            CreateResult = UserManagementResult<ManagedUserDto>.Failure("user_email_duplicate", "Пользователь с таким email уже существует.")
+        });
+
+        var result = await controller.CreateUser(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator]),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("user_email_duplicate", problem.Title);
+    }
+
+    [Fact]
+    public async Task UpdateUser_ReturnsNotFoundForMissingUser()
+    {
+        var controller = CreateController(new FakeUserManagementService
+        {
+            UpdateResult = UserManagementResult<ManagedUserDto>.Failure("user_not_found", "Пользователь не найден.")
+        });
+
+        var result = await controller.UpdateUser(
+            Guid.NewGuid(),
+            new UpdateManagedUserRequest("User", [SystemRoles.Operator], true, null),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("user_not_found", problem.Title);
+    }
+
+    [Fact]
+    public async Task CreateUser_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var user = CreateUserDto();
+        var service = new FakeUserManagementService
+        {
+            CreateResult = UserManagementResult<ManagedUserDto>.Success(user)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateUser(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator]),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    private static UsersController CreateController(FakeUserManagementService service, Guid? actorUserId = null)
+    {
+        var controller = new UsersController(service);
+        var claims = actorUserId is null ? [] : new[] { new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString()) };
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
+        };
+        return controller;
+    }
+
+    private static ManagedUserDto CreateUserDto()
+    {
+        return new ManagedUserDto(Guid.NewGuid(), "user@example.com", "User", true, DateTimeOffset.UtcNow, null, [SystemRoles.Operator], [SystemPermissions.DictionariesRead]);
+    }
+
+    private sealed class FakeUserManagementService : IUserManagementService
+    {
+        public Guid? LastActorUserId { get; private set; }
+        public UserManagementResult<ManagedUserDto> CreateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
+        public UserManagementResult<ManagedUserDto> UpdateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
+
+        public Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<ManagedRoleDto>>([]);
+        }
+
+        public Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<ManagedUserDto>>([]);
+        }
+
+        public Task<UserManagementResult<ManagedUserDto>> CreateUserAsync(CreateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateResult);
+        }
+
+        public Task<UserManagementResult<ManagedUserDto>> UpdateUserAsync(Guid userId, UpdateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateResult);
+        }
+    }
+}

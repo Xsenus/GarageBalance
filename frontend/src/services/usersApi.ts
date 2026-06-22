@@ -1,0 +1,85 @@
+export type ManagedRoleDto = {
+  code: string
+  name: string
+  permissions: string[]
+}
+
+export type ManagedUserDto = {
+  id: string
+  email: string
+  displayName: string
+  isActive: boolean
+  createdAtUtc: string
+  lastLoginAtUtc: string | null
+  roles: string[]
+  permissions: string[]
+}
+
+export type CreateManagedUserRequest = {
+  email: string
+  displayName: string
+  password: string
+  roleCodes: string[]
+  isActive: boolean
+}
+
+export type UpdateManagedUserRequest = {
+  displayName: string
+  roleCodes: string[]
+  isActive: boolean
+  newPassword?: string | null
+}
+
+export type UserManagementClient = {
+  getRoles(accessToken: string): Promise<ManagedRoleDto[]>
+  getUsers(accessToken: string, search?: string): Promise<ManagedUserDto[]>
+  createUser(accessToken: string, request: CreateManagedUserRequest): Promise<ManagedUserDto>
+  updateUser(accessToken: string, userId: string, request: UpdateManagedUserRequest): Promise<ManagedUserDto>
+}
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
+
+async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
+    },
+  })
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    throw new Error(problem?.detail ?? 'Не удалось выполнить запрос.')
+  }
+
+  return response.json()
+}
+
+function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      query.set(key, value)
+    }
+  }
+
+  const queryString = query.toString()
+  return queryString ? `${path}?${queryString}` : path
+}
+
+export const usersApi: UserManagementClient = {
+  getRoles(accessToken) {
+    return requestJson(accessToken, '/api/users/roles')
+  },
+  getUsers(accessToken, search) {
+    return requestJson(accessToken, withQuery('/api/users', { search }))
+  },
+  createUser(accessToken, request) {
+    return requestJson(accessToken, '/api/users', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateUser(accessToken, userId, request) {
+    return requestJson(accessToken, `/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+}
