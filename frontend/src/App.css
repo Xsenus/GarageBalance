@@ -677,11 +677,24 @@ button.operation-row:hover {
 }
 
 .report-filter {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: center;
   margin-bottom: 16px;
 }
 
 .report-filter input {
   min-width: 160px;
+}
+
+.form-note {
+  border: 1px solid #abefc6;
+  border-radius: 8px;
+  background: #ecfdf3;
+  color: #027a48;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  padding: 10px 12px;
 }
 
 .user-table-row.header,

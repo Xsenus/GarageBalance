@@ -103,3 +103,8 @@ public sealed record ExpenseReportRowDto(
     decimal Difference,
     string? DocumentNumber,
     string? Comment);
+
+public sealed record ReportExportFileDto(
+    string FileName,
+    string ContentType,
+    byte[] Content);

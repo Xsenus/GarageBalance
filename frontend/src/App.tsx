@@ -987,9 +987,13 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [loading, setLoading] = useState(true)
   const [incomeLoading, setIncomeLoading] = useState(true)
   const [expenseLoading, setExpenseLoading] = useState(true)
+  const [incomeExporting, setIncomeExporting] = useState(false)
+  const [expenseExporting, setExpenseExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [incomeError, setIncomeError] = useState<string | null>(null)
   const [expenseError, setExpenseError] = useState<string | null>(null)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -1130,6 +1134,49 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     })
   }
 
+  async function exportIncomeXlsx() {
+    setIncomeExporting(true)
+    setExportError(null)
+    setExportMessage(null)
+    try {
+      const blob = await reportClient.exportIncomeReportXlsx(auth.accessToken, {
+        dateFrom: incomeFilters.dateFrom,
+        dateTo: incomeFilters.dateTo,
+        search: incomeFilters.search,
+        incomeTypeIds: incomeFilters.incomeTypeId ? [incomeFilters.incomeTypeId] : [],
+        rowMode: incomeFilters.rowMode,
+      })
+      downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo))
+      setExportMessage('XLSX по поступлениям готов.')
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет по поступлениям.')
+    } finally {
+      setIncomeExporting(false)
+    }
+  }
+
+  async function exportExpenseXlsx() {
+    setExpenseExporting(true)
+    setExportError(null)
+    setExportMessage(null)
+    try {
+      const blob = await reportClient.exportExpenseReportXlsx(auth.accessToken, {
+        dateFrom: expenseFilters.dateFrom,
+        dateTo: expenseFilters.dateTo,
+        search: expenseFilters.search,
+        supplierIds: expenseFilters.supplierId ? [expenseFilters.supplierId] : [],
+        expenseTypeIds: expenseFilters.expenseTypeId ? [expenseFilters.expenseTypeId] : [],
+        rowMode: expenseFilters.rowMode,
+      })
+      downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo))
+      setExportMessage('XLSX по выплатам готов.')
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет по выплатам.')
+    } finally {
+      setExpenseExporting(false)
+    }
+  }
+
   return (
     <section className="dictionary-panel" aria-label="Отчеты">
       <div className="section-heading">
@@ -1141,6 +1188,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       </div>
 
       {error ? <div className="form-error">{error}</div> : null}
+      {exportError ? <div className="form-error">{exportError}</div> : null}
+      {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <form className="compact-form report-filter" onSubmit={applyFilters}>
         <input aria-label="Начало периода отчета" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
@@ -1255,6 +1304,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <Search size={16} />
           <span>Показать</span>
         </button>
+        <button className="secondary-button" type="button" onClick={exportIncomeXlsx} disabled={incomeLoading || incomeExporting}>
+          <FileSpreadsheet size={16} />
+          <span>{incomeExporting ? 'Готовим XLSX' : 'Скачать поступления XLSX'}</span>
+        </button>
       </form>
 
       <div className="summary-strip" aria-label="Итоги отчета по поступлениям">
@@ -1334,6 +1387,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <button className="secondary-button" type="submit">
           <Search size={16} />
           <span>Показать</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={exportExpenseXlsx} disabled={expenseLoading || expenseExporting}>
+          <FileSpreadsheet size={16} />
+          <span>{expenseExporting ? 'Готовим XLSX' : 'Скачать выплаты XLSX'}</span>
         </button>
       </form>
 
@@ -1787,6 +1844,25 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
+}
+
+function buildReportFileName(type: 'income' | 'expense', dateFrom: string, dateTo: string): string {
+  return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.xlsx`
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  if (typeof URL.createObjectURL !== 'function') {
+    return
+  }
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function formatReleaseDate(value: string): string {

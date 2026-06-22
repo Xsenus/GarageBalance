@@ -4,6 +4,7 @@ using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.IO.Compression;
 
 namespace GarageBalance.Api.Tests.Reports;
 
@@ -228,6 +229,45 @@ public sealed class ReportServiceTests
         Assert.Equal("period_invalid", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
+
+        var result = await service.ExportIncomeReportXlsxAsync(
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "PKO-1", [], [], [], "payments"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-income-20260601-20260630.xlsx", result.Value!.FileName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
+        AssertWorkbookContains(result.Value.Content, "PKO-1");
+        AssertWorkbookContains(result.Value.Content, "Поступления");
+    }
+
+    [Fact]
+    public async Task ExportExpenseReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
+
+        var result = await service.ExportExpenseReportXlsxAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "RKO-1", [], [], "payments"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-expense-20260601-20260630.xlsx", result.Value!.FileName);
+        AssertWorkbookContains(result.Value.Content, "RKO-1");
+        AssertWorkbookContains(result.Value.Content, "Выплаты");
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -276,4 +316,20 @@ public sealed class ReportServiceTests
     }
 
     private sealed record Fixtures(Garage FirstGarage, Garage SecondGarage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType);
+
+    private static void AssertWorkbookContains(byte[] content, string expected)
+    {
+        using var stream = new MemoryStream(content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        Assert.NotNull(archive.GetEntry("xl/workbook.xml"));
+        Assert.NotNull(archive.GetEntry("xl/worksheets/sheet1.xml"));
+        var text = string.Join('\n', archive.Entries.Select(ReadEntry));
+        Assert.Contains(expected, text);
+    }
+
+    private static string ReadEntry(ZipArchiveEntry entry)
+    {
+        using var reader = new StreamReader(entry.Open());
+        return reader.ReadToEnd();
+    }
 }

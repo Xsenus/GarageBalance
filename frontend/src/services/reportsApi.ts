@@ -101,6 +101,18 @@ export type ReportClient = {
       rowMode?: string
     },
   ): Promise<IncomeReportDto>
+  exportIncomeReportXlsx(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      garageIds?: string[]
+      ownerIds?: string[]
+      incomeTypeIds?: string[]
+      rowMode?: string
+    },
+  ): Promise<Blob>
   getExpenseReport(
     accessToken: string,
     params?: {
@@ -112,6 +124,17 @@ export type ReportClient = {
       rowMode?: string
     },
   ): Promise<ExpenseReportDto>
+  exportExpenseReportXlsx(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      supplierIds?: string[]
+      expenseTypeIds?: string[]
+      rowMode?: string
+    },
+  ): Promise<Blob>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
@@ -131,6 +154,70 @@ async function requestJson<TResponse>(accessToken: string, path: string): Promis
   return response.json()
 }
 
+async function requestBlob(accessToken: string, path: string): Promise<Blob> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    throw new Error(problem?.detail ?? 'Не удалось выгрузить отчет.')
+  }
+
+  return response.blob()
+}
+
+function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.dateFrom) {
+    searchParams.set('dateFrom', params.dateFrom)
+  }
+  if (params.dateTo) {
+    searchParams.set('dateTo', params.dateTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  if (params.rowMode) {
+    searchParams.set('rowMode', params.rowMode)
+  }
+  for (const garageId of params.garageIds ?? []) {
+    searchParams.append('garageIds', garageId)
+  }
+  for (const ownerId of params.ownerIds ?? []) {
+    searchParams.append('ownerIds', ownerId)
+  }
+  for (const incomeTypeId of params.incomeTypeIds ?? []) {
+    searchParams.append('incomeTypeIds', incomeTypeId)
+  }
+  return searchParams.toString()
+}
+
+function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.dateFrom) {
+    searchParams.set('dateFrom', params.dateFrom)
+  }
+  if (params.dateTo) {
+    searchParams.set('dateTo', params.dateTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  if (params.rowMode) {
+    searchParams.set('rowMode', params.rowMode)
+  }
+  for (const supplierId of params.supplierIds ?? []) {
+    searchParams.append('supplierIds', supplierId)
+  }
+  for (const expenseTypeId of params.expenseTypeIds ?? []) {
+    searchParams.append('expenseTypeIds', expenseTypeId)
+  }
+  return searchParams.toString()
+}
+
 export const reportsApi: ReportClient = {
   getConsolidatedReport(accessToken, params = {}) {
     const searchParams = new URLSearchParams()
@@ -147,52 +234,19 @@ export const reportsApi: ReportClient = {
     return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`)
   },
   getIncomeReport(accessToken, params = {}) {
-    const searchParams = new URLSearchParams()
-    if (params.dateFrom) {
-      searchParams.set('dateFrom', params.dateFrom)
-    }
-    if (params.dateTo) {
-      searchParams.set('dateTo', params.dateTo)
-    }
-    if (params.search) {
-      searchParams.set('search', params.search)
-    }
-    if (params.rowMode) {
-      searchParams.set('rowMode', params.rowMode)
-    }
-    for (const garageId of params.garageIds ?? []) {
-      searchParams.append('garageIds', garageId)
-    }
-    for (const ownerId of params.ownerIds ?? []) {
-      searchParams.append('ownerIds', ownerId)
-    }
-    for (const incomeTypeId of params.incomeTypeIds ?? []) {
-      searchParams.append('incomeTypeIds', incomeTypeId)
-    }
-    const query = searchParams.toString()
+    const query = buildIncomeReportQuery(params)
     return requestJson(accessToken, `/api/reports/income${query ? `?${query}` : ''}`)
   },
+  exportIncomeReportXlsx(accessToken, params = {}) {
+    const query = buildIncomeReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/income/export/xlsx${query ? `?${query}` : ''}`)
+  },
   getExpenseReport(accessToken, params = {}) {
-    const searchParams = new URLSearchParams()
-    if (params.dateFrom) {
-      searchParams.set('dateFrom', params.dateFrom)
-    }
-    if (params.dateTo) {
-      searchParams.set('dateTo', params.dateTo)
-    }
-    if (params.search) {
-      searchParams.set('search', params.search)
-    }
-    if (params.rowMode) {
-      searchParams.set('rowMode', params.rowMode)
-    }
-    for (const supplierId of params.supplierIds ?? []) {
-      searchParams.append('supplierIds', supplierId)
-    }
-    for (const expenseTypeId of params.expenseTypeIds ?? []) {
-      searchParams.append('expenseTypeIds', expenseTypeId)
-    }
-    const query = searchParams.toString()
+    const query = buildExpenseReportQuery(params)
     return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`)
+  },
+  exportExpenseReportXlsx(accessToken, params = {}) {
+    const query = buildExpenseReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/expense/export/xlsx${query ? `?${query}` : ''}`)
   },
 }

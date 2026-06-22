@@ -326,6 +326,103 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
         return ReportResult<ExpenseReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetIncomeReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Поступления",
+                    ["Тип", "Дата", "Месяц учета", "Гараж", "Владелец", "Вид поступления", "Начислено", "Оплачено", "Разница", "Документ", "Комментарий"],
+                    report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(FormatIncomeRowType(row.RowType)),
+                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
+                        XlsxCell.Text(row.GarageNumber),
+                        XlsxCell.Text(row.OwnerName),
+                        XlsxCell.Text(row.IncomeTypeName),
+                        XlsxCell.Number(row.AccrualAmount),
+                        XlsxCell.Number(row.IncomeAmount),
+                        XlsxCell.Number(row.Debt),
+                        XlsxCell.Text(row.DocumentNumber),
+                        XlsxCell.Text(row.Comment)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Начислено", "Оплачено", "Разница", "Строк"],
+                    [
+                        [
+                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Number(report.AccrualTotal),
+                            XlsxCell.Number(report.IncomeTotal),
+                            XlsxCell.Number(report.Debt),
+                            XlsxCell.Number(report.RowCount)
+                        ]
+                    ])
+            ]);
+
+        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+            BuildExportFileName("income", report.DateFrom, report.DateTo),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content));
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportExpenseReportXlsxAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetExpenseReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Выплаты",
+                    ["Тип", "Дата", "Месяц учета", "Поставщик", "Вид выплаты", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
+                    report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(FormatExpenseRowType(row.RowType)),
+                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
+                        XlsxCell.Text(row.SupplierName),
+                        XlsxCell.Text(row.ExpenseTypeName),
+                        XlsxCell.Number(row.AccrualAmount),
+                        XlsxCell.Number(row.ExpenseAmount),
+                        XlsxCell.Number(row.Difference),
+                        XlsxCell.Text(row.DocumentNumber),
+                        XlsxCell.Text(row.Comment)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Начислено", "Выплачено", "Разница", "Строк"],
+                    [
+                        [
+                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Number(report.AccrualTotal),
+                            XlsxCell.Number(report.ExpenseTotal),
+                            XlsxCell.Number(report.Difference),
+                            XlsxCell.Number(report.RowCount)
+                        ]
+                    ])
+            ]);
+
+        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+            BuildExportFileName("expense", report.DateFrom, report.DateTo),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content));
+    }
+
     private async Task<IReadOnlyList<GarageReportRowDto>> BuildGarageRowsAsync(string? search, DateOnly periodFrom, DateOnly periodTo, CancellationToken cancellationToken)
     {
         var garagesQuery = dbContext.Garages.AsNoTracking()
@@ -408,6 +505,31 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
         var start = dateFrom ?? new DateOnly(today.Year, today.Month, 1);
         var end = dateTo ?? new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
         return (start, end);
+    }
+
+    private static string BuildExportFileName(string reportType, DateOnly dateFrom, DateOnly dateTo)
+    {
+        return $"garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.xlsx";
+    }
+
+    private static string FormatIncomeRowType(string rowType)
+    {
+        return rowType switch
+        {
+            IncomeReportAccrualRows => "Начисление",
+            IncomeReportPaymentRows => "Оплата",
+            _ => rowType
+        };
+    }
+
+    private static string FormatExpenseRowType(string rowType)
+    {
+        return rowType switch
+        {
+            ExpenseReportAccrualRows => "Начисление",
+            ExpenseReportPaymentRows => "Выплата",
+            _ => rowType
+        };
     }
 
     private readonly record struct AmountCountByMonth(DateOnly Month, decimal Amount, int Count);
