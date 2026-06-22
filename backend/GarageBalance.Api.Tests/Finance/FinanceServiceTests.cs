@@ -86,6 +86,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(500m, result.Debt);
         Assert.Equal(2, result.OperationCount);
         Assert.Equal(1, result.AccrualCount);
+        Assert.Equal(0, result.MeterReadingCount);
     }
 
     [Fact]
@@ -173,6 +174,76 @@ public sealed class FinanceServiceTests
         Assert.Equal(600m, result[0].Amount);
     }
 
+    [Fact]
+    public async Task CreateMeterReadingAsync_UsesInitialMeterValueAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Контроль"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(10m, result.Value!.PreviousValue);
+        Assert.Equal(5.5m, result.Value.Consumption);
+        Assert.False(result.Value.HasGapWarning);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task CreateMeterReadingAsync_RejectsDecreasedValue()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 5m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_reading_decreased", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateMeterReadingAsync_RejectsDuplicateGarageKindAndMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 110m, null), null, CancellationToken.None);
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 120m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_reading_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetMeterReadingsAsync_SearchesAndOrdersByMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 14m, null), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "monthly electricity"), null, CancellationToken.None);
+
+        var result = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", "monthly"), CancellationToken.None);
+
+        var reading = Assert.Single(result);
+        Assert.Equal("electricity", reading.MeterKind);
+        Assert.Equal(new DateOnly(2026, 6, 1), reading.AccountingMonth);
+        Assert.Equal(20m, reading.Consumption);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -200,7 +271,7 @@ public sealed class FinanceServiceTests
         public async Task<Fixtures> SeedAsync()
         {
             var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
-            var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner };
+            var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner, InitialWaterMeterValue = 10m, InitialElectricityMeterValue = 100m };
             var group = new SupplierGroup { Name = "Коммунальные услуги" };
             var supplier = new Supplier { Name = "Vodokanal", Group = group };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };

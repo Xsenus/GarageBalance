@@ -34,6 +34,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetAccrualsAsync(new AccrualListRequest(monthFrom, monthTo, search), cancellationToken));
     }
 
+    [HttpGet("meter-readings")]
+    [ProducesResponseType<IReadOnlyList<MeterReadingDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MeterReadingDto>>> GetMeterReadings(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? meterKind,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetMeterReadingsAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search), cancellationToken));
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType<FinanceSummaryDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinanceSummaryDto>> GetSummary(
@@ -88,6 +100,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
             : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("meter-readings")]
+    [ProducesResponseType<MeterReadingDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MeterReadingDto>> CreateMeterReading(CreateMeterReadingRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateMeterReadingAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetMeterReadings), new { meterKind = result.Value!.MeterKind, search = result.Value.GarageNumber }, result.Value)
+            : ToError(result);
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
@@ -104,7 +130,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" => NotFound(problem),
-            "operation_duplicate" or "accrual_duplicate" => Conflict(problem),
+            "operation_duplicate" or "accrual_duplicate" or "meter_reading_duplicate" => Conflict(problem),
             _ => BadRequest(problem)
         };
     }

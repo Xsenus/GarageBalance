@@ -23,6 +23,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
+    public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -223,6 +224,25 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(accrual => accrual.IncomeType)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.IncomeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MeterReading>(entity =>
+        {
+            entity.ToTable("meter_readings");
+            entity.HasKey(reading => reading.Id);
+            entity.Property(reading => reading.MeterKind).HasMaxLength(40).IsRequired();
+            entity.Property(reading => reading.CurrentValue).HasPrecision(18, 3);
+            entity.Property(reading => reading.PreviousValue).HasPrecision(18, 3);
+            entity.Property(reading => reading.Consumption).HasPrecision(18, 3);
+            entity.Property(reading => reading.Comment).HasMaxLength(1000);
+            entity.HasIndex(reading => reading.AccountingMonth);
+            entity.HasIndex(reading => reading.ReadingDate);
+            entity.HasIndex(reading => reading.GarageId);
+            entity.HasIndex(reading => new { reading.GarageId, reading.MeterKind, reading.AccountingMonth }).IsUnique();
+            entity.HasOne(reading => reading.Garage)
+                .WithMany()
+                .HasForeignKey(reading => reading.GarageId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -427,7 +427,7 @@ h1 {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -631,6 +631,11 @@ h1 {
 
 .money-accrual {
   color: #1849a9;
+}
+
+.warning-text {
+  color: #b54708;
+  font-weight: 700;
 }
 
 .status-active,

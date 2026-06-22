@@ -54,6 +54,7 @@ npm run dev
 - `GET/POST /api/dictionaries/tariffs` - тарифы с датой действия.
 - `GET /api/finance/operations` - последние финансовые операции с фильтрами.
 - `GET/POST /api/finance/accruals` - начисления по гаражам.
+- `GET/POST /api/finance/meter-readings` - показания счетчиков воды и электричества.
 - `GET /api/finance/summary` - итоги поступлений, выплат и баланса.
 - `POST /api/finance/income` - внесение поступления по гаражу.
 - `POST /api/finance/expense` - внесение выплаты поставщику.

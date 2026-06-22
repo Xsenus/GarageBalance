@@ -96,6 +96,41 @@ public sealed class FinanceControllerTests
         Assert.Equal(actorUserId, service.LastActorUserId);
     }
 
+    [Fact]
+    public async Task CreateMeterReading_ReturnsConflictForDuplicateReading()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание уже внесено.")
+        });
+
+        var result = await controller.CreateMeterReading(
+            new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("meter_reading_duplicate", problem.Title);
+    }
+
+    [Fact]
+    public async Task CreateMeterReading_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading())
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateMeterReading(
+            new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, null),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
     private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
     {
         var controller = new FinanceController(service);
@@ -145,12 +180,31 @@ public sealed class FinanceControllerTests
             false);
     }
 
+    private static MeterReadingDto CreateMeterReading()
+    {
+        return new MeterReadingDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "12",
+            "Иванов Иван",
+            "water",
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 20),
+            15m,
+            10m,
+            5m,
+            false,
+            null,
+            false);
+    }
+
     private sealed class FakeFinanceService : IFinanceService
     {
         public Guid? LastActorUserId { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
@@ -162,9 +216,14 @@ public sealed class FinanceControllerTests
             return Task.FromResult<IReadOnlyList<AccrualDto>>([]);
         }
 
+        public Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<MeterReadingDto>>([]);
+        }
+
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new FinanceSummaryDto(0, 0, 0, 0, 0, 0, 0));
+            return Task.FromResult(new FinanceSummaryDto(0, 0, 0, 0, 0, 0, 0, 0));
         }
 
         public Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -183,6 +242,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateAccrualResult);
+        }
+
+        public Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateMeterReadingResult);
         }
     }
 }

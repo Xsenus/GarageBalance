@@ -29,10 +29,22 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
+    {
+        return await ApplyMeterReadingFilters(QueryMeterReadings(), request)
+            .OrderByDescending(reading => reading.AccountingMonth)
+            .ThenBy(reading => reading.Garage.Number)
+            .ThenBy(reading => reading.MeterKind)
+            .Take(ListLimit)
+            .Select(reading => ToDto(reading))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {
         var operations = ApplyFilters(dbContext.FinancialOperations.AsNoTracking().Where(operation => !operation.IsCanceled), request);
         var accruals = ApplyAccrualFilters(dbContext.Accruals.AsNoTracking().Where(accrual => !accrual.IsCanceled), new AccrualListRequest(request.DateFrom, request.DateTo, request.Search));
+        var meterReadings = ApplyMeterReadingFilters(dbContext.MeterReadings.AsNoTracking().Where(reading => !reading.IsCanceled), new MeterReadingListRequest(request.DateFrom, request.DateTo, null, request.Search));
         var incomeTotal = await operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
             .SumAsync(operation => operation.Amount, cancellationToken);
@@ -42,8 +54,9 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         var accrualTotal = await accruals.SumAsync(accrual => accrual.Amount, cancellationToken);
         var operationCount = await operations.CountAsync(cancellationToken);
         var accrualCount = await accruals.CountAsync(cancellationToken);
+        var meterReadingCount = await meterReadings.CountAsync(cancellationToken);
 
-        return new FinanceSummaryDto(incomeTotal, expenseTotal, accrualTotal, incomeTotal - expenseTotal, accrualTotal - incomeTotal, operationCount, accrualCount);
+        return new FinanceSummaryDto(incomeTotal, expenseTotal, accrualTotal, incomeTotal - expenseTotal, accrualTotal - incomeTotal, operationCount, accrualCount, meterReadingCount);
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -182,6 +195,58 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
+    public async Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var meterKind = request.MeterKind.Trim();
+        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+        }
+
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
+        }
+
+        var month = NormalizeMonth(request.AccountingMonth);
+        if (await dbContext.MeterReadings.AnyAsync(
+            reading => !reading.IsCanceled && reading.GarageId == garage.Id && reading.MeterKind == meterKind && reading.AccountingMonth == month,
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
+        }
+
+        var previousReading = await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading => !reading.IsCanceled && reading.GarageId == garage.Id && reading.MeterKind == meterKind && reading.AccountingMonth < month)
+            .OrderByDescending(reading => reading.AccountingMonth)
+            .FirstOrDefaultAsync(cancellationToken);
+        var previousValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m;
+        var consumption = request.CurrentValue - previousValue;
+        if (consumption < 0)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
+        }
+
+        var reading = new MeterReading
+        {
+            GarageId = garage.Id,
+            Garage = garage,
+            MeterKind = meterKind,
+            AccountingMonth = month,
+            ReadingDate = request.ReadingDate,
+            CurrentValue = request.CurrentValue,
+            PreviousValue = previousValue,
+            Consumption = consumption,
+            Comment = NormalizeOptional(request.Comment)
+        };
+
+        dbContext.MeterReadings.Add(reading);
+        AddAudit(actorUserId, "finance.meter_reading_created", "meter_reading", reading.Id, $"Внесено показание {meterKind} по гаражу {garage.Number}: расход {consumption:N3}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+    }
+
     private IQueryable<FinancialOperation> QueryOperations()
     {
         return dbContext.FinancialOperations.AsNoTracking()
@@ -200,6 +265,14 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .ThenInclude(garage => garage.Owner)
             .Include(accrual => accrual.IncomeType)
             .Where(accrual => !accrual.IsCanceled);
+    }
+
+    private IQueryable<MeterReading> QueryMeterReadings()
+    {
+        return dbContext.MeterReadings.AsNoTracking()
+            .Include(reading => reading.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Where(reading => !reading.IsCanceled);
     }
 
     private static IQueryable<FinancialOperation> ApplyFilters(IQueryable<FinancialOperation> query, FinancialOperationListRequest request)
@@ -228,6 +301,35 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
                 (operation.Comment != null && operation.Comment.ToLower().Contains(search)) ||
                 (operation.Garage != null && operation.Garage.Number.ToLower().Contains(search)) ||
                 (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(search)));
+        }
+
+        return query;
+    }
+
+    private static IQueryable<MeterReading> ApplyMeterReadingFilters(IQueryable<MeterReading> query, MeterReadingListRequest request)
+    {
+        if (request.MonthFrom is not null)
+        {
+            query = query.Where(reading => reading.AccountingMonth >= NormalizeMonth(request.MonthFrom.Value));
+        }
+
+        if (request.MonthTo is not null)
+        {
+            query = query.Where(reading => reading.AccountingMonth <= NormalizeMonth(request.MonthTo.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.MeterKind))
+        {
+            var meterKind = request.MeterKind.Trim();
+            query = query.Where(reading => reading.MeterKind == meterKind);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLowerInvariant();
+            query = query.Where(reading =>
+                reading.Garage.Number.ToLower().Contains(search) ||
+                (reading.Comment != null && reading.Comment.ToLower().Contains(search)));
         }
 
         return query;
@@ -296,6 +398,16 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private static decimal? GetInitialMeterValue(GarageBalance.Api.Domain.Dictionaries.Garage garage, string meterKind)
+    {
+        return meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : garage.InitialElectricityMeterValue;
+    }
+
+    private static bool HasGapWarning(MeterReading reading)
+    {
+        return reading.MeterKind == MeterKinds.Electricity && reading.PreviousValue == 0m && reading.Consumption > 0m;
+    }
+
     private static FinancialOperationDto ToDto(FinancialOperation operation)
     {
         return new FinancialOperationDto(
@@ -332,5 +444,23 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             accrual.Source,
             accrual.Comment,
             accrual.IsCanceled);
+    }
+
+    private static MeterReadingDto ToDto(MeterReading reading)
+    {
+        return new MeterReadingDto(
+            reading.Id,
+            reading.GarageId,
+            reading.Garage.Number,
+            reading.Garage.Owner?.FullName,
+            reading.MeterKind,
+            reading.AccountingMonth,
+            reading.ReadingDate,
+            reading.CurrentValue,
+            reading.PreviousValue,
+            reading.Consumption,
+            HasGapWarning(reading),
+            reading.Comment,
+            reading.IsCanceled);
     }
 }

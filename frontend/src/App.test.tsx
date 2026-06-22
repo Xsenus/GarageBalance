@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto } from './services/financeApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
@@ -45,6 +45,7 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('1 500,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('1')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
@@ -168,6 +169,24 @@ describe('App', () => {
 
     expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
     expect(within(financePanel).getByRole('table', { name: 'Последние начисления' })).toBeInTheDocument()
+  })
+
+  it('creates meter reading and shows calculated consumption', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.selectOptions(within(financePanel).getByLabelText('Тип счетчика'), 'water')
+    await user.clear(within(financePanel).getByLabelText('Новое показание'))
+    await user.type(within(financePanel).getByLabelText('Новое показание'), '15.5')
+    await user.click(within(financePanel).getByRole('button', { name: 'Внести' }))
+
+    expect(await within(financePanel).findByText('5.5')).toBeInTheDocument()
+    expect(within(financePanel).getByRole('table', { name: 'Последние показания' })).toBeInTheDocument()
   })
 
   it('shows login errors without opening protected workspace', async () => {
@@ -321,14 +340,17 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     incomeTypeName: 'Членский взнос',
   })
   const accrual = createAccrual({ id: 'accrual-1', amount: 2000, garageNumber: '12', incomeTypeName: 'Членский взнос' })
+  const meterReading = createMeterReading({ id: 'meter-reading-1', consumption: 5.5, currentValue: 15.5, previousValue: 10 })
 
   return {
     getOperations: async () => [operation],
     getAccruals: async () => [accrual],
-    getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1 }),
+    getMeterReadings: async () => [meterReading],
+    getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     createAccrual: async () => accrual,
+    createMeterReading: async () => meterReading,
     ...overrides,
   }
 }
@@ -336,17 +358,19 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
 function createStatefulFinanceClient(): FinanceClient {
   let operations: FinancialOperationDto[] = []
   let accruals: AccrualDto[] = []
+  let meterReadings: MeterReadingDto[] = []
 
   function summary(): FinanceSummaryDto {
     const incomeTotal = operations.filter((item) => item.operationKind === 'income').reduce((sum, item) => sum + item.amount, 0)
     const expenseTotal = operations.filter((item) => item.operationKind === 'expense').reduce((sum, item) => sum + item.amount, 0)
     const accrualTotal = accruals.reduce((sum, item) => sum + item.amount, 0)
-    return { incomeTotal, expenseTotal, accrualTotal, balance: incomeTotal - expenseTotal, debt: accrualTotal - incomeTotal, operationCount: operations.length, accrualCount: accruals.length }
+    return { incomeTotal, expenseTotal, accrualTotal, balance: incomeTotal - expenseTotal, debt: accrualTotal - incomeTotal, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }
   }
 
   return {
     getOperations: async () => operations,
     getAccruals: async () => accruals,
+    getMeterReadings: async () => meterReadings,
     getSummary: async () => summary(),
     createIncome: async (_token, request) => {
       const operation = createFinancialOperation({
@@ -385,6 +409,22 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       accruals = [accrual, ...accruals]
       return accrual
+    },
+    createMeterReading: async (_token, request) => {
+      const previousValue = request.meterKind === 'water' ? 10 : 100
+      const reading = createMeterReading({
+        id: crypto.randomUUID(),
+        garageId: request.garageId,
+        meterKind: request.meterKind,
+        accountingMonth: request.accountingMonth,
+        readingDate: request.readingDate,
+        currentValue: request.currentValue,
+        previousValue,
+        consumption: request.currentValue - previousValue,
+        comment: request.comment ?? null,
+      })
+      meterReadings = [reading, ...meterReadings]
+      return reading
     },
   }
 }
@@ -598,6 +638,25 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     accountingMonth: '2026-06-01',
     amount: 100,
     source: 'manual',
+    comment: null,
+    isCanceled: false,
+    ...overrides,
+  }
+}
+
+function createMeterReading(overrides: Partial<MeterReadingDto>): MeterReadingDto {
+  return {
+    id: 'meter-reading',
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    meterKind: 'water',
+    accountingMonth: '2026-06-01',
+    readingDate: '2026-06-20',
+    currentValue: 15,
+    previousValue: 10,
+    consumption: 5,
+    hasGapWarning: false,
     comment: null,
     isCanceled: false,
     ...overrides,

@@ -21,7 +21,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto } from './services/financeApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -66,6 +66,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлены показания счетчиков воды и электричества: система считает расход и показывает предупреждение по разрыву истории.',
   'Добавлены ручные начисления по гаражам: месяц учета, вид начисления, сумма, комментарий и расчет задолженности.',
   'Добавлен первый рабочий учет денег: поступления по гаражам, выплаты поставщикам, итоги и последние операции.',
   'Добавлены финансовые справочники: виды поступлений, виды выплат и тарифы с датой начала действия.',
@@ -304,10 +305,12 @@ function FinancePanel({
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
   const [accruals, setAccruals] = useState<AccrualDto[]>([])
-  const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0 })
+  const [meterReadings, setMeterReadings] = useState<MeterReadingDto[]>([])
+  const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0, meterReadingCount: 0 })
   const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, comment: '' })
+  const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -318,13 +321,14 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedOperations, loadedAccruals, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedOperations, loadedAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken),
           dictionaryClient.getSuppliers(auth.accessToken),
           dictionaryClient.getIncomeTypes(auth.accessToken),
           dictionaryClient.getExpenseTypes(auth.accessToken),
           financeClient.getOperations(auth.accessToken),
           financeClient.getAccruals(auth.accessToken),
+          financeClient.getMeterReadings(auth.accessToken),
           financeClient.getSummary(auth.accessToken),
         ])
         if (!ignore) {
@@ -334,10 +338,12 @@ function FinancePanel({
           setExpenseTypes(loadedExpenseTypes)
           setOperations(loadedOperations)
           setAccruals(loadedAccruals)
+          setMeterReadings(loadedMeterReadings)
           setSummary(loadedSummary)
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
         }
       } catch (caught) {
         if (!ignore) {
@@ -410,6 +416,23 @@ function FinancePanel({
     })
   }
 
+  async function saveMeterReading(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('meter-reading', async () => {
+      const reading = await financeClient.createMeterReading(auth.accessToken, {
+        garageId: meterForm.garageId,
+        meterKind: meterForm.meterKind,
+        accountingMonth: meterForm.accountingMonth,
+        readingDate: meterForm.readingDate,
+        currentValue: meterForm.currentValue,
+        comment: meterForm.comment,
+      })
+      setMeterReadings((items) => [reading, ...items])
+      setSummary((value) => ({ ...value, meterReadingCount: value.meterReadingCount + 1 }))
+      setMeterForm((value) => ({ ...value, currentValue: 0, comment: '' }))
+    })
+  }
+
   function addOperation(operation: FinancialOperationDto) {
     setOperations((items) => [operation, ...items])
     setSummary((value) => {
@@ -423,6 +446,7 @@ function FinancePanel({
         operationCount: value.operationCount + 1,
         accrualTotal: value.accrualTotal,
         accrualCount: value.accrualCount,
+        meterReadingCount: value.meterReadingCount,
       }
     })
   }
@@ -471,6 +495,10 @@ function FinancePanel({
         <div>
           <span>Баланс</span>
           <strong>{formatMoney(summary.balance)}</strong>
+        </div>
+        <div>
+          <span>Счетчики</span>
+          <strong>{summary.meterReadingCount}</strong>
         </div>
       </div>
 
@@ -580,6 +608,36 @@ function FinancePanel({
           </button>
         </form>
 
+        <form className="dictionary-form" onSubmit={saveMeterReading}>
+          <h3>Показание счетчика</h3>
+          <select aria-label="Гараж для счетчика" value={meterForm.garageId} onChange={(event) => setMeterForm({ ...meterForm, garageId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите гараж
+            </option>
+            {garages.map((garage) => (
+              <option value={garage.id} key={garage.id}>
+                Гараж {garage.number}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Тип счетчика" value={meterForm.meterKind} onChange={(event) => setMeterForm({ ...meterForm, meterKind: event.target.value as 'water' | 'electricity' })} required>
+            <option value="water">Вода</option>
+            <option value="electricity">Электричество</option>
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Месяц показания" type="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(event) => setMeterForm({ ...meterForm, accountingMonth: `${event.target.value}-01` })} required />
+            <input aria-label="Дата показания" type="date" value={meterForm.readingDate} onChange={(event) => setMeterForm({ ...meterForm, readingDate: event.target.value })} required />
+          </div>
+          <div className="inline-fields">
+            <input aria-label="Новое показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />
+            <input aria-label="Комментарий счетчика" placeholder="Комментарий" value={meterForm.comment} onChange={(event) => setMeterForm({ ...meterForm, comment: event.target.value })} />
+          </div>
+          <button className="secondary-button" type="submit" disabled={saving === 'meter-reading' || !meterForm.garageId}>
+            <Plus size={16} />
+            <span>Внести</span>
+          </button>
+        </form>
+
         <div className="operation-list" role="table" aria-label="Последние платежи">
           <div className="operation-row header" role="row">
             <span role="columnheader">Дата</span>
@@ -618,6 +676,30 @@ function FinancePanel({
               </span>
               <span role="cell" className="money-accrual">
                 {formatMoney(accrual.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="Последние показания">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Месяц</span>
+            <span role="columnheader">Счетчик</span>
+            <span role="columnheader">Расход</span>
+          </div>
+          {meterReadings.length === 0 ? <p className="empty-state">Показаний пока нет</p> : null}
+          {meterReadings.slice(0, 8).map((reading) => (
+            <div className="operation-row" role="row" key={reading.id}>
+              <span role="cell">{reading.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">
+                <strong>{reading.meterKind === 'water' ? 'Вода' : 'Электричество'}</strong>
+                <small>
+                  Гараж {reading.garageNumber}: {reading.previousValue} → {reading.currentValue}
+                </small>
+                {reading.hasGapWarning ? <small className="warning-text">нет предыдущего периода</small> : null}
+              </span>
+              <span role="cell" className="money-accrual">
+                {reading.consumption}
               </span>
             </div>
           ))}

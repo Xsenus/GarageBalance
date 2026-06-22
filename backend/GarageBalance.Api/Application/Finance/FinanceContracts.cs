@@ -71,6 +71,35 @@ public sealed record AccrualListRequest(
     DateOnly? MonthTo,
     string? Search);
 
+public sealed record MeterReadingDto(
+    Guid Id,
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    string MeterKind,
+    DateOnly AccountingMonth,
+    DateOnly ReadingDate,
+    decimal CurrentValue,
+    decimal PreviousValue,
+    decimal Consumption,
+    bool HasGapWarning,
+    string? Comment,
+    bool IsCanceled);
+
+public sealed record CreateMeterReadingRequest(
+    Guid GarageId,
+    [property: Required, MaxLength(40)] string MeterKind,
+    DateOnly AccountingMonth,
+    DateOnly ReadingDate,
+    [property: Range(0, 999999999)] decimal CurrentValue,
+    [property: MaxLength(1000)] string? Comment);
+
+public sealed record MeterReadingListRequest(
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo,
+    string? MeterKind,
+    string? Search);
+
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,
     decimal ExpenseTotal,
@@ -78,4 +107,5 @@ public sealed record FinanceSummaryDto(
     decimal Balance,
     decimal Debt,
     int OperationCount,
-    int AccrualCount);
+    int AccrualCount,
+    int MeterReadingCount);
