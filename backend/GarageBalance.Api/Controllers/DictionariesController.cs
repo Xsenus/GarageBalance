@@ -1,0 +1,154 @@
+using System.Security.Claims;
+using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Domain.Security;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GarageBalance.Api.Controllers;
+
+[ApiController]
+[Authorize(Policy = SystemPermissions.DictionariesRead)]
+[Route("api/dictionaries")]
+public sealed class DictionariesController(IDictionaryService dictionaryService) : ControllerBase
+{
+    [HttpGet("owners")]
+    [ProducesResponseType<IReadOnlyList<OwnerDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<OwnerDto>>> GetOwners([FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetOwnersAsync(search, cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("owners")]
+    [ProducesResponseType<OwnerDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<OwnerDto>> CreateOwner(UpsertOwnerRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateOwnerAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetOwners), new { search = result.Value!.LastName }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("owners/{id:guid}")]
+    [ProducesResponseType<OwnerDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OwnerDto>> UpdateOwner(Guid id, UpsertOwnerRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateOwnerAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpGet("garages")]
+    [ProducesResponseType<IReadOnlyList<GarageDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<GarageDto>>> GetGarages([FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetGaragesAsync(search, cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("garages")]
+    [ProducesResponseType<GarageDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<GarageDto>> CreateGarage(UpsertGarageRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateGarageAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetGarages), new { search = result.Value!.Number }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("garages/{id:guid}")]
+    [ProducesResponseType<GarageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<GarageDto>> UpdateGarage(Guid id, UpsertGarageRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateGarageAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpGet("supplier-groups")]
+    [ProducesResponseType<IReadOnlyList<SupplierGroupDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups(CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetSupplierGroupsAsync(cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("supplier-groups")]
+    [ProducesResponseType<SupplierGroupDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SupplierGroupDto>> CreateSupplierGroup(UpsertSupplierGroupRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateSupplierGroupAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetSupplierGroups), result.Value);
+    }
+
+    [HttpGet("suppliers")]
+    [ProducesResponseType<IReadOnlyList<SupplierDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SupplierDto>>> GetSuppliers([FromQuery] Guid? groupId, [FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetSuppliersAsync(groupId, search, cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("suppliers")]
+    [ProducesResponseType<SupplierDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<SupplierDto>> CreateSupplier(UpsertSupplierRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateSupplierAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetSuppliers), new { groupId = result.Value!.GroupId, search = result.Value.Name }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("suppliers/{id:guid}")]
+    [ProducesResponseType<SupplierDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierDto>> UpdateSupplier(Guid id, UpsertSupplierRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateSupplierAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    private Guid? GetActorUserId()
+    {
+        return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
+    }
+
+    private ActionResult<T> ToError<T>(DictionaryResult<T> result)
+    {
+        var problem = new ProblemDetails
+        {
+            Title = result.ErrorCode,
+            Detail = result.ErrorMessage
+        };
+
+        return result.ErrorCode switch
+        {
+            "owner_not_found" or "garage_not_found" or "supplier_not_found" => NotFound(problem),
+            "garage_number_duplicate" or "supplier_group_duplicate" => Conflict(problem),
+            _ => BadRequest(problem)
+        };
+    }
+}

@@ -1,0 +1,173 @@
+# Agent Instructions
+
+## Project Context
+
+GarageBalance is a web application for financial accounting in a garage-building cooperative. The target stack is C# / ASP.NET Core controllers, React, PostgreSQL, and Docker-ready deployment.
+
+The product must support local installation on one PC and later web/VPS deployment. Do not assume that the system is only desktop or only cloud: keep configuration portable.
+
+## Development Order
+
+Follow the agreed project order unless the user explicitly changes priorities:
+
+1. Users, authentication, roles, permissions, and audit history.
+2. Dictionaries matching the old Access database and the updated technical assignment.
+3. Encryption and protected handling of personal, financial, and import data.
+4. Import from the old Access database without manual re-entry.
+5. Payments, accruals, meters, tariffs, balances, and reports.
+6. Stage 2 integrations: 1C Fresh synchronization and receipt/check printing.
+7. Docker packaging, deployment documentation, and final acceptance.
+
+## Roadmaps
+
+Roadmaps live in `docs/` as human-readable Markdown documents. Before starting any implementation that belongs to a roadmap, open the relevant roadmap and update statuses as the work progresses.
+
+Use these status markers consistently:
+
+- `[ ]` not started.
+- `[~]` in progress.
+- `[x]` completed and verified.
+- `[!]` blocked; write the blocking reason on the same line.
+- `[decision]` requires a user/business decision.
+- `[acceptance]` requires manual acceptance on real data or environment.
+
+Every roadmap must include:
+
+- source materials considered;
+- assumptions and decisions;
+- milestones;
+- detailed checkable tasks;
+- definition of done;
+- open risks and questions;
+- a bottom section named `История выполнения`.
+
+Always update `История выполнения` when you complete, verify, defer, or unblock meaningful work. Each entry must explain what was done, why it was done, how it was checked, and what remains.
+
+Do not mark a roadmap item as `[x]` until the related code, tests, encoding checks, database checks, and documentation updates required by that item are complete.
+
+## Release Notes: "Что нового"
+
+When implementing a user-facing mechanism, changing business rules, permissions, integrations, data handling, reports, imports, or fixing a visible defect, prepare an end-user release note for the "Что нового" module.
+
+Release notes must be written for cooperative staff and administrators, not for developers. Describe what is available, improved, fixed, or important, where the user will see it, and how it affects daily work. Avoid file names, commits, internal architecture, deployment steps, and vague phrases like "minor fixes".
+
+Use the release item types:
+
+- `new`: new functionality.
+- `improved`: improved existing behavior.
+- `fixed`: corrected bugs or display issues.
+- `important`: user-facing rules or caveats that affect work.
+
+Store source release entries in `backend/GarageBalance.Api/AppReleases/releases.json`. Later the backend should sync this file into PostgreSQL on startup and allow admins to manage release notes in the UI.
+
+If a release note cannot be added directly, include the proposed text in the final response and in the roadmap history.
+
+## Security And Data
+
+Treat personal, payment, contract, and Access import data as sensitive. Do not copy passport data, full bank details, real addresses, phone numbers, or raw legacy database contents into public docs, tests, fixtures, or release notes unless the user explicitly asks and the file is intentionally private.
+
+Secrets must not be committed. Use environment variables, `.env.example`, user secrets, or deployment secrets. Keep real `.env`, database dumps, `.accdb`, `.mdb`, backups, and private import files out of Git.
+
+Authentication and authorization must be enforced on the backend, not only hidden in the UI. Financial data, reports, import tools, settings, and audit logs require explicit permissions.
+
+All changes to financial values, tariffs, permissions, imports, manual corrections, and integrations must create audit history.
+
+## Backend Guidelines
+
+Prefer established ASP.NET Core patterns:
+
+- controllers as the default API surface; do not add minimal API endpoints for business functionality unless the user explicitly approves an exception;
+- DTOs at API boundaries;
+- EF Core migrations for PostgreSQL schema changes;
+- decimal money values, explicit rounding rules, and date/time handling with clear local business dates;
+- cancellation tokens for I/O;
+- structured logs without sensitive values.
+
+Use this backend layering unless a roadmap decision changes it:
+
+- `Controllers`: HTTP surface only, authorization, DTO binding, response codes.
+- `Application`: use cases, orchestration, transactions, permission checks that depend on business context.
+- `Domain`: tariff, accrual, payment, balance, import, and reporting rules that can be tested without ASP.NET.
+- `Infrastructure`: EF Core, PostgreSQL, file import readers, external integrations, printers, 1C Fresh clients.
+- `Contracts`: request/response DTOs and API-facing validation models when a feature grows beyond a single controller.
+
+Keep business calculations testable outside controllers. Add unit tests for tariff, accrual, meter, debt, import mapping, and permission logic.
+
+Every controller action must have tests for the successful path, validation errors, permission denial, and important edge cases. Do not leave generated sample controllers, unused endpoints, or untested public methods in the project. If a method is not worth testing, it is probably not worth keeping as public surface.
+
+Controller code must stay thin: validate the request, call application/business services, map DTOs, and return clear HTTP results. Business rules belong in services that are easy to test directly.
+
+Backend tests must include:
+
+- unit tests for domain calculations and validators;
+- controller tests for routes, status codes, DTO shape, validation, and authorization;
+- integration tests for EF Core mappings, PostgreSQL-specific queries, migrations, and transactions;
+- import tests for Access mapping, idempotency, malformed data, duplicates, and rollback behavior;
+- report tests for filters, totals, date ranges, permissions, and export contents.
+
+Do not add unbounded `ToList`, `Include`, or in-memory grouping in financial/reporting flows without a written reason in the roadmap. Queries that can grow with historical payments must be paginated, filtered, or aggregated in PostgreSQL.
+
+## Frontend Guidelines
+
+Build a pleasant but operational interface: compact, calm, readable, and suitable for repeated accounting work. The interface may borrow the comfortable clarity of ChatGPT, but the product must feel like a working accounting system, not a landing page.
+
+Use icons for navigation and actions where appropriate. Keep dense tables readable, make filters obvious, and avoid decorative layouts that reduce useful working space.
+
+For important flows, design loading, empty, error, validation, and permission-denied states from the start.
+
+React functionality must be covered by tests. Add component, hook, service, and integration-style tests for visible behavior, validation, permissions, filters, tables, reports, dialogs, imports, and error states. Any user-facing change should include or update frontend tests unless it is documentation-only.
+
+Do not merge untested UI paths for money, permissions, imports, reports, or data editing. Use stable selectors or accessible roles/names in tests so the tests describe the user's real workflow.
+
+Keep UI business decisions out of components. Components should render state and call hooks/services; calculations for money, tariffs, balances, filters, and import summaries must live in tested utility or domain modules shared by the feature.
+
+Frontend tests must include:
+
+- component tests for forms, tables, dialogs, and visible states;
+- hook/service tests for API interaction, retries, validation mapping, and caching behavior;
+- workflow tests for login, permissions, dictionary editing, payment entry, report filtering, import dry-run, and "Что нового";
+- accessibility-oriented assertions using roles, names, labels, and keyboard-reachable controls.
+
+## Performance
+
+The system must feel fast on the customer's real cooperative data. Design lists, search, reports, imports, and dashboards with performance in mind from the beginning.
+
+Backend performance rules:
+
+- push filtering, sorting, pagination, and aggregation to PostgreSQL where practical;
+- add indexes for lookup fields such as garage number, owner name, supplier, month, date, payment type, and import identifiers;
+- avoid loading entire tables into memory for reports, search, or balances;
+- keep import jobs resumable and observable instead of blocking the UI;
+- add performance-oriented tests or diagnostics for heavy calculations and report queries once real data volume is known.
+
+Frontend performance rules:
+
+- avoid rendering huge tables without pagination or virtualization;
+- debounce search inputs and keep filters predictable;
+- avoid unnecessary global re-renders in financial tables;
+- keep bundle growth visible and review new dependencies before adding them.
+
+Initial performance gates for feature acceptance:
+
+- common search suggestions should respond without visible lag on realistic cooperative data;
+- main tables must use server pagination or virtualization before real data can exceed a few hundred rows;
+- report endpoints must return filtered periods through indexed PostgreSQL queries, not full-table scans in application memory;
+- import must show progress and never freeze the browser during parsing or server processing;
+- any dependency that materially increases bundle size must be justified in the roadmap history.
+
+## Docker And Deployment
+
+Docker is planned for the end of the project, but keep it ready from the beginning. Update Dockerfiles and `docker-compose.yml` when backend ports, frontend build steps, database settings, or environment variables change.
+
+The app must support:
+
+- local development without Docker;
+- local Docker Compose with PostgreSQL;
+- future VPS deployment behind a domain;
+- local-only installation on the customer's PC.
+
+## Git Preparation
+
+The project is prepared for Git, but do not publish, push, or create a remote repository unless the user explicitly asks. Keep commits scoped when Git is initialized later.
+
+Before any future push/deployment, verify tests, builds, migrations, Docker configuration, and release notes.

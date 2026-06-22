@@ -1,0 +1,36 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+.vs/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+logs/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+
+# Data and imports
+*.bak
+*.dump
+*.db
+*.sqlite
+*.accdb
+*.mdb
+local-db-backups/
+imports/private/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.serena/

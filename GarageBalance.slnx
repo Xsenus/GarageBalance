@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/GarageBalance.Api.Tests/GarageBalance.Api.Tests.csproj" />
+    <Project Path="backend/GarageBalance.Api/GarageBalance.Api.csproj" />
+  </Folder>
+</Solution>
