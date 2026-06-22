@@ -26,6 +26,8 @@ import { importApi } from './services/importApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
 import type { ConsolidatedReportDto, ReportClient } from './services/reportsApi'
+import { releasesApi } from './services/releasesApi'
+import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -36,6 +38,7 @@ type AppProps = {
   financeClient?: FinanceClient
   importClient?: ImportClient
   reportClient?: ReportClient
+  releaseClient?: ReleaseClient
   userClient?: UserManagementClient
 }
 
@@ -71,21 +74,7 @@ const roadmap = [
   },
 ]
 
-const updates = [
-  'Добавлен консолидированный отчет за период: итоги по месяцам и гаражам показывают начислено, оплачено, выплаты, баланс и долг.',
-  'Добавлен dry-run импорта Access: можно загрузить .accdb/.mdb, получить отчет первичных проверок и сохранить историю запуска без изменения данных.',
-  'Добавлено создание регулярных начислений по тарифам: фиксированные суммы, расчет по людям и счетчикам воды/электричества можно сформировать за месяц одним действием.',
-  'Добавлены показания счетчиков воды и электричества: система считает расход и показывает предупреждение по разрыву истории.',
-  'Добавлены ручные начисления по гаражам: месяц учета, вид начисления, сумма, комментарий и расчет задолженности.',
-  'Добавлен первый рабочий учет денег: поступления по гаражам, выплаты поставщикам, итоги и последние операции.',
-  'Добавлены финансовые справочники: виды поступлений, виды выплат и тарифы с датой начала действия.',
-  'Добавлено управление пользователями: администратор может создать сотрудника, назначить роль и увидеть статус доступа.',
-  'Добавлен контур входа: создание администратора, обычный вход и отображение текущего пользователя.',
-  'Backend получил контроллеры авторизации, JWT, роли, права и audit-события.',
-  'Добавлены справочники владельцев, гаражей, групп поставщиков и поставщиков с тестами и миграцией.',
-]
-
-function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
 
   return (
@@ -122,7 +111,7 @@ function App({ authClient = authApi, dictionaryClient = dictionariesApi, finance
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} userClient={userClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -211,6 +200,7 @@ function Workspace({
   financeClient,
   importClient,
   reportClient,
+  releaseClient,
   userClient,
   onLogout,
 }: {
@@ -219,6 +209,7 @@ function Workspace({
   financeClient: FinanceClient
   importClient: ImportClient
   reportClient: ReportClient
+  releaseClient: ReleaseClient
   userClient: UserManagementClient
   onLogout: () => void
 }) {
@@ -290,18 +281,85 @@ function Workspace({
         })}
       </section>
 
-      <section className="release-panel" aria-label="Что нового">
+      <ReleasePanel auth={auth} releaseClient={releaseClient} />
+    </>
+  )
+}
+
+function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClient: ReleaseClient }) {
+  const [releases, setReleases] = useState<AppReleaseDto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadReleases() {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const nextReleases = await releaseClient.getReleases(auth.accessToken, 10)
+        if (!ignore) {
+          setReleases(nextReleases)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить историю обновлений.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadReleases()
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, releaseClient])
+
+  return (
+    <section className="release-panel" aria-label="Что нового">
+      <div className="panel-heading">
         <div>
           <p className="eyebrow">Что нового</p>
-          <h2>Журнал обновлений включен с первого дня</h2>
+          <h2>История обновлений</h2>
         </div>
-        <ul>
-          {updates.map((item) => (
-            <li key={item}>{item}</li>
+        <span>{releases.length} версий</span>
+      </div>
+
+      {loading ? <p className="muted">Загружаем историю обновлений...</p> : null}
+      {error ? <div className="form-error">{error}</div> : null}
+      {!loading && !error && releases.length === 0 ? <p className="muted">Пока нет опубликованных изменений.</p> : null}
+
+      {!loading && !error && releases.length > 0 ? (
+        <div className="release-list">
+          {releases.map((release) => (
+            <article className="release-entry" key={release.releaseId}>
+              <div className="release-entry__header">
+                <div>
+                  <h3>{release.title}</h3>
+                  <p>{release.summary}</p>
+                </div>
+                <span>
+                  v{release.version} · {formatReleaseDate(release.publishedAt)}
+                </span>
+              </div>
+              <ul>
+                {release.items.map((item) => (
+                  <li className={`release-item release-item--${item.type}`} key={`${release.releaseId}-${item.type}-${item.text}`}>
+                    {item.text}
+                  </li>
+                ))}
+              </ul>
+            </article>
           ))}
-        </ul>
-      </section>
-    </>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -1464,6 +1522,10 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
+}
+
+function formatReleaseDate(value: string): string {
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))
 }
 
 export default App

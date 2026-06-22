@@ -355,7 +355,47 @@ h1 {
   padding: 18px;
 }
 
-.release-panel ul {
+.release-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.release-entry {
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fcfcfd;
+}
+
+.release-entry__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 12px;
+  align-items: start;
+}
+
+.release-entry h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.release-entry p {
+  margin-top: 6px;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.release-entry__header span {
+  color: #667085;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.release-entry ul {
   display: grid;
   gap: 8px;
   margin: 14px 0 0;
@@ -363,9 +403,17 @@ h1 {
   list-style: none;
 }
 
-.release-panel li {
+.release-item {
   border-left: 3px solid #2e90fa;
   padding-left: 10px;
+}
+
+.release-item--important {
+  border-left-color: #f79009;
+}
+
+.release-item--improved {
+  border-left-color: #12b76a;
 }
 
 .dictionary-panel,
