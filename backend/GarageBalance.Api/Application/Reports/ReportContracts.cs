@@ -5,6 +5,15 @@ public sealed record ConsolidatedReportRequest(
     DateOnly? MonthTo,
     string? Search);
 
+public sealed record IncomeReportRequest(
+    DateOnly? DateFrom,
+    DateOnly? DateTo,
+    string? Search,
+    IReadOnlyCollection<Guid> GarageIds,
+    IReadOnlyCollection<Guid> OwnerIds,
+    IReadOnlyCollection<Guid> IncomeTypeIds,
+    string? RowMode);
+
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,
     DateOnly PeriodTo,
@@ -38,3 +47,28 @@ public sealed record GarageReportRowDto(
     decimal AccrualTotal,
     decimal Debt,
     int MeterReadingCount);
+
+public sealed record IncomeReportDto(
+    DateOnly DateFrom,
+    DateOnly DateTo,
+    decimal AccrualTotal,
+    decimal IncomeTotal,
+    decimal Debt,
+    int RowCount,
+    IReadOnlyList<IncomeReportRowDto> Rows);
+
+public sealed record IncomeReportRowDto(
+    string RowType,
+    DateOnly Date,
+    DateOnly AccountingMonth,
+    Guid GarageId,
+    string GarageNumber,
+    Guid? OwnerId,
+    string? OwnerName,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    decimal AccrualAmount,
+    decimal IncomeAmount,
+    decimal Debt,
+    string? DocumentNumber,
+    string? Comment);

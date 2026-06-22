@@ -69,6 +69,76 @@ public sealed class ReportServiceTests
         Assert.Equal("period_invalid", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task GetIncomeReportAsync_ReturnsAccrualAndPaymentRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "manual", "Начисление за июнь"), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата за июнь"), null, CancellationToken.None);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2000m, result.Value!.AccrualTotal);
+        Assert.Equal(1500m, result.Value.IncomeTotal);
+        Assert.Equal(500m, result.Value.Debt);
+        Assert.Equal(2, result.Value.RowCount);
+        Assert.Contains(result.Value.Rows, row => row.RowType == "accruals" && row.AccrualAmount == 2000m && row.GarageNumber == "12");
+        Assert.Contains(result.Value.Rows, row => row.RowType == "payments" && row.IncomeAmount == 1500m && row.DocumentNumber == "PKO-1");
+    }
+
+    [Fact]
+    public async Task GetIncomeReportAsync_FiltersByOwnerIncomeTypeAndRowMode()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var targetIncomeType = new IncomeType { Name = "Целевой взнос", Code = "target" };
+        database.Context.IncomeTypes.Add(targetIncomeType);
+        await database.Context.SaveChangesAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, targetIncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 700m, "PKO-2", null), null, CancellationToken.None);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 30),
+                "Петров",
+                [],
+                [fixtures.SecondGarage.OwnerId!.Value],
+                [targetIncomeType.Id],
+                "payments"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var row = Assert.Single(result.Value!.Rows);
+        Assert.Equal("payments", row.RowType);
+        Assert.Equal("21", row.GarageNumber);
+        Assert.Equal("Целевой взнос", row.IncomeTypeName);
+        Assert.Equal(700m, result.Value.IncomeTotal);
+        Assert.Equal(-700m, result.Value.Debt);
+    }
+
+    [Fact]
+    public async Task GetIncomeReportAsync_ReturnsErrorForInvalidPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all"),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("period_invalid", result.ErrorCode);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

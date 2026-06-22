@@ -35,8 +35,47 @@ export type ConsolidatedReportDto = {
   garageRows: GarageReportRowDto[]
 }
 
+export type IncomeReportRowDto = {
+  rowType: string
+  date: string
+  accountingMonth: string
+  garageId: string
+  garageNumber: string
+  ownerId: string | null
+  ownerName: string | null
+  incomeTypeId: string
+  incomeTypeName: string
+  accrualAmount: number
+  incomeAmount: number
+  debt: number
+  documentNumber: string | null
+  comment: string | null
+}
+
+export type IncomeReportDto = {
+  dateFrom: string
+  dateTo: string
+  accrualTotal: number
+  incomeTotal: number
+  debt: number
+  rowCount: number
+  rows: IncomeReportRowDto[]
+}
+
 export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<ConsolidatedReportDto>
+  getIncomeReport(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      garageIds?: string[]
+      ownerIds?: string[]
+      incomeTypeIds?: string[]
+      rowMode?: string
+    },
+  ): Promise<IncomeReportDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
@@ -70,5 +109,31 @@ export const reportsApi: ReportClient = {
     }
     const query = searchParams.toString()
     return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`)
+  },
+  getIncomeReport(accessToken, params = {}) {
+    const searchParams = new URLSearchParams()
+    if (params.dateFrom) {
+      searchParams.set('dateFrom', params.dateFrom)
+    }
+    if (params.dateTo) {
+      searchParams.set('dateTo', params.dateTo)
+    }
+    if (params.search) {
+      searchParams.set('search', params.search)
+    }
+    if (params.rowMode) {
+      searchParams.set('rowMode', params.rowMode)
+    }
+    for (const garageId of params.garageIds ?? []) {
+      searchParams.append('garageIds', garageId)
+    }
+    for (const ownerId of params.ownerIds ?? []) {
+      searchParams.append('ownerIds', ownerId)
+    }
+    for (const incomeTypeId of params.incomeTypeIds ?? []) {
+      searchParams.append('incomeTypeIds', incomeTypeId)
+    }
+    const query = searchParams.toString()
+    return requestJson(accessToken, `/api/reports/income${query ? `?${query}` : ''}`)
   },
 }

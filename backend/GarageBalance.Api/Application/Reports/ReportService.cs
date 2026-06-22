@@ -6,6 +6,10 @@ namespace GarageBalance.Api.Application.Reports;
 
 public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportService
 {
+    private const string IncomeReportAllRows = "all";
+    private const string IncomeReportAccrualRows = "accruals";
+    private const string IncomeReportPaymentRows = "payments";
+
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
         var periodFrom = NormalizeMonth(request.MonthFrom ?? DateOnly.FromDateTime(DateTime.Today));
@@ -78,6 +82,153 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             garageRows);
 
         return ReportResult<ConsolidatedReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)
+    {
+        var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
+        if (dateTo < dateFrom)
+        {
+            return ReportResult<IncomeReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        var rowMode = string.IsNullOrWhiteSpace(request.RowMode)
+            ? IncomeReportAllRows
+            : request.RowMode.Trim().ToLowerInvariant();
+        if (rowMode is not (IncomeReportAllRows or IncomeReportAccrualRows or IncomeReportPaymentRows))
+        {
+            return ReportResult<IncomeReportDto>.Failure("row_mode_invalid", "Режим строк отчета по поступлениям неизвестен.");
+        }
+
+        var garageIds = request.GarageIds.ToHashSet();
+        var ownerIds = request.OwnerIds.ToHashSet();
+        var incomeTypeIds = request.IncomeTypeIds.ToHashSet();
+        var rows = new List<IncomeReportRowDto>();
+
+        if (rowMode is IncomeReportAllRows or IncomeReportAccrualRows)
+        {
+            var accrualsQuery = dbContext.Accruals.AsNoTracking()
+                .Include(accrual => accrual.Garage)
+                .ThenInclude(garage => garage.Owner)
+                .Include(accrual => accrual.IncomeType)
+                .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= dateFrom && accrual.AccountingMonth <= dateTo);
+
+            if (garageIds.Count > 0)
+            {
+                accrualsQuery = accrualsQuery.Where(accrual => garageIds.Contains(accrual.GarageId));
+            }
+
+            if (ownerIds.Count > 0)
+            {
+                accrualsQuery = accrualsQuery.Where(accrual => accrual.Garage.OwnerId != null && ownerIds.Contains(accrual.Garage.OwnerId.Value));
+            }
+
+            if (incomeTypeIds.Count > 0)
+            {
+                accrualsQuery = accrualsQuery.Where(accrual => incomeTypeIds.Contains(accrual.IncomeTypeId));
+            }
+
+            var accrualRows = await accrualsQuery
+                .OrderBy(accrual => accrual.AccountingMonth)
+                .ThenBy(accrual => accrual.Garage.Number)
+                .ToListAsync(cancellationToken);
+
+            rows.AddRange(accrualRows.Select(accrual => new IncomeReportRowDto(
+                IncomeReportAccrualRows,
+                accrual.AccountingMonth,
+                accrual.AccountingMonth,
+                accrual.GarageId,
+                accrual.Garage.Number,
+                accrual.Garage.OwnerId,
+                accrual.Garage.Owner?.FullName,
+                accrual.IncomeTypeId,
+                accrual.IncomeType.Name,
+                accrual.Amount,
+                0m,
+                accrual.Amount,
+                null,
+                accrual.Comment)));
+        }
+
+        if (rowMode is IncomeReportAllRows or IncomeReportPaymentRows)
+        {
+            var paymentsQuery = dbContext.FinancialOperations.AsNoTracking()
+                .Include(operation => operation.Garage)
+                .ThenInclude(garage => garage!.Owner)
+                .Include(operation => operation.IncomeType)
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FinancialOperationKinds.Income &&
+                    operation.GarageId != null &&
+                    operation.IncomeTypeId != null &&
+                    operation.OperationDate >= dateFrom &&
+                    operation.OperationDate <= dateTo);
+
+            if (garageIds.Count > 0)
+            {
+                paymentsQuery = paymentsQuery.Where(operation => operation.GarageId != null && garageIds.Contains(operation.GarageId.Value));
+            }
+
+            if (ownerIds.Count > 0)
+            {
+                paymentsQuery = paymentsQuery.Where(operation => operation.Garage != null && operation.Garage.OwnerId != null && ownerIds.Contains(operation.Garage.OwnerId.Value));
+            }
+
+            if (incomeTypeIds.Count > 0)
+            {
+                paymentsQuery = paymentsQuery.Where(operation => operation.IncomeTypeId != null && incomeTypeIds.Contains(operation.IncomeTypeId.Value));
+            }
+
+            var paymentRows = await paymentsQuery
+                .OrderBy(operation => operation.OperationDate)
+                .ThenBy(operation => operation.Garage!.Number)
+                .ToListAsync(cancellationToken);
+
+            rows.AddRange(paymentRows.Select(operation => new IncomeReportRowDto(
+                IncomeReportPaymentRows,
+                operation.OperationDate,
+                operation.AccountingMonth,
+                operation.GarageId!.Value,
+                operation.Garage!.Number,
+                operation.Garage.OwnerId,
+                operation.Garage.Owner?.FullName,
+                operation.IncomeTypeId!.Value,
+                operation.IncomeType!.Name,
+                0m,
+                operation.Amount,
+                -operation.Amount,
+                operation.DocumentNumber,
+                operation.Comment)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var normalizedSearch = request.Search.Trim();
+            rows = rows
+                .Where(row =>
+                    row.GarageNumber.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (row.OwnerName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    row.IncomeTypeName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (row.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        rows = rows
+            .OrderBy(row => row.Date)
+            .ThenBy(row => row.GarageNumber)
+            .ThenBy(row => row.RowType)
+            .ToList();
+
+        var report = new IncomeReportDto(
+            dateFrom,
+            dateTo,
+            rows.Sum(row => row.AccrualAmount),
+            rows.Sum(row => row.IncomeAmount),
+            rows.Sum(row => row.Debt),
+            rows.Count,
+            rows);
+
+        return ReportResult<IncomeReportDto>.Success(report);
     }
 
     private async Task<IReadOnlyList<GarageReportRowDto>> BuildGarageRowsAsync(string? search, DateOnly periodFrom, DateOnly periodTo, CancellationToken cancellationToken)
@@ -154,6 +305,14 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     private static DateOnly NormalizeMonth(DateOnly value)
     {
         return new DateOnly(value.Year, value.Month, 1);
+    }
+
+    private static (DateOnly DateFrom, DateOnly DateTo) NormalizeDateRange(DateOnly? dateFrom, DateOnly? dateTo)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var start = dateFrom ?? new DateOnly(today.Year, today.Month, 1);
+        var end = dateTo ?? new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
+        return (start, end);
     }
 
     private readonly record struct AmountCountByMonth(DateOnly Month, decimal Amount, int Count);

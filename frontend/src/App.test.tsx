@@ -5,7 +5,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
-import type { ConsolidatedReportDto, ReportClient } from './services/reportsApi'
+import type { ConsolidatedReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
@@ -251,6 +251,28 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText('Гараж 21')).toBeInTheDocument()
   })
 
+  it('shows income report and applies income filters', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    expect(await within(reportsPanel).findByText('Отчет по поступлениям')).toBeInTheDocument()
+    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })).toBeInTheDocument()
+    expect(within(reportsPanel).getAllByText(/Гараж 12 · Членский взнос/)).toHaveLength(2)
+    expect(within(reportsPanel).getByText(/PKO-1/)).toBeInTheDocument()
+
+    await user.selectOptions(within(reportsPanel).getByLabelText('Тип строк отчета по поступлениям'), 'payments')
+    await user.selectOptions(within(reportsPanel).getByLabelText('Вид поступления в отчете'), 'income-type-1')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать' }))
+
+    expect(await within(reportsPanel).findByText('1 строк')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('+1 500,00')).toBeInTheDocument()
+  })
+
   it('shows login errors without opening protected workspace', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
@@ -471,6 +493,19 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
               meterReadingCount: 0,
             },
           ],
+        })
+      }
+      return report
+    },
+    getIncomeReport: async (_token, params) => {
+      const report = createIncomeReport()
+      if (params?.rowMode === 'payments') {
+        return createIncomeReport({
+          accrualTotal: 0,
+          incomeTotal: 1500,
+          debt: -1500,
+          rowCount: 1,
+          rows: report.rows.filter((row) => row.rowType === 'payments'),
         })
       }
       return report
@@ -896,6 +931,52 @@ function createConsolidatedReport(overrides: Partial<ConsolidatedReportDto> = {}
         accrualTotal: 2000,
         debt: 500,
         meterReadingCount: 1,
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createIncomeReport(overrides: Partial<IncomeReportDto> = {}): IncomeReportDto {
+  return {
+    dateFrom: '2026-06-01',
+    dateTo: '2026-06-30',
+    accrualTotal: 2000,
+    incomeTotal: 1500,
+    debt: 500,
+    rowCount: 2,
+    rows: [
+      {
+        rowType: 'accruals',
+        date: '2026-06-01',
+        accountingMonth: '2026-06-01',
+        garageId: 'garage-1',
+        garageNumber: '12',
+        ownerId: 'owner-1',
+        ownerName: 'Иванов Иван',
+        incomeTypeId: 'income-type-1',
+        incomeTypeName: 'Членский взнос',
+        accrualAmount: 2000,
+        incomeAmount: 0,
+        debt: 2000,
+        documentNumber: null,
+        comment: 'Начисление за июнь',
+      },
+      {
+        rowType: 'payments',
+        date: '2026-06-10',
+        accountingMonth: '2026-06-01',
+        garageId: 'garage-1',
+        garageNumber: '12',
+        ownerId: 'owner-1',
+        ownerName: 'Иванов Иван',
+        incomeTypeId: 'income-type-1',
+        incomeTypeName: 'Членский взнос',
+        accrualAmount: 0,
+        incomeAmount: 1500,
+        debt: -1500,
+        documentNumber: 'PKO-1',
+        comment: 'Оплата за июнь',
       },
     ],
     ...overrides,

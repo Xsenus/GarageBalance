@@ -25,7 +25,7 @@ import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDt
 import { importApi } from './services/importApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
-import type { ConsolidatedReportDto, ReportClient } from './services/reportsApi'
+import type { ConsolidatedReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
@@ -266,7 +266,7 @@ function Workspace({
 
       <ImportPanel auth={auth} importClient={importClient} />
 
-      <ReportPanel auth={auth} reportClient={reportClient} />
+      <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
 
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
         {roadmap.map((item) => {
@@ -972,13 +972,18 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   )
 }
 
-function ReportPanel({ auth, reportClient }: { auth: AuthResponse; reportClient: ReportClient }) {
+function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = new Date().toISOString().slice(0, 10)
   const month = `${today.slice(0, 7)}-01`
   const [filters, setFilters] = useState({ monthFrom: month, monthTo: month, search: '' })
+  const [incomeFilters, setIncomeFilters] = useState({ dateFrom: month, dateTo: today, search: '', incomeTypeId: '', rowMode: 'all' })
   const [report, setReport] = useState<ConsolidatedReportDto | null>(null)
+  const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
+  const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [loading, setLoading] = useState(true)
+  const [incomeLoading, setIncomeLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [incomeError, setIncomeError] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -1007,6 +1012,43 @@ function ReportPanel({ auth, reportClient }: { auth: AuthResponse; reportClient:
     }
   }, [auth.accessToken, filters, reportClient])
 
+  useEffect(() => {
+    let ignore = false
+    async function loadIncomeReport() {
+      setIncomeLoading(true)
+      setIncomeError(null)
+      try {
+        const [loadedIncomeTypes, loadedIncomeReport] = await Promise.all([
+          dictionaryClient.getIncomeTypes(auth.accessToken),
+          reportClient.getIncomeReport(auth.accessToken, {
+            dateFrom: incomeFilters.dateFrom,
+            dateTo: incomeFilters.dateTo,
+            search: incomeFilters.search,
+            incomeTypeIds: incomeFilters.incomeTypeId ? [incomeFilters.incomeTypeId] : [],
+            rowMode: incomeFilters.rowMode,
+          }),
+        ])
+        if (!ignore) {
+          setIncomeTypes(loadedIncomeTypes)
+          setIncomeReport(loadedIncomeReport)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setIncomeError(caught instanceof Error ? caught.message : 'Не удалось сформировать отчет по поступлениям.')
+        }
+      } finally {
+        if (!ignore) {
+          setIncomeLoading(false)
+        }
+      }
+    }
+
+    void loadIncomeReport()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, dictionaryClient, incomeFilters, reportClient])
+
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -1014,6 +1056,18 @@ function ReportPanel({ auth, reportClient }: { auth: AuthResponse; reportClient:
       monthFrom: `${form.get('monthFrom')}-01`,
       monthTo: `${form.get('monthTo')}-01`,
       search: String(form.get('search') ?? ''),
+    })
+  }
+
+  function applyIncomeFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setIncomeFilters({
+      dateFrom: String(form.get('dateFrom') ?? today),
+      dateTo: String(form.get('dateTo') ?? today),
+      search: String(form.get('search') ?? ''),
+      incomeTypeId: String(form.get('incomeTypeId') ?? ''),
+      rowMode: String(form.get('rowMode') ?? 'all'),
     })
   }
 
@@ -1109,6 +1163,78 @@ function ReportPanel({ auth, reportClient }: { auth: AuthResponse; reportClient:
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="subsection-heading">
+        <div>
+          <h3>Отчет по поступлениям</h3>
+          <p>Начисления и оплаты по гаражам, владельцам и видам поступлений.</p>
+        </div>
+        <span>{incomeLoading ? 'Формируем...' : `${incomeReport?.rowCount ?? 0} строк`}</span>
+      </div>
+
+      {incomeError ? <div className="form-error">{incomeError}</div> : null}
+
+      <form className="compact-form report-filter" onSubmit={applyIncomeFilters}>
+        <input aria-label="Начало отчета по поступлениям" name="dateFrom" type="date" defaultValue={incomeFilters.dateFrom} required />
+        <input aria-label="Конец отчета по поступлениям" name="dateTo" type="date" defaultValue={incomeFilters.dateTo} required />
+        <input aria-label="Поиск в поступлениях" name="search" placeholder="Гараж, владелец, документ" defaultValue={incomeFilters.search} />
+        <select aria-label="Вид поступления в отчете" name="incomeTypeId" defaultValue={incomeFilters.incomeTypeId}>
+          <option value="">Все виды</option>
+          {incomeTypes.map((incomeType) => (
+            <option value={incomeType.id} key={incomeType.id}>
+              {incomeType.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Тип строк отчета по поступлениям" name="rowMode" defaultValue={incomeFilters.rowMode}>
+          <option value="all">Начисления и оплаты</option>
+          <option value="accruals">Только начисления</option>
+          <option value="payments">Только оплаты</option>
+        </select>
+        <button className="secondary-button" type="submit">
+          <Search size={16} />
+          <span>Показать</span>
+        </button>
+      </form>
+
+      <div className="summary-strip" aria-label="Итоги отчета по поступлениям">
+        <div>
+          <span>Начислено</span>
+          <strong>{formatMoney(incomeReport?.accrualTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Оплачено</span>
+          <strong>{formatMoney(incomeReport?.incomeTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Разница</span>
+          <strong>{formatMoney(incomeReport?.debt ?? 0)}</strong>
+        </div>
+      </div>
+
+      <div className="operation-list" role="table" aria-label="Отчет по поступлениям">
+        <div className="operation-row header" role="row">
+          <span role="columnheader">Дата</span>
+          <span role="columnheader">Гараж и вид</span>
+          <span role="columnheader">Сумма</span>
+        </div>
+        {incomeReport?.rows.length === 0 ? <p className="empty-state">По выбранному фильтру поступлений нет</p> : null}
+        {incomeReport?.rows.slice(0, 16).map((row) => (
+          <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
+            <span role="cell">
+              <strong>{row.date}</strong>
+              <small>{row.rowType === 'accruals' ? 'начисление' : 'оплата'}</small>
+            </span>
+            <span role="cell">
+              <strong>Гараж {row.garageNumber} · {row.incomeTypeName}</strong>
+              <small>{row.ownerName ?? 'владелец не указан'}{row.documentNumber ? ` · ${row.documentNumber}` : ''}</small>
+            </span>
+            <span role="cell" className={row.rowType === 'payments' ? 'money-income' : 'money-accrual'}>
+              {row.rowType === 'payments' ? '+' : ''}{formatMoney(row.rowType === 'payments' ? row.incomeAmount : row.accrualAmount)}
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   )

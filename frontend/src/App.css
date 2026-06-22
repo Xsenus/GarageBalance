@@ -500,6 +500,29 @@ h1 {
   font-size: 18px;
 }
 
+.subsection-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #eaecf0;
+}
+
+.subsection-heading h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 17px;
+}
+
+.subsection-heading p,
+.subsection-heading span {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 13px;
+}
+
 .user-management-grid {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
