@@ -159,6 +159,77 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_CreatesFixedAccrualsForActiveGarages()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 15), "Июнь"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
+        Assert.Equal(1, result.Value.CreatedCount);
+        Assert.Equal(0, result.Value.SkippedCount);
+        Assert.Equal(300m, result.Value.TotalAmount);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal("regular", accrual.Source);
+        Assert.Equal(300m, accrual.Amount);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_CalculatesMeterAmountFromReading()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(275m, result.Value!.TotalAmount);
+        Assert.Equal(275m, result.Value.CreatedAccruals[0].Amount);
+        Assert.Equal("meter_water", result.Value.CalculationBase);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_RejectsSecondRunForSameMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var request = new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null);
+        await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
+
+        var result = await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("regular_accruals_empty", result.ErrorCode);
+        Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
     public async Task GetAccrualsAsync_SearchesAndOrdersByMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

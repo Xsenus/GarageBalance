@@ -101,6 +101,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("accruals/generate-regular")]
+    [ProducesResponseType<RegularAccrualGenerationResultDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<RegularAccrualGenerationResultDto>> GenerateRegularAccruals(GenerateRegularAccrualsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.GenerateRegularAccrualsAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetAccruals), new { monthFrom = result.Value!.AccountingMonth, monthTo = result.Value.AccountingMonth }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("meter-readings")]
     [ProducesResponseType<MeterReadingDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -129,8 +143,8 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
 
         return result.ErrorCode switch
         {
-            "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" => NotFound(problem),
-            "operation_duplicate" or "accrual_duplicate" or "meter_reading_duplicate" => Conflict(problem),
+            "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(problem),
+            "operation_duplicate" or "accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(problem),
             _ => BadRequest(problem)
         };
     }

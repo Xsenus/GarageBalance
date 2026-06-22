@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto } from './services/financeApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
@@ -169,6 +169,26 @@ describe('App', () => {
 
     expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
     expect(within(financePanel).getByRole('table', { name: 'Последние начисления' })).toBeInTheDocument()
+  })
+
+  it('generates regular accruals from tariff in payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [createTariff({ id: 'tariff-fixed', name: 'Членский тариф', calculationBase: 'fixed', rate: 300, effectiveFrom: '2026-01-01' })],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.type(within(financePanel).getByLabelText('Комментарий регулярных начислений'), 'Начисление за месяц')
+    await user.click(within(financePanel).getByRole('button', { name: 'Создать месяц' }))
+
+    expect(await within(financePanel).findByText('Создано 1, пропущено 0')).toBeInTheDocument()
+    expect((await within(financePanel).findAllByText('300,00')).length).toBeGreaterThan(0)
+    expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
   })
 
   it('creates meter reading and shows calculated consumption', async () => {
@@ -350,6 +370,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     createIncome: async () => operation,
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     createAccrual: async () => accrual,
+    generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     createMeterReading: async () => meterReading,
     ...overrides,
   }
@@ -409,6 +430,24 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       accruals = [accrual, ...accruals]
       return accrual
+    },
+    generateRegularAccruals: async (_token, request) => {
+      const accrual = createAccrual({
+        id: crypto.randomUUID(),
+        incomeTypeId: request.incomeTypeId,
+        accountingMonth: request.accountingMonth,
+        amount: 300,
+        source: 'regular',
+        comment: request.comment ?? null,
+      })
+      accruals = [accrual, ...accruals]
+      return createRegularAccrualGenerationResult({
+        accountingMonth: request.accountingMonth,
+        incomeTypeId: request.incomeTypeId,
+        tariffId: request.tariffId,
+        createdAccruals: [accrual],
+        totalAmount: accrual.amount,
+      })
     },
     createMeterReading: async (_token, request) => {
       const previousValue = request.meterKind === 'water' ? 10 : 100
@@ -640,6 +679,23 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     source: 'manual',
     comment: null,
     isCanceled: false,
+    ...overrides,
+  }
+}
+
+function createRegularAccrualGenerationResult(overrides: Partial<RegularAccrualGenerationResultDto>): RegularAccrualGenerationResultDto {
+  return {
+    accountingMonth: '2026-06-01',
+    incomeTypeId: 'income-type-1',
+    incomeTypeName: 'Членский взнос',
+    tariffId: 'tariff-fixed',
+    tariffName: 'Членский тариф',
+    calculationBase: 'fixed',
+    createdCount: overrides.createdAccruals?.length ?? 1,
+    skippedCount: 0,
+    totalAmount: 300,
+    createdAccruals: [createAccrual({ amount: 300, source: 'regular' })],
+    skippedGarages: [],
     ...overrides,
   }
 }

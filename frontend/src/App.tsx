@@ -66,6 +66,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлено создание регулярных начислений по тарифам: фиксированные суммы, расчет по людям и счетчикам воды/электричества можно сформировать за месяц одним действием.',
   'Добавлены показания счетчиков воды и электричества: система считает расход и показывает предупреждение по разрыву истории.',
   'Добавлены ручные начисления по гаражам: месяц учета, вид начисления, сумма, комментарий и расчет задолженности.',
   'Добавлен первый рабочий учет денег: поступления по гаражам, выплаты поставщикам, итоги и последние операции.',
@@ -303,6 +304,7 @@ function FinancePanel({
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
   const [accruals, setAccruals] = useState<AccrualDto[]>([])
   const [meterReadings, setMeterReadings] = useState<MeterReadingDto[]>([])
@@ -310,6 +312,8 @@ function FinancePanel({
   const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, comment: '' })
+  const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
+  const [regularStatus, setRegularStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -321,11 +325,12 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedOperations, loadedAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken),
           dictionaryClient.getSuppliers(auth.accessToken),
           dictionaryClient.getIncomeTypes(auth.accessToken),
           dictionaryClient.getExpenseTypes(auth.accessToken),
+          dictionaryClient.getTariffs(auth.accessToken),
           financeClient.getOperations(auth.accessToken),
           financeClient.getAccruals(auth.accessToken),
           financeClient.getMeterReadings(auth.accessToken),
@@ -336,6 +341,7 @@ function FinancePanel({
           setSuppliers(loadedSuppliers)
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
+          setTariffs(loadedTariffs)
           setOperations(loadedOperations)
           setAccruals(loadedAccruals)
           setMeterReadings(loadedMeterReadings)
@@ -343,6 +349,7 @@ function FinancePanel({
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setRegularForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '', tariffId: value.tariffId || loadedTariffs[0]?.id || '' }))
           setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
         }
       } catch (caught) {
@@ -413,6 +420,27 @@ function FinancePanel({
         accrualCount: value.accrualCount + 1,
       }))
       setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
+    })
+  }
+
+  async function saveRegularAccruals(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('regular-accruals', async () => {
+      const result = await financeClient.generateRegularAccruals(auth.accessToken, {
+        incomeTypeId: regularForm.incomeTypeId,
+        tariffId: regularForm.tariffId,
+        accountingMonth: regularForm.accountingMonth,
+        comment: regularForm.comment,
+      })
+      setAccruals((items) => [...result.createdAccruals, ...items])
+      setSummary((value) => ({
+        ...value,
+        accrualTotal: value.accrualTotal + result.totalAmount,
+        debt: value.debt + result.totalAmount,
+        accrualCount: value.accrualCount + result.createdCount,
+      }))
+      setRegularStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
+      setRegularForm((value) => ({ ...value, comment: '' }))
     })
   }
 
@@ -606,6 +634,37 @@ function FinancePanel({
             <Plus size={16} />
             <span>Начислить</span>
           </button>
+        </form>
+
+        <form className="dictionary-form" onSubmit={saveRegularAccruals}>
+          <h3>Регулярные начисления</h3>
+          <select aria-label="Вид регулярного начисления" value={regularForm.incomeTypeId} onChange={(event) => setRegularForm({ ...regularForm, incomeTypeId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите вид
+            </option>
+            {incomeTypes.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Тариф регулярного начисления" value={regularForm.tariffId} onChange={(event) => setRegularForm({ ...regularForm, tariffId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите тариф
+            </option>
+            {tariffs.map((tariff) => (
+              <option value={tariff.id} key={tariff.id}>
+                {tariff.name} · {formatMoney(tariff.rate)}
+              </option>
+            ))}
+          </select>
+          <input aria-label="Месяц регулярных начислений" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />
+          <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
+          <button className="secondary-button" type="submit" disabled={saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
+            <Plus size={16} />
+            <span>Создать месяц</span>
+          </button>
+          {regularStatus ? <p className="empty-state">{regularStatus}</p> : null}
         </form>
 
         <form className="dictionary-form" onSubmit={saveMeterReading}>

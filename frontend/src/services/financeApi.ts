@@ -88,6 +88,27 @@ export type CreateAccrualRequest = {
   comment?: string
 }
 
+export type GenerateRegularAccrualsRequest = {
+  incomeTypeId: string
+  tariffId: string
+  accountingMonth: string
+  comment?: string
+}
+
+export type RegularAccrualGenerationResultDto = {
+  accountingMonth: string
+  incomeTypeId: string
+  incomeTypeName: string
+  tariffId: string
+  tariffName: string
+  calculationBase: string
+  createdCount: number
+  skippedCount: number
+  totalAmount: number
+  createdAccruals: AccrualDto[]
+  skippedGarages: string[]
+}
+
 export type CreateMeterReadingRequest = {
   garageId: string
   meterKind: 'water' | 'electricity'
@@ -105,6 +126,7 @@ export type FinanceClient = {
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
+  generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
 }
 
@@ -149,6 +171,9 @@ export const financeApi: FinanceClient = {
   },
   createAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })
+  },
+  generateRegularAccruals(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals/generate-regular', { method: 'POST', body: JSON.stringify(request) })
   },
   createMeterReading(accessToken, request) {
     return requestJson(accessToken, '/api/finance/meter-readings', { method: 'POST', body: JSON.stringify(request) })

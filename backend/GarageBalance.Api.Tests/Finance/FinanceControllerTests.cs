@@ -97,6 +97,41 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccruals_ReturnsConflictWhenNothingCreated()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            GenerateRegularAccrualsResult = FinanceResult<RegularAccrualGenerationResultDto>.Failure("regular_accruals_empty", "Начисления не созданы.")
+        });
+
+        var result = await controller.GenerateRegularAccruals(
+            new GenerateRegularAccrualsRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("regular_accruals_empty", problem.Title);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccruals_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            GenerateRegularAccrualsResult = FinanceResult<RegularAccrualGenerationResultDto>.Success(CreateGenerationResult())
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.GenerateRegularAccruals(
+            new GenerateRegularAccrualsRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), null),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task CreateMeterReading_ReturnsConflictForDuplicateReading()
     {
         var controller = CreateController(new FakeFinanceService
@@ -198,12 +233,30 @@ public sealed class FinanceControllerTests
             false);
     }
 
+    private static RegularAccrualGenerationResultDto CreateGenerationResult()
+    {
+        var accrual = CreateAccrual();
+        return new RegularAccrualGenerationResultDto(
+            new DateOnly(2026, 6, 1),
+            accrual.IncomeTypeId,
+            accrual.IncomeTypeName,
+            Guid.NewGuid(),
+            "Членский тариф",
+            "fixed",
+            1,
+            0,
+            accrual.Amount,
+            [accrual],
+            []);
+    }
+
     private sealed class FakeFinanceService : IFinanceService
     {
         public Guid? LastActorUserId { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -242,6 +295,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateAccrualResult);
+        }
+
+        public Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(GenerateRegularAccrualsResult);
         }
 
         public Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)

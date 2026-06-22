@@ -66,6 +66,25 @@ public sealed record CreateAccrualRequest(
     [property: Required, MaxLength(40)] string Source,
     [property: MaxLength(1000)] string? Comment);
 
+public sealed record GenerateRegularAccrualsRequest(
+    Guid IncomeTypeId,
+    Guid TariffId,
+    DateOnly AccountingMonth,
+    [property: MaxLength(1000)] string? Comment);
+
+public sealed record RegularAccrualGenerationResultDto(
+    DateOnly AccountingMonth,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    Guid TariffId,
+    string TariffName,
+    string CalculationBase,
+    int CreatedCount,
+    int SkippedCount,
+    decimal TotalAmount,
+    IReadOnlyList<AccrualDto> CreatedAccruals,
+    IReadOnlyList<string> SkippedGarages);
+
 public sealed record AccrualListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
