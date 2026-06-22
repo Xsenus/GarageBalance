@@ -61,6 +61,7 @@ npm run dev
 - `POST /api/finance/expense` - внесение выплаты поставщику.
 - `GET /api/import/access/runs` - журнал dry-run проверок Access-БД.
 - `POST /api/import/access/dry-run` - загрузка `.accdb`/`.mdb` и первичная проверка перед импортом.
+- `GET /api/reports/consolidated` - консолидированный отчет за период с итогами по месяцам и гаражам.
 
 Docker-заготовка:
 

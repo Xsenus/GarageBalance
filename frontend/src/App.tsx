@@ -24,6 +24,8 @@ import { financeApi } from './services/financeApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
+import { reportsApi } from './services/reportsApi'
+import type { ConsolidatedReportDto, ReportClient } from './services/reportsApi'
 import { usersApi } from './services/usersApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 import './App.css'
@@ -33,6 +35,7 @@ type AppProps = {
   dictionaryClient?: DictionaryClient
   financeClient?: FinanceClient
   importClient?: ImportClient
+  reportClient?: ReportClient
   userClient?: UserManagementClient
 }
 
@@ -69,6 +72,7 @@ const roadmap = [
 ]
 
 const updates = [
+  'Добавлен консолидированный отчет за период: итоги по месяцам и гаражам показывают начислено, оплачено, выплаты, баланс и долг.',
   'Добавлен dry-run импорта Access: можно загрузить .accdb/.mdb, получить отчет первичных проверок и сохранить историю запуска без изменения данных.',
   'Добавлено создание регулярных начислений по тарифам: фиксированные суммы, расчет по людям и счетчикам воды/электричества можно сформировать за месяц одним действием.',
   'Добавлены показания счетчиков воды и электричества: система считает расход и показывает предупреждение по разрыву истории.',
@@ -81,7 +85,7 @@ const updates = [
   'Добавлены справочники владельцев, гаражей, групп поставщиков и поставщиков с тестами и миграцией.',
 ]
 
-function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
 
   return (
@@ -118,7 +122,7 @@ function App({ authClient = authApi, dictionaryClient = dictionariesApi, finance
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} userClient={userClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} userClient={userClient} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -206,6 +210,7 @@ function Workspace({
   dictionaryClient,
   financeClient,
   importClient,
+  reportClient,
   userClient,
   onLogout,
 }: {
@@ -213,6 +218,7 @@ function Workspace({
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   importClient: ImportClient
+  reportClient: ReportClient
   userClient: UserManagementClient
   onLogout: () => void
 }) {
@@ -268,6 +274,8 @@ function Workspace({
       <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
 
       <ImportPanel auth={auth} importClient={importClient} />
+
+      <ReportPanel auth={auth} reportClient={reportClient} />
 
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
         {roadmap.map((item) => {
@@ -899,6 +907,148 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 {run.passedChecks}/{run.totalChecks}
               </span>
             </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ReportPanel({ auth, reportClient }: { auth: AuthResponse; reportClient: ReportClient }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const month = `${today.slice(0, 7)}-01`
+  const [filters, setFilters] = useState({ monthFrom: month, monthTo: month, search: '' })
+  const [report, setReport] = useState<ConsolidatedReportDto | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const loadedReport = await reportClient.getConsolidatedReport(auth.accessToken, filters)
+        if (!ignore) {
+          setReport(loadedReport)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось сформировать отчет.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, filters, reportClient])
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setFilters({
+      monthFrom: `${form.get('monthFrom')}-01`,
+      monthTo: `${form.get('monthTo')}-01`,
+      search: String(form.get('search') ?? ''),
+    })
+  }
+
+  return (
+    <section className="dictionary-panel" aria-label="Отчеты">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Отчеты</p>
+          <h2>Консолидированный отчет за период</h2>
+        </div>
+        <span>{loading ? 'Формируем...' : `${report?.monthlyRows.length ?? 0} месяцев`}</span>
+      </div>
+
+      {error ? <div className="form-error">{error}</div> : null}
+
+      <form className="compact-form report-filter" onSubmit={applyFilters}>
+        <input aria-label="Начало периода отчета" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
+        <input aria-label="Конец периода отчета" name="monthTo" type="month" defaultValue={filters.monthTo.slice(0, 7)} required />
+        <input aria-label="Поиск в отчете" name="search" placeholder="Гараж или владелец" defaultValue={filters.search} />
+        <button className="secondary-button" type="submit">
+          <Search size={16} />
+          <span>Сформировать</span>
+        </button>
+      </form>
+
+      <div className="summary-strip" aria-label="Итоги отчета">
+        <div>
+          <span>Начислено</span>
+          <strong>{formatMoney(report?.accrualTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Поступило</span>
+          <strong>{formatMoney(report?.incomeTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Задолженность</span>
+          <strong>{formatMoney(report?.debt ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Выплаты</span>
+          <strong>{formatMoney(report?.expenseTotal ?? 0)}</strong>
+        </div>
+        <div>
+          <span>Баланс</span>
+          <strong>{formatMoney(report?.balance ?? 0)}</strong>
+        </div>
+      </div>
+
+      <div className="finance-grid">
+        <div className="operation-list" role="table" aria-label="Помесячный отчет">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Месяц</span>
+            <span role="columnheader">Итоги</span>
+            <span role="columnheader">Долг</span>
+          </div>
+          {report?.monthlyRows.length === 0 ? <p className="empty-state">Строк отчета пока нет</p> : null}
+          {report?.monthlyRows.map((row) => (
+            <div className="operation-row" role="row" key={row.accountingMonth}>
+              <span role="cell">{row.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">
+                <strong>{formatMoney(row.accrualTotal)} начислено</strong>
+                <small>
+                  {formatMoney(row.incomeTotal)} поступило, {formatMoney(row.expenseTotal)} выплат
+                </small>
+              </span>
+              <span role="cell" className="money-accrual">
+                {formatMoney(row.debt)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="Отчет по гаражам">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Гараж</span>
+            <span role="columnheader">Начисления</span>
+            <span role="columnheader">Долг</span>
+          </div>
+          {report?.garageRows.length === 0 ? <p className="empty-state">По выбранному фильтру строк нет</p> : null}
+          {report?.garageRows.slice(0, 12).map((row) => (
+            <div className="operation-row" role="row" key={row.garageId}>
+              <span role="cell">
+                <strong>Гараж {row.garageNumber}</strong>
+                <small>{row.ownerName ?? 'владелец не указан'}</small>
+              </span>
+              <span role="cell">
+                <strong>{formatMoney(row.accrualTotal)}</strong>
+                <small>{formatMoney(row.incomeTotal)} оплачено</small>
+              </span>
+              <span role="cell" className="money-accrual">
+                {formatMoney(row.debt)}
+              </span>
+            </div>
           ))}
         </div>
       </div>

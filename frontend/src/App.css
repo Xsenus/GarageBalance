@@ -605,6 +605,14 @@ button.operation-row:hover {
   background: #f8fafc;
 }
 
+.report-filter {
+  margin-bottom: 16px;
+}
+
+.report-filter input {
+  min-width: 160px;
+}
+
 .user-table-row.header,
 .operation-row.header {
   border-top: 0;
