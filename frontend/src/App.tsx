@@ -3903,7 +3903,10 @@ type DictionaryListItem = {
 function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
-  const visibleItems = items.slice(0, 5)
+  const [showAllItems, setShowAllItems] = useState(false)
+  const compactLimit = 5
+  const visibleItems = showAllItems ? items : items.slice(0, compactLimit)
+  const hasHiddenItems = items.length > compactLimit
   useRestoreFocusOnClose(Boolean(pendingArchive))
   const archiveCancelButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingArchive) && !confirmingArchive)
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingArchive))
@@ -3955,7 +3958,14 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
           </li>
         ))}
       </ul>
-      {items.length > visibleItems.length ? <p className="empty-state">Показано {visibleItems.length} из {items.length} записей</p> : null}
+      {hasHiddenItems ? (
+        <div className="dictionary-list-footer">
+          <p className="empty-state">Показано {visibleItems.length} из {items.length} записей</p>
+          <button className="ghost-button" type="button" onClick={() => setShowAllItems((value) => !value)}>
+            {showAllItems ? 'Свернуть список' : 'Показать все записи'}
+          </button>
+        </div>
+      ) : null}
       {pendingArchive ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
           if (!confirmingArchive) {

@@ -765,6 +765,21 @@ h1 {
   padding: 4px 7px;
 }
 
+.dictionary-list-footer {
+  align-items: center;
+  border-top: 1px solid #e4e7ec;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.dictionary-list-footer .empty-state {
+  border-top: 0;
+  margin: 0;
+  padding: 0;
+}
+
 .dictionary-list span,
 .empty-state {
   color: #667085;
