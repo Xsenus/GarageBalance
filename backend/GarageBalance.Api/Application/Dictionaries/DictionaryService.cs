@@ -108,7 +108,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     public async Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var number = request.Number.Trim();
-        if (await dbContext.Garages.AnyAsync(garage => garage.Number == number, cancellationToken))
+        if (await dbContext.Garages.AnyAsync(garage => !garage.IsArchived && garage.Number == number, cancellationToken))
         {
             return DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Гараж с таким номером уже существует.");
         }
@@ -147,7 +147,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         }
 
         var number = request.Number.Trim();
-        if (await dbContext.Garages.AnyAsync(item => item.Id != id && item.Number == number, cancellationToken))
+        if (await dbContext.Garages.AnyAsync(item => item.Id != id && !item.IsArchived && item.Number == number, cancellationToken))
         {
             return DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Гараж с таким номером уже существует.");
         }

@@ -102,6 +102,37 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateGarageAsync_AllowsNumberFromArchivedGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var archivedGarage = await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, "old import row"), null, CancellationToken.None);
+        await service.ArchiveGarageAsync(archivedGarage.Value!.Id, null, CancellationToken.None);
+
+        var result = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, null, 100m, null, null, "new active row"), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("12", result.Value!.Number);
+        Assert.False(result.Value.IsArchived);
+        Assert.Equal(2, await database.Context.Garages.CountAsync(garage => garage.Number == "12"));
+        Assert.Single(await service.GetGaragesAsync("12", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateGarageAsync_RejectsNumberOfAnotherActiveGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+        var second = await service.CreateGarageAsync(new UpsertGarageRequest("21", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+
+        var result = await service.UpdateGarageAsync(second.Value!.Id, new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("garage_number_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task Dictionaries_RoundMoneyAndTariffRateBeforeSaving()
     {
         await using var database = await TestDatabase.CreateAsync();

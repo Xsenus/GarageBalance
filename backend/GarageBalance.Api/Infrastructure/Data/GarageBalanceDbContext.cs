@@ -109,7 +109,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(garage => garage.InitialWaterMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.InitialElectricityMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.Comment).HasMaxLength(1000);
-            entity.HasIndex(garage => garage.Number).IsUnique();
+            entity.HasIndex(garage => garage.Number).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(garage => garage.OwnerId);
             entity.HasOne(garage => garage.Owner)
                 .WithMany(owner => owner.Garages)
