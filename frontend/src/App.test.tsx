@@ -961,6 +961,46 @@ describe('App', () => {
     })
   })
 
+  it('shows visible row counters for truncated report tables', async () => {
+    const user = userEvent.setup()
+    const garageRows = Array.from({ length: 13 }, (_, index) => ({
+      garageId: `garage-${index + 1}`,
+      garageNumber: String(index + 1).padStart(2, '0'),
+      ownerName: `Владелец ${index + 1}`,
+      incomeTotal: 1000 + index,
+      accrualTotal: 1500 + index,
+      debt: 500,
+      meterReadingCount: 0,
+    }))
+    const incomeRows = Array.from({ length: 17 }, (_, index) => ({
+      ...createIncomeReport().rows[index % 2],
+      date: `2026-06-${String((index % 28) + 1).padStart(2, '0')}`,
+      garageId: `garage-${index + 1}`,
+      garageNumber: String(index + 1).padStart(2, '0'),
+      documentNumber: `PKO-${index + 1}`,
+    }))
+    const expenseRows = Array.from({ length: 17 }, (_, index) => ({
+      ...createExpenseReport().rows[0],
+      date: `2026-06-${String((index % 28) + 1).padStart(2, '0')}`,
+      supplierId: `supplier-${index + 1}`,
+      supplierName: `Поставщик ${index + 1}`,
+      documentNumber: `RKO-${index + 1}`,
+    }))
+    const reportClient = createReportClient({
+      getConsolidatedReport: async () => createConsolidatedReport({ garageRows }),
+      getIncomeReport: async () => createIncomeReport({ rowCount: incomeRows.length, rows: incomeRows }),
+      getExpenseReport: async () => createExpenseReport({ rowCount: expenseRows.length, rows: expenseRows }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toBeInTheDocument()
+    expect((await within(reportsPanel).findAllByText('Показано 16 из 17 строк')).length).toBe(2)
+  })
+
   it('shows income report and applies income filters', async () => {
     const user = userEvent.setup()
     let incomeRequest: Parameters<ReportClient['getIncomeReport']>[1] = undefined

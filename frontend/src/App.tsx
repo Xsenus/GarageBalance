@@ -2092,6 +2092,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               </span>
             </div>
           ))}
+          {report && report.garageRows.length > 12 ? <p className="empty-state">Показано 12 из {report.garageRows.length} строк</p> : null}
         </div>
       </div>
 
@@ -2186,6 +2187,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
+        {incomeReport && incomeReport.rowCount > 16 ? <p className="empty-state">Показано 16 из {incomeReport.rowCount} строк</p> : null}
       </div>
 
       <div className="subsection-heading">
@@ -2272,6 +2274,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
+        {expenseReport && expenseReport.rowCount > 16 ? <p className="empty-state">Показано 16 из {expenseReport.rowCount} строк</p> : null}
       </div>
     </section>
   )
