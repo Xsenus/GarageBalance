@@ -2460,6 +2460,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [selectedGarage, setSelectedGarage] = useState<GarageDto | null>(null)
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
+  const [supplierSearch, setSupplierSearch] = useState('')
+  const [supplierSearchStatus, setSupplierSearchStatus] = useState<string | null>(null)
   const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
   const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
   const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
@@ -2598,6 +2600,22 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       setSuppliers((items) => [supplier, ...items])
       setSupplierForm({ name: '', groupId: defaultGroupId, inn: '', startingBalance: 0 })
     })
+  }
+
+  async function searchSuppliers() {
+    setSaving('supplier-search')
+    setError(null)
+    setSupplierSearchStatus(null)
+    try {
+      const result = await dictionaryClient.getSuppliers(auth.accessToken, undefined, supplierSearch)
+      setSuppliers(result)
+      const query = supplierSearch.trim()
+      setSupplierSearchStatus(query ? `Найдено поставщиков: ${result.length}` : 'Показаны все поставщики')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск поставщиков.')
+    } finally {
+      setSaving(null)
+    }
   }
 
   async function saveIncomeType(event: FormEvent<HTMLFormElement>) {
@@ -2792,6 +2810,24 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
         <div className="dictionary-form">
           <h3>Поставщики</h3>
+          <div className="compact-form">
+            <input
+              aria-label="Поиск поставщика"
+              placeholder="Название, ИНН или контакт"
+              value={supplierSearch}
+              onChange={(event) => setSupplierSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void searchSuppliers()
+                }
+              }}
+            />
+            <button className="icon-button" type="button" aria-label="Найти поставщика" disabled={saving === 'supplier-search'} onClick={() => void searchSuppliers()}>
+              <Search size={17} />
+            </button>
+          </div>
+          {supplierSearchStatus ? <p className="form-hint">{supplierSearchStatus}</p> : null}
           <form className="compact-form" onSubmit={saveSupplierGroup}>
             <input aria-label="Группа поставщиков" placeholder="Группа" value={supplierGroupName} onChange={(event) => setSupplierGroupName(event.target.value)} required />
             <button className="icon-button" type="submit" aria-label="Добавить группу" disabled={!canWriteDictionaries || saving === 'group'}>

@@ -509,6 +509,35 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toBeInTheDocument()
   })
 
+  it('searches suppliers by name or inn from dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    let supplierSearch: string | undefined
+    const group = createGroup({ id: 'group-1', name: 'Коммунальные услуги' })
+    const waterSupplier = createSupplier({ id: 'supplier-1', name: 'Водоканал', groupId: group.id, groupName: group.name, inn: '5401' })
+    const bankSupplier = createSupplier({ id: 'supplier-2', name: 'Альфа-Банк', groupId: group.id, groupName: group.name, inn: '7728' })
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [group],
+      getSuppliers: async (_token, _groupId, search) => {
+        supplierSearch = search
+        return search?.includes('7728') ? [bankSupplier] : [waterSupplier, bankSupplier]
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
+    await user.type(within(dictionaryPanel).getByLabelText('Поиск поставщика'), '7728')
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Найти поставщика' }))
+
+    expect(supplierSearch).toBe('7728')
+    expect(await within(dictionaryPanel).findByText('Альфа-Банк')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Водоканал')).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Найдено поставщиков: 1')).toBeInTheDocument()
+  })
+
   it('archives owner from dictionaries workspace', async () => {
     const user = userEvent.setup()
     let archivedOwnerId: string | null = null
