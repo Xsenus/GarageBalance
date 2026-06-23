@@ -651,13 +651,20 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     {
         decimal? garageDebtBefore = null;
         decimal? garageDebtAfter = null;
+        decimal? supplierDebtBefore = null;
+        decimal? supplierDebtAfter = null;
         if (operation.OperationKind == FinancialOperationKinds.Income && operation.GarageId is not null)
         {
             garageDebtBefore = await CalculateGarageDebtBeforeIncomeAsync(operation, cancellationToken);
             garageDebtAfter = garageDebtBefore - operation.Amount;
         }
+        else if (operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId is not null)
+        {
+            supplierDebtBefore = await CalculateSupplierDebtBeforeExpenseAsync(operation, cancellationToken);
+            supplierDebtAfter = supplierDebtBefore - operation.Amount;
+        }
 
-        return ToDto(operation, garageDebtBefore, garageDebtAfter);
+        return ToDto(operation, garageDebtBefore, garageDebtAfter, supplierDebtBefore, supplierDebtAfter);
     }
 
     private async Task<decimal> CalculateGarageDebtBeforeIncomeAsync(FinancialOperation operation, CancellationToken cancellationToken)
@@ -682,7 +689,34 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return RoundMoney(startingBalance + accrualTotal - previousIncomeTotal);
     }
 
-    private static FinancialOperationDto ToDto(FinancialOperation operation, decimal? garageDebtBefore = null, decimal? garageDebtAfter = null)
+    private async Task<decimal> CalculateSupplierDebtBeforeExpenseAsync(FinancialOperation operation, CancellationToken cancellationToken)
+    {
+        var supplierId = operation.SupplierId!.Value;
+        var startingBalance = operation.Supplier?.StartingBalance ?? await dbContext.Suppliers
+            .Where(supplier => supplier.Id == supplierId)
+            .Select(supplier => supplier.StartingBalance)
+            .SingleAsync(cancellationToken);
+        var accrualTotal = await dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= operation.AccountingMonth)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+        var previousExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(previous =>
+                !previous.IsCanceled &&
+                previous.Id != operation.Id &&
+                previous.OperationKind == FinancialOperationKinds.Expense &&
+                previous.SupplierId == supplierId &&
+                previous.OperationDate < operation.OperationDate)
+            .SumAsync(previous => previous.Amount, cancellationToken);
+
+        return RoundMoney(startingBalance + accrualTotal - previousExpenseTotal);
+    }
+
+    private static FinancialOperationDto ToDto(
+        FinancialOperation operation,
+        decimal? garageDebtBefore = null,
+        decimal? garageDebtAfter = null,
+        decimal? supplierDebtBefore = null,
+        decimal? supplierDebtAfter = null)
     {
         return new FinancialOperationDto(
             operation.Id,
@@ -703,6 +737,8 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             operation.ExpenseType?.Name,
             garageDebtBefore,
             garageDebtAfter,
+            supplierDebtBefore,
+            supplierDebtAfter,
             operation.IsCanceled);
     }
 

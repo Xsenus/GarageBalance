@@ -280,6 +280,29 @@ describe('App', () => {
     expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
   })
 
+  it('shows supplier obligation before and after expense payment', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
+    await user.type(within(financePanel).getByLabelText('Документ начисления поставщику'), 'INV-2')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Счет месяца')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[1])
+
+    await user.clear(within(financePanel).getByLabelText('Сумма выплаты'))
+    await user.type(within(financePanel).getByLabelText('Сумма выплаты'), '250')
+    await user.type(within(financePanel).getByLabelText('Документ выплаты'), 'RKO-2')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
+
+    expect(await within(financePanel).findByText('Обязательство: 650,00 → 400,00')).toBeInTheDocument()
+  })
+
   it('generates regular accruals from tariff in payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
@@ -886,6 +909,7 @@ function createStatefulFinanceClient(): FinanceClient {
       return operation
     },
     createExpense: async (_token, request) => {
+      const supplierDebtBefore = supplierAccruals.reduce((sum, item) => sum + item.amount, 0) - operations.filter((item) => item.operationKind === 'expense').reduce((sum, item) => sum + item.amount, 0)
       const operation = createFinancialOperation({
         id: crypto.randomUUID(),
         operationKind: 'expense',
@@ -895,6 +919,8 @@ function createStatefulFinanceClient(): FinanceClient {
         documentNumber: request.documentNumber ?? null,
         supplierName: 'Водоканал',
         expenseTypeName: 'Вода',
+        supplierDebtBefore,
+        supplierDebtAfter: supplierDebtBefore - request.amount,
       })
       operations = [operation, ...operations]
       return operation
@@ -1199,6 +1225,8 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     expenseTypeName: null,
     garageDebtBefore: null,
     garageDebtAfter: null,
+    supplierDebtBefore: null,
+    supplierDebtAfter: null,
     isCanceled: false,
     ...overrides,
   }

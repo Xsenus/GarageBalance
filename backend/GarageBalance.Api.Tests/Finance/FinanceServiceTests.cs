@@ -98,6 +98,39 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_ReturnsSupplierDebtBeforeAndAfterPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.StartingBalance = 300m;
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 800m, "manual", "INV-1", "Счет за месяц"),
+            null,
+            CancellationToken.None);
+
+        var firstPayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 250m, "RKO-1", "Оплата поставщику"),
+            null,
+            CancellationToken.None);
+        var secondPayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 350m, "RKO-2", "Доплата"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(firstPayment.Succeeded);
+        Assert.Equal(1100m, firstPayment.Value!.SupplierDebtBefore);
+        Assert.Equal(850m, firstPayment.Value.SupplierDebtAfter);
+        Assert.True(secondPayment.Succeeded);
+        Assert.Equal(850m, secondPayment.Value!.SupplierDebtBefore);
+        Assert.Equal(500m, secondPayment.Value.SupplierDebtAfter);
+
+        var history = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, "expense", null), CancellationToken.None);
+        Assert.Contains(history, item => item.DocumentNumber == "RKO-2" && item.SupplierDebtBefore == 850m && item.SupplierDebtAfter == 500m);
+    }
+
+    [Fact]
     public async Task GetSummaryAsync_ReturnsIncomeExpenseAndBalance()
     {
         await using var database = await TestDatabase.CreateAsync();

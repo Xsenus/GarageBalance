@@ -21,6 +21,8 @@ public sealed record FinancialOperationDto(
     string? ExpenseTypeName,
     decimal? GarageDebtBefore,
     decimal? GarageDebtAfter,
+    decimal? SupplierDebtBefore,
+    decimal? SupplierDebtAfter,
     bool IsCanceled);
 
 public sealed record CreateIncomeOperationRequest(
