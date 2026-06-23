@@ -65,6 +65,27 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return Ok(result.Value);
     }
 
+    [Authorize]
+    [HttpPut("me/password")]
+    [ProducesResponseType<CurrentUserDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<CurrentUserDto>> ChangeOwnPassword(ChangeOwnPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var result = await authService.ChangeOwnPasswordAsync(User, request, cancellationToken);
+        if (result.Succeeded)
+        {
+            return Ok(result.Value);
+        }
+
+        if (result.ErrorCode is "invalid_token" or "user_not_found")
+        {
+            return Unauthorized(ToProblem(result));
+        }
+
+        return BadRequest(ToProblem(result));
+    }
+
     private static ProblemDetails ToProblem<T>(AuthResult<T> result)
     {
         return new ProblemDetails

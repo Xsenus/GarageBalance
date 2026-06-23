@@ -103,6 +103,61 @@ public sealed class AuthControllerTests
         Assert.Same(user, ok.Value);
     }
 
+    [Fact]
+    public async Task ChangeOwnPassword_ReturnsCurrentUserForSuccessfulChange()
+    {
+        var user = CreateResponse().User;
+        var controller = new AuthController(new FakeAuthService
+        {
+            ChangePasswordResult = AuthResult<CurrentUserDto>.Success(user)
+        });
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())]))
+        };
+
+        var result = await controller.ChangeOwnPassword(
+            new ChangeOwnPasswordRequest("StrongPass123", "NewStrongPass123"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(user, ok.Value);
+    }
+
+    [Fact]
+    public async Task ChangeOwnPassword_ReturnsBadRequestForInvalidCurrentPassword()
+    {
+        var controller = new AuthController(new FakeAuthService
+        {
+            ChangePasswordResult = AuthResult<CurrentUserDto>.Failure("invalid_current_password", "Текущий пароль указан неверно.")
+        });
+
+        var result = await controller.ChangeOwnPassword(
+            new ChangeOwnPasswordRequest("WrongPass123", "NewStrongPass123"),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("invalid_current_password", problem.Title);
+    }
+
+    [Fact]
+    public async Task ChangeOwnPassword_ReturnsUnauthorizedForInvalidToken()
+    {
+        var controller = new AuthController(new FakeAuthService
+        {
+            ChangePasswordResult = AuthResult<CurrentUserDto>.Failure("invalid_token", "Не удалось определить пользователя.")
+        });
+
+        var result = await controller.ChangeOwnPassword(
+            new ChangeOwnPasswordRequest("StrongPass123", "NewStrongPass123"),
+            CancellationToken.None);
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(unauthorized.Value);
+        Assert.Equal("invalid_token", problem.Title);
+    }
+
     private static AuthResponse CreateResponse()
     {
         var user = new CurrentUserDto(Guid.NewGuid(), "admin@example.com", "Admin", ["administrator"], ["users.manage"]);
@@ -114,6 +169,7 @@ public sealed class AuthControllerTests
         public AuthResult<AuthResponse> BootstrapResult { get; init; } = AuthResult<AuthResponse>.Failure("not_configured", "Not configured.");
         public AuthResult<AuthResponse> LoginResult { get; init; } = AuthResult<AuthResponse>.Failure("not_configured", "Not configured.");
         public AuthResult<CurrentUserDto> MeResult { get; init; } = AuthResult<CurrentUserDto>.Failure("not_configured", "Not configured.");
+        public AuthResult<CurrentUserDto> ChangePasswordResult { get; init; } = AuthResult<CurrentUserDto>.Failure("not_configured", "Not configured.");
 
         public Task<AuthResult<AuthResponse>> BootstrapAdminAsync(BootstrapAdminRequest request, CancellationToken cancellationToken)
         {
@@ -128,6 +184,11 @@ public sealed class AuthControllerTests
         public Task<AuthResult<CurrentUserDto>> GetCurrentUserAsync(ClaimsPrincipal principal, CancellationToken cancellationToken)
         {
             return Task.FromResult(MeResult);
+        }
+
+        public Task<AuthResult<CurrentUserDto>> ChangeOwnPasswordAsync(ClaimsPrincipal principal, ChangeOwnPasswordRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ChangePasswordResult);
         }
     }
 }

@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { authApi } from './services/authApi'
-import type { AuthClient, AuthResponse } from './services/authApi'
+import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authApi'
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
@@ -160,7 +160,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onUserChanged={(user) => setAuth((current) => current ? { ...current, user } : current)} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -245,6 +245,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
 function Workspace({
   auth,
+  authClient,
   auditClient,
   dictionaryClient,
   financeClient,
@@ -252,9 +253,11 @@ function Workspace({
   reportClient,
   releaseClient,
   userClient,
+  onUserChanged,
   onLogout,
 }: {
   auth: AuthResponse
+  authClient: AuthClient
   auditClient: AuditClient
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
@@ -262,6 +265,7 @@ function Workspace({
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
+  onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }) {
   const canManageUsers = hasPermission(auth, permissions.usersManage)
@@ -316,6 +320,8 @@ function Workspace({
         </div>
       </section>
 
+      <PasswordPanel auth={auth} authClient={authClient} onUserChanged={onUserChanged} />
+
       {canManageUsers ? (
         <UserManagementPanel auth={auth} userClient={userClient} />
       ) : (
@@ -367,6 +373,71 @@ function Workspace({
 
       <ReleasePanel auth={auth} releaseClient={releaseClient} />
     </>
+  )
+}
+
+function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; onUserChanged: (user: CurrentUserDto) => void }) {
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setMessage(null)
+
+    if (form.newPassword !== form.repeatPassword) {
+      setError('Новый пароль и повтор пароля не совпадают.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const user = await authClient.changeOwnPassword(auth.accessToken, {
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      })
+      onUserChanged(user)
+      setForm({ currentPassword: '', newPassword: '', repeatPassword: '' })
+      setMessage('Пароль изменен. Используйте новый пароль при следующем входе.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось изменить пароль.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="password-panel" aria-label="Безопасность аккаунта">
+      <div>
+        <p className="eyebrow">Безопасность</p>
+        <h2>Смена пароля</h2>
+        <p>Пользователь может обновить свой пароль без участия администратора. Текущий пароль нужен для подтверждения действия.</p>
+      </div>
+      <form className="dictionary-form" onSubmit={handleSubmit}>
+        <label>
+          Текущий пароль
+          <input aria-label="Текущий пароль" type="password" value={form.currentPassword} onChange={(event) => setForm({ ...form, currentPassword: event.target.value })} minLength={8} required />
+        </label>
+        <div className="inline-fields">
+          <label>
+            Новый пароль
+            <input aria-label="Новый пароль" type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} minLength={8} required />
+          </label>
+          <label>
+            Повтор нового пароля
+            <input aria-label="Повтор нового пароля" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
+          </label>
+        </div>
+        {error ? <div className="form-error">{error}</div> : null}
+        {message ? <div className="form-success">{message}</div> : null}
+        <button className="secondary-button" type="submit" disabled={saving}>
+          <ShieldCheck size={16} />
+          <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
+        </button>
+      </form>
+    </section>
   )
 }
 

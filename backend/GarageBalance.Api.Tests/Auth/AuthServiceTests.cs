@@ -173,6 +173,70 @@ public sealed class AuthServiceTests
         Assert.Equal("invalid_token", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task ChangeOwnPasswordAsync_ChangesPasswordAndWritesAudit()
+    {
+        var repository = new InMemoryUserRepository();
+        var service = CreateService(repository);
+        await service.BootstrapAdminAsync(
+            new BootstrapAdminRequest("admin@example.com", "StrongPass123", "Администратор"),
+            CancellationToken.None);
+        var user = repository.Users[0];
+        var oldHash = user.PasswordHash;
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())],
+            "Test"));
+
+        var result = await service.ChangeOwnPasswordAsync(
+            principal,
+            new ChangeOwnPasswordRequest("StrongPass123", "NewStrongPass123"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(user.Id, result.Value!.Id);
+        Assert.NotEqual(oldHash, user.PasswordHash);
+        Assert.Contains(repository.AuditEvents, item =>
+            item.Action == "auth.password_changed" &&
+            item.ActorUserId == user.Id &&
+            !item.Summary.Contains("StrongPass123", StringComparison.OrdinalIgnoreCase) &&
+            !item.Summary.Contains("NewStrongPass123", StringComparison.OrdinalIgnoreCase));
+
+        var oldLogin = await service.LoginAsync(new LoginRequest("admin@example.com", "StrongPass123"), CancellationToken.None);
+        Assert.False(oldLogin.Succeeded);
+
+        var newLogin = await service.LoginAsync(new LoginRequest("admin@example.com", "NewStrongPass123"), CancellationToken.None);
+        Assert.True(newLogin.Succeeded);
+    }
+
+    [Fact]
+    public async Task ChangeOwnPasswordAsync_RejectsInvalidCurrentPasswordWithoutChangingHash()
+    {
+        var repository = new InMemoryUserRepository();
+        var service = CreateService(repository);
+        await service.BootstrapAdminAsync(
+            new BootstrapAdminRequest("admin@example.com", "StrongPass123", "Администратор"),
+            CancellationToken.None);
+        var user = repository.Users[0];
+        var oldHash = user.PasswordHash;
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())],
+            "Test"));
+
+        var result = await service.ChangeOwnPasswordAsync(
+            principal,
+            new ChangeOwnPasswordRequest("WrongPass123", "NewStrongPass123"),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("invalid_current_password", result.ErrorCode);
+        Assert.Equal(oldHash, user.PasswordHash);
+        Assert.Contains(repository.AuditEvents, item =>
+            item.Action == "auth.password_change_failed" &&
+            item.ActorUserId == user.Id &&
+            !item.Summary.Contains("WrongPass123", StringComparison.OrdinalIgnoreCase) &&
+            !item.Summary.Contains("NewStrongPass123", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static AuthService CreateService(InMemoryUserRepository repository)
     {
         var jwtOptions = Options.Create(new JwtOptions

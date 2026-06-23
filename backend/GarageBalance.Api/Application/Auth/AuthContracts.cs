@@ -11,6 +11,10 @@ public sealed record LoginRequest(
     [property: Required, EmailAddress, MaxLength(320)] string Email,
     [property: Required, MaxLength(200)] string Password);
 
+public sealed record ChangeOwnPasswordRequest(
+    [property: Required, MaxLength(200)] string CurrentPassword,
+    [property: Required, MinLength(8), MaxLength(200)] string NewPassword);
+
 public sealed record AuthResponse(
     string AccessToken,
     DateTimeOffset ExpiresAtUtc,

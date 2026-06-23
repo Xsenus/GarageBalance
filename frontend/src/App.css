@@ -189,6 +189,14 @@
   font-size: 14px;
 }
 
+.form-success {
+  border-radius: 8px;
+  background: #ecfdf3;
+  color: #027a48;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
 .access-notice {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -281,6 +289,7 @@
 }
 
 .hero-panel,
+.password-panel,
 .release-panel,
 .work-card {
   border: 1px solid #dce3ee;
@@ -295,6 +304,21 @@
   gap: 18px;
   align-items: center;
   padding: 22px;
+}
+
+.password-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(360px, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 18px;
+}
+
+.password-panel p:not(.eyebrow) {
+  margin-top: 8px;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .eyebrow {
@@ -942,7 +966,8 @@ button.operation-row:hover {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .hero-panel {
+  .hero-panel,
+  .password-panel {
     grid-template-columns: 1fr;
   }
 

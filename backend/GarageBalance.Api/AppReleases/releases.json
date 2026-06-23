@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-own-password-change",
+    "version": "0.35.0",
+    "publishedAt": "2026-06-23T19:05:00+07:00",
+    "title": "Пользователь может сменить свой пароль",
+    "summary": "В рабочей области появилась безопасная смена пароля с проверкой текущего пароля и audit-событиями.",
+    "items": [
+      {
+        "type": "new",
+        "text": "Добавлен endpoint PUT /api/auth/me/password для самостоятельной смены пароля авторизованным пользователем."
+      },
+      {
+        "type": "important",
+        "text": "Backend проверяет текущий пароль, запрещает повторное использование того же пароля и пишет audit-события auth.password_changed/auth.password_change_failed без сохранения секретов."
+      },
+      {
+        "type": "improved",
+        "text": "Во frontend добавлена панель \"Безопасность аккаунта\" с проверкой повтора нового пароля до вызова API."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-tariff-management-permission",
     "version": "0.34.0",
     "publishedAt": "2026-06-23T18:35:00+07:00",

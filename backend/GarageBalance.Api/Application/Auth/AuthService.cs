@@ -136,6 +136,62 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
         return AuthResult<CurrentUserDto>.Success(dto);
     }
 
+    public async Task<AuthResult<CurrentUserDto>> ChangeOwnPasswordAsync(ClaimsPrincipal principal, ChangeOwnPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            return AuthResult<CurrentUserDto>.Failure("invalid_token", "Не удалось определить пользователя.");
+        }
+
+        var user = await users.FindUserByIdAsync(userId, cancellationToken);
+        if (user is null || !user.IsActive)
+        {
+            return AuthResult<CurrentUserDto>.Failure("user_not_found", "Пользователь не найден или отключен.");
+        }
+
+        if (!passwordHasher.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+        {
+            await users.AddAuditEventAsync(new AuditEvent
+            {
+                ActorUserId = user.Id,
+                Action = "auth.password_change_failed",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                Summary = $"Отклонена смена пароля пользователя {user.Email}: неверный текущий пароль."
+            }, cancellationToken);
+            await users.SaveChangesAsync(cancellationToken);
+
+            return AuthResult<CurrentUserDto>.Failure("invalid_current_password", "Текущий пароль указан неверно.");
+        }
+
+        if (passwordHasher.VerifyPassword(request.NewPassword, user.PasswordHash))
+        {
+            return AuthResult<CurrentUserDto>.Failure("new_password_same_as_current", "Новый пароль должен отличаться от текущего.");
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
+        await users.AddAuditEventAsync(new AuditEvent
+        {
+            ActorUserId = user.Id,
+            Action = "auth.password_changed",
+            EntityType = "user",
+            EntityId = user.Id.ToString(),
+            Summary = $"Пользователь {user.Email} сменил пароль."
+        }, cancellationToken);
+        await users.SaveChangesAsync(cancellationToken);
+
+        var roles = user.UserRoles.Select(userRole => userRole.Role).ToList();
+        var dto = new CurrentUserDto(
+            user.Id,
+            user.Email,
+            user.DisplayName,
+            roles.Select(role => role.Code).Distinct(StringComparer.Ordinal).OrderBy(role => role).ToArray(),
+            roles.SelectMany(role => role.Permissions).Distinct(StringComparer.Ordinal).OrderBy(permission => permission).ToArray());
+
+        return AuthResult<CurrentUserDto>.Success(dto);
+    }
+
     private static string NormalizeEmail(string email)
     {
         return email.Trim().ToUpperInvariant();

@@ -71,6 +71,71 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
+  it('changes current user password from the workspace', async () => {
+    const user = userEvent.setup()
+    let passwordRequest: { token: string; currentPassword: string; newPassword: string } | null = null
+    const authClient = createAuthClient({
+      changeOwnPassword: async (accessToken, request) => {
+        passwordRequest = {
+          token: accessToken,
+          currentPassword: request.currentPassword,
+          newPassword: request.newPassword,
+        }
+        return {
+          id: 'user-1',
+          email: 'admin@example.com',
+          displayName: 'Администратор ГСК',
+          roles: ['administrator'],
+          permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'payments.read', 'payments.write', 'reports.read', 'import.run'],
+        }
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
+
+    await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'NewStrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'NewStrongPass123')
+    await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
+
+    expect(passwordRequest).toEqual({
+      token: 'token',
+      currentPassword: 'StrongPass123',
+      newPassword: 'NewStrongPass123',
+    })
+    expect(await within(passwordPanel).findByText('Пароль изменен. Используйте новый пароль при следующем входе.')).toBeInTheDocument()
+    expect(within(passwordPanel).getByLabelText('Текущий пароль')).toHaveValue('')
+    expect(within(passwordPanel).getByLabelText('Новый пароль')).toHaveValue('')
+    expect(within(passwordPanel).getByLabelText('Повтор нового пароля')).toHaveValue('')
+  })
+
+  it('does not call password API when repeated password differs', async () => {
+    const user = userEvent.setup()
+    let changeCalled = false
+    const authClient = createAuthClient({
+      changeOwnPassword: async () => {
+        changeCalled = true
+        throw new Error('Смена пароля не должна вызываться при несовпадающем повторе.')
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
+
+    await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'NewStrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'AnotherStrongPass123')
+    await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
+
+    expect(await within(passwordPanel).findByText('Новый пароль и повтор пароля не совпадают.')).toBeInTheDocument()
+    expect(changeCalled).toBe(false)
+  })
+
   it('adds managed user from protected workspace', async () => {
     const user = userEvent.setup()
     const userClient = createStatefulUserClient()
@@ -931,6 +996,7 @@ function createAuthClient(overrides: Partial<AuthClient> = {}): AuthClient {
   return {
     bootstrapAdmin: async () => createAuthResponse(),
     login: async () => createAuthResponse(),
+    changeOwnPassword: async () => createAuthResponse().user,
     ...overrides,
   }
 }
