@@ -517,6 +517,7 @@ describe('App', () => {
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Открыть карточку гаража 21' }))
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 21' })
+    await waitFor(() => expect(within(garageDialog).getByRole('button', { name: 'Закрыть карточку гаража' })).toHaveFocus())
     expect(within(garageDialog).getByText('Карточка гаража')).toBeInTheDocument()
     expect(within(garageDialog).getAllByText('Петров Петр').length).toBeGreaterThan(0)
     expect(within(garageDialog).getByText('2')).toBeInTheDocument()
@@ -678,6 +679,7 @@ describe('App', () => {
 
     expect(archivedOwnerId).toBeNull()
     const firstDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
+    await waitFor(() => expect(within(firstDialog).getByRole('button', { name: 'Отменить' })).toHaveFocus())
     expect(within(firstDialog).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(firstDialog).getByText('Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.')).toBeInTheDocument()
 
@@ -1005,6 +1007,7 @@ describe('App', () => {
     await user.dblClick(within(accrualTable).getByLabelText(/Разбивка начисления/i))
 
     const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Закрыть разбивку' })).toHaveFocus())
     expect(within(dialog).getByText('Ручная корректировка')).toBeInTheDocument()
     expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
     expect(within(dialog).getByText('Гараж')).toBeInTheDocument()

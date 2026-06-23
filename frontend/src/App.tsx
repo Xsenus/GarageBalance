@@ -92,6 +92,18 @@ function useEscapeKey(enabled: boolean, onEscape: () => void) {
   }, [enabled, onEscape])
 }
 
+function useFocusOnOpen<TElement extends HTMLElement>(enabled: boolean) {
+  const ref = useRef<TElement | null>(null)
+
+  useEffect(() => {
+    if (enabled) {
+      ref.current?.focus()
+    }
+  }, [enabled])
+
+  return ref
+}
+
 function getPasswordPolicyErrors(password: string, emptyMessage = 'Укажите пароль.') {
   const errors: string[] = []
   if (!password) {
@@ -1064,6 +1076,7 @@ function FinancePanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
 
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
@@ -1871,7 +1884,7 @@ function FinancePanel({
                 </h3>
                 <p>{formatMonth(accrualBreakdown.accrual.accountingMonth)}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть разбивку" onClick={() => setAccrualBreakdown(null)}>
+              <button ref={accrualBreakdownCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть разбивку" onClick={() => setAccrualBreakdown(null)}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -3091,6 +3104,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const selectedGarageCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(selectedGarage))
 
   useEscapeKey(Boolean(selectedGarage), () => setSelectedGarage(null))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
@@ -3723,7 +3737,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
                 <h3 id="garage-card-title">Гараж {selectedGarage.number}</h3>
                 <p>{selectedGarage.ownerName ?? 'Владелец не указан'}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть карточку гаража" onClick={() => setSelectedGarage(null)}>
+              <button ref={selectedGarageCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть карточку гаража" onClick={() => setSelectedGarage(null)}>
                 <X size={18} />
               </button>
             </div>
@@ -3777,6 +3791,7 @@ type DictionaryListItem = {
 function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+  const archiveCancelButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingArchive) && !confirmingArchive)
 
   useEscapeKey(Boolean(pendingArchive) && !confirmingArchive, () => setPendingArchive(null))
 
@@ -3837,7 +3852,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
             </div>
             <p className="confirmation-text">Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.</p>
             <div className="detail-dialog-actions">
-              <button className="ghost-button" type="button" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
+              <button ref={archiveCancelButtonRef} className="ghost-button" type="button" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
                 Отменить
               </button>
               <button className="secondary-button" type="button" onClick={() => void confirmArchive()} disabled={confirmingArchive}>
