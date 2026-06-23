@@ -1211,11 +1211,32 @@ describe('App', () => {
 
     expect(screen.getByText('Минимум 8 символов: заглавная буква, строчная буква и цифра.')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('Пароль'), 'Password')
+    await user.type(screen.getByLabelText('Пароль'), 'Password1')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     expect(await screen.findByText('Пароль должен содержать хотя бы одну цифру.')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
+  })
+
+  it('shows auth validation summary before calling backend', async () => {
+    const user = userEvent.setup()
+    let bootstrapCalled = false
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () => {
+        bootstrapCalled = true
+        return createAuthResponse()
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'Password')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    expect(await screen.findByText('Проверьте форму входа')).toBeInTheDocument()
+    expect(screen.getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(bootstrapCalled).toBe(false)
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 

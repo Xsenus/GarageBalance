@@ -57,6 +57,60 @@ function FormError({ children }: { children: ReactNode }) {
   )
 }
 
+function FormValidationSummary({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="form-error validation-summary" role="alert" aria-label={title}>
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function getAuthValidationErrors(mode: 'bootstrap' | 'login', email: string, displayName: string, password: string) {
+  const errors: string[] = []
+  const trimmedEmail = email.trim()
+
+  if (!trimmedEmail) {
+    errors.push('Укажите email.')
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    errors.push('Проверьте формат email.')
+  }
+
+  if (mode === 'bootstrap' && !displayName.trim()) {
+    errors.push('Укажите имя пользователя.')
+  }
+
+  if (!password) {
+    errors.push('Укажите пароль.')
+  } else {
+    if (password.length < 8) {
+      errors.push('Пароль должен быть не короче 8 символов.')
+    }
+
+    if (!/[A-ZА-ЯЁ]/.test(password)) {
+      errors.push('Добавьте заглавную букву в пароль.')
+    }
+
+    if (!/[a-zа-яё]/.test(password)) {
+      errors.push('Добавьте строчную букву в пароль.')
+    }
+
+    if (!/\d/.test(password)) {
+      errors.push('Добавьте хотя бы одну цифру в пароль.')
+    }
+  }
+
+  return errors
+}
+
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
   | { kind: 'supplier'; accrual: SupplierAccrualDto }
@@ -210,11 +264,19 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
   const [displayName, setDisplayName] = useState('Администратор')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    const errors = getAuthValidationErrors(mode, email, displayName, password)
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      return
+    }
+
+    setValidationErrors([])
     setLoading(true)
 
     try {
@@ -269,6 +331,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
         </label>
         <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
+        <FormValidationSummary title="Проверьте форму входа" items={validationErrors} />
         {error ? <FormError>{error}</FormError> : null}
 
         <button className="primary-button" type="submit" disabled={loading}>

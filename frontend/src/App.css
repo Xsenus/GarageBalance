@@ -189,6 +189,16 @@
   font-size: 14px;
 }
 
+.validation-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.validation-summary ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .form-success {
   border-radius: 8px;
   background: #ecfdf3;
