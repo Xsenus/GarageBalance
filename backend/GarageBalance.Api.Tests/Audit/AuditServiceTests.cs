@@ -75,6 +75,35 @@ public sealed class AuditServiceTests
         Assert.Equal("users.user_updated", auditEvent.Action);
     }
 
+    [Fact]
+    public async Task GetEventsAsync_MasksSensitiveValuesInSummaryAndEntityId()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 10, 0, 0, TimeSpan.Zero),
+            Action = "auth.login_failed",
+            EntityType = "login_email",
+            EntityId = "owner@example.com",
+            Summary = "Login owner@example.com failed: password=Secret123, token: abc.def.ghi, card 40817810507220051060, Bearer eyJhbGciOi."
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, "owner@example.com"), CancellationToken.None);
+
+        var auditEvent = Assert.Single(result);
+        Assert.Equal("[email скрыт]", auditEvent.EntityId);
+        Assert.Contains("[email скрыт]", auditEvent.Summary);
+        Assert.Contains("password=[секрет скрыт]", auditEvent.Summary);
+        Assert.Contains("token: [секрет скрыт]", auditEvent.Summary);
+        Assert.Contains("[номер скрыт]", auditEvent.Summary);
+        Assert.Contains("Bearer [token скрыт]", auditEvent.Summary);
+        Assert.DoesNotContain("owner@example.com", auditEvent.Summary);
+        Assert.DoesNotContain("40817810507220051060", auditEvent.Summary);
+        Assert.DoesNotContain("Secret123", auditEvent.Summary);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

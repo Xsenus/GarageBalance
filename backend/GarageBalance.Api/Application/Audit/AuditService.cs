@@ -58,8 +58,8 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             auditEvent.ActorUserId,
             auditEvent.Action,
             auditEvent.EntityType,
-            auditEvent.EntityId,
-            auditEvent.Summary);
+            AuditTextMasker.Mask(auditEvent.EntityId),
+            AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty);
     }
 
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
