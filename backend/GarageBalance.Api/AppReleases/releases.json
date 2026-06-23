@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-unified-validation-problems",
+    "version": "0.40.0",
+    "publishedAt": "2026-06-23T21:35:00+07:00",
+    "title": "Унифицированы ошибки валидации запросов",
+    "summary": "Автоматические ошибки проверки входных данных API теперь возвращаются в том же ProblemDetails-формате, что и остальные сервисные ошибки.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Если в запросе не хватает обязательного поля или поле имеет неверный формат, API возвращает код validation_failed и список ошибок по полям."
+      },
+      {
+        "type": "important",
+        "text": "Frontend сможет одинаково обрабатывать ошибки форм, импорта, платежей, отчетов и авторизации через extensions.code и status."
+      },
+      {
+        "type": "improved",
+        "text": "Добавлены backend-тесты для ValidationProblemDetails и фабрики автоматической model validation."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-unified-api-problems",
     "version": "0.39.0",
     "publishedAt": "2026-06-23T21:05:00+07:00",

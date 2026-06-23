@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace GarageBalance.Api.Controllers;
 
 public static class ApiProblemDetails
 {
     public const string CodeExtensionKey = "code";
+    public const string ValidationFailedCode = "validation_failed";
 
     public static ProblemDetails Create(string? code, string? detail, int statusCode)
     {
@@ -18,5 +20,23 @@ public static class ApiProblemDetails
 
         problem.Extensions[CodeExtensionKey] = normalizedCode;
         return problem;
+    }
+
+    public static ValidationProblemDetails CreateValidation(ModelStateDictionary modelState)
+    {
+        var problem = new ValidationProblemDetails(modelState)
+        {
+            Title = ValidationFailedCode,
+            Detail = "Проверьте обязательные поля и формат данных.",
+            Status = StatusCodes.Status400BadRequest
+        };
+
+        problem.Extensions[CodeExtensionKey] = ValidationFailedCode;
+        return problem;
+    }
+
+    public static IActionResult CreateInvalidModelStateResponse(ActionContext context)
+    {
+        return new BadRequestObjectResult(CreateValidation(context.ModelState));
     }
 }

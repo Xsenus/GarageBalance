@@ -7,11 +7,13 @@ using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Application.Releases;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Application.Users;
+using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -73,7 +75,12 @@ builder.Services.AddAuthorization(options =>
         options.AddPolicy(permission, policy => policy.Requirements.Add(new PermissionRequirement(permission)));
     }
 });
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = ApiProblemDetails.CreateInvalidModelStateResponse;
+    });
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
