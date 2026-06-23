@@ -839,6 +839,67 @@ function FinancePanel({
     })
   }
 
+  async function cancelAccrual(accrual: AccrualDto) {
+    if (!canWritePayments) {
+      setError('Для отмены начислений нужно право payments.write.')
+      return
+    }
+
+    const reason = window.prompt('Укажите причину отмены начисления')
+    if (!reason?.trim()) {
+      setError('Для отмены начисления нужна причина.')
+      return
+    }
+
+    await runSaving(`cancel-accrual-${accrual.id}`, async () => {
+      await financeClient.cancelAccrual(auth.accessToken, accrual.id, { reason: reason.trim() })
+      setAccruals((items) => items.filter((item) => item.id !== accrual.id))
+      setSummary((value) => ({
+        ...value,
+        accrualTotal: value.accrualTotal - accrual.amount,
+        debt: value.debt - accrual.amount,
+        accrualCount: Math.max(0, value.accrualCount - 1),
+      }))
+    })
+  }
+
+  async function cancelSupplierAccrual(accrual: SupplierAccrualDto) {
+    if (!canWritePayments) {
+      setError('Для отмены начислений поставщикам нужно право payments.write.')
+      return
+    }
+
+    const reason = window.prompt('Укажите причину отмены начисления поставщику')
+    if (!reason?.trim()) {
+      setError('Для отмены начисления поставщику нужна причина.')
+      return
+    }
+
+    await runSaving(`cancel-supplier-accrual-${accrual.id}`, async () => {
+      await financeClient.cancelSupplierAccrual(auth.accessToken, accrual.id, { reason: reason.trim() })
+      setSupplierAccruals((items) => items.filter((item) => item.id !== accrual.id))
+    })
+  }
+
+  async function cancelMeterReading(reading: MeterReadingDto) {
+    if (!canWritePayments) {
+      setError('Для отмены показаний нужно право payments.write.')
+      return
+    }
+
+    const reason = window.prompt('Укажите причину отмены показания')
+    if (!reason?.trim()) {
+      setError('Для отмены показания нужна причина.')
+      return
+    }
+
+    await runSaving(`cancel-meter-reading-${reading.id}`, async () => {
+      await financeClient.cancelMeterReading(auth.accessToken, reading.id, { reason: reason.trim() })
+      setMeterReadings((items) => items.filter((item) => item.id !== reading.id))
+      setSummary((value) => ({ ...value, meterReadingCount: Math.max(0, value.meterReadingCount - 1) }))
+    })
+  }
+
   async function runSaving(scope: string, action: () => Promise<void>) {
     setSaving(scope)
     setError(null)
@@ -1157,8 +1218,23 @@ function FinancePanel({
                 <small>Гараж {accrual.garageNumber}</small>
                 <small>{formatAccrualSource(accrual.source)}</small>
               </span>
-              <span role="cell" className="money-accrual">
+              <span role="cell" className="operation-amount money-accrual">
                 {formatMoney(accrual.amount)}
+                {canWritePayments ? (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Отменить начисление ${accrual.incomeTypeName} гараж ${accrual.garageNumber}`}
+                    title="Отменить начисление"
+                    disabled={saving === `cancel-accrual-${accrual.id}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void cancelAccrual(accrual)
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                ) : null}
               </span>
             </div>
           ))}
@@ -1187,8 +1263,23 @@ function FinancePanel({
                 <small>{accrual.expenseTypeName}</small>
                 <small>{formatAccrualSource(accrual.source)}</small>
               </span>
-              <span role="cell" className="money-expense">
+              <span role="cell" className="operation-amount money-expense">
                 {formatMoney(accrual.amount)}
+                {canWritePayments ? (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Отменить начисление поставщику ${accrual.supplierName}`}
+                    title="Отменить начисление поставщику"
+                    disabled={saving === `cancel-supplier-accrual-${accrual.id}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void cancelSupplierAccrual(accrual)
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                ) : null}
               </span>
             </div>
           ))}
@@ -1211,8 +1302,20 @@ function FinancePanel({
                 </small>
                 {reading.hasGapWarning ? <small className="warning-text">проверьте предыдущий месяц</small> : null}
               </span>
-              <span role="cell" className="money-accrual">
+              <span role="cell" className="operation-amount money-accrual">
                 {reading.consumption}
+                {canWritePayments ? (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Отменить показание ${reading.meterKind === 'water' ? 'Вода' : 'Электричество'} гараж ${reading.garageNumber}`}
+                    title="Отменить показание"
+                    disabled={saving === `cancel-meter-reading-${reading.id}`}
+                    onClick={() => void cancelMeterReading(reading)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                ) : null}
               </span>
             </div>
           ))}

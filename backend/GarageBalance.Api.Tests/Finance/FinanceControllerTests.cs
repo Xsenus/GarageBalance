@@ -55,7 +55,7 @@ public sealed class FinanceControllerTests
         };
         var controller = CreateController(service, actorUserId);
 
-        var result = await controller.CancelOperation(operation.Id, new CancelFinancialOperationRequest("Ошибка документа"), CancellationToken.None);
+        var result = await controller.CancelOperation(operation.Id, new CancelFinanceEntryRequest("Ошибка документа"), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(operation, ok.Value);
@@ -72,7 +72,7 @@ public sealed class FinanceControllerTests
             CancelOperationResult = FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Операция уже отменена.")
         });
 
-        var result = await controller.CancelOperation(Guid.NewGuid(), new CancelFinancialOperationRequest("Повторная отмена"), CancellationToken.None);
+        var result = await controller.CancelOperation(Guid.NewGuid(), new CancelFinanceEntryRequest("Повторная отмена"), CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
@@ -87,7 +87,7 @@ public sealed class FinanceControllerTests
             CancelOperationResult = FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Операция не найдена.")
         });
 
-        var result = await controller.CancelOperation(Guid.NewGuid(), new CancelFinancialOperationRequest("Нет операции"), CancellationToken.None);
+        var result = await controller.CancelOperation(Guid.NewGuid(), new CancelFinanceEntryRequest("Нет операции"), CancellationToken.None);
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
@@ -147,6 +147,41 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CancelAccrual_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var accrual = CreateAccrual();
+        var service = new FakeFinanceService
+        {
+            CancelAccrualResult = FinanceResult<AccrualDto>.Success(accrual)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CancelAccrual(accrual.Id, new CancelFinanceEntryRequest("Ошибка начисления"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(accrual, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(accrual.Id, service.LastCanceledAccrualId);
+        Assert.Equal("Ошибка начисления", service.LastCancelRequest?.Reason);
+    }
+
+    [Fact]
+    public async Task CancelAccrual_ReturnsConflictForAlreadyCanceledAccrual()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CancelAccrualResult = FinanceResult<AccrualDto>.Failure("accrual_already_canceled", "Начисление уже отменено.")
+        });
+
+        var result = await controller.CancelAccrual(Guid.NewGuid(), new CancelFinanceEntryRequest("Повторная отмена"), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("accrual_already_canceled", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateSupplierAccrual_ReturnsConflictForDuplicateAccrual()
     {
         var controller = CreateController(new FakeFinanceService
@@ -179,6 +214,25 @@ public sealed class FinanceControllerTests
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CancelSupplierAccrual_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var accrual = CreateSupplierAccrual();
+        var service = new FakeFinanceService
+        {
+            CancelSupplierAccrualResult = FinanceResult<SupplierAccrualDto>.Success(accrual)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CancelSupplierAccrual(accrual.Id, new CancelFinanceEntryRequest("Ошибка счета"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(accrual, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(accrual.Id, service.LastCanceledSupplierAccrualId);
     }
 
     [Fact]
@@ -249,6 +303,21 @@ public sealed class FinanceControllerTests
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CancelMeterReading_ReturnsNotFoundForMissingReading()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CancelMeterReadingResult = FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание не найдено.")
+        });
+
+        var result = await controller.CancelMeterReading(Guid.NewGuid(), new CancelFinanceEntryRequest("Нет показания"), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("meter_reading_not_found", problem.Title);
     }
 
     private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
@@ -359,14 +428,20 @@ public sealed class FinanceControllerTests
     {
         public Guid? LastActorUserId { get; private set; }
         public Guid? LastCanceledOperationId { get; private set; }
-        public CancelFinancialOperationRequest? LastCancelRequest { get; private set; }
+        public Guid? LastCanceledAccrualId { get; private set; }
+        public Guid? LastCanceledSupplierAccrualId { get; private set; }
+        public Guid? LastCanceledMeterReadingId { get; private set; }
+        public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CancelOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<AccrualDto> CancelAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierAccrualDto> CreateSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<SupplierAccrualDto> CancelSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
@@ -405,7 +480,7 @@ public sealed class FinanceControllerTests
             return Task.FromResult(CreateExpenseResult);
         }
 
-        public Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinancialOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
             LastCanceledOperationId = operationId;
@@ -419,10 +494,26 @@ public sealed class FinanceControllerTests
             return Task.FromResult(CreateAccrualResult);
         }
 
+        public Task<FinanceResult<AccrualDto>> CancelAccrualAsync(Guid accrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastCanceledAccrualId = accrualId;
+            LastCancelRequest = request;
+            return Task.FromResult(CancelAccrualResult);
+        }
+
         public Task<FinanceResult<SupplierAccrualDto>> CreateSupplierAccrualAsync(CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateSupplierAccrualResult);
+        }
+
+        public Task<FinanceResult<SupplierAccrualDto>> CancelSupplierAccrualAsync(Guid supplierAccrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastCanceledSupplierAccrualId = supplierAccrualId;
+            LastCancelRequest = request;
+            return Task.FromResult(CancelSupplierAccrualResult);
         }
 
         public Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -435,6 +526,14 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateMeterReadingResult);
+        }
+
+        public Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastCanceledMeterReadingId = meterReadingId;
+            LastCancelRequest = request;
+            return Task.FromResult(CancelMeterReadingResult);
         }
     }
 }

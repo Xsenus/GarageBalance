@@ -151,7 +151,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
-    public async Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinancialOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var reason = NormalizeOptional(request.Reason);
         if (reason is null)
@@ -182,6 +182,36 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         AddAudit(actorUserId, "finance.operation_canceled", operation.Id, $"Отменена операция {operation.DocumentNumber ?? operation.Id.ToString()} на сумму {operation.Amount:N2}. Причина: {reason}");
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
+    public async Task<FinanceResult<AccrualDto>> CancelAccrualAsync(Guid accrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_cancel_reason_required", "Для отмены начисления нужна причина.");
+        }
+
+        var accrual = await dbContext.Accruals
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == accrualId, cancellationToken);
+        if (accrual is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
+        }
+
+        if (accrual.IsCanceled)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_already_canceled", "Начисление уже отменено.");
+        }
+
+        accrual.IsCanceled = true;
+        accrual.Comment = AppendCancelReason(accrual.Comment, reason);
+        AddAudit(actorUserId, "finance.accrual_canceled", "accrual", accrual.Id, $"Отменено начисление {accrual.Amount:N2} по гаражу {accrual.Garage.Number}. Причина: {reason}");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
     public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -295,6 +325,35 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         dbContext.SupplierAccruals.Add(accrual);
         AddAudit(actorUserId, "finance.supplier_accrual_created", "supplier_accrual", accrual.Id, $"Создано начисление {accrual.Amount:N2} поставщику {supplier.Name} за {accrual.AccountingMonth:MM.yyyy}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
+    }
+
+    public async Task<FinanceResult<SupplierAccrualDto>> CancelSupplierAccrualAsync(Guid supplierAccrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_cancel_reason_required", "Для отмены начисления поставщику нужна причина.");
+        }
+
+        var accrual = await dbContext.SupplierAccruals
+            .Include(item => item.Supplier)
+            .Include(item => item.ExpenseType)
+            .SingleOrDefaultAsync(item => item.Id == supplierAccrualId, cancellationToken);
+        if (accrual is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_found", "Начисление поставщику не найдено.");
+        }
+
+        if (accrual.IsCanceled)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_already_canceled", "Начисление поставщику уже отменено.");
+        }
+
+        accrual.IsCanceled = true;
+        accrual.Comment = AppendCancelReason(accrual.Comment, reason);
+        AddAudit(actorUserId, "finance.supplier_accrual_canceled", "supplier_accrual", accrual.Id, $"Отменено начисление {accrual.Amount:N2} поставщику {accrual.Supplier.Name}. Причина: {reason}");
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -446,6 +505,35 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         dbContext.MeterReadings.Add(reading);
         AddAudit(actorUserId, "finance.meter_reading_created", "meter_reading", reading.Id, $"Внесено показание {meterKind} по гаражу {garage.Number}: расход {consumption:N3}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+    }
+
+    public async Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_cancel_reason_required", "Для отмены показания счетчика нужна причина.");
+        }
+
+        var reading = await dbContext.MeterReadings
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .SingleOrDefaultAsync(item => item.Id == meterReadingId, cancellationToken);
+        if (reading is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
+        }
+
+        if (reading.IsCanceled)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Показание счетчика уже отменено.");
+        }
+
+        reading.IsCanceled = true;
+        reading.Comment = AppendCancelReason(reading.Comment, reason);
+        AddAudit(actorUserId, "finance.meter_reading_canceled", "meter_reading", reading.Id, $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number}. Причина: {reason}");
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }

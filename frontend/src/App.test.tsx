@@ -581,6 +581,48 @@ describe('App', () => {
     promptSpy.mockRestore()
   })
 
+  it('cancels accruals and meter readings with required reasons from payments workspace', async () => {
+    const user = userEvent.setup()
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный ввод')
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
+    const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    expect(await within(accrualTable).findByText('900,00')).toBeInTheDocument()
+    await user.click(within(accrualTable).getByRole('button', { name: 'Отменить начисление Членский взнос гараж 12' }))
+    await waitFor(() => expect(within(accrualTable).queryByText('900,00')).not.toBeInTheDocument())
+    expect(within(accrualTable).getByText('Начислений пока нет')).toBeInTheDocument()
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[1])
+    const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
+    expect(await within(supplierAccrualTable).findByText('650,00')).toBeInTheDocument()
+    await user.click(within(supplierAccrualTable).getByRole('button', { name: 'Отменить начисление поставщику Водоканал' }))
+    await waitFor(() => expect(within(supplierAccrualTable).queryByText('650,00')).not.toBeInTheDocument())
+    expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toBeInTheDocument()
+
+    await user.clear(within(financePanel).getByLabelText('Новое показание'))
+    await user.type(within(financePanel).getByLabelText('Новое показание'), '15.5')
+    await user.click(within(financePanel).getByRole('button', { name: 'Внести' }))
+    const meterReadingTable = within(financePanel).getByRole('table', { name: 'Последние показания' })
+    expect(await within(meterReadingTable).findByText('5.5')).toBeInTheDocument()
+    await user.click(within(meterReadingTable).getByRole('button', { name: 'Отменить показание Вода гараж 12' }))
+    await waitFor(() => expect(within(meterReadingTable).queryByText('5.5')).not.toBeInTheDocument())
+    expect(within(meterReadingTable).getByText('Показаний пока нет')).toBeInTheDocument()
+    expect(promptSpy).toHaveBeenCalledTimes(3)
+    promptSpy.mockRestore()
+  })
+
   it('creates manual accrual and updates debt from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
@@ -1196,9 +1238,21 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     createAccrual: async () => accrual,
+    cancelAccrual: async (_token, accrualId, request) => {
+      const target = accrual.id === accrualId ? accrual : createAccrual({ id: accrualId })
+      return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
     createSupplierAccrual: async () => supplierAccrual,
+    cancelSupplierAccrual: async (_token, supplierAccrualId, request) => {
+      const target = supplierAccrual.id === supplierAccrualId ? supplierAccrual : createSupplierAccrual({ id: supplierAccrualId })
+      return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     createMeterReading: async () => meterReading,
+    cancelMeterReading: async (_token, meterReadingId, request) => {
+      const target = meterReading.id === meterReadingId ? meterReading : createMeterReading({ id: meterReadingId })
+      return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
     ...overrides,
   }
 }
@@ -1364,6 +1418,15 @@ function createStatefulFinanceClient(): FinanceClient {
       accruals = [accrual, ...accruals]
       return accrual
     },
+    cancelAccrual: async (_token, accrualId, request) => {
+      const accrual = accruals.find((item) => item.id === accrualId)
+      if (!accrual) {
+        throw new Error('Начисление не найдено.')
+      }
+
+      accruals = accruals.filter((item) => item.id !== accrualId)
+      return { ...accrual, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
     createSupplierAccrual: async (_token, request) => {
       const accrual = createSupplierAccrual({
         id: crypto.randomUUID(),
@@ -1377,6 +1440,15 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       supplierAccruals = [accrual, ...supplierAccruals]
       return accrual
+    },
+    cancelSupplierAccrual: async (_token, supplierAccrualId, request) => {
+      const accrual = supplierAccruals.find((item) => item.id === supplierAccrualId)
+      if (!accrual) {
+        throw new Error('Начисление поставщику не найдено.')
+      }
+
+      supplierAccruals = supplierAccruals.filter((item) => item.id !== supplierAccrualId)
+      return { ...accrual, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     generateRegularAccruals: async (_token, request) => {
       const accrual = createAccrual({
@@ -1412,6 +1484,15 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       meterReadings = [reading, ...meterReadings]
       return reading
+    },
+    cancelMeterReading: async (_token, meterReadingId, request) => {
+      const reading = meterReadings.find((item) => item.id === meterReadingId)
+      if (!reading) {
+        throw new Error('Показание счетчика не найдено.')
+      }
+
+      meterReadings = meterReadings.filter((item) => item.id !== meterReadingId)
+      return { ...reading, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
   }
 }

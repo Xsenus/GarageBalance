@@ -128,7 +128,7 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        var result = await service.CancelOperationAsync(created.Value!.Id, new CancelFinancialOperationRequest("Дублирующий документ"), actorUserId, CancellationToken.None);
+        var result = await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Дублирующий документ"), actorUserId, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.True(result.Value!.IsCanceled);
@@ -153,7 +153,7 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        var result = await service.CancelOperationAsync(created.Value!.Id, new CancelFinancialOperationRequest("   "), null, CancellationToken.None);
+        var result = await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("   "), null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("operation_cancel_reason_required", result.ErrorCode);
@@ -169,9 +169,9 @@ public sealed class FinanceServiceTests
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-already-canceled", null),
             null,
             CancellationToken.None);
-        await service.CancelOperationAsync(created.Value!.Id, new CancelFinancialOperationRequest("Первая отмена"), null, CancellationToken.None);
+        await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Первая отмена"), null, CancellationToken.None);
 
-        var result = await service.CancelOperationAsync(created.Value.Id, new CancelFinancialOperationRequest("Вторая отмена"), null, CancellationToken.None);
+        var result = await service.CancelOperationAsync(created.Value.Id, new CancelFinanceEntryRequest("Вторая отмена"), null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("operation_already_canceled", result.ErrorCode);
@@ -318,6 +318,31 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CancelAccrualAsync_CancelsAccrualAndRemovesItFromSummary()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Ручная корректировка"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CancelAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Начислено не тому гаражу"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsCanceled);
+        Assert.Contains("Отменено: Начислено не тому гаражу", result.Value.Comment);
+        Assert.Empty(await service.GetAccrualsAsync(new AccrualListRequest(null, null, null), CancellationToken.None));
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Equal(0m, summary.AccrualTotal);
+        Assert.Equal(0m, summary.Debt);
+        Assert.Equal(0, summary.AccrualCount);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.accrual_canceled" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task CreateSupplierAccrualAsync_CreatesManualAccrualAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -351,6 +376,27 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_accrual_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CancelSupplierAccrualAsync_CancelsSupplierAccrualAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-cancel", "Счет поставщика"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CancelSupplierAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Счет заменен"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsCanceled);
+        Assert.Contains("Отменено: Счет заменен", result.Value.Comment);
+        Assert.Empty(await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, null), CancellationToken.None));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_canceled" && item.ActorUserId == actorUserId);
     }
 
     [Fact]
@@ -494,6 +540,29 @@ public sealed class FinanceServiceTests
         Assert.Equal(15.556m, result.Value!.CurrentValue);
         Assert.Equal(10.001m, result.Value.PreviousValue);
         Assert.Equal(5.555m, result.Value.Consumption);
+    }
+
+    [Fact]
+    public async Task CancelMeterReadingAsync_CancelsReadingAndRemovesItFromSummary()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Контроль"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CancelMeterReadingAsync(created.Value!.Id, new CancelFinanceEntryRequest("Ошибочное показание"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsCanceled);
+        Assert.Contains("Отменено: Ошибочное показание", result.Value.Comment);
+        Assert.Empty(await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, null, null), CancellationToken.None));
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Equal(0, summary.MeterReadingCount);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_canceled" && item.ActorUserId == actorUserId);
     }
 
     [Fact]
