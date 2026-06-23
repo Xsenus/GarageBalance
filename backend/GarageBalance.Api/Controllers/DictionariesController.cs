@@ -261,6 +261,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPut("tariffs/{id:guid}")]
+    [ProducesResponseType<TariffDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TariffDto>> UpdateTariff(Guid id, UpsertTariffRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateTariffAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpDelete("tariffs/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

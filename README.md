@@ -52,7 +52,7 @@ npm run dev
 - `GET/POST /api/dictionaries/suppliers`, `DELETE /api/dictionaries/suppliers/{id}` - поставщики и архивирование поставщика.
 - `GET/POST /api/dictionaries/income-types`, `DELETE /api/dictionaries/income-types/{id}` - виды поступлений и архивирование вида.
 - `GET/POST /api/dictionaries/expense-types`, `DELETE /api/dictionaries/expense-types/{id}` - виды выплат и архивирование вида.
-- `GET/POST /api/dictionaries/tariffs`, `DELETE /api/dictionaries/tariffs/{id}` - тарифы с датой действия и архивирование тарифа.
+- `GET/POST /api/dictionaries/tariffs`, `PUT/DELETE /api/dictionaries/tariffs/{id}` - тарифы с датой действия, изменение и архивирование тарифа.
 - `GET /api/finance/operations` - последние финансовые операции с фильтрами.
 - `GET/POST /api/finance/accruals` - начисления по гаражам.
 - `GET/POST /api/finance/supplier-accruals` - начисления поставщикам для сверки обязательств и выплат.

@@ -134,6 +134,7 @@ export type DictionaryClient = {
   archiveExpenseType(accessToken: string, id: string): Promise<void>
   getTariffs(accessToken: string, search?: string): Promise<TariffDto[]>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
+  updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff(accessToken: string, id: string): Promise<void>
 }
 
@@ -233,6 +234,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   createTariff(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/tariffs', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateTariff(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
   archiveTariff(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'DELETE' })

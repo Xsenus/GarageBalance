@@ -478,6 +478,33 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
+    public async Task<DictionaryResult<TariffDto>> UpdateTariffAsync(Guid id, UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (tariff is null)
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден.");
+        }
+
+        var name = request.Name.Trim();
+        var calculationBase = request.CalculationBase.Trim();
+        if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
+        }
+
+        tariff.Name = name;
+        tariff.CalculationBase = calculationBase;
+        tariff.Rate = MoneyMath.RoundRate(request.Rate);
+        tariff.EffectiveFrom = request.EffectiveFrom;
+        tariff.Comment = NormalizeOptional(request.Comment);
+        tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
+    }
+
     public async Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);

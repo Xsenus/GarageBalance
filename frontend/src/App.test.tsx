@@ -340,6 +340,7 @@ describe('App', () => {
   it('allows tariff management without broad dictionary write permission', async () => {
     const user = userEvent.setup()
     let createdTariffs = 0
+    let updatedTariffRequest: { id: string; name: string; rate: number; comment?: string } | null = null
     let archivedTariffId: string | null = null
     const authClient = createAuthClient({
       bootstrapAdmin: async () =>
@@ -359,11 +360,22 @@ describe('App', () => {
       createTariff: async (_token, request) => {
         createdTariffs += 1
         return createTariff({
-          id: `tariff-${createdTariffs}`,
+          id: `tariff-new-${createdTariffs}`,
           name: request.name,
           calculationBase: request.calculationBase,
           rate: request.rate,
           effectiveFrom: request.effectiveFrom,
+        })
+      },
+      updateTariff: async (_token, id, request) => {
+        updatedTariffRequest = { id, name: request.name, rate: request.rate, comment: request.comment }
+        return createTariff({
+          id,
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+          comment: request.comment ?? null,
         })
       },
       archiveTariff: async (_token, id) => {
@@ -392,7 +404,20 @@ describe('App', () => {
     expect(createdTariffs).toBe(1)
     expect(await within(dictionaryPanel).findByText('Тариф обслуживания')).toBeInTheDocument()
 
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать тариф Тариф воды' }))
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' }))
+    expect(within(dictionaryPanel).getByText('Изменение тарифа')).toBeInTheDocument()
+    await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
+    await user.type(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'), 'Вода после собрания')
+    await user.clear(within(tariffForm as HTMLElement).getByLabelText('Ставка тарифа'))
+    await user.type(within(tariffForm as HTMLElement).getByLabelText('Ставка тарифа'), '72.5')
+    await user.type(within(tariffForm as HTMLElement).getByLabelText('Комментарий тарифа'), 'Протокол 2')
+    await user.click(within(tariffForm as HTMLElement).getByRole('button', { name: 'Сохранить' }))
+
+    expect(updatedTariffRequest).toEqual({ id: 'tariff-1', name: 'Вода после собрания', rate: 72.5, comment: 'Протокол 2' })
+    expect(await within(dictionaryPanel).findByText('Вода после собрания')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Изменение тарифа')).not.toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать тариф Вода после собрания' }))
     expect(archivedTariffId).toBe('tariff-1')
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
   })
@@ -1331,6 +1356,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     archiveExpenseType: async () => undefined,
     getTariffs: async () => [tariff],
     createTariff: async () => tariff,
+    updateTariff: async (_token, id, request) => createTariff({ id, name: request.name, calculationBase: request.calculationBase, rate: request.rate, effectiveFrom: request.effectiveFrom, comment: request.comment ?? null }),
     archiveTariff: async () => undefined,
     ...overrides,
   }
@@ -1692,6 +1718,16 @@ function createStatefulDictionaryClient(): DictionaryClient {
         calculationBase: request.calculationBase,
         rate: request.rate,
         effectiveFrom: request.effectiveFrom,
+        comment: request.comment ?? null,
+      }),
+    updateTariff: async (_token, id, request) =>
+      createTariff({
+        id,
+        name: request.name,
+        calculationBase: request.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+        comment: request.comment ?? null,
       }),
     archiveTariff: async () => undefined,
   }

@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-tariff-editing",
+    "version": "0.65.0",
+    "publishedAt": "2026-06-23T23:59:59+07:00",
+    "title": "Добавлено изменение тарифов",
+    "summary": "Тарифы теперь можно редактировать из раздела справочников без удаления и повторного создания записи.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен endpoint PUT /api/dictionaries/tariffs/{id} под правом tariffs.manage."
+      },
+      {
+        "type": "added",
+        "text": "В интерфейсе тариф можно открыть из списка, изменить название, базу расчета, ставку, дату начала и комментарий, затем сохранить."
+      },
+      {
+        "type": "improved",
+        "text": "Backend проверяет дубли названия и даты, округляет ставку по общему правилу и пишет audit-событие dictionary.tariff_updated."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-default-accounting-types",
     "version": "0.64.0",
     "publishedAt": "2026-06-23T23:59:59+07:00",

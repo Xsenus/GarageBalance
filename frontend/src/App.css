@@ -656,6 +656,12 @@ h1 {
   gap: 8px;
 }
 
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .secondary-button {
   display: inline-flex;
   align-items: center;
@@ -666,6 +672,18 @@ h1 {
   border-radius: 8px;
   background: #155eef;
   color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 12px;
+}
+
+.ghost-button {
+  min-height: 40px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
   cursor: pointer;
   font: inherit;
   font-weight: 700;

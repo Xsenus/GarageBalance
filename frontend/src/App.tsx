@@ -11,6 +11,7 @@ import {
   LockKeyhole,
   LogOut,
   Plus,
+  Save,
   Search,
   Settings,
   ShieldCheck,
@@ -2461,7 +2462,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
   const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
   const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
-  const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01' })
+  const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
+  const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -2634,10 +2636,33 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     }
 
     await runSaving('tariff', async () => {
-      const tariff = await dictionaryClient.createTariff(auth.accessToken, tariffForm)
-      setTariffs((items) => [tariff, ...items])
-      setTariffForm((value) => ({ ...value, name: '', rate: 1 }))
+      if (editingTariffId) {
+        const tariff = await dictionaryClient.updateTariff(auth.accessToken, editingTariffId, tariffForm)
+        setTariffs((items) => items.map((item) => (item.id === tariff.id ? tariff : item)))
+        setEditingTariffId(null)
+      } else {
+        const tariff = await dictionaryClient.createTariff(auth.accessToken, tariffForm)
+        setTariffs((items) => [tariff, ...items])
+      }
+
+      setTariffForm((value) => ({ ...value, name: '', rate: 1, comment: '' }))
     })
+  }
+
+  function editTariff(tariff: TariffDto) {
+    setEditingTariffId(tariff.id)
+    setTariffForm({
+      name: tariff.name,
+      calculationBase: tariff.calculationBase,
+      rate: tariff.rate,
+      effectiveFrom: tariff.effectiveFrom,
+      comment: tariff.comment ?? '',
+    })
+  }
+
+  function resetTariffForm() {
+    setEditingTariffId(null)
+    setTariffForm((value) => ({ ...value, name: '', rate: 1, comment: '' }))
   }
 
   async function archiveDictionaryItem(scope: string, action: () => Promise<void>) {
@@ -2856,7 +2881,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
         </form>
 
         <form className="dictionary-form" onSubmit={saveTariff}>
-          <h3>Тарифы</h3>
+          <h3>{editingTariffId ? 'Изменение тарифа' : 'Тарифы'}</h3>
           <input aria-label="Название тарифа" placeholder="Вода" value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
           <select aria-label="База расчета тарифа" value={tariffForm.calculationBase} onChange={(event) => setTariffForm({ ...tariffForm, calculationBase: event.target.value })}>
             <option value="fixed">Фиксированно</option>
@@ -2868,19 +2893,32 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
           </div>
-          <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
-            <Plus size={16} />
-            <span>Добавить</span>
-          </button>
+          <textarea aria-label="Комментарий тарифа" placeholder="Комментарий" value={tariffForm.comment} onChange={(event) => setTariffForm({ ...tariffForm, comment: event.target.value })} />
+          <div className="inline-actions">
+            <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
+              {editingTariffId ? <Save size={16} /> : <Plus size={16} />}
+              <span>{editingTariffId ? 'Сохранить' : 'Добавить'}</span>
+            </button>
+            {editingTariffId ? (
+              <button className="ghost-button" type="button" onClick={resetTariffForm}>
+                Отменить
+              </button>
+            ) : null}
+          </div>
           <DictionaryList
             items={tariffs.map((item) => ({
               id: item.id,
               title: item.name,
-              meta: `${formatMoney(item.rate)} с ${formatDateOnly(item.effectiveFrom)}`,
+              meta: `${formatMoney(item.rate)} с ${formatDateOnly(item.effectiveFrom)}${item.comment ? ` · ${item.comment}` : ''}`,
+              openLabel: canManageTariffs ? `Изменить тариф ${item.name}` : undefined,
+              onOpen: canManageTariffs ? () => editTariff(item) : undefined,
               archiveLabel: canManageTariffs ? `Архивировать тариф ${item.name}` : undefined,
               onArchive: canManageTariffs ? () => archiveDictionaryItem('tariff', async () => {
                 await dictionaryClient.archiveTariff(auth.accessToken, item.id)
                 setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
+                if (editingTariffId === item.id) {
+                  resetTariffForm()
+                }
               }) : undefined,
             }))}
             emptyText="Тарифов пока нет"

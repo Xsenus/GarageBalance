@@ -107,6 +107,24 @@ public sealed class DictionariesControllerTests
         Assert.Equal("tariff_duplicate", problem.Title);
     }
 
+    [Fact]
+    public async Task UpdateTariff_ReturnsConflictForDuplicateTariff()
+    {
+        var controller = CreateController(new FakeDictionaryService
+        {
+            UpdateTariffResult = DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.")
+        });
+
+        var result = await controller.UpdateTariff(
+            Guid.NewGuid(),
+            new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 7, 1), null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("tariff_duplicate", problem.Title);
+    }
+
     private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
     {
         var controller = new DictionariesController(service);
@@ -127,6 +145,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<AccountingTypeDto> ArchiveIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> UpdateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken)
         {
@@ -246,6 +265,12 @@ public sealed class DictionariesControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateTariffResult);
+        }
+
+        public Task<DictionaryResult<TariffDto>> UpdateTariffAsync(Guid id, UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateTariffResult);
         }
 
         public Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
