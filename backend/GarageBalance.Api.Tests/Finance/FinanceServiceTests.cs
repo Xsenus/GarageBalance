@@ -116,6 +116,68 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CancelOperationAsync_CancelsOperationAndRemovesItFromSummary()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-cancel", "Ошибочный платеж"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CancelOperationAsync(created.Value!.Id, new CancelFinancialOperationRequest("Дублирующий документ"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsCanceled);
+        Assert.Contains("Ошибочный платеж", result.Value.Comment);
+        Assert.Contains("Отменено: Дублирующий документ", result.Value.Comment);
+        Assert.Empty(await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None));
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Equal(0m, summary.IncomeTotal);
+        Assert.Equal(1000m, summary.Debt);
+        Assert.Equal(0, summary.OperationCount);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled" && item.ActorUserId == actorUserId && item.Summary.Contains("Дублирующий документ"));
+    }
+
+    [Fact]
+    public async Task CancelOperationAsync_RequiresReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-empty-reason", null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CancelOperationAsync(created.Value!.Id, new CancelFinancialOperationRequest("   "), null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("operation_cancel_reason_required", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CancelOperationAsync_RejectsAlreadyCanceledOperation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-already-canceled", null),
+            null,
+            CancellationToken.None);
+        await service.CancelOperationAsync(created.Value!.Id, new CancelFinancialOperationRequest("Первая отмена"), null, CancellationToken.None);
+
+        var result = await service.CancelOperationAsync(created.Value.Id, new CancelFinancialOperationRequest("Вторая отмена"), null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("operation_already_canceled", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_ReturnsNotFoundForMissingSupplier()
     {
         await using var database = await TestDatabase.CreateAsync();

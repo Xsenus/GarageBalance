@@ -43,6 +43,9 @@ public sealed record CreateExpenseOperationRequest(
     [property: MaxLength(120)] string? DocumentNumber,
     [property: MaxLength(1000)] string? Comment);
 
+public sealed record CancelFinancialOperationRequest(
+    [property: Required, MaxLength(1000)] string Reason);
+
 public sealed record FinancialOperationListRequest(
     DateOnly? DateFrom,
     DateOnly? DateTo,

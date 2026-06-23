@@ -556,6 +556,31 @@ describe('App', () => {
     expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
   })
 
+  it('cancels income operation with required reason from payments workspace', async () => {
+    const user = userEvent.setup()
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный документ')
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
+    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '700')
+    await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-cancel')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+
+    expect(await within(financePanel).findByText('+700,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('1 операций')).toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('button', { name: 'Отменить операцию PKO-cancel' }))
+
+    expect(promptSpy).toHaveBeenCalledWith('Укажите причину отмены операции')
+    await waitFor(() => expect(within(financePanel).queryByText('+700,00')).not.toBeInTheDocument())
+    expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
+    promptSpy.mockRestore()
+  })
+
   it('creates manual accrual and updates debt from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
@@ -1166,6 +1191,10 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
+    cancelOperation: async (_token, operationId, request) => {
+      const target = operation.id === operationId ? operation : createFinancialOperation({ id: operationId })
+      return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
     createAccrual: async () => accrual,
     createSupplierAccrual: async () => supplierAccrual,
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
@@ -1312,6 +1341,15 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       operations = [operation, ...operations]
       return operation
+    },
+    cancelOperation: async (_token, operationId, request) => {
+      const operation = operations.find((item) => item.id === operationId)
+      if (!operation) {
+        throw new Error('Финансовая операция не найдена.')
+      }
+
+      operations = operations.filter((item) => item.id !== operationId)
+      return { ...operation, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     createAccrual: async (_token, request) => {
       const accrual = createAccrual({

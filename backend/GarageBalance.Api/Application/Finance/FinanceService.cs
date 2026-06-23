@@ -151,6 +151,39 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
+    public async Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinancialOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_cancel_reason_required", "Для отмены операции нужна причина.");
+        }
+
+        var operation = await dbContext.FinancialOperations
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage!.Owner)
+            .Include(item => item.IncomeType)
+            .Include(item => item.Supplier)
+            .Include(item => item.ExpenseType)
+            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        if (operation is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
+        }
+
+        if (operation.IsCanceled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Финансовая операция уже отменена.");
+        }
+
+        operation.IsCanceled = true;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        operation.Comment = AppendCancelReason(operation.Comment, reason);
+        AddAudit(actorUserId, "finance.operation_canceled", operation.Id, $"Отменена операция {operation.DocumentNumber ?? operation.Id.ToString()} на сумму {operation.Amount:N2}. Причина: {reason}");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
     public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
@@ -616,6 +649,13 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string AppendCancelReason(string? comment, string reason)
+    {
+        var cancelComment = $"Отменено: {reason}";
+        var normalized = NormalizeOptional(comment);
+        return normalized is null ? cancelComment : $"{normalized}{Environment.NewLine}{cancelComment}";
     }
 
     private static decimal? GetInitialMeterValue(GarageBalance.Api.Domain.Dictionaries.Garage garage, string meterKind)

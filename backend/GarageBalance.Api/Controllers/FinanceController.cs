@@ -98,6 +98,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("operations/{operationId:guid}/cancel")]
+    [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FinancialOperationDto>> CancelOperation(Guid operationId, CancelFinancialOperationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.CancelOperationAsync(operationId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("accruals")]
     [ProducesResponseType<AccrualDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -162,8 +174,8 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     {
         return result.ErrorCode switch
         {
-            "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "operation_duplicate" or "accrual_duplicate" or "supplier_accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" or "operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "operation_duplicate" or "operation_already_canceled" or "accrual_duplicate" or "supplier_accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

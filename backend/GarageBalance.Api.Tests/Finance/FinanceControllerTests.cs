@@ -45,6 +45,56 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CancelOperation_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operation = CreateOperation("income");
+        var service = new FakeFinanceService
+        {
+            CancelOperationResult = FinanceResult<FinancialOperationDto>.Success(operation)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CancelOperation(operation.Id, new CancelFinancialOperationRequest("Ошибка документа"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(operation, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(operation.Id, service.LastCanceledOperationId);
+        Assert.Equal("Ошибка документа", service.LastCancelRequest?.Reason);
+    }
+
+    [Fact]
+    public async Task CancelOperation_ReturnsConflictForAlreadyCanceledOperation()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CancelOperationResult = FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Операция уже отменена.")
+        });
+
+        var result = await controller.CancelOperation(Guid.NewGuid(), new CancelFinancialOperationRequest("Повторная отмена"), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("operation_already_canceled", problem.Title);
+    }
+
+    [Fact]
+    public async Task CancelOperation_ReturnsNotFoundForMissingOperation()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CancelOperationResult = FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Операция не найдена.")
+        });
+
+        var result = await controller.CancelOperation(Guid.NewGuid(), new CancelFinancialOperationRequest("Нет операции"), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("operation_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateIncome_ReturnsNotFoundForMissingGarage()
     {
         var controller = CreateController(new FakeFinanceService
@@ -308,8 +358,11 @@ public sealed class FinanceControllerTests
     private sealed class FakeFinanceService : IFinanceService
     {
         public Guid? LastActorUserId { get; private set; }
+        public Guid? LastCanceledOperationId { get; private set; }
+        public CancelFinancialOperationRequest? LastCancelRequest { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> CancelOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierAccrualDto> CreateSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
@@ -350,6 +403,14 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateExpenseResult);
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinancialOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastCanceledOperationId = operationId;
+            LastCancelRequest = request;
+            return Task.FromResult(CancelOperationResult);
         }
 
         public Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)

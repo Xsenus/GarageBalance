@@ -809,6 +809,36 @@ function FinancePanel({
     })
   }
 
+  async function cancelOperation(operation: FinancialOperationDto) {
+    if (!canWritePayments) {
+      setError('Для отмены платежей нужно право payments.write.')
+      return
+    }
+
+    const reason = window.prompt('Укажите причину отмены операции')
+    if (!reason?.trim()) {
+      setError('Для отмены операции нужна причина.')
+      return
+    }
+
+    await runSaving(`cancel-${operation.id}`, async () => {
+      await financeClient.cancelOperation(auth.accessToken, operation.id, { reason: reason.trim() })
+      setOperations((items) => items.filter((item) => item.id !== operation.id))
+      setSummary((value) => {
+        const incomeDelta = operation.operationKind === 'income' ? operation.amount : 0
+        const expenseDelta = operation.operationKind === 'expense' ? operation.amount : 0
+        return {
+          ...value,
+          incomeTotal: value.incomeTotal - incomeDelta,
+          expenseTotal: value.expenseTotal - expenseDelta,
+          balance: value.balance - incomeDelta + expenseDelta,
+          debt: value.debt + incomeDelta,
+          operationCount: Math.max(0, value.operationCount - 1),
+        }
+      })
+    })
+  }
+
   async function runSaving(scope: string, action: () => Promise<void>) {
     setSaving(scope)
     setError(null)
@@ -1084,9 +1114,21 @@ function FinancePanel({
                   <small className="balance-history">Обязательство: {formatMoney(operation.supplierDebtBefore)} → {formatMoney(operation.supplierDebtAfter)}</small>
                 ) : null}
               </span>
-              <span role="cell" className={operation.operationKind === 'income' ? 'money-income' : 'money-expense'}>
+              <span role="cell" className={`operation-amount ${operation.operationKind === 'income' ? 'money-income' : 'money-expense'}`}>
                 {operation.operationKind === 'income' ? '+' : '-'}
                 {formatMoney(operation.amount)}
+                {canWritePayments ? (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Отменить операцию ${operation.documentNumber ?? operation.id}`}
+                    title="Отменить операцию"
+                    disabled={saving === `cancel-${operation.id}`}
+                    onClick={() => void cancelOperation(operation)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                ) : null}
               </span>
             </div>
           ))}

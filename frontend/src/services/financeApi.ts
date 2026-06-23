@@ -97,6 +97,10 @@ export type CreateExpenseOperationRequest = {
   comment?: string
 }
 
+export type CancelFinancialOperationRequest = {
+  reason: string
+}
+
 export type CreateAccrualRequest = {
   garageId: string
   incomeTypeId: string
@@ -154,6 +158,7 @@ export type FinanceClient = {
   getSummary(accessToken: string): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
+  cancelOperation(accessToken: string, operationId: string, request: CancelFinancialOperationRequest): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
   createSupplierAccrual(accessToken: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
@@ -201,6 +206,9 @@ export const financeApi: FinanceClient = {
   },
   createExpense(accessToken, request) {
     return requestJson(accessToken, '/api/finance/expense', { method: 'POST', body: JSON.stringify(request) })
+  },
+  cancelOperation(accessToken, operationId, request) {
+    return requestJson(accessToken, `/api/finance/operations/${operationId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
   },
   createAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })

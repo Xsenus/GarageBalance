@@ -16,6 +16,8 @@ public interface IFinanceService
 
     Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
+    Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinancialOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+
     Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FinanceResult<SupplierAccrualDto>> CreateSupplierAccrualAsync(CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken);

@@ -898,6 +898,17 @@ button.operation-row:hover {
   color: #1849a9;
 }
 
+.operation-amount {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.operation-amount .icon-button {
+  min-width: 32px;
+}
+
 .warning-text {
   color: #b54708;
   font-weight: 700;
