@@ -573,6 +573,7 @@ describe('App', () => {
     expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(accrualTable).toBeInTheDocument()
+    expect(within(accrualTable).getByText('Ручное')).toBeInTheDocument()
 
     await user.dblClick(within(accrualTable).getByLabelText(/Разбивка начисления/i))
 
@@ -625,6 +626,7 @@ describe('App', () => {
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
     expect(supplierAccrualTable).toBeInTheDocument()
     expect(within(supplierAccrualTable).getByText('Водоканал')).toBeInTheDocument()
+    expect(within(supplierAccrualTable).getByText('Ручное')).toBeInTheDocument()
 
     await user.dblClick(within(supplierAccrualTable).getByLabelText(/Разбивка начисления поставщику/i))
 
@@ -675,6 +677,8 @@ describe('App', () => {
     expect(await within(financePanel).findByText('Создано 1, пропущено 0')).toBeInTheDocument()
     expect((await within(financePanel).findAllByText('300,00')).length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
+    const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    expect(within(accrualTable).getByText('Авто')).toBeInTheDocument()
   })
 
   it('creates meter reading and shows calculated consumption', async () => {

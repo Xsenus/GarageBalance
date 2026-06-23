@@ -1113,6 +1113,7 @@ function FinancePanel({
               <span role="cell">
                 <strong>{accrual.incomeTypeName}</strong>
                 <small>Гараж {accrual.garageNumber}</small>
+                <small>{formatAccrualSource(accrual.source)}</small>
               </span>
               <span role="cell" className="money-accrual">
                 {formatMoney(accrual.amount)}
@@ -1142,6 +1143,7 @@ function FinancePanel({
               <span role="cell">
                 <strong>{accrual.supplierName}</strong>
                 <small>{accrual.expenseTypeName}</small>
+                <small>{formatAccrualSource(accrual.source)}</small>
               </span>
               <span role="cell" className="money-expense">
                 {formatMoney(accrual.amount)}
@@ -1204,7 +1206,7 @@ function FinancePanel({
                 </div>
                 <div>
                   <dt>Источник</dt>
-                  <dd>{accrualBreakdown.accrual.source === 'regular' ? 'Регулярное' : 'Ручное'}</dd>
+                  <dd>{formatAccrualSource(accrualBreakdown.accrual.source)}</dd>
                 </div>
                 <div>
                   <dt>Сумма</dt>
@@ -1227,7 +1229,7 @@ function FinancePanel({
                 </div>
                 <div>
                   <dt>Источник</dt>
-                  <dd>{accrualBreakdown.accrual.source === 'regular' ? 'Регулярное' : 'Ручное'}</dd>
+                  <dd>{formatAccrualSource(accrualBreakdown.accrual.source)}</dd>
                 </div>
                 <div>
                   <dt>Документ</dt>
@@ -2801,6 +2803,18 @@ function formatMonth(value: string): string {
   }
 
   return `${match[2]}.${match[1]}`
+}
+
+function formatAccrualSource(source: string): string {
+  if (source === 'manual') {
+    return 'Ручное'
+  }
+
+  if (source === 'regular') {
+    return 'Авто'
+  }
+
+  return source
 }
 
 function formatNullableNumber(value: number | null): string {
