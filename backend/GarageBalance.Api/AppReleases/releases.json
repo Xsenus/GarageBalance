@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-archive-dialog-description",
+    "version": "0.90.0",
+    "publishedAt": "2026-06-23T23:59:59+07:00",
+    "title": "Dialog архивирования описывает последствия",
+    "summary": "Подтверждение архивирования теперь связано с поясняющим текстом для доступного чтения.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Confirmation dialog архивирования получил aria-describedby с текстом о скрытии записи из рабочих списков."
+      },
+      {
+        "type": "improved",
+        "text": "Пояснение про сохранение истории и audit-журнала теперь связано с dialog так же явно, как заголовок."
+      },
+      {
+        "type": "improved",
+        "text": "React-тест проверяет связь dialog с описанием опасного действия."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-dictionary-list-expand-accessibility",
     "version": "0.89.0",
     "publishedAt": "2026-06-23T23:59:59+07:00",

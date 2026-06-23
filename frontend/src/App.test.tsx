@@ -756,6 +756,8 @@ describe('App', () => {
 
     expect(archivedOwnerId).toBeNull()
     const firstDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
+    const archiveDescription = within(firstDialog).getByText('Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.')
+    expect(firstDialog).toHaveAttribute('aria-describedby', archiveDescription.id)
     const archiveCancelButton = within(firstDialog).getByRole('button', { name: 'Отменить' })
     const archiveConfirmButton = within(firstDialog).getByRole('button', { name: 'Архивировать запись' })
     const archiveCloseButton = within(firstDialog).getByRole('button', { name: 'Отменить архивирование' })

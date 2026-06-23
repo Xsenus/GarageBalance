@@ -3973,7 +3973,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
             setPendingArchive(null)
           }
         }}>
-          <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} aria-describedby={`archive-confirmation-description-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Архивирование</p>
@@ -3984,7 +3984,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text">Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.</p>
+            <p className="confirmation-text" id={`archive-confirmation-description-${pendingArchive.id}`}>Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.</p>
             <div className="detail-dialog-actions">
               <button ref={archiveCancelButtonRef} className="ghost-button" type="button" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
                 Отменить
