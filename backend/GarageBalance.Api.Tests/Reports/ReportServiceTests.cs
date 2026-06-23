@@ -149,6 +149,28 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 700m, "PKO-2", null), null, CancellationToken.None);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "payments", 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("PKO-1", row.DocumentNumber);
+        Assert.Equal(2200m, result.Value.IncomeTotal);
+        Assert.Equal(-2200m, result.Value.Debt);
+    }
+
+    [Fact]
     public async Task GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -239,6 +261,28 @@ public sealed class ReportServiceTests
         Assert.Equal("Vodokanal", row.SupplierName);
         Assert.Equal("RKO-1", row.DocumentNumber);
         Assert.Equal(400m, row.ExpenseAmount);
+    }
+
+    [Fact]
+    public async Task GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 300m, "RKO-2", null), null, CancellationToken.None);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "payments", 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("RKO-1", row.DocumentNumber);
+        Assert.Equal(700m, result.Value.ExpenseTotal);
+        Assert.Equal(-700m, result.Value.Difference);
     }
 
     [Fact]

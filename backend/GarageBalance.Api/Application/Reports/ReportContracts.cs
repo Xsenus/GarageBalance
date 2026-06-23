@@ -12,7 +12,8 @@ public sealed record IncomeReportRequest(
     IReadOnlyCollection<Guid> GarageIds,
     IReadOnlyCollection<Guid> OwnerIds,
     IReadOnlyCollection<Guid> IncomeTypeIds,
-    string? RowMode);
+    string? RowMode,
+    int? Limit = null);
 
 public sealed record ExpenseReportRequest(
     DateOnly? DateFrom,
@@ -20,7 +21,8 @@ public sealed record ExpenseReportRequest(
     string? Search,
     IReadOnlyCollection<Guid> SupplierIds,
     IReadOnlyCollection<Guid> ExpenseTypeIds,
-    string? RowMode);
+    string? RowMode,
+    int? Limit = null);
 
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,

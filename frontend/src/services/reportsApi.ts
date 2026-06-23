@@ -101,6 +101,7 @@ export type ReportClient = {
       ownerIds?: string[]
       incomeTypeIds?: string[]
       rowMode?: string
+      limit?: number
     },
   ): Promise<IncomeReportDto>
   exportIncomeReportXlsx(
@@ -136,6 +137,7 @@ export type ReportClient = {
       supplierIds?: string[]
       expenseTypeIds?: string[]
       rowMode?: string
+      limit?: number
     },
   ): Promise<ExpenseReportDto>
   exportExpenseReportXlsx(
@@ -208,6 +210,9 @@ function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport
   if (params.rowMode) {
     searchParams.set('rowMode', params.rowMode)
   }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
   for (const garageId of params.garageIds ?? []) {
     searchParams.append('garageIds', garageId)
   }
@@ -247,6 +252,9 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
   }
   if (params.rowMode) {
     searchParams.set('rowMode', params.rowMode)
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
   }
   for (const supplierId of params.supplierIds ?? []) {
     searchParams.append('supplierIds', supplierId)

@@ -377,14 +377,16 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             .ThenBy(row => row.RowType)
             .ToList();
 
+        var rowCount = rows.Count;
+        var visibleRows = ApplyRowLimit(rows, request.Limit);
         var report = new IncomeReportDto(
             dateFrom,
             dateTo,
             rows.Sum(row => row.AccrualAmount),
             rows.Sum(row => row.IncomeAmount),
             rows.Sum(row => row.Debt),
-            rows.Count,
-            rows);
+            rowCount,
+            visibleRows);
 
         return ReportResult<IncomeReportDto>.Success(report);
     }
@@ -538,14 +540,16 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             .ThenBy(row => row.RowType)
             .ToList();
 
+        var rowCount = rows.Count;
+        var visibleRows = ApplyRowLimit(rows, request.Limit);
         var report = new ExpenseReportDto(
             dateFrom,
             dateTo,
             rows.Sum(row => row.AccrualAmount),
             rows.Sum(row => row.ExpenseAmount),
             rows.Sum(row => row.Difference),
-            rows.Count,
-            rows);
+            rowCount,
+            visibleRows);
 
         return ReportResult<ExpenseReportDto>.Success(report);
     }
@@ -793,6 +797,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     private static string BuildExportFileName(string reportType, DateOnly dateFrom, DateOnly dateTo, string extension)
     {
         return $"garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.{extension}";
+    }
+
+    private static IReadOnlyList<T> ApplyRowLimit<T>(IReadOnlyList<T> rows, int? limit)
+    {
+        return limit is > 0 && rows.Count > limit.Value
+            ? rows.Take(limit.Value).ToList()
+            : rows;
     }
 
     private static string FormatAmount(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);

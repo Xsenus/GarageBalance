@@ -82,6 +82,8 @@ const reportFilterStorageKeys = {
   income: 'garagebalance.reports.incomeFilters',
   expense: 'garagebalance.reports.expenseFilters',
 } as const
+const garageReportScreenRowLimit = 12
+const reportScreenRowLimit = 16
 
 type NavigationItem = {
   label: string
@@ -1763,6 +1765,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             ownerIds: incomeFilters.ownerIds,
             incomeTypeIds: incomeFilters.incomeTypeIds,
             rowMode: incomeFilters.rowMode,
+            limit: reportScreenRowLimit,
           }),
         ])
         if (!ignore) {
@@ -1804,6 +1807,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             supplierIds: expenseFilters.supplierIds,
             expenseTypeIds: expenseFilters.expenseTypeIds,
             rowMode: expenseFilters.rowMode,
+            limit: reportScreenRowLimit,
           }),
         ])
         if (!ignore) {
@@ -2077,7 +2081,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <span role="columnheader">Долг</span>
           </div>
           {report?.garageRows.length === 0 ? <p className="empty-state">По выбранному фильтру строк нет</p> : null}
-          {report?.garageRows.slice(0, 12).map((row) => (
+          {report?.garageRows.slice(0, garageReportScreenRowLimit).map((row) => (
             <div className="operation-row" role="row" key={row.garageId}>
               <span role="cell">
                 <strong>Гараж {row.garageNumber}</strong>
@@ -2092,7 +2096,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               </span>
             </div>
           ))}
-          {report && report.garageRows.length > 12 ? <p className="empty-state">Показано 12 из {report.garageRows.length} строк</p> : null}
+          {report && report.garageRows.length > garageReportScreenRowLimit ? <p className="empty-state">Показано {garageReportScreenRowLimit} из {report.garageRows.length} строк</p> : null}
         </div>
       </div>
 
@@ -2172,7 +2176,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <span role="columnheader">Сумма</span>
         </div>
         {incomeReport?.rows.length === 0 ? <p className="empty-state">По выбранному фильтру поступлений нет</p> : null}
-        {incomeReport?.rows.slice(0, 16).map((row) => (
+        {incomeReport?.rows.map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
             <span role="cell">
               <strong>{formatDateOnly(row.date)}</strong>
@@ -2187,7 +2191,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
-        {incomeReport && incomeReport.rowCount > 16 ? <p className="empty-state">Показано 16 из {incomeReport.rowCount} строк</p> : null}
+        {incomeReport && incomeReport.rowCount > incomeReport.rows.length ? <p className="empty-state">Показано {incomeReport.rows.length} из {incomeReport.rowCount} строк</p> : null}
       </div>
 
       <div className="subsection-heading">
@@ -2259,7 +2263,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <span role="columnheader">Сумма</span>
         </div>
         {expenseReport?.rows.length === 0 ? <p className="empty-state">По выбранному фильтру выплат нет</p> : null}
-        {expenseReport?.rows.slice(0, 16).map((row) => (
+        {expenseReport?.rows.map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
             <span role="cell">
               <strong>{formatDateOnly(row.date)}</strong>
@@ -2274,7 +2278,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
-        {expenseReport && expenseReport.rowCount > 16 ? <p className="empty-state">Показано 16 из {expenseReport.rowCount} строк</p> : null}
+        {expenseReport && expenseReport.rowCount > expenseReport.rows.length ? <p className="empty-state">Показано {expenseReport.rows.length} из {expenseReport.rowCount} строк</p> : null}
       </div>
     </section>
   )

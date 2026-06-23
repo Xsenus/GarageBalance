@@ -109,10 +109,11 @@ public sealed class ReportsControllerTests
     public async Task GetIncomeReport_ReturnsOk()
     {
         var report = CreateIncomeReport();
-        var controller = new ReportsController(new FakeReportService
+        var service = new FakeReportService
         {
             IncomeResult = ReportResult<IncomeReportDto>.Success(report)
-        });
+        };
+        var controller = new ReportsController(service);
 
         var result = await controller.GetIncomeReport(
             new DateOnly(2026, 6, 1),
@@ -122,10 +123,12 @@ public sealed class ReportsControllerTests
             [],
             [],
             "all",
+            16,
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
+        Assert.Equal(16, service.IncomeRequest?.Limit);
     }
 
     [Fact]
@@ -136,7 +139,7 @@ public sealed class ReportsControllerTests
             IncomeResult = ReportResult<IncomeReportDto>.Failure("period_invalid", "Период неверный.")
         });
 
-        var result = await controller.GetIncomeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all", CancellationToken.None);
+        var result = await controller.GetIncomeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all", null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -147,10 +150,11 @@ public sealed class ReportsControllerTests
     public async Task GetExpenseReport_ReturnsOk()
     {
         var report = CreateExpenseReport();
-        var controller = new ReportsController(new FakeReportService
+        var service = new FakeReportService
         {
             ExpenseResult = ReportResult<ExpenseReportDto>.Success(report)
-        });
+        };
+        var controller = new ReportsController(service);
 
         var result = await controller.GetExpenseReport(
             new DateOnly(2026, 6, 1),
@@ -159,10 +163,12 @@ public sealed class ReportsControllerTests
             [Guid.NewGuid()],
             [],
             "payments",
+            16,
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
+        Assert.Equal(16, service.ExpenseRequest?.Limit);
     }
 
     [Fact]
@@ -258,7 +264,7 @@ public sealed class ReportsControllerTests
             ExpenseResult = ReportResult<ExpenseReportDto>.Failure("period_invalid", "Период неверный.")
         });
 
-        var result = await controller.GetExpenseReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all", CancellationToken.None);
+        var result = await controller.GetExpenseReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all", null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -408,8 +414,10 @@ public sealed class ReportsControllerTests
         public ReportResult<ReportExportFileDto> ConsolidatedPdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<IncomeReportDto> IncomeResult { get; init; } = ReportResult<IncomeReportDto>.Failure("not_configured", "Not configured.");
+        public IncomeReportRequest? IncomeRequest { get; private set; }
 
         public ReportResult<ExpenseReportDto> ExpenseResult { get; init; } = ReportResult<ExpenseReportDto>.Failure("not_configured", "Not configured.");
+        public ExpenseReportRequest? ExpenseRequest { get; private set; }
 
         public ReportResult<ReportExportFileDto> IncomeExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
@@ -436,11 +444,13 @@ public sealed class ReportsControllerTests
 
         public Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)
         {
+            IncomeRequest = request;
             return Task.FromResult(IncomeResult);
         }
 
         public Task<ReportResult<ExpenseReportDto>> GetExpenseReportAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
         {
+            ExpenseRequest = request;
             return Task.FromResult(ExpenseResult);
         }
 

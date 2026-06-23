@@ -66,6 +66,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? ownerIds,
         [FromQuery] Guid[]? incomeTypeIds,
         [FromQuery] string? rowMode,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
         var result = await reportService.GetIncomeReportAsync(
@@ -76,7 +77,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 garageIds ?? [],
                 ownerIds ?? [],
                 incomeTypeIds ?? [],
-                rowMode),
+                rowMode,
+                limit),
             cancellationToken);
 
         return result.Succeeded
@@ -152,6 +154,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? supplierIds,
         [FromQuery] Guid[]? expenseTypeIds,
         [FromQuery] string? rowMode,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
         var result = await reportService.GetExpenseReportAsync(
@@ -161,7 +164,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 search,
                 supplierIds ?? [],
                 expenseTypeIds ?? [],
-                rowMode),
+                rowMode,
+                limit),
             cancellationToken);
 
         return result.Succeeded

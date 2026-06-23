@@ -949,6 +949,7 @@ describe('App', () => {
         ownerIds: ['owner-1'],
         incomeTypeIds: ['income-type-1'],
         rowMode: 'payments',
+        limit: 16,
       })
       expect(expenseRequest).toEqual({
         dateFrom: '2026-05-01',
@@ -957,6 +958,7 @@ describe('App', () => {
         supplierIds: ['supplier-1'],
         expenseTypeIds: ['expense-type-1'],
         rowMode: 'payments',
+        limit: 16,
       })
     })
   })
@@ -988,8 +990,8 @@ describe('App', () => {
     }))
     const reportClient = createReportClient({
       getConsolidatedReport: async () => createConsolidatedReport({ garageRows }),
-      getIncomeReport: async () => createIncomeReport({ rowCount: incomeRows.length, rows: incomeRows }),
-      getExpenseReport: async () => createExpenseReport({ rowCount: expenseRows.length, rows: expenseRows }),
+      getIncomeReport: async () => createIncomeReport({ rowCount: incomeRows.length, rows: incomeRows.slice(0, 16) }),
+      getExpenseReport: async () => createExpenseReport({ rowCount: expenseRows.length, rows: expenseRows.slice(0, 16) }),
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -1043,6 +1045,7 @@ describe('App', () => {
     expect(incomeRequest?.garageIds).toEqual(['garage-1'])
     expect(incomeRequest?.ownerIds).toEqual(['owner-1'])
     expect(incomeRequest?.incomeTypeIds).toEqual(['income-type-1'])
+    expect(incomeRequest?.limit).toBe(16)
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления XLSX' }))
 
@@ -1091,6 +1094,7 @@ describe('App', () => {
     expect((await within(reportsPanel).findAllByText('400,00')).length).toBeGreaterThan(0)
     expect(expenseRequest?.supplierIds).toEqual(['supplier-1'])
     expect(expenseRequest?.expenseTypeIds).toEqual(['expense-type-1'])
+    expect(expenseRequest?.limit).toBe(16)
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты XLSX' }))
 
