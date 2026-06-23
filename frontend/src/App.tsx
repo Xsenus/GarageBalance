@@ -3840,12 +3840,12 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       </div>
       {selectedGarage ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedGarage(null)}>
-          <section ref={selectedGarageDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={selectedGarageDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" aria-describedby="garage-card-owner" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Карточка гаража</p>
                 <h3 id="garage-card-title">Гараж {selectedGarage.number}</h3>
-                <p>{selectedGarage.ownerName ?? 'Владелец не указан'}</p>
+                <p id="garage-card-owner">{selectedGarage.ownerName ?? 'Владелец не указан'}</p>
               </div>
               <button ref={selectedGarageCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть карточку гаража" onClick={() => setSelectedGarage(null)}>
                 <X size={18} />

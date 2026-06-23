@@ -560,6 +560,9 @@ describe('App', () => {
     await user.tab()
     expect(garageCloseButton).toHaveFocus()
     expect(within(garageDialog).getByText('Карточка гаража')).toBeInTheDocument()
+    const garageOwnerDescription = garageDialog.querySelector('#garage-card-owner') as HTMLElement
+    expect(garageOwnerDescription).toHaveTextContent('Петров Петр')
+    expect(garageDialog).toHaveAttribute('aria-describedby', garageOwnerDescription.id)
     expect(within(garageDialog).getAllByText('Петров Петр').length).toBeGreaterThan(0)
     expect(within(garageDialog).getByText('2')).toBeInTheDocument()
     expect(within(garageDialog).getByText('3')).toBeInTheDocument()
