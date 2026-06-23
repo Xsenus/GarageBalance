@@ -544,7 +544,8 @@ h1 {
 }
 
 .dictionary-form input,
-.dictionary-form select {
+.dictionary-form select,
+.dictionary-form textarea {
   width: 100%;
   min-height: 40px;
   border: 1px solid #d0d5dd;
@@ -555,8 +556,14 @@ h1 {
   font: inherit;
 }
 
+.dictionary-form textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
 .dictionary-form input:focus,
-.dictionary-form select:focus {
+.dictionary-form select:focus,
+.dictionary-form textarea:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }
@@ -626,6 +633,11 @@ h1 {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.dictionary-list .dictionary-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .dictionary-list strong {

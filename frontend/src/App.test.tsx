@@ -107,13 +107,35 @@ describe('App', () => {
     expect((await within(dictionaryPanel).findAllByText('Петров Петр')).length).toBeGreaterThan(0)
 
     await user.type(within(dictionaryPanel).getByLabelText('Номер гаража'), '21')
+    await user.clear(within(dictionaryPanel).getByLabelText('Количество людей'))
+    await user.type(within(dictionaryPanel).getByLabelText('Количество людей'), '2')
+    await user.clear(within(dictionaryPanel).getByLabelText('Количество этажей'))
+    await user.type(within(dictionaryPanel).getByLabelText('Количество этажей'), '3')
     await user.clear(within(dictionaryPanel).getByLabelText('Стартовый баланс гаража'))
     await user.type(within(dictionaryPanel).getByLabelText('Стартовый баланс гаража'), '350')
+    await user.type(within(dictionaryPanel).getByLabelText('Стартовый счетчик воды'), '18.5')
+    await user.type(within(dictionaryPanel).getByLabelText('Стартовый счетчик электричества'), '412.75')
+    await user.type(within(dictionaryPanel).getByLabelText('Комментарий по гаражу'), 'Старые счетчики внесены из Access')
     await user.selectOptions(within(dictionaryPanel).getByLabelText('Владелец гаража'), within(dictionaryPanel).getByRole('option', { name: 'Петров Петр' }))
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[1])
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).getAllByText('Петров Петр').length).toBeGreaterThan(0)
     expect(within(dictionaryPanel).getByText(/старт 350,00/)).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Открыть карточку гаража 21' }))
+    const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 21' })
+    expect(within(garageDialog).getByText('Карточка гаража')).toBeInTheDocument()
+    expect(within(garageDialog).getAllByText('Петров Петр').length).toBeGreaterThan(0)
+    expect(within(garageDialog).getByText('2')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('3')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('350,00')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('18,5')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('412,75')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('Старые счетчики внесены из Access')).toBeInTheDocument()
+    await user.click(within(garageDialog).getByRole('button', { name: 'Закрыть карточку гаража' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Гараж 21' })).not.toBeInTheDocument()
+    })
 
     await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), 'Связь')
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
@@ -1046,9 +1068,14 @@ function createStatefulDictionaryClient(): DictionaryClient {
       const garage = createGarage({
         id: crypto.randomUUID(),
         number: request.number,
+        peopleCount: request.peopleCount,
+        floorCount: request.floorCount,
         ownerId: owner?.id ?? null,
         ownerName: owner?.fullName ?? null,
         startingBalance: request.startingBalance,
+        initialWaterMeterValue: request.initialWaterMeterValue ?? null,
+        initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
+        comment: request.comment ?? null,
       })
       garages = [garage, ...garages]
       return garage

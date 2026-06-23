@@ -2002,9 +2002,10 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [ownerForm, setOwnerForm] = useState({ lastName: '', firstName: '', phone: '' })
-  const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0 })
+  const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
   const [garageSearch, setGarageSearch] = useState('')
   const [garageSearchStatus, setGarageSearchStatus] = useState<string | null>(null)
+  const [selectedGarage, setSelectedGarage] = useState<GarageDto | null>(null)
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
   const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
@@ -2075,9 +2076,12 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
         floorCount: garageForm.floorCount,
         ownerId: garageForm.ownerId || null,
         startingBalance: garageForm.startingBalance,
+        initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
+        initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
+        comment: garageForm.comment.trim() || undefined,
       })
       setGarages((items) => [garage, ...items])
-      setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0 })
+      setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
     })
   }
 
@@ -2227,6 +2231,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Количество этажей" type="number" min="0" value={garageForm.floorCount} onChange={(event) => setGarageForm({ ...garageForm, floorCount: Number(event.target.value) })} />
           </div>
           <input aria-label="Стартовый баланс гаража" type="number" step="0.01" value={garageForm.startingBalance} onChange={(event) => setGarageForm({ ...garageForm, startingBalance: Number(event.target.value) })} />
+          <div className="inline-fields">
+            <input aria-label="Стартовый счетчик воды" type="number" min="0" step="0.001" value={garageForm.initialWaterMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialWaterMeterValue: event.target.value })} />
+            <input aria-label="Стартовый счетчик электричества" type="number" min="0" step="0.001" value={garageForm.initialElectricityMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialElectricityMeterValue: event.target.value })} />
+          </div>
+          <textarea aria-label="Комментарий по гаражу" placeholder="Комментарий по счетчикам, особенностям начислений или импорта" value={garageForm.comment} onChange={(event) => setGarageForm({ ...garageForm, comment: event.target.value })} />
           <select aria-label="Владелец гаража" value={garageForm.ownerId} onChange={(event) => setGarageForm({ ...garageForm, ownerId: event.target.value })}>
             <option value="">Без владельца</option>
             {owners.map((owner) => (
@@ -2244,6 +2253,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: garage.id,
               title: `Гараж ${garage.number}`,
               meta: `${garage.ownerName ?? 'владелец не указан'} · старт ${formatMoney(garage.startingBalance)}`,
+              openLabel: `Открыть карточку гаража ${garage.number}`,
+              onOpen: () => setSelectedGarage(garage),
               archiveLabel: `Архивировать гараж ${garage.number}`,
               onArchive: () => archiveDictionaryItem('garage', async () => {
                 await dictionaryClient.archiveGarage(auth.accessToken, garage.id)
@@ -2376,11 +2387,57 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           />
         </form>
       </div>
+      {selectedGarage ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedGarage(null)}>
+          <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Карточка гаража</p>
+                <h3 id="garage-card-title">Гараж {selectedGarage.number}</h3>
+                <p>{selectedGarage.ownerName ?? 'Владелец не указан'}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть карточку гаража" onClick={() => setSelectedGarage(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <dl className="detail-grid">
+              <div>
+                <dt>Владелец</dt>
+                <dd>{selectedGarage.ownerName ?? 'Не указан'}</dd>
+              </div>
+              <div>
+                <dt>Людей</dt>
+                <dd>{selectedGarage.peopleCount}</dd>
+              </div>
+              <div>
+                <dt>Этажей</dt>
+                <dd>{selectedGarage.floorCount}</dd>
+              </div>
+              <div>
+                <dt>Стартовый баланс</dt>
+                <dd>{formatMoney(selectedGarage.startingBalance)}</dd>
+              </div>
+              <div>
+                <dt>Старт воды</dt>
+                <dd>{formatNullableNumber(selectedGarage.initialWaterMeterValue)}</dd>
+              </div>
+              <div>
+                <dt>Старт электричества</dt>
+                <dd>{formatNullableNumber(selectedGarage.initialElectricityMeterValue)}</dd>
+              </div>
+              <div>
+                <dt>Комментарий</dt>
+                <dd>{selectedGarage.comment || 'Нет комментария'}</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }
 
-function DictionaryList({ items, emptyText }: { items: { id: string; title: string; meta: string; archiveLabel?: string; onArchive?: () => void }[]; emptyText: string }) {
+function DictionaryList({ items, emptyText }: { items: { id: string; title: string; meta: string; openLabel?: string; onOpen?: () => void; archiveLabel?: string; onArchive?: () => void }[]; emptyText: string }) {
   if (items.length === 0) {
     return <p className="empty-state">{emptyText}</p>
   }
@@ -2393,11 +2450,18 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
             <strong>{item.title}</strong>
             <span>{item.meta}</span>
           </span>
-          {item.onArchive ? (
-            <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={item.onArchive}>
-              <Trash2 size={16} />
-            </button>
-          ) : null}
+          <span className="dictionary-actions">
+            {item.onOpen ? (
+              <button className="icon-button" type="button" aria-label={item.openLabel ?? `Открыть ${item.title}`} onClick={item.onOpen}>
+                <FileText size={16} />
+              </button>
+            ) : null}
+            {item.onArchive ? (
+              <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={item.onArchive}>
+                <Trash2 size={16} />
+              </button>
+            ) : null}
+          </span>
         </li>
       ))}
     </ul>
@@ -2406,6 +2470,14 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
+}
+
+function formatNullableNumber(value: number | null): string {
+  if (value === null) {
+    return 'Не указан'
+  }
+
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(value)
 }
 
 function buildReportFileName(type: 'consolidated' | 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
