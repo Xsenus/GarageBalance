@@ -394,6 +394,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
         }
 
+        var hasGapWarning = HasGapWarning(meterKind, month, previousReading);
         var reading = new MeterReading
         {
             GarageId = garage.Id,
@@ -404,6 +405,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             CurrentValue = request.CurrentValue,
             PreviousValue = previousValue,
             Consumption = consumption,
+            HasGapWarning = hasGapWarning,
             Comment = NormalizeOptional(request.Comment)
         };
 
@@ -629,9 +631,9 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return Math.Round(value, 2, MidpointRounding.AwayFromZero);
     }
 
-    private static bool HasGapWarning(MeterReading reading)
+    private static bool HasGapWarning(string meterKind, DateOnly month, MeterReading? previousReading)
     {
-        return reading.MeterKind == MeterKinds.Electricity && reading.PreviousValue == 0m && reading.Consumption > 0m;
+        return meterKind == MeterKinds.Electricity && (previousReading is null || previousReading.AccountingMonth < month.AddMonths(-1));
     }
 
     private static FinancialOperationDto ToDto(FinancialOperation operation)
@@ -701,7 +703,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             reading.CurrentValue,
             reading.PreviousValue,
             reading.Consumption,
-            HasGapWarning(reading),
+            reading.HasGapWarning,
             reading.Comment,
             reading.IsCanceled);
     }

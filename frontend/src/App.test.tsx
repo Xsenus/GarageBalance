@@ -279,6 +279,23 @@ describe('App', () => {
     expect(within(financePanel).getByRole('table', { name: 'Последние показания' })).toBeInTheDocument()
   })
 
+  it('shows electricity gap warning returned by API', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.selectOptions(within(financePanel).getByLabelText('Тип счетчика'), 'electricity')
+    await user.clear(within(financePanel).getByLabelText('Новое показание'))
+    await user.type(within(financePanel).getByLabelText('Новое показание'), '125')
+    await user.click(within(financePanel).getByRole('button', { name: 'Внести' }))
+
+    expect(await within(financePanel).findByText('проверьте предыдущий месяц')).toBeInTheDocument()
+  })
+
   it('runs Access import dry-run and shows checks history', async () => {
     const user = userEvent.setup()
     const importClient = createStatefulImportClient()
@@ -896,6 +913,7 @@ function createStatefulFinanceClient(): FinanceClient {
         currentValue: request.currentValue,
         previousValue,
         consumption: request.currentValue - previousValue,
+        hasGapWarning: request.meterKind === 'electricity',
         comment: request.comment ?? null,
       })
       meterReadings = [reading, ...meterReadings]

@@ -13,6 +13,7 @@ public sealed class MeterReading
     public decimal CurrentValue { get; set; }
     public decimal PreviousValue { get; set; }
     public decimal Consumption { get; set; }
+    public bool HasGapWarning { get; set; }
     public string? Comment { get; set; }
     public bool IsCanceled { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

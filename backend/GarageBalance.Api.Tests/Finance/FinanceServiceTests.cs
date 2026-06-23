@@ -318,6 +318,29 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateMeterReadingAsync_WarnsWhenElectricityPreviousMonthIsMissing()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 20), 110m, null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 130m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.HasGapWarning);
+
+        var readings = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", null), CancellationToken.None);
+        Assert.Contains(readings, reading => reading.AccountingMonth == new DateOnly(2026, 6, 1) && reading.HasGapWarning);
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_RejectsDecreasedValue()
     {
         await using var database = await TestDatabase.CreateAsync();

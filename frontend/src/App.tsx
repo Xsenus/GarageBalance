@@ -936,7 +936,7 @@ function FinancePanel({
                 <small>
                   Гараж {reading.garageNumber}: {reading.previousValue} → {reading.currentValue}
                 </small>
-                {reading.hasGapWarning ? <small className="warning-text">нет предыдущего периода</small> : null}
+                {reading.hasGapWarning ? <small className="warning-text">проверьте предыдущий месяц</small> : null}
               </span>
               <span role="cell" className="money-accrual">
                 {reading.consumption}
