@@ -2515,6 +2515,66 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     }
   }, [auth.accessToken, dictionaryClient])
 
+  useEffect(() => {
+    const query = garageSearch.trim()
+    if (!query) {
+      return
+    }
+
+    let ignore = false
+    const timeoutId = window.setTimeout(() => {
+      setError(null)
+      dictionaryClient
+        .getGarages(auth.accessToken, query)
+        .then((result) => {
+          if (!ignore) {
+            setGarages(result)
+            setGarageSearchStatus(`Найдено гаражей: ${result.length}`)
+          }
+        })
+        .catch((caught) => {
+          if (!ignore) {
+            setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск гаражей.')
+          }
+        })
+    }, 350)
+
+    return () => {
+      ignore = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [auth.accessToken, dictionaryClient, garageSearch])
+
+  useEffect(() => {
+    const query = supplierSearch.trim()
+    if (!query) {
+      return
+    }
+
+    let ignore = false
+    const timeoutId = window.setTimeout(() => {
+      setError(null)
+      dictionaryClient
+        .getSuppliers(auth.accessToken, undefined, query)
+        .then((result) => {
+          if (!ignore) {
+            setSuppliers(result)
+            setSupplierSearchStatus(`Найдено поставщиков: ${result.length}`)
+          }
+        })
+        .catch((caught) => {
+          if (!ignore) {
+            setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск поставщиков.')
+          }
+        })
+    }, 350)
+
+    return () => {
+      ignore = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [auth.accessToken, dictionaryClient, supplierSearch])
+
   async function saveOwner(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canWriteDictionaries) {

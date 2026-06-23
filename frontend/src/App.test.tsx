@@ -501,9 +501,10 @@ describe('App', () => {
 
     expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
     await user.type(within(dictionaryPanel).getByLabelText('Поиск гаража или владельца'), 'Петров')
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Найти гараж' }))
 
-    expect(garageSearch).toBe('Петров')
+    await waitFor(() => {
+      expect(garageSearch).toBe('Петров')
+    })
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Гараж 12')).not.toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toBeInTheDocument()
@@ -530,9 +531,10 @@ describe('App', () => {
 
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
     await user.type(within(dictionaryPanel).getByLabelText('Поиск поставщика'), '7728')
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Найти поставщика' }))
 
-    expect(supplierSearch).toBe('7728')
+    await waitFor(() => {
+      expect(supplierSearch).toBe('7728')
+    })
     expect(await within(dictionaryPanel).findByText('Альфа-Банк')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Водоканал')).not.toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Найдено поставщиков: 1')).toBeInTheDocument()
