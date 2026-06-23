@@ -1,6 +1,8 @@
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Text;
 
 namespace GarageBalance.Api.Application.Audit;
 
@@ -100,5 +102,49 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             .Take(ListLimit)
             .Select(ToDto)
             .ToList();
+    }
+
+    public async Task<AuditEventExportDto> ExportEventsCsvAsync(AuditEventListRequest request, CancellationToken cancellationToken)
+    {
+        var events = await GetEventsAsync(request, cancellationToken);
+        var csv = BuildCsv(events);
+        var fileName = $"audit-events-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.csv";
+
+        return new AuditEventExportDto(fileName, "text/csv; charset=utf-8", Encoding.UTF8.GetBytes(csv));
+    }
+
+    private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("createdAtUtc,actorUserId,action,entityType,entityId,summary");
+
+        foreach (var auditEvent in events)
+        {
+            builder
+                .Append(EscapeCsv(auditEvent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture))).Append(',')
+                .Append(EscapeCsv(auditEvent.ActorUserId?.ToString())).Append(',')
+                .Append(EscapeCsv(auditEvent.Action)).Append(',')
+                .Append(EscapeCsv(auditEvent.EntityType)).Append(',')
+                .Append(EscapeCsv(auditEvent.EntityId)).Append(',')
+                .Append(EscapeCsv(auditEvent.Summary))
+                .AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
+    private static string EscapeCsv(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        if (!value.Any(character => character is ',' or '"' or '\r' or '\n'))
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
     }
 }

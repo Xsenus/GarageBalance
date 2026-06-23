@@ -512,6 +512,14 @@ h1 {
   font-weight: 700;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .dictionary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

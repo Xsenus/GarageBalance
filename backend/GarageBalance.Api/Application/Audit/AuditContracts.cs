@@ -14,3 +14,8 @@ public sealed record AuditEventListRequest(
     DateTimeOffset? DateTo,
     string? Action,
     string? Search);
+
+public sealed record AuditEventExportDto(
+    string FileName,
+    string ContentType,
+    byte[] Content);

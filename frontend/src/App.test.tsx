@@ -735,6 +735,7 @@ describe('App', () => {
   it('shows audit journal for users with audit permission', async () => {
     const user = userEvent.setup()
     let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
+    let auditExportRequest: Parameters<AuditClient['exportEvents']>[1] = undefined
     const auth = createAuthResponse()
     const authClient = createAuthClient({
       bootstrapAdmin: async () => ({
@@ -756,6 +757,10 @@ describe('App', () => {
           createAuditEvent({ action: 'finance.income_created', entityType: 'financial_operation', summary: 'Создано поступление.' }),
         ]
       },
+      exportEvents: async (_token, params) => {
+        auditExportRequest = params
+        return new Blob(['createdAtUtc,action\n2026-06-23T10:00:00Z,import.access_dry_run\n'], { type: 'text/csv' })
+      },
     })
     render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -770,6 +775,11 @@ describe('App', () => {
 
     expect(await within(auditPanel).findByText('import.access_dry_run')).toBeInTheDocument()
     expect(auditRequest?.search).toBe('import')
+
+    await user.click(within(auditPanel).getByRole('button', { name: /CSV/ }))
+
+    expect(auditExportRequest?.search).toBe('import')
+    expect(await within(auditPanel).findByText('Audit-журнал CSV готов.')).toBeInTheDocument()
   })
 
   it('shows consolidated report and applies garage search', async () => {
@@ -1046,6 +1056,7 @@ function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseCli
 function createAuditClient(overrides: Partial<AuditClient> = {}): AuditClient {
   return {
     getEvents: async () => [createAuditEvent({})],
+    exportEvents: async () => new Blob(['createdAtUtc,action\n'], { type: 'text/csv' }),
     ...overrides,
   }
 }

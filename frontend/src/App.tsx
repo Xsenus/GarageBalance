@@ -1416,7 +1416,9 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const [events, setEvents] = useState<AuditEventDto[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -1446,6 +1448,21 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     }
   }, [auth.accessToken, auditClient, search])
 
+  async function exportCurrentEvents() {
+    setExporting(true)
+    setError(null)
+    setExportMessage(null)
+    try {
+      const blob = await auditClient.exportEvents(auth.accessToken, { search })
+      downloadBlob(blob, buildAuditExportFileName())
+      setExportMessage('Audit-журнал CSV готов.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось скачать audit-журнал.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <section className="dictionary-panel" aria-label="Audit-журнал">
       <div className="section-heading">
@@ -1453,10 +1470,17 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <p className="eyebrow">Audit</p>
           <h2>Журнал действий пользователей и системы</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${events.length} событий`}</span>
+        <div className="section-actions">
+          <span>{loading ? 'Загрузка...' : `${events.length} событий`}</span>
+          <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEvents}>
+            <FileSpreadsheet size={16} />
+            Скачать CSV
+          </button>
+        </div>
       </div>
 
       {error ? <div className="form-error">{error}</div> : null}
+      {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
         <input aria-label="Поиск в audit-журнале" placeholder="Действие, сущность или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -2770,6 +2794,10 @@ function buildImportReportFileName(run: AccessImportRunDto): string {
   const startedAt = run.startedAtUtc.slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '-')
   const sourceName = run.originalFileName.replace(/\.[^.]+$/, '').replaceAll(' ', '-').toLowerCase()
   return `garagebalance-access-dry-run-${sourceName}-${startedAt}.json`
+}
+
+function buildAuditExportFileName(): string {
+  return `garagebalance-audit-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}.csv`
 }
 
 function getFormValues(form: FormData, name: string): string[] {

@@ -3,6 +3,7 @@ using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace GarageBalance.Api.Tests.Audit;
 
@@ -102,6 +103,44 @@ public sealed class AuditServiceTests
         Assert.DoesNotContain("owner@example.com", auditEvent.Summary);
         Assert.DoesNotContain("40817810507220051060", auditEvent.Summary);
         Assert.DoesNotContain("Secret123", auditEvent.Summary);
+    }
+
+    [Fact]
+    public async Task ExportEventsCsvAsync_UsesFiltersAndMaskedCsvValues()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.AddRange(
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 10, 0, 0, TimeSpan.Zero),
+                Action = "auth.login_failed",
+                EntityType = "login_email",
+                EntityId = "owner@example.com",
+                Summary = "Login owner@example.com failed, password=Secret123 \"quoted\""
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 9, 0, 0, TimeSpan.Zero),
+                Action = "finance.income_created",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Поступление по гаражу 12."
+            });
+        await database.Context.SaveChangesAsync();
+
+        var export = await service.ExportEventsCsvAsync(new AuditEventListRequest(null, null, "auth.login_failed", null), CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(export.Content);
+
+        Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
+        Assert.EndsWith(".csv", export.FileName, StringComparison.Ordinal);
+        Assert.Equal("text/csv; charset=utf-8", export.ContentType);
+        Assert.Contains("createdAtUtc,actorUserId,action,entityType,entityId,summary", csv);
+        Assert.Contains("auth.login_failed", csv);
+        Assert.Contains("\"Login [email скрыт] failed, password=[секрет скрыт] \"\"quoted\"\"\"", csv);
+        Assert.DoesNotContain("finance.income_created", csv);
+        Assert.DoesNotContain("owner@example.com", csv);
+        Assert.DoesNotContain("Secret123", csv);
     }
 
     private sealed class TestDatabase : IAsyncDisposable
