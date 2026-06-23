@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-unified-auth-problems",
+    "version": "0.41.0",
+    "publishedAt": "2026-06-23T22:05:00+07:00",
+    "title": "Унифицированы ошибки авторизации API",
+    "summary": "Запросы без входа в систему и запросы без нужных прав теперь получают единый ProblemDetails-ответ с кодами unauthorized и forbidden.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Если пользователь не авторизован, защищенный API возвращает 401 с кодом unauthorized."
+      },
+      {
+        "type": "important",
+        "text": "Если у пользователя нет нужного права, защищенный API возвращает 403 с кодом forbidden."
+      },
+      {
+        "type": "improved",
+        "text": "Frontend и будущие интеграции смогут одинаково обрабатывать ошибки входа, запрета доступа, валидации и бизнес-правил через extensions.code."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-unified-validation-problems",
     "version": "0.40.0",
     "publishedAt": "2026-06-23T21:35:00+07:00",

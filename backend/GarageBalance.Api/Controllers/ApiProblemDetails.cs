@@ -6,6 +6,8 @@ namespace GarageBalance.Api.Controllers;
 public static class ApiProblemDetails
 {
     public const string CodeExtensionKey = "code";
+    public const string ForbiddenCode = "forbidden";
+    public const string UnauthorizedCode = "unauthorized";
     public const string ValidationFailedCode = "validation_failed";
 
     public static ProblemDetails Create(string? code, string? detail, int statusCode)
@@ -38,5 +40,15 @@ public static class ApiProblemDetails
     public static IActionResult CreateInvalidModelStateResponse(ActionContext context)
     {
         return new BadRequestObjectResult(CreateValidation(context.ModelState));
+    }
+
+    public static ProblemDetails CreateUnauthorized()
+    {
+        return Create(UnauthorizedCode, "Необходима авторизация.", StatusCodes.Status401Unauthorized);
+    }
+
+    public static ProblemDetails CreateForbidden()
+    {
+        return Create(ForbiddenCode, "Недостаточно прав для выполнения действия.", StatusCodes.Status403Forbidden);
     }
 }
