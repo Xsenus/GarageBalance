@@ -3961,7 +3961,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
       </ul>
       {hasHiddenItems ? (
         <div className="dictionary-list-footer">
-          <p className="empty-state">Показано {visibleItems.length} из {items.length} записей</p>
+          <p className="empty-state" aria-live="polite">Показано {visibleItems.length} из {items.length} записей</p>
           <button className="ghost-button" type="button" aria-controls={listId} aria-expanded={showAllItems} onClick={() => setShowAllItems((value) => !value)}>
             {showAllItems ? 'Свернуть список' : 'Показать все записи'}
           </button>

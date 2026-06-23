@@ -599,7 +599,7 @@ describe('App', () => {
     const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
     expect(await within(ownerForm as HTMLElement).findByText('Владелец1 Тест')).toBeInTheDocument()
-    expect(within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')).toBeInTheDocument()
+    expect(within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')).toHaveAttribute('aria-live', 'polite')
     expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
     const compactList = within(ownerForm as HTMLElement).getByRole('list')
     const expandButton = within(ownerForm as HTMLElement).getByRole('button', { name: 'Показать все записи' })
@@ -607,7 +607,7 @@ describe('App', () => {
     expect(expandButton).toHaveAttribute('aria-controls', compactList.id)
 
     await user.click(expandButton)
-    expect(within(ownerForm as HTMLElement).getByText('Показано 6 из 6 записей')).toBeInTheDocument()
+    expect(within(ownerForm as HTMLElement).getByText('Показано 6 из 6 записей')).toHaveAttribute('aria-live', 'polite')
     expect(within(ownerForm as HTMLElement).getByText('Владелец6 Тест')).toBeInTheDocument()
     const collapseButton = within(ownerForm as HTMLElement).getByRole('button', { name: 'Свернуть список' })
     expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
