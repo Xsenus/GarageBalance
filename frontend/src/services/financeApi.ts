@@ -15,6 +15,8 @@ export type FinancialOperationDto = {
   supplierName: string | null
   expenseTypeId: string | null
   expenseTypeName: string | null
+  garageDebtBefore: number | null
+  garageDebtAfter: number | null
   isCanceled: boolean
 }
 

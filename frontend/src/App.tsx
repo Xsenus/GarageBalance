@@ -887,6 +887,9 @@ function FinancePanel({
               <span role="cell">
                 <strong>{operation.operationKind === 'income' ? operation.incomeTypeName : operation.expenseTypeName}</strong>
                 <small>{operation.operationKind === 'income' ? `Гараж ${operation.garageNumber}` : operation.supplierName}</small>
+                {operation.operationKind === 'income' && operation.garageDebtBefore !== null && operation.garageDebtAfter !== null ? (
+                  <small className="balance-history">Долг: {formatMoney(operation.garageDebtBefore)} → {formatMoney(operation.garageDebtAfter)}</small>
+                ) : null}
               </span>
               <span role="cell" className={operation.operationKind === 'income' ? 'money-income' : 'money-expense'}>
                 {operation.operationKind === 'income' ? '+' : '-'}

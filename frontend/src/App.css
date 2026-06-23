@@ -786,6 +786,11 @@ button.operation-row:hover {
   font-weight: 700;
 }
 
+.balance-history {
+  color: #1849a9;
+  font-weight: 700;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

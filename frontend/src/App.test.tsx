@@ -230,6 +230,28 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Разбивка начисления' })).not.toBeInTheDocument()
   })
 
+  it('shows garage debt before and after owner payment', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Начисление месяца')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
+
+    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
+    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '300')
+    await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-2')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+
+    expect(await within(financePanel).findByText('Долг: 900,00 → 600,00')).toBeInTheDocument()
+  })
+
   it('creates supplier accrual from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
@@ -850,12 +872,15 @@ function createStatefulFinanceClient(): FinanceClient {
     getMeterReadings: async () => meterReadings,
     getSummary: async () => summary(),
     createIncome: async (_token, request) => {
+      const debtBefore = summary().debt
       const operation = createFinancialOperation({
         id: crypto.randomUUID(),
         operationDate: request.operationDate,
         accountingMonth: request.accountingMonth,
         amount: request.amount,
         documentNumber: request.documentNumber ?? null,
+        garageDebtBefore: debtBefore,
+        garageDebtAfter: debtBefore - request.amount,
       })
       operations = [operation, ...operations]
       return operation
@@ -1172,6 +1197,8 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     supplierName: null,
     expenseTypeId: null,
     expenseTypeName: null,
+    garageDebtBefore: null,
+    garageDebtAfter: null,
     isCanceled: false,
     ...overrides,
   }

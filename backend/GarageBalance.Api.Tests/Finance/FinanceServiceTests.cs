@@ -37,6 +37,36 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 200m;
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+
+        var firstPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 300m, "PKO-1", null),
+            null,
+            CancellationToken.None);
+        var secondPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "PKO-2", null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(firstPayment.Succeeded);
+        Assert.Equal(1200m, firstPayment.Value!.GarageDebtBefore);
+        Assert.Equal(900m, firstPayment.Value.GarageDebtAfter);
+        Assert.True(secondPayment.Succeeded);
+        Assert.Equal(900m, secondPayment.Value!.GarageDebtBefore);
+        Assert.Equal(500m, secondPayment.Value.GarageDebtAfter);
+
+        var history = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, "income", null), CancellationToken.None);
+        Assert.Contains(history, item => item.DocumentNumber == "PKO-2" && item.GarageDebtBefore == 900m && item.GarageDebtAfter == 500m);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_RejectsDuplicateDocumentForSameDate()
     {
         await using var database = await TestDatabase.CreateAsync();

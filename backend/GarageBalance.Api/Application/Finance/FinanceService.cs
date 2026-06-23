@@ -12,12 +12,12 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {
-        return await ApplyFilters(QueryOperations(), request)
+        var operations = await ApplyFilters(QueryOperations(), request)
             .OrderByDescending(operation => operation.OperationDate)
             .ThenBy(operation => operation.DocumentNumber)
             .Take(ListLimit)
-            .Select(operation => ToDto(operation))
             .ToListAsync(cancellationToken);
+        return await ToOperationDtosAsync(operations, cancellationToken);
     }
 
     public async Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
@@ -107,7 +107,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         dbContext.FinancialOperations.Add(operation);
         AddAudit(actorUserId, "finance.income_created", operation.Id, $"Создано поступление {operation.Amount:N2} по гаражу {garage.Number}.");
         await dbContext.SaveChangesAsync(cancellationToken);
-        return FinanceResult<FinancialOperationDto>.Success(ToDto(operation));
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -147,7 +147,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         dbContext.FinancialOperations.Add(operation);
         AddAudit(actorUserId, "finance.expense_created", operation.Id, $"Создана выплата {operation.Amount:N2} поставщику {supplier.Name}.");
         await dbContext.SaveChangesAsync(cancellationToken);
-        return FinanceResult<FinancialOperationDto>.Success(ToDto(operation));
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
     public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -636,7 +636,53 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return meterKind == MeterKinds.Electricity && (previousReading is null || previousReading.AccountingMonth < month.AddMonths(-1));
     }
 
-    private static FinancialOperationDto ToDto(FinancialOperation operation)
+    private async Task<IReadOnlyList<FinancialOperationDto>> ToOperationDtosAsync(IReadOnlyList<FinancialOperation> operations, CancellationToken cancellationToken)
+    {
+        var result = new List<FinancialOperationDto>(operations.Count);
+        foreach (var operation in operations)
+        {
+            result.Add(await ToDtoAsync(operation, cancellationToken));
+        }
+
+        return result;
+    }
+
+    private async Task<FinancialOperationDto> ToDtoAsync(FinancialOperation operation, CancellationToken cancellationToken)
+    {
+        decimal? garageDebtBefore = null;
+        decimal? garageDebtAfter = null;
+        if (operation.OperationKind == FinancialOperationKinds.Income && operation.GarageId is not null)
+        {
+            garageDebtBefore = await CalculateGarageDebtBeforeIncomeAsync(operation, cancellationToken);
+            garageDebtAfter = garageDebtBefore - operation.Amount;
+        }
+
+        return ToDto(operation, garageDebtBefore, garageDebtAfter);
+    }
+
+    private async Task<decimal> CalculateGarageDebtBeforeIncomeAsync(FinancialOperation operation, CancellationToken cancellationToken)
+    {
+        var garageId = operation.GarageId!.Value;
+        var startingBalance = operation.Garage?.StartingBalance ?? await dbContext.Garages
+            .Where(garage => garage.Id == garageId)
+            .Select(garage => garage.StartingBalance)
+            .SingleAsync(cancellationToken);
+        var accrualTotal = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= operation.AccountingMonth)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(previous =>
+                !previous.IsCanceled &&
+                previous.Id != operation.Id &&
+                previous.OperationKind == FinancialOperationKinds.Income &&
+                previous.GarageId == garageId &&
+                previous.OperationDate < operation.OperationDate)
+            .SumAsync(previous => previous.Amount, cancellationToken);
+
+        return RoundMoney(startingBalance + accrualTotal - previousIncomeTotal);
+    }
+
+    private static FinancialOperationDto ToDto(FinancialOperation operation, decimal? garageDebtBefore = null, decimal? garageDebtAfter = null)
     {
         return new FinancialOperationDto(
             operation.Id,
@@ -655,6 +701,8 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             operation.Supplier?.Name,
             operation.ExpenseTypeId,
             operation.ExpenseType?.Name,
+            garageDebtBefore,
+            garageDebtAfter,
             operation.IsCanceled);
     }
 
