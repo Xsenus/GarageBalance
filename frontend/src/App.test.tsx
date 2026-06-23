@@ -537,6 +537,46 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
   })
 
+  it('does not call dictionary APIs when owner and garage forms fail client validation', async () => {
+    const user = userEvent.setup()
+    let createOwnerCalled = false
+    let createGarageCalled = false
+    const statefulDictionaryClient = createStatefulDictionaryClient()
+    const dictionaryClient: DictionaryClient = {
+      ...statefulDictionaryClient,
+      createOwner: async (...args) => {
+        createOwnerCalled = true
+        return statefulDictionaryClient.createOwner(...args)
+      },
+      createGarage: async (...args) => {
+        createGarageCalled = true
+        return statefulDictionaryClient.createGarage(...args)
+      },
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), '   ')
+    await user.type(within(dictionaryPanel).getByLabelText('Имя владельца'), 'Петр')
+    await user.type(within(dictionaryPanel).getByLabelText('Телефон владельца'), '1')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[0])
+
+    expect(await within(dictionaryPanel).findByText('Проверьте владельца')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите фамилию владельца.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Проверьте телефон владельца.')).toBeInTheDocument()
+    expect(createOwnerCalled).toBe(false)
+
+    await user.type(within(dictionaryPanel).getByLabelText('Номер гаража'), '   ')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[1])
+
+    expect(await within(dictionaryPanel).findByText('Проверьте гараж')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите номер гаража.')).toBeInTheDocument()
+    expect(createGarageCalled).toBe(false)
+  })
+
   it('searches garages by number or owner from dictionaries workspace', async () => {
     const user = userEvent.setup()
     let garageSearch: string | undefined

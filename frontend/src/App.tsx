@@ -25,7 +25,7 @@ import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authAp
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
@@ -154,6 +154,54 @@ function getManagedUserValidationErrors(email: string, displayName: string, pass
 
   if (!roleCode) {
     errors.push('Выберите роль пользователя.')
+  }
+
+  return errors
+}
+
+function getOwnerValidationErrors(form: UpsertOwnerRequest) {
+  const errors: string[] = []
+
+  if (!form.lastName.trim()) {
+    errors.push('Укажите фамилию владельца.')
+  }
+
+  if (!form.firstName.trim()) {
+    errors.push('Укажите имя владельца.')
+  }
+
+  if (form.phone?.trim() && form.phone.trim().length < 5) {
+    errors.push('Проверьте телефон владельца.')
+  }
+
+  return errors
+}
+
+function getGarageValidationErrors(form: UpsertGarageRequest) {
+  const errors: string[] = []
+
+  if (!form.number.trim()) {
+    errors.push('Укажите номер гаража.')
+  }
+
+  if (!Number.isInteger(form.peopleCount) || form.peopleCount < 0) {
+    errors.push('Количество людей должно быть целым числом 0 или больше.')
+  }
+
+  if (!Number.isInteger(form.floorCount) || form.floorCount < 0) {
+    errors.push('Количество этажей должно быть целым числом 0 или больше.')
+  }
+
+  if (!Number.isFinite(form.startingBalance)) {
+    errors.push('Укажите корректный стартовый баланс гаража.')
+  }
+
+  if (form.initialWaterMeterValue != null && (!Number.isFinite(form.initialWaterMeterValue) || form.initialWaterMeterValue < 0)) {
+    errors.push('Стартовый счетчик воды должен быть 0 или больше.')
+  }
+
+  if (form.initialElectricityMeterValue != null && (!Number.isFinite(form.initialElectricityMeterValue) || form.initialElectricityMeterValue < 0)) {
+    errors.push('Стартовый счетчик электричества должен быть 0 или больше.')
   }
 
   return errors
@@ -2601,6 +2649,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
   const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
+  const [ownerValidationErrors, setOwnerValidationErrors] = useState<string[]>([])
+  const [garageValidationErrors, setGarageValidationErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -2719,6 +2769,14 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const errors = getOwnerValidationErrors(ownerForm)
+    if (errors.length > 0) {
+      setError(null)
+      setOwnerValidationErrors(errors)
+      return
+    }
+
+    setOwnerValidationErrors([])
     await runSaving('owner', async () => {
       const owner = await dictionaryClient.createOwner(auth.accessToken, ownerForm)
       setOwners((items) => [owner, ...items])
@@ -2733,17 +2791,26 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const request: UpsertGarageRequest = {
+      number: garageForm.number,
+      peopleCount: garageForm.peopleCount,
+      floorCount: garageForm.floorCount,
+      ownerId: garageForm.ownerId || null,
+      startingBalance: garageForm.startingBalance,
+      initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
+      initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
+      comment: garageForm.comment.trim() || undefined,
+    }
+    const errors = getGarageValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setGarageValidationErrors(errors)
+      return
+    }
+
+    setGarageValidationErrors([])
     await runSaving('garage', async () => {
-      const garage = await dictionaryClient.createGarage(auth.accessToken, {
-        number: garageForm.number,
-        peopleCount: garageForm.peopleCount,
-        floorCount: garageForm.floorCount,
-        ownerId: garageForm.ownerId || null,
-        startingBalance: garageForm.startingBalance,
-        initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
-        initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
-        comment: garageForm.comment.trim() || undefined,
-      })
+      const garage = await dictionaryClient.createGarage(auth.accessToken, request)
       setGarages((items) => [garage, ...items])
       setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
     })
@@ -2926,6 +2993,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <input aria-label="Фамилия владельца" placeholder="Фамилия" value={ownerForm.lastName} onChange={(event) => setOwnerForm({ ...ownerForm, lastName: event.target.value })} required />
           <input aria-label="Имя владельца" placeholder="Имя" value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />
           <input aria-label="Телефон владельца" placeholder="Телефон" value={ownerForm.phone} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />
+          <FormValidationSummary title="Проверьте владельца" items={ownerValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'owner'}>
             <Plus size={16} />
             <span>Добавить</span>
@@ -2984,6 +3052,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               </option>
             ))}
           </select>
+          <FormValidationSummary title="Проверьте гараж" items={garageValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'garage'}>
             <Plus size={16} />
             <span>Добавить</span>
