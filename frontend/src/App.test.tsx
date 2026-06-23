@@ -525,7 +525,7 @@ describe('App', () => {
     expect(within(garageDialog).getByText('18,5')).toBeInTheDocument()
     expect(within(garageDialog).getByText('412,75')).toBeInTheDocument()
     expect(within(garageDialog).getByText('Старые счетчики внесены из Access')).toBeInTheDocument()
-    await user.click(within(garageDialog).getByRole('button', { name: 'Закрыть карточку гаража' }))
+    await user.keyboard('{Escape}')
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Гараж 21' })).not.toBeInTheDocument()
     })
@@ -681,7 +681,13 @@ describe('App', () => {
     expect(within(firstDialog).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(firstDialog).getByText('Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.')).toBeInTheDocument()
 
-    await user.click(within(firstDialog).getByRole('button', { name: 'Отменить' }))
+    await user.keyboard('{Escape}')
+    expect(archivedOwnerId).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите архивирование' })).not.toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
+    const cancelDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить' }))
     expect(archivedOwnerId).toBeNull()
     expect(screen.queryByRole('dialog', { name: 'Подтвердите архивирование' })).not.toBeInTheDocument()
 
@@ -1002,7 +1008,7 @@ describe('App', () => {
     expect(within(dialog).getByText('Ручная корректировка')).toBeInTheDocument()
     expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
     expect(within(dialog).getByText('Гараж')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Закрыть разбивку' }))
+    await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Разбивка начисления' })).not.toBeInTheDocument()
   })
 

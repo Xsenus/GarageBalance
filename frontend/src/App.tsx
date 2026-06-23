@@ -74,6 +74,24 @@ function FormValidationSummary({ title, items }: { title: string; items: string[
   )
 }
 
+function useEscapeKey(enabled: boolean, onEscape: () => void) {
+  useEffect(() => {
+    if (!enabled) {
+      return undefined
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onEscape()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [enabled, onEscape])
+}
+
 function getPasswordPolicyErrors(password: string, emptyMessage = 'Укажите пароль.') {
   const errors: string[] = []
   if (!password) {
@@ -1046,6 +1064,8 @@ function FinancePanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
 
   useEffect(() => {
@@ -3071,6 +3091,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEscapeKey(Boolean(selectedGarage), () => setSelectedGarage(null))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
 
@@ -3755,6 +3777,8 @@ type DictionaryListItem = {
 function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+
+  useEscapeKey(Boolean(pendingArchive) && !confirmingArchive, () => setPendingArchive(null))
 
   async function confirmArchive() {
     if (!pendingArchive?.onArchive) {
