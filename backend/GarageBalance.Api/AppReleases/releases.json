@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-pdf-report-export",
+    "version": "0.17.0",
+    "publishedAt": "2026-06-23T10:05:00+07:00",
+    "title": "Добавлен PDF-экспорт отчетов",
+    "summary": "Отчеты по поступлениям и выплатам теперь можно скачать не только в XLSX, но и в PDF для отправки или печати.",
+    "items": [
+      {
+        "type": "new",
+        "text": "Добавлены endpoints GET /api/reports/income/export/pdf и GET /api/reports/expense/export/pdf под правом reports.read."
+      },
+      {
+        "type": "new",
+        "text": "На экране \"Отчеты\" появились кнопки \"Скачать поступления PDF\" и \"Скачать выплаты PDF\" рядом с XLSX-выгрузкой."
+      },
+      {
+        "type": "important",
+        "text": "PDF использует те же фильтры, что экранный отчет и XLSX, поэтому выбранные гаражи, владельцы, поставщики, виды операций и режим строк не расходятся между форматами."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-report-multiselect-filters",
     "version": "0.16.0",
     "publishedAt": "2026-06-23T09:25:00+07:00",

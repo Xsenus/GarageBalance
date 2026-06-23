@@ -1,3 +1,4 @@
+using System.Globalization;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -370,8 +371,44 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             ]);
 
         return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
-            BuildExportFileName("income", report.DateFrom, report.DateTo),
+            BuildExportFileName("income", report.DateFrom, report.DateTo, "xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content));
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportPdfAsync(IncomeReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetIncomeReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
+            $"Accrued: {FormatAmount(report.AccrualTotal)} | Paid: {FormatAmount(report.IncomeTotal)} | Difference: {FormatAmount(report.Debt)} | Rows: {report.RowCount}",
+            string.Empty,
+            "Type | Date | Month | Garage | Owner | Income type | Accrued | Paid | Difference | Document"
+        };
+        lines.AddRange(report.Rows.Select(row =>
+            string.Join(" | ",
+                FormatIncomeRowType(row.RowType),
+                row.Date.ToString("yyyy-MM-dd"),
+                row.AccountingMonth.ToString("yyyy-MM"),
+                row.GarageNumber,
+                row.OwnerName ?? string.Empty,
+                row.IncomeTypeName,
+                FormatAmount(row.AccrualAmount),
+                FormatAmount(row.IncomeAmount),
+                FormatAmount(row.Debt),
+                row.DocumentNumber ?? string.Empty)));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance income report", lines);
+        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+            BuildExportFileName("income", report.DateFrom, report.DateTo, "pdf"),
+            "application/pdf",
             content));
     }
 
@@ -418,8 +455,43 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             ]);
 
         return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
-            BuildExportFileName("expense", report.DateFrom, report.DateTo),
+            BuildExportFileName("expense", report.DateFrom, report.DateTo, "xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content));
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportExpenseReportPdfAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetExpenseReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
+            $"Accrued: {FormatAmount(report.AccrualTotal)} | Paid: {FormatAmount(report.ExpenseTotal)} | Difference: {FormatAmount(report.Difference)} | Rows: {report.RowCount}",
+            string.Empty,
+            "Type | Date | Month | Supplier | Expense type | Accrued | Paid | Difference | Document"
+        };
+        lines.AddRange(report.Rows.Select(row =>
+            string.Join(" | ",
+                FormatExpenseRowType(row.RowType),
+                row.Date.ToString("yyyy-MM-dd"),
+                row.AccountingMonth.ToString("yyyy-MM"),
+                row.SupplierName,
+                row.ExpenseTypeName,
+                FormatAmount(row.AccrualAmount),
+                FormatAmount(row.ExpenseAmount),
+                FormatAmount(row.Difference),
+                row.DocumentNumber ?? string.Empty)));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance expense report", lines);
+        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+            BuildExportFileName("expense", report.DateFrom, report.DateTo, "pdf"),
+            "application/pdf",
             content));
     }
 
@@ -507,10 +579,12 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
         return (start, end);
     }
 
-    private static string BuildExportFileName(string reportType, DateOnly dateFrom, DateOnly dateTo)
+    private static string BuildExportFileName(string reportType, DateOnly dateFrom, DateOnly dateTo, string extension)
     {
-        return $"garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.xlsx";
+        return $"garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.{extension}";
     }
+
+    private static string FormatAmount(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
 
     private static string FormatIncomeRowType(string rowType)
     {

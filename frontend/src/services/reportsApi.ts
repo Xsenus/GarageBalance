@@ -113,6 +113,18 @@ export type ReportClient = {
       rowMode?: string
     },
   ): Promise<Blob>
+  exportIncomeReportPdf(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      garageIds?: string[]
+      ownerIds?: string[]
+      incomeTypeIds?: string[]
+      rowMode?: string
+    },
+  ): Promise<Blob>
   getExpenseReport(
     accessToken: string,
     params?: {
@@ -125,6 +137,17 @@ export type ReportClient = {
     },
   ): Promise<ExpenseReportDto>
   exportExpenseReportXlsx(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      supplierIds?: string[]
+      expenseTypeIds?: string[]
+      rowMode?: string
+    },
+  ): Promise<Blob>
+  exportExpenseReportPdf(
     accessToken: string,
     params?: {
       dateFrom?: string
@@ -241,6 +264,10 @@ export const reportsApi: ReportClient = {
     const query = buildIncomeReportQuery(params)
     return requestBlob(accessToken, `/api/reports/income/export/xlsx${query ? `?${query}` : ''}`)
   },
+  exportIncomeReportPdf(accessToken, params = {}) {
+    const query = buildIncomeReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/income/export/pdf${query ? `?${query}` : ''}`)
+  },
   getExpenseReport(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)
     return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`)
@@ -248,5 +275,9 @@ export const reportsApi: ReportClient = {
   exportExpenseReportXlsx(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)
     return requestBlob(accessToken, `/api/reports/expense/export/xlsx${query ? `?${query}` : ''}`)
+  },
+  exportExpenseReportPdf(accessToken, params = {}) {
+    const query = buildExpenseReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/expense/export/pdf${query ? `?${query}` : ''}`)
   },
 }

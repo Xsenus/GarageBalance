@@ -5,6 +5,7 @@ import {
   BookOpenCheck,
   CircleDollarSign,
   DatabaseZap,
+  FileText,
   FileSpreadsheet,
   Gauge,
   LockKeyhole,
@@ -1177,10 +1178,33 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         incomeTypeIds: incomeFilters.incomeTypeIds,
         rowMode: incomeFilters.rowMode,
       })
-      downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo))
+      downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo, 'xlsx'))
       setExportMessage('XLSX по поступлениям готов.')
     } catch (caught) {
       setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет по поступлениям.')
+    } finally {
+      setIncomeExporting(false)
+    }
+  }
+
+  async function exportIncomePdf() {
+    setIncomeExporting(true)
+    setExportError(null)
+    setExportMessage(null)
+    try {
+      const blob = await reportClient.exportIncomeReportPdf(auth.accessToken, {
+        dateFrom: incomeFilters.dateFrom,
+        dateTo: incomeFilters.dateTo,
+        search: incomeFilters.search,
+        garageIds: incomeFilters.garageIds,
+        ownerIds: incomeFilters.ownerIds,
+        incomeTypeIds: incomeFilters.incomeTypeIds,
+        rowMode: incomeFilters.rowMode,
+      })
+      downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo, 'pdf'))
+      setExportMessage('PDF по поступлениям готов.')
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить PDF по поступлениям.')
     } finally {
       setIncomeExporting(false)
     }
@@ -1199,10 +1223,32 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         expenseTypeIds: expenseFilters.expenseTypeIds,
         rowMode: expenseFilters.rowMode,
       })
-      downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo))
+      downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo, 'xlsx'))
       setExportMessage('XLSX по выплатам готов.')
     } catch (caught) {
       setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет по выплатам.')
+    } finally {
+      setExpenseExporting(false)
+    }
+  }
+
+  async function exportExpensePdf() {
+    setExpenseExporting(true)
+    setExportError(null)
+    setExportMessage(null)
+    try {
+      const blob = await reportClient.exportExpenseReportPdf(auth.accessToken, {
+        dateFrom: expenseFilters.dateFrom,
+        dateTo: expenseFilters.dateTo,
+        search: expenseFilters.search,
+        supplierIds: expenseFilters.supplierIds,
+        expenseTypeIds: expenseFilters.expenseTypeIds,
+        rowMode: expenseFilters.rowMode,
+      })
+      downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo, 'pdf'))
+      setExportMessage('PDF по выплатам готов.')
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить PDF по выплатам.')
     } finally {
       setExpenseExporting(false)
     }
@@ -1352,6 +1398,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <FileSpreadsheet size={16} />
           <span>{incomeExporting ? 'Готовим XLSX' : 'Скачать поступления XLSX'}</span>
         </button>
+        <button className="secondary-button" type="button" onClick={exportIncomePdf} disabled={incomeLoading || incomeExporting}>
+          <FileText size={16} />
+          <span>{incomeExporting ? 'Готовим PDF' : 'Скачать поступления PDF'}</span>
+        </button>
       </form>
 
       <div className="summary-strip" aria-label="Итоги отчета по поступлениям">
@@ -1433,6 +1483,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <button className="secondary-button" type="button" onClick={exportExpenseXlsx} disabled={expenseLoading || expenseExporting}>
           <FileSpreadsheet size={16} />
           <span>{expenseExporting ? 'Готовим XLSX' : 'Скачать выплаты XLSX'}</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={exportExpensePdf} disabled={expenseLoading || expenseExporting}>
+          <FileText size={16} />
+          <span>{expenseExporting ? 'Готовим PDF' : 'Скачать выплаты PDF'}</span>
         </button>
       </form>
 
@@ -1888,8 +1942,8 @@ function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
 }
 
-function buildReportFileName(type: 'income' | 'expense', dateFrom: string, dateTo: string): string {
-  return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.xlsx`
+function buildReportFileName(type: 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
+  return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
 }
 
 function getFormValues(form: FormData, name: string): string[] {

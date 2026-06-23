@@ -296,6 +296,10 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления XLSX' }))
 
     expect(await within(reportsPanel).findByText('XLSX по поступлениям готов.')).toBeInTheDocument()
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления PDF' }))
+
+    expect(await within(reportsPanel).findByText('PDF по поступлениям готов.')).toBeInTheDocument()
   })
 
   it('shows expense report and applies expense filters', async () => {
@@ -340,6 +344,10 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты XLSX' }))
 
     expect(await within(reportsPanel).findByText('XLSX по выплатам готов.')).toBeInTheDocument()
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты PDF' }))
+
+    expect(await within(reportsPanel).findByText('PDF по выплатам готов.')).toBeInTheDocument()
   })
 
   it('shows login errors without opening protected workspace', async () => {
@@ -580,6 +588,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
       return report
     },
     exportIncomeReportXlsx: async () => new Blob(['income xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportIncomeReportPdf: async () => new Blob(['income pdf'], { type: 'application/pdf' }),
     getExpenseReport: async (_token, params) => {
       const report = createExpenseReport()
       if (params?.rowMode === 'payments') {
@@ -594,6 +603,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
       return report
     },
     exportExpenseReportXlsx: async () => new Blob(['expense xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportExpenseReportPdf: async () => new Blob(['expense pdf'], { type: 'application/pdf' }),
     ...overrides,
   }
 }

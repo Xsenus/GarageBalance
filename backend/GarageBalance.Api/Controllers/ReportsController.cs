@@ -83,6 +83,35 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
     }
 
+    [HttpGet("income/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportIncomeReportPdf(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        [FromQuery] Guid[]? garageIds,
+        [FromQuery] Guid[]? ownerIds,
+        [FromQuery] Guid[]? incomeTypeIds,
+        [FromQuery] string? rowMode,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportIncomeReportPdfAsync(
+            new IncomeReportRequest(
+                dateFrom,
+                dateTo,
+                search,
+                garageIds ?? [],
+                ownerIds ?? [],
+                incomeTypeIds ?? [],
+                rowMode),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+    }
+
     [HttpGet("expense")]
     [ProducesResponseType<ExpenseReportDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -123,6 +152,33 @@ public sealed class ReportsController(IReportService reportService) : Controller
         CancellationToken cancellationToken)
     {
         var result = await reportService.ExportExpenseReportXlsxAsync(
+            new ExpenseReportRequest(
+                dateFrom,
+                dateTo,
+                search,
+                supplierIds ?? [],
+                expenseTypeIds ?? [],
+                rowMode),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+    }
+
+    [HttpGet("expense/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportExpenseReportPdf(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        [FromQuery] Guid[]? supplierIds,
+        [FromQuery] Guid[]? expenseTypeIds,
+        [FromQuery] string? rowMode,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportExpenseReportPdfAsync(
             new ExpenseReportRequest(
                 dateFrom,
                 dateTo,
