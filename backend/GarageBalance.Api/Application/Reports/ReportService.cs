@@ -1,4 +1,5 @@
 using System.Globalization;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +18,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
 
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
-        var periodFrom = NormalizeMonth(request.MonthFrom ?? DateOnly.FromDateTime(DateTime.Today));
-        var periodTo = NormalizeMonth(request.MonthTo ?? periodFrom);
+        var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
+        var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
         if (periodTo < periodFrom)
         {
             return ReportResult<ConsolidatedReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
@@ -53,7 +54,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             .Where(garage => !garage.IsArchived && garage.StartingBalance != 0)
             .SumAsync(garage => garage.StartingBalance, cancellationToken);
 
-        var months = EnumerateMonths(periodFrom, periodTo).ToList();
+        var months = MonthPeriod.Enumerate(periodFrom, periodTo).ToList();
         var monthlyRows = months
             .Select(month =>
             {
@@ -781,23 +782,10 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             .ToList();
     }
 
-    private static IEnumerable<DateOnly> EnumerateMonths(DateOnly periodFrom, DateOnly periodTo)
-    {
-        for (var month = periodFrom; month <= periodTo; month = month.AddMonths(1))
-        {
-            yield return month;
-        }
-    }
-
-    private static DateOnly NormalizeMonth(DateOnly value)
-    {
-        return new DateOnly(value.Year, value.Month, 1);
-    }
-
     private static (DateOnly DateFrom, DateOnly DateTo) NormalizeDateRange(DateOnly? dateFrom, DateOnly? dateTo)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
-        var start = dateFrom ?? new DateOnly(today.Year, today.Month, 1);
+        var start = dateFrom ?? MonthPeriod.Normalize(today);
         var end = dateTo ?? new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
         return (start, end);
     }

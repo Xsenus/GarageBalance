@@ -60,6 +60,23 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetConsolidatedReportAsync_NormalizesReportPeriodToMonthStarts()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 23), 2000m, "regular", null), null, CancellationToken.None);
+
+        var result = await service.GetConsolidatedReportAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 30), new DateOnly(2026, 6, 15), null), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var month = Assert.Single(result.Value!.MonthlyRows);
+        Assert.Equal(new DateOnly(2026, 6, 1), month.AccountingMonth);
+        Assert.Equal(2000m, month.AccrualTotal);
+    }
+
+    [Fact]
     public async Task GetConsolidatedReportAsync_ReturnsErrorForInvalidPeriod()
     {
         await using var database = await TestDatabase.CreateAsync();

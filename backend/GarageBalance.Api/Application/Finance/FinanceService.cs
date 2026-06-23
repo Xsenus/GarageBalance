@@ -95,7 +95,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         {
             OperationKind = FinancialOperationKinds.Income,
             OperationDate = request.OperationDate,
-            AccountingMonth = NormalizeMonth(request.AccountingMonth),
+            AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth),
             Amount = MoneyMath.RoundMoney(request.Amount),
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
@@ -135,7 +135,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         {
             OperationKind = FinancialOperationKinds.Expense,
             OperationDate = request.OperationDate,
-            AccountingMonth = NormalizeMonth(request.AccountingMonth),
+            AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth),
             Amount = MoneyMath.RoundMoney(request.Amount),
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
@@ -176,7 +176,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
         }
 
-        var month = NormalizeMonth(request.AccountingMonth);
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
         if (await dbContext.Accruals.AnyAsync(
             accrual =>
                 !accrual.IsCanceled &&
@@ -232,7 +232,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
         }
 
-        var month = NormalizeMonth(request.AccountingMonth);
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
         if (await dbContext.SupplierAccruals.AnyAsync(
             accrual =>
@@ -268,7 +268,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
     public async Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var month = NormalizeMonth(request.AccountingMonth);
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
         var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
         if (incomeType is null)
         {
@@ -376,7 +376,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
-        var month = NormalizeMonth(request.AccountingMonth);
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
         if (await dbContext.MeterReadings.AnyAsync(
             reading => !reading.IsCanceled && reading.GarageId == garage.Id && reading.MeterKind == meterKind && reading.AccountingMonth == month,
             cancellationToken))
@@ -510,12 +510,12 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     {
         if (request.MonthFrom is not null)
         {
-            query = query.Where(reading => reading.AccountingMonth >= NormalizeMonth(request.MonthFrom.Value));
+            query = query.Where(reading => reading.AccountingMonth >= MonthPeriod.Normalize(request.MonthFrom.Value));
         }
 
         if (request.MonthTo is not null)
         {
-            query = query.Where(reading => reading.AccountingMonth <= NormalizeMonth(request.MonthTo.Value));
+            query = query.Where(reading => reading.AccountingMonth <= MonthPeriod.Normalize(request.MonthTo.Value));
         }
 
         if (!string.IsNullOrWhiteSpace(request.MeterKind))
@@ -539,12 +539,12 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     {
         if (request.MonthFrom is not null)
         {
-            query = query.Where(accrual => accrual.AccountingMonth >= NormalizeMonth(request.MonthFrom.Value));
+            query = query.Where(accrual => accrual.AccountingMonth >= MonthPeriod.Normalize(request.MonthFrom.Value));
         }
 
         if (request.MonthTo is not null)
         {
-            query = query.Where(accrual => accrual.AccountingMonth <= NormalizeMonth(request.MonthTo.Value));
+            query = query.Where(accrual => accrual.AccountingMonth <= MonthPeriod.Normalize(request.MonthTo.Value));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -563,12 +563,12 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     {
         if (request.MonthFrom is not null)
         {
-            query = query.Where(accrual => accrual.AccountingMonth >= NormalizeMonth(request.MonthFrom.Value));
+            query = query.Where(accrual => accrual.AccountingMonth >= MonthPeriod.Normalize(request.MonthFrom.Value));
         }
 
         if (request.MonthTo is not null)
         {
-            query = query.Where(accrual => accrual.AccountingMonth <= NormalizeMonth(request.MonthTo.Value));
+            query = query.Where(accrual => accrual.AccountingMonth <= MonthPeriod.Normalize(request.MonthTo.Value));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -611,11 +611,6 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             EntityId = entityId.ToString(),
             Summary = summary
         });
-    }
-
-    private static DateOnly NormalizeMonth(DateOnly value)
-    {
-        return new DateOnly(value.Year, value.Month, 1);
     }
 
     private static string? NormalizeOptional(string? value)
