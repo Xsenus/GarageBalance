@@ -27,7 +27,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportCheckDto, AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -272,6 +272,160 @@ function getTariffValidationErrors(form: UpsertTariffRequest) {
 
   if (!form.effectiveFrom || Number.isNaN(Date.parse(form.effectiveFrom))) {
     errors.push('Укажите дату начала тарифа.')
+  }
+
+  return errors
+}
+
+function isDateInputValue(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+}
+
+function isAccountingMonthValue(value: string) {
+  return /^\d{4}-\d{2}-01$/.test(value) && !Number.isNaN(Date.parse(value))
+}
+
+function addPositiveAmountValidation(errors: string[], amount: number, label: string) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    errors.push(`${label} должна быть больше 0.`)
+  }
+}
+
+function getIncomeValidationErrors(form: CreateIncomeOperationRequest) {
+  const errors: string[] = []
+
+  if (!form.garageId) {
+    errors.push('Выберите гараж для поступления.')
+  }
+
+  if (!form.incomeTypeId) {
+    errors.push('Выберите вид поступления.')
+  }
+
+  if (!isDateInputValue(form.operationDate)) {
+    errors.push('Укажите дату поступления.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц поступления.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма поступления')
+
+  return errors
+}
+
+function getExpenseValidationErrors(form: CreateExpenseOperationRequest) {
+  const errors: string[] = []
+
+  if (!form.supplierId) {
+    errors.push('Выберите поставщика для выплаты.')
+  }
+
+  if (!form.expenseTypeId) {
+    errors.push('Выберите вид выплаты.')
+  }
+
+  if (!isDateInputValue(form.operationDate)) {
+    errors.push('Укажите дату выплаты.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц выплаты.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма выплаты')
+
+  return errors
+}
+
+function getAccrualValidationErrors(form: CreateAccrualRequest) {
+  const errors: string[] = []
+
+  if (!form.garageId) {
+    errors.push('Выберите гараж для начисления.')
+  }
+
+  if (!form.incomeTypeId) {
+    errors.push('Выберите вид начисления.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц начисления.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма начисления')
+
+  if (!form.comment?.trim()) {
+    errors.push('Укажите комментарий начисления.')
+  }
+
+  return errors
+}
+
+function getSupplierAccrualValidationErrors(form: CreateSupplierAccrualRequest) {
+  const errors: string[] = []
+
+  if (!form.supplierId) {
+    errors.push('Выберите поставщика для начисления.')
+  }
+
+  if (!form.expenseTypeId) {
+    errors.push('Выберите вид начисления поставщику.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц начисления поставщику.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма начисления поставщику')
+
+  if (!form.comment?.trim()) {
+    errors.push('Укажите комментарий начисления поставщику.')
+  }
+
+  return errors
+}
+
+function getRegularAccrualValidationErrors(form: GenerateRegularAccrualsRequest) {
+  const errors: string[] = []
+
+  if (!form.incomeTypeId) {
+    errors.push('Выберите вид регулярного начисления.')
+  }
+
+  if (!form.tariffId) {
+    errors.push('Выберите тариф регулярного начисления.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц регулярных начислений.')
+  }
+
+  return errors
+}
+
+function getMeterReadingValidationErrors(form: CreateMeterReadingRequest) {
+  const errors: string[] = []
+
+  if (!form.garageId) {
+    errors.push('Выберите гараж для счетчика.')
+  }
+
+  if (!['water', 'electricity'].includes(form.meterKind)) {
+    errors.push('Выберите тип счетчика.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц показания.')
+  }
+
+  if (!isDateInputValue(form.readingDate)) {
+    errors.push('Укажите дату показания.')
+  }
+
+  if (!Number.isFinite(form.currentValue) || form.currentValue < 0) {
+    errors.push('Новое показание должно быть 0 или больше.')
   }
 
   return errors
@@ -838,6 +992,12 @@ function FinancePanel({
   const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
   const [regularStatus, setRegularStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
+  const [incomeValidationErrors, setIncomeValidationErrors] = useState<string[]>([])
+  const [expenseValidationErrors, setExpenseValidationErrors] = useState<string[]>([])
+  const [accrualValidationErrors, setAccrualValidationErrors] = useState<string[]>([])
+  const [supplierAccrualValidationErrors, setSupplierAccrualValidationErrors] = useState<string[]>([])
+  const [regularValidationErrors, setRegularValidationErrors] = useState<string[]>([])
+  const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -904,15 +1064,24 @@ function FinancePanel({
       return
     }
 
+    const request: CreateIncomeOperationRequest = {
+      garageId: incomeForm.garageId,
+      incomeTypeId: incomeForm.incomeTypeId,
+      operationDate: incomeForm.operationDate,
+      accountingMonth: incomeForm.accountingMonth,
+      amount: incomeForm.amount,
+      documentNumber: incomeForm.documentNumber,
+    }
+    const errors = getIncomeValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setIncomeValidationErrors(errors)
+      return
+    }
+
+    setIncomeValidationErrors([])
     await runSaving('income', async () => {
-      const operation = await financeClient.createIncome(auth.accessToken, {
-        garageId: incomeForm.garageId,
-        incomeTypeId: incomeForm.incomeTypeId,
-        operationDate: incomeForm.operationDate,
-        accountingMonth: incomeForm.accountingMonth,
-        amount: incomeForm.amount,
-        documentNumber: incomeForm.documentNumber,
-      })
+      const operation = await financeClient.createIncome(auth.accessToken, request)
       addOperation(operation)
       setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '' }))
     })
@@ -925,15 +1094,24 @@ function FinancePanel({
       return
     }
 
+    const request: CreateExpenseOperationRequest = {
+      supplierId: expenseForm.supplierId,
+      expenseTypeId: expenseForm.expenseTypeId,
+      operationDate: expenseForm.operationDate,
+      accountingMonth: expenseForm.accountingMonth,
+      amount: expenseForm.amount,
+      documentNumber: expenseForm.documentNumber,
+    }
+    const errors = getExpenseValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setExpenseValidationErrors(errors)
+      return
+    }
+
+    setExpenseValidationErrors([])
     await runSaving('expense', async () => {
-      const operation = await financeClient.createExpense(auth.accessToken, {
-        supplierId: expenseForm.supplierId,
-        expenseTypeId: expenseForm.expenseTypeId,
-        operationDate: expenseForm.operationDate,
-        accountingMonth: expenseForm.accountingMonth,
-        amount: expenseForm.amount,
-        documentNumber: expenseForm.documentNumber,
-      })
+      const operation = await financeClient.createExpense(auth.accessToken, request)
       addOperation(operation)
       setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '' }))
     })
@@ -946,15 +1124,24 @@ function FinancePanel({
       return
     }
 
+    const request: CreateAccrualRequest = {
+      garageId: accrualForm.garageId,
+      incomeTypeId: accrualForm.incomeTypeId,
+      accountingMonth: accrualForm.accountingMonth,
+      amount: accrualForm.amount,
+      source: 'manual',
+      comment: accrualForm.comment,
+    }
+    const errors = getAccrualValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setAccrualValidationErrors(errors)
+      return
+    }
+
+    setAccrualValidationErrors([])
     await runSaving('accrual', async () => {
-      const accrual = await financeClient.createAccrual(auth.accessToken, {
-        garageId: accrualForm.garageId,
-        incomeTypeId: accrualForm.incomeTypeId,
-        accountingMonth: accrualForm.accountingMonth,
-        amount: accrualForm.amount,
-        source: 'manual',
-        comment: accrualForm.comment,
-      })
+      const accrual = await financeClient.createAccrual(auth.accessToken, request)
       setAccruals((items) => [accrual, ...items])
       setSummary((value) => ({
         ...value,
@@ -973,13 +1160,22 @@ function FinancePanel({
       return
     }
 
+    const request: GenerateRegularAccrualsRequest = {
+      incomeTypeId: regularForm.incomeTypeId,
+      tariffId: regularForm.tariffId,
+      accountingMonth: regularForm.accountingMonth,
+      comment: regularForm.comment,
+    }
+    const errors = getRegularAccrualValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setRegularValidationErrors(errors)
+      return
+    }
+
+    setRegularValidationErrors([])
     await runSaving('regular-accruals', async () => {
-      const result = await financeClient.generateRegularAccruals(auth.accessToken, {
-        incomeTypeId: regularForm.incomeTypeId,
-        tariffId: regularForm.tariffId,
-        accountingMonth: regularForm.accountingMonth,
-        comment: regularForm.comment,
-      })
+      const result = await financeClient.generateRegularAccruals(auth.accessToken, request)
       setAccruals((items) => [...result.createdAccruals, ...items])
       setSummary((value) => ({
         ...value,
@@ -999,16 +1195,25 @@ function FinancePanel({
       return
     }
 
+    const request: CreateSupplierAccrualRequest = {
+      supplierId: supplierAccrualForm.supplierId,
+      expenseTypeId: supplierAccrualForm.expenseTypeId,
+      accountingMonth: supplierAccrualForm.accountingMonth,
+      amount: supplierAccrualForm.amount,
+      source: 'manual',
+      documentNumber: supplierAccrualForm.documentNumber,
+      comment: supplierAccrualForm.comment,
+    }
+    const errors = getSupplierAccrualValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setSupplierAccrualValidationErrors(errors)
+      return
+    }
+
+    setSupplierAccrualValidationErrors([])
     await runSaving('supplier-accrual', async () => {
-      const accrual = await financeClient.createSupplierAccrual(auth.accessToken, {
-        supplierId: supplierAccrualForm.supplierId,
-        expenseTypeId: supplierAccrualForm.expenseTypeId,
-        accountingMonth: supplierAccrualForm.accountingMonth,
-        amount: supplierAccrualForm.amount,
-        source: 'manual',
-        documentNumber: supplierAccrualForm.documentNumber,
-        comment: supplierAccrualForm.comment,
-      })
+      const accrual = await financeClient.createSupplierAccrual(auth.accessToken, request)
       setSupplierAccruals((items) => [accrual, ...items])
       setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
@@ -1021,15 +1226,24 @@ function FinancePanel({
       return
     }
 
+    const request: CreateMeterReadingRequest = {
+      garageId: meterForm.garageId,
+      meterKind: meterForm.meterKind,
+      accountingMonth: meterForm.accountingMonth,
+      readingDate: meterForm.readingDate,
+      currentValue: meterForm.currentValue,
+      comment: meterForm.comment,
+    }
+    const errors = getMeterReadingValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setMeterValidationErrors(errors)
+      return
+    }
+
+    setMeterValidationErrors([])
     await runSaving('meter-reading', async () => {
-      const reading = await financeClient.createMeterReading(auth.accessToken, {
-        garageId: meterForm.garageId,
-        meterKind: meterForm.meterKind,
-        accountingMonth: meterForm.accountingMonth,
-        readingDate: meterForm.readingDate,
-        currentValue: meterForm.currentValue,
-        comment: meterForm.comment,
-      })
+      const reading = await financeClient.createMeterReading(auth.accessToken, request)
       setMeterReadings((items) => [reading, ...items])
       setSummary((value) => ({ ...value, meterReadingCount: value.meterReadingCount + 1 }))
       setMeterForm((value) => ({ ...value, currentValue: 0, comment: '' }))
@@ -1239,6 +1453,7 @@ function FinancePanel({
             <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
+          <FormValidationSummary title="Проверьте поступление" items={incomeValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
             <Plus size={16} />
             <span>Провести</span>
@@ -1275,6 +1490,7 @@ function FinancePanel({
             <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
+          <FormValidationSummary title="Проверьте выплату" items={expenseValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
             <Plus size={16} />
             <span>Провести</span>
@@ -1308,6 +1524,7 @@ function FinancePanel({
             <input aria-label="Сумма начисления" type="number" min="0.01" step="0.01" value={accrualForm.amount} onChange={(event) => setAccrualForm({ ...accrualForm, amount: Number(event.target.value) })} required />
           </div>
           <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
+          <FormValidationSummary title="Проверьте начисление" items={accrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
             <Plus size={16} />
             <span>Начислить</span>
@@ -1344,6 +1561,7 @@ function FinancePanel({
             <input aria-label="Документ начисления поставщику" placeholder="Документ" value={supplierAccrualForm.documentNumber} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, documentNumber: event.target.value })} />
             <input aria-label="Комментарий начисления поставщику" placeholder="Комментарий" value={supplierAccrualForm.comment} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, comment: event.target.value })} required />
           </div>
+          <FormValidationSummary title="Проверьте начисление поставщику" items={supplierAccrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
             <Plus size={16} />
             <span>Начислить</span>
@@ -1374,6 +1592,7 @@ function FinancePanel({
           </select>
           <input aria-label="Месяц регулярных начислений" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />
           <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
+          <FormValidationSummary title="Проверьте регулярные начисления" items={regularValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
             <Plus size={16} />
             <span>Создать месяц</span>
@@ -1405,6 +1624,7 @@ function FinancePanel({
             <input aria-label="Новое показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />
             <input aria-label="Комментарий счетчика" placeholder="Комментарий" value={meterForm.comment} onChange={(event) => setMeterForm({ ...meterForm, comment: event.target.value })} />
           </div>
+          <FormValidationSummary title="Проверьте показание счетчика" items={meterValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'meter-reading' || !meterForm.garageId}>
             <Plus size={16} />
             <span>Внести</span>

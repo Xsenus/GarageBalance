@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
@@ -814,6 +814,83 @@ describe('App', () => {
     expect(await within(financePanel).findByText('-500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('Переплата')).toBeInTheDocument()
+  })
+
+  it('does not call finance APIs when payment forms fail client validation', async () => {
+    const user = userEvent.setup()
+    const financeCalls = {
+      income: false,
+      expense: false,
+      accrual: false,
+      supplierAccrual: false,
+      regular: false,
+      meter: false,
+    }
+    const financeClient = createFinanceClient({
+      createIncome: async () => {
+        financeCalls.income = true
+        return createFinancialOperation({})
+      },
+      createExpense: async () => {
+        financeCalls.expense = true
+        return createFinancialOperation({ operationKind: 'expense' })
+      },
+      createAccrual: async () => {
+        financeCalls.accrual = true
+        return createAccrual({})
+      },
+      createSupplierAccrual: async () => {
+        financeCalls.supplierAccrual = true
+        return createSupplierAccrual({})
+      },
+      generateRegularAccruals: async () => {
+        financeCalls.regular = true
+        return createRegularAccrualGenerationResult({})
+      },
+      createMeterReading: async () => {
+        financeCalls.meter = true
+        return createMeterReading({})
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    fireEvent.submit(within(financePanel).getByLabelText('Сумма поступления').closest('form')!)
+    expect(await within(financePanel).findByText('Проверьте поступление')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Сумма поступления должна быть больше 0.')).toBeInTheDocument()
+    expect(financeCalls.income).toBe(false)
+
+    fireEvent.submit(within(financePanel).getByLabelText('Сумма выплаты').closest('form')!)
+    expect(await within(financePanel).findByText('Проверьте выплату')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Сумма выплаты должна быть больше 0.')).toBeInTheDocument()
+    expect(financeCalls.expense).toBe(false)
+
+    fireEvent.submit(within(financePanel).getByLabelText('Сумма начисления').closest('form')!)
+    expect(await within(financePanel).findByText('Проверьте начисление')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Сумма начисления должна быть больше 0.')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Укажите комментарий начисления.')).toBeInTheDocument()
+    expect(financeCalls.accrual).toBe(false)
+
+    fireEvent.submit(within(financePanel).getByLabelText('Сумма начисления поставщику').closest('form')!)
+    expect(await within(financePanel).findByText('Проверьте начисление поставщику')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Сумма начисления поставщику должна быть больше 0.')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Укажите комментарий начисления поставщику.')).toBeInTheDocument()
+    expect(financeCalls.supplierAccrual).toBe(false)
+
+    fireEvent.change(within(financePanel).getByLabelText('Месяц регулярных начислений'), { target: { value: '' } })
+    fireEvent.submit(within(financePanel).getByLabelText('Месяц регулярных начислений').closest('form')!)
+    expect(await within(financePanel).findByText('Проверьте регулярные начисления')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Укажите месяц регулярных начислений.')).toBeInTheDocument()
+    expect(financeCalls.regular).toBe(false)
+
+    fireEvent.change(within(financePanel).getByLabelText('Новое показание'), { target: { value: '-1' } })
+    fireEvent.submit(within(financePanel).getByLabelText('Новое показание').closest('form')!)
+    expect(await within(financePanel).findByText('Проверьте показание счетчика')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Новое показание должно быть 0 или больше.')).toBeInTheDocument()
+    expect(financeCalls.meter).toBe(false)
   })
 
   it('cancels income operation with required reason from payments workspace', async () => {
