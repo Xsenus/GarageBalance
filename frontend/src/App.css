@@ -723,6 +723,13 @@ h1 {
   padding-top: 8px;
 }
 
+.dictionary-list li.is-active {
+  border-top-color: #8bc6b8;
+  background: #f3fbf8;
+  border-radius: 8px;
+  padding: 8px;
+}
+
 .dictionary-list li > span {
   display: grid;
   gap: 3px;
@@ -735,8 +742,27 @@ h1 {
 }
 
 .dictionary-list strong {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   color: #101828;
   font-size: 14px;
+}
+
+.dictionary-list .icon-button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.dictionary-state {
+  border: 1px solid #8bc6b8;
+  border-radius: 999px;
+  color: #176b5b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 7px;
 }
 
 .dictionary-list span,

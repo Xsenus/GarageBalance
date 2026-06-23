@@ -3821,6 +3821,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: item.id,
               title: item.name,
               meta: `${formatMoney(item.rate)} с ${formatDateOnly(item.effectiveFrom)}${item.comment ? ` · ${item.comment}` : ''}`,
+              isActive: editingTariffId === item.id,
+              activeLabel: 'Редактируется',
               openLabel: canManageTariffs ? `Изменить тариф ${item.name}` : undefined,
               onOpen: canManageTariffs ? () => editTariff(item) : undefined,
               archiveLabel: canManageTariffs ? `Архивировать тариф ${item.name}` : undefined,
@@ -3890,6 +3892,8 @@ type DictionaryListItem = {
   id: string
   title: string
   meta: string
+  isActive?: boolean
+  activeLabel?: string
   openLabel?: string
   onOpen?: () => void
   archiveLabel?: string
@@ -3927,14 +3931,17 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
     <>
       <ul className="dictionary-list">
         {items.slice(0, 5).map((item) => (
-          <li key={item.id}>
+          <li className={item.isActive ? 'is-active' : undefined} aria-current={item.isActive ? 'true' : undefined} key={item.id}>
             <span>
-              <strong>{item.title}</strong>
+              <strong>
+                {item.title}
+                {item.isActive ? <span className="dictionary-state">{item.activeLabel ?? 'Открыто'}</span> : null}
+              </strong>
               <span>{item.meta}</span>
             </span>
             <span className="dictionary-actions">
               {item.onOpen ? (
-                <button className="icon-button" type="button" aria-label={item.openLabel ?? `Открыть ${item.title}`} onClick={item.onOpen}>
+                <button className="icon-button" type="button" aria-label={item.openLabel ?? `Открыть ${item.title}`} onClick={item.onOpen} disabled={item.isActive} title={item.isActive ? 'Запись уже открыта' : undefined}>
                   <FileText size={16} />
                 </button>
               ) : null}

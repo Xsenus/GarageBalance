@@ -464,6 +464,8 @@ describe('App', () => {
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' }))
     expect(within(dictionaryPanel).getByText('Изменение тарифа')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Редактируется')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' })).toBeDisabled()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
     await user.type(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'), 'Вода черновик')
@@ -471,13 +473,17 @@ describe('App', () => {
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф обслуживания' }))
     expect(confirmSpy).toHaveBeenCalledWith('Перейти к другому тарифу без сохранения изменений?')
     expect(within(tariffForm as HTMLElement).getByLabelText('Название тарифа')).toHaveValue('Вода черновик')
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' })).toBeDisabled()
 
     confirmSpy.mockReturnValue(true)
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф обслуживания' }))
     expect(within(tariffForm as HTMLElement).getByLabelText('Название тарифа')).toHaveValue('Тариф обслуживания')
     expect(within(tariffForm as HTMLElement).queryByText('Есть несохраненные изменения тарифа.')).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' })).toBeEnabled()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф обслуживания' })).toBeDisabled()
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' }))
     expect(within(tariffForm as HTMLElement).getByLabelText('Название тарифа')).toHaveValue('Тариф воды')
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' })).toBeDisabled()
 
     confirmSpy.mockReturnValue(false)
     await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
