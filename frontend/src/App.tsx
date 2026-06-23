@@ -1520,7 +1520,29 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <FileText size={16} />
             <span>Скачать отчет JSON</span>
           </button>
-          {currentRun ? <p className="empty-state">{currentRun.originalFileName} · {currentRun.passedChecks}/{currentRun.totalChecks}</p> : <p className="empty-state">Выберите запуск dry-run</p>}
+          {currentRun ? (
+            <>
+              <p className="empty-state">{currentRun.originalFileName} · {currentRun.passedChecks}/{currentRun.totalChecks}</p>
+              <div className="summary-strip" aria-label="Итоги dry-run импорта">
+                <div>
+                  <span>Статус</span>
+                  <strong>{currentRun.status === 'completed' ? 'Завершен' : 'Заблокирован'}</strong>
+                </div>
+                <div>
+                  <span>Успешно</span>
+                  <strong className="status-active">{currentRun.passedChecks}</strong>
+                </div>
+                <div>
+                  <span>Предупреждения</span>
+                  <strong className="warning-text">{currentRun.warningCount}</strong>
+                </div>
+                <div>
+                  <span>Ошибки</span>
+                  <strong className={currentRun.errorCount > 0 ? 'status-disabled' : 'status-active'}>{currentRun.errorCount}</strong>
+                </div>
+              </div>
+            </>
+          ) : <p className="empty-state">Выберите запуск dry-run</p>}
         </div>
 
         <div className="operation-list" role="table" aria-label="Проверки импорта">
