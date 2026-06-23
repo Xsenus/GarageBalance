@@ -236,21 +236,28 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GetExpenseReportAsync_ReturnsEmptyRowsForAccrualModeUntilSupplierAccrualsExist()
+    public async Task GetExpenseReportAsync_ReturnsSupplierAccrualRows()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
         var service = new ReportService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
+        await finance.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 650m, "manual", "INV-1", "Счет поставщика"), null, CancellationToken.None);
 
         var result = await service.GetExpenseReportAsync(
             new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "accruals"),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Empty(result.Value!.Rows);
+        Assert.Equal(650m, result.Value!.AccrualTotal);
         Assert.Equal(0m, result.Value.ExpenseTotal);
+        Assert.Equal(650m, result.Value.Difference);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("accruals", row.RowType);
+        Assert.Equal("Vodokanal", row.SupplierName);
+        Assert.Equal("INV-1", row.DocumentNumber);
+        Assert.Equal(650m, row.AccrualAmount);
     }
 
     [Fact]

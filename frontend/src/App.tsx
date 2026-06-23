@@ -22,7 +22,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -401,11 +401,13 @@ function FinancePanel({
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
   const [accruals, setAccruals] = useState<AccrualDto[]>([])
+  const [supplierAccruals, setSupplierAccruals] = useState<SupplierAccrualDto[]>([])
   const [meterReadings, setMeterReadings] = useState<MeterReadingDto[]>([])
   const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0, meterReadingCount: 0 })
   const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, comment: '' })
+  const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
   const [regularStatus, setRegularStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
@@ -419,7 +421,7 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken),
           dictionaryClient.getSuppliers(auth.accessToken),
           dictionaryClient.getIncomeTypes(auth.accessToken),
@@ -427,6 +429,7 @@ function FinancePanel({
           dictionaryClient.getTariffs(auth.accessToken),
           financeClient.getOperations(auth.accessToken),
           financeClient.getAccruals(auth.accessToken),
+          financeClient.getSupplierAccruals(auth.accessToken),
           financeClient.getMeterReadings(auth.accessToken),
           financeClient.getSummary(auth.accessToken),
         ])
@@ -438,11 +441,13 @@ function FinancePanel({
           setTariffs(loadedTariffs)
           setOperations(loadedOperations)
           setAccruals(loadedAccruals)
+          setSupplierAccruals(loadedSupplierAccruals)
           setMeterReadings(loadedMeterReadings)
           setSummary(loadedSummary)
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setRegularForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '', tariffId: value.tariffId || loadedTariffs[0]?.id || '' }))
           setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
         }
@@ -535,6 +540,23 @@ function FinancePanel({
       }))
       setRegularStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
       setRegularForm((value) => ({ ...value, comment: '' }))
+    })
+  }
+
+  async function saveSupplierAccrual(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runSaving('supplier-accrual', async () => {
+      const accrual = await financeClient.createSupplierAccrual(auth.accessToken, {
+        supplierId: supplierAccrualForm.supplierId,
+        expenseTypeId: supplierAccrualForm.expenseTypeId,
+        accountingMonth: supplierAccrualForm.accountingMonth,
+        amount: supplierAccrualForm.amount,
+        source: 'manual',
+        documentNumber: supplierAccrualForm.documentNumber,
+        comment: supplierAccrualForm.comment,
+      })
+      setSupplierAccruals((items) => [accrual, ...items])
+      setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
   }
 
@@ -730,6 +752,42 @@ function FinancePanel({
           </button>
         </form>
 
+        <form className="dictionary-form" onSubmit={saveSupplierAccrual}>
+          <h3>Начисление поставщику</h3>
+          <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, supplierId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите поставщика
+            </option>
+            {suppliers.map((supplier) => (
+              <option value={supplier.id} key={supplier.id}>
+                {supplier.name}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Вид начисления поставщику" value={supplierAccrualForm.expenseTypeId} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, expenseTypeId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите вид
+            </option>
+            {expenseTypes.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Месяц начисления поставщику" type="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${event.target.value}-01` })} required />
+            <input aria-label="Сумма начисления поставщику" type="number" min="0.01" step="0.01" value={supplierAccrualForm.amount} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, amount: Number(event.target.value) })} required />
+          </div>
+          <div className="inline-fields">
+            <input aria-label="Документ начисления поставщику" placeholder="Документ" value={supplierAccrualForm.documentNumber} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, documentNumber: event.target.value })} />
+            <input aria-label="Комментарий начисления поставщику" placeholder="Комментарий" value={supplierAccrualForm.comment} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, comment: event.target.value })} required />
+          </div>
+          <button className="secondary-button" type="submit" disabled={saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
+            <Plus size={16} />
+            <span>Начислить</span>
+          </button>
+        </form>
+
         <form className="dictionary-form" onSubmit={saveRegularAccruals}>
           <h3>Регулярные начисления</h3>
           <select aria-label="Вид регулярного начисления" value={regularForm.incomeTypeId} onChange={(event) => setRegularForm({ ...regularForm, incomeTypeId: event.target.value })} required>
@@ -828,6 +886,27 @@ function FinancePanel({
                 <small>Гараж {accrual.garageNumber}</small>
               </span>
               <span role="cell" className="money-accrual">
+                {formatMoney(accrual.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="Последние начисления поставщикам">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Месяц</span>
+            <span role="columnheader">Поставщик</span>
+            <span role="columnheader">Сумма</span>
+          </div>
+          {supplierAccruals.length === 0 ? <p className="empty-state">Начислений поставщикам пока нет</p> : null}
+          {supplierAccruals.slice(0, 8).map((accrual) => (
+            <div className="operation-row" role="row" key={accrual.id}>
+              <span role="cell">{accrual.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">
+                <strong>{accrual.supplierName}</strong>
+                <small>{accrual.expenseTypeName}</small>
+              </span>
+              <span role="cell" className="money-expense">
                 {formatMoney(accrual.amount)}
               </span>
             </div>

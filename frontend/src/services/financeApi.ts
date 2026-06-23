@@ -43,6 +43,20 @@ export type AccrualDto = {
   isCanceled: boolean
 }
 
+export type SupplierAccrualDto = {
+  id: string
+  supplierId: string
+  supplierName: string
+  expenseTypeId: string
+  expenseTypeName: string
+  accountingMonth: string
+  amount: number
+  source: 'manual' | 'regular'
+  documentNumber: string | null
+  comment: string | null
+  isCanceled: boolean
+}
+
 export type MeterReadingDto = {
   id: string
   garageId: string
@@ -88,6 +102,16 @@ export type CreateAccrualRequest = {
   comment?: string
 }
 
+export type CreateSupplierAccrualRequest = {
+  supplierId: string
+  expenseTypeId: string
+  accountingMonth: string
+  amount: number
+  source: 'manual' | 'regular'
+  documentNumber?: string
+  comment?: string
+}
+
 export type GenerateRegularAccrualsRequest = {
   incomeTypeId: string
   tariffId: string
@@ -121,11 +145,13 @@ export type CreateMeterReadingRequest = {
 export type FinanceClient = {
   getOperations(accessToken: string): Promise<FinancialOperationDto[]>
   getAccruals(accessToken: string): Promise<AccrualDto[]>
+  getSupplierAccruals(accessToken: string): Promise<SupplierAccrualDto[]>
   getMeterReadings(accessToken: string): Promise<MeterReadingDto[]>
   getSummary(accessToken: string): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
+  createSupplierAccrual(accessToken: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
 }
@@ -157,6 +183,9 @@ export const financeApi: FinanceClient = {
   getAccruals(accessToken) {
     return requestJson(accessToken, '/api/finance/accruals')
   },
+  getSupplierAccruals(accessToken) {
+    return requestJson(accessToken, '/api/finance/supplier-accruals')
+  },
   getMeterReadings(accessToken) {
     return requestJson(accessToken, '/api/finance/meter-readings')
   },
@@ -171,6 +200,9 @@ export const financeApi: FinanceClient = {
   },
   createAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createSupplierAccrual(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/supplier-accruals', { method: 'POST', body: JSON.stringify(request) })
   },
   generateRegularAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals/generate-regular', { method: 'POST', body: JSON.stringify(request) })

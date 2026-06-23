@@ -34,6 +34,17 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetAccrualsAsync(new AccrualListRequest(monthFrom, monthTo, search), cancellationToken));
     }
 
+    [HttpGet("supplier-accruals")]
+    [ProducesResponseType<IReadOnlyList<SupplierAccrualDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SupplierAccrualDto>>> GetSupplierAccruals(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search), cancellationToken));
+    }
+
     [HttpGet("meter-readings")]
     [ProducesResponseType<IReadOnlyList<MeterReadingDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MeterReadingDto>>> GetMeterReadings(
@@ -101,6 +112,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("supplier-accruals")]
+    [ProducesResponseType<SupplierAccrualDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SupplierAccrualDto>> CreateSupplierAccrual(CreateSupplierAccrualRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateSupplierAccrualAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetSupplierAccruals), new { search = result.Value!.SupplierName }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("accruals/generate-regular")]
     [ProducesResponseType<RegularAccrualGenerationResultDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -144,7 +169,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(problem),
-            "operation_duplicate" or "accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(problem),
+            "operation_duplicate" or "accrual_duplicate" or "supplier_accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(problem),
             _ => BadRequest(problem)
         };
     }

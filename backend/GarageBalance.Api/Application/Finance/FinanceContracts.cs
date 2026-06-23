@@ -58,12 +58,34 @@ public sealed record AccrualDto(
     string? Comment,
     bool IsCanceled);
 
+public sealed record SupplierAccrualDto(
+    Guid Id,
+    Guid SupplierId,
+    string SupplierName,
+    Guid ExpenseTypeId,
+    string ExpenseTypeName,
+    DateOnly AccountingMonth,
+    decimal Amount,
+    string Source,
+    string? DocumentNumber,
+    string? Comment,
+    bool IsCanceled);
+
 public sealed record CreateAccrualRequest(
     Guid GarageId,
     Guid IncomeTypeId,
     DateOnly AccountingMonth,
     [property: Range(0.01, 999999999)] decimal Amount,
     [property: Required, MaxLength(40)] string Source,
+    [property: MaxLength(1000)] string? Comment);
+
+public sealed record CreateSupplierAccrualRequest(
+    Guid SupplierId,
+    Guid ExpenseTypeId,
+    DateOnly AccountingMonth,
+    [property: Range(0.01, 999999999)] decimal Amount,
+    [property: Required, MaxLength(40)] string Source,
+    [property: MaxLength(120)] string? DocumentNumber,
     [property: MaxLength(1000)] string? Comment);
 
 public sealed record GenerateRegularAccrualsRequest(
@@ -86,6 +108,11 @@ public sealed record RegularAccrualGenerationResultDto(
     IReadOnlyList<string> SkippedGarages);
 
 public sealed record AccrualListRequest(
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo,
+    string? Search);
+
+public sealed record SupplierAccrualListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
     string? Search);

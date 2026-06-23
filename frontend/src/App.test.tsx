@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto } from './services/financeApi'
 import type { AccessImportRunDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -168,10 +168,31 @@ describe('App', () => {
     await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
     await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
     await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
-    await user.click(within(financePanel).getByRole('button', { name: 'Начислить' }))
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
 
     expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
     expect(within(financePanel).getByRole('table', { name: 'Последние начисления' })).toBeInTheDocument()
+  })
+
+  it('creates supplier accrual from payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
+    await user.type(within(financePanel).getByLabelText('Документ начисления поставщику'), 'INV-1')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[1])
+
+    expect((await within(financePanel).findAllByText('650,00')).length).toBeGreaterThan(0)
+    const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
+    expect(supplierAccrualTable).toBeInTheDocument()
+    expect(within(supplierAccrualTable).getByText('Водоканал')).toBeInTheDocument()
   })
 
   it('generates regular accruals from tariff in payments workspace', async () => {
@@ -535,16 +556,19 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     incomeTypeName: 'Членский взнос',
   })
   const accrual = createAccrual({ id: 'accrual-1', amount: 2000, garageNumber: '12', incomeTypeName: 'Членский взнос' })
+  const supplierAccrual = createSupplierAccrual({ id: 'supplier-accrual-1', amount: 650 })
   const meterReading = createMeterReading({ id: 'meter-reading-1', consumption: 5.5, currentValue: 15.5, previousValue: 10 })
 
   return {
     getOperations: async () => [operation],
     getAccruals: async () => [accrual],
+    getSupplierAccruals: async () => [supplierAccrual],
     getMeterReadings: async () => [meterReading],
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     createAccrual: async () => accrual,
+    createSupplierAccrual: async () => supplierAccrual,
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     createMeterReading: async () => meterReading,
     ...overrides,
@@ -638,6 +662,7 @@ function createStatefulImportClient(): ImportClient {
 function createStatefulFinanceClient(): FinanceClient {
   let operations: FinancialOperationDto[] = []
   let accruals: AccrualDto[] = []
+  let supplierAccruals: SupplierAccrualDto[] = []
   let meterReadings: MeterReadingDto[] = []
 
   function summary(): FinanceSummaryDto {
@@ -650,6 +675,7 @@ function createStatefulFinanceClient(): FinanceClient {
   return {
     getOperations: async () => operations,
     getAccruals: async () => accruals,
+    getSupplierAccruals: async () => supplierAccruals,
     getMeterReadings: async () => meterReadings,
     getSummary: async () => summary(),
     createIncome: async (_token, request) => {
@@ -688,6 +714,20 @@ function createStatefulFinanceClient(): FinanceClient {
         comment: request.comment ?? null,
       })
       accruals = [accrual, ...accruals]
+      return accrual
+    },
+    createSupplierAccrual: async (_token, request) => {
+      const accrual = createSupplierAccrual({
+        id: crypto.randomUUID(),
+        supplierId: request.supplierId,
+        expenseTypeId: request.expenseTypeId,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        source: request.source,
+        documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
+      })
+      supplierAccruals = [accrual, ...supplierAccruals]
       return accrual
     },
     generateRegularAccruals: async (_token, request) => {
@@ -953,6 +993,23 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     accountingMonth: '2026-06-01',
     amount: 100,
     source: 'manual',
+    comment: null,
+    isCanceled: false,
+    ...overrides,
+  }
+}
+
+function createSupplierAccrual(overrides: Partial<SupplierAccrualDto>): SupplierAccrualDto {
+  return {
+    id: 'supplier-accrual',
+    supplierId: 'supplier-1',
+    supplierName: 'Водоканал',
+    expenseTypeId: 'expense-type-1',
+    expenseTypeName: 'Вода',
+    accountingMonth: '2026-06-01',
+    amount: 100,
+    source: 'manual',
+    documentNumber: null,
     comment: null,
     isCanceled: false,
     ...overrides,

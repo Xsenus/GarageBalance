@@ -24,6 +24,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
+    public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
 
@@ -226,6 +227,28 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(accrual => accrual.IncomeType)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.IncomeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SupplierAccrual>(entity =>
+        {
+            entity.ToTable("supplier_accruals");
+            entity.HasKey(accrual => accrual.Id);
+            entity.Property(accrual => accrual.Amount).HasPrecision(18, 2);
+            entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
+            entity.Property(accrual => accrual.DocumentNumber).HasMaxLength(120);
+            entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
+            entity.HasIndex(accrual => accrual.AccountingMonth);
+            entity.HasIndex(accrual => accrual.SupplierId);
+            entity.HasIndex(accrual => accrual.ExpenseTypeId);
+            entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber }).IsUnique();
+            entity.HasOne(accrual => accrual.Supplier)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(accrual => accrual.ExpenseType)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.ExpenseTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -97,6 +97,41 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateSupplierAccrual_ReturnsConflictForDuplicateAccrual()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateSupplierAccrualResult = FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Начисление поставщику уже внесено.")
+        });
+
+        var result = await controller.CreateSupplierAccrual(
+            new CreateSupplierAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), 100m, "regular", "INV-1", null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("supplier_accrual_duplicate", problem.Title);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAccrual_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            CreateSupplierAccrualResult = FinanceResult<SupplierAccrualDto>.Success(CreateSupplierAccrual())
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateSupplierAccrual(
+            new CreateSupplierAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), 100m, "regular", "INV-1", null),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccruals_ReturnsConflictWhenNothingCreated()
     {
         var controller = CreateController(new FakeFinanceService
@@ -233,6 +268,22 @@ public sealed class FinanceControllerTests
             false);
     }
 
+    private static SupplierAccrualDto CreateSupplierAccrual()
+    {
+        return new SupplierAccrualDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Водоканал",
+            Guid.NewGuid(),
+            "Вода",
+            new DateOnly(2026, 6, 1),
+            100m,
+            "regular",
+            "INV-1",
+            null,
+            false);
+    }
+
     private static RegularAccrualGenerationResultDto CreateGenerationResult()
     {
         var accrual = CreateAccrual();
@@ -256,6 +307,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<SupplierAccrualDto> CreateSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
 
@@ -267,6 +319,11 @@ public sealed class FinanceControllerTests
         public Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlyList<AccrualDto>>([]);
+        }
+
+        public Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<SupplierAccrualDto>>([]);
         }
 
         public Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
@@ -295,6 +352,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateAccrualResult);
+        }
+
+        public Task<FinanceResult<SupplierAccrualDto>> CreateSupplierAccrualAsync(CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateSupplierAccrualResult);
         }
 
         public Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)

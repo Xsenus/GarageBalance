@@ -30,6 +30,16 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
+    {
+        return await ApplySupplierAccrualFilters(QuerySupplierAccruals(), request)
+            .OrderByDescending(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.Supplier.Name)
+            .Take(ListLimit)
+            .Select(accrual => ToDto(accrual))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
     {
         return await ApplyMeterReadingFilters(QueryMeterReadings(), request)
@@ -194,6 +204,65 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         AddAudit(actorUserId, "finance.accrual_created", "accrual", accrual.Id, $"Создано начисление {accrual.Amount:N2} по гаражу {garage.Number} за {accrual.AccountingMonth:MM.yyyy}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+    }
+
+    public async Task<FinanceResult<SupplierAccrualDto>> CreateSupplierAccrualAsync(CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var source = request.Source.Trim();
+        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_comment_required", "Для ручного начисления поставщику нужен комментарий.");
+        }
+
+        if (source is not AccrualSources.Manual and not AccrualSources.Regular)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_source_invalid", "Источник начисления поставщику должен быть manual или regular.");
+        }
+
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        if (supplier is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_not_found", "Поставщик для начисления не найден.");
+        }
+
+        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        if (expenseType is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
+        }
+
+        var month = NormalizeMonth(request.AccountingMonth);
+        var documentNumber = NormalizeOptional(request.DocumentNumber);
+        if (await dbContext.SupplierAccruals.AnyAsync(
+            accrual =>
+                !accrual.IsCanceled &&
+                accrual.SupplierId == supplier.Id &&
+                accrual.ExpenseTypeId == expenseType.Id &&
+                accrual.AccountingMonth == month &&
+                accrual.Source == source &&
+                accrual.DocumentNumber == documentNumber,
+            cancellationToken))
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
+        }
+
+        var accrual = new SupplierAccrual
+        {
+            SupplierId = supplier.Id,
+            Supplier = supplier,
+            ExpenseTypeId = expenseType.Id,
+            ExpenseType = expenseType,
+            AccountingMonth = month,
+            Amount = request.Amount,
+            Source = source,
+            DocumentNumber = documentNumber,
+            Comment = NormalizeOptional(request.Comment)
+        };
+
+        dbContext.SupplierAccruals.Add(accrual);
+        AddAudit(actorUserId, "finance.supplier_accrual_created", "supplier_accrual", accrual.Id, $"Создано начисление {accrual.Amount:N2} поставщику {supplier.Name} за {accrual.AccountingMonth:MM.yyyy}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
 
     public async Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -386,6 +455,14 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .Where(accrual => !accrual.IsCanceled);
     }
 
+    private IQueryable<SupplierAccrual> QuerySupplierAccruals()
+    {
+        return dbContext.SupplierAccruals.AsNoTracking()
+            .Include(accrual => accrual.Supplier)
+            .Include(accrual => accrual.ExpenseType)
+            .Where(accrual => !accrual.IsCanceled);
+    }
+
     private IQueryable<MeterReading> QueryMeterReadings()
     {
         return dbContext.MeterReadings.AsNoTracking()
@@ -472,6 +549,31 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             query = query.Where(accrual =>
                 accrual.Garage.Number.ToLower().Contains(search) ||
                 accrual.IncomeType.Name.ToLower().Contains(search) ||
+                (accrual.Comment != null && accrual.Comment.ToLower().Contains(search)));
+        }
+
+        return query;
+    }
+
+    private static IQueryable<SupplierAccrual> ApplySupplierAccrualFilters(IQueryable<SupplierAccrual> query, SupplierAccrualListRequest request)
+    {
+        if (request.MonthFrom is not null)
+        {
+            query = query.Where(accrual => accrual.AccountingMonth >= NormalizeMonth(request.MonthFrom.Value));
+        }
+
+        if (request.MonthTo is not null)
+        {
+            query = query.Where(accrual => accrual.AccountingMonth <= NormalizeMonth(request.MonthTo.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLowerInvariant();
+            query = query.Where(accrual =>
+                accrual.Supplier.Name.ToLower().Contains(search) ||
+                accrual.ExpenseType.Name.ToLower().Contains(search) ||
+                (accrual.DocumentNumber != null && accrual.DocumentNumber.ToLower().Contains(search)) ||
                 (accrual.Comment != null && accrual.Comment.ToLower().Contains(search)));
         }
 
@@ -566,6 +668,22 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             accrual.AccountingMonth,
             accrual.Amount,
             accrual.Source,
+            accrual.Comment,
+            accrual.IsCanceled);
+    }
+
+    private static SupplierAccrualDto ToDto(SupplierAccrual accrual)
+    {
+        return new SupplierAccrualDto(
+            accrual.Id,
+            accrual.SupplierId,
+            accrual.Supplier.Name,
+            accrual.ExpenseTypeId,
+            accrual.ExpenseType.Name,
+            accrual.AccountingMonth,
+            accrual.Amount,
+            accrual.Source,
+            accrual.DocumentNumber,
             accrual.Comment,
             accrual.IsCanceled);
     }

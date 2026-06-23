@@ -366,6 +366,46 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
         var expenseTypeIds = request.ExpenseTypeIds.ToHashSet();
         var rows = new List<ExpenseReportRowDto>();
 
+        if (rowMode is ExpenseReportAllRows or ExpenseReportAccrualRows)
+        {
+            var accrualsQuery = dbContext.SupplierAccruals.AsNoTracking()
+                .Include(accrual => accrual.Supplier)
+                .Include(accrual => accrual.ExpenseType)
+                .Where(accrual =>
+                    !accrual.IsCanceled &&
+                    accrual.AccountingMonth >= dateFrom &&
+                    accrual.AccountingMonth <= dateTo);
+
+            if (supplierIds.Count > 0)
+            {
+                accrualsQuery = accrualsQuery.Where(accrual => supplierIds.Contains(accrual.SupplierId));
+            }
+
+            if (expenseTypeIds.Count > 0)
+            {
+                accrualsQuery = accrualsQuery.Where(accrual => expenseTypeIds.Contains(accrual.ExpenseTypeId));
+            }
+
+            var accrualRows = await accrualsQuery
+                .OrderBy(accrual => accrual.AccountingMonth)
+                .ThenBy(accrual => accrual.Supplier.Name)
+                .ToListAsync(cancellationToken);
+
+            rows.AddRange(accrualRows.Select(accrual => new ExpenseReportRowDto(
+                ExpenseReportAccrualRows,
+                accrual.AccountingMonth,
+                accrual.AccountingMonth,
+                accrual.SupplierId,
+                accrual.Supplier.Name,
+                accrual.ExpenseTypeId,
+                accrual.ExpenseType.Name,
+                accrual.Amount,
+                0m,
+                accrual.Amount,
+                accrual.DocumentNumber,
+                accrual.Comment)));
+        }
+
         if (rowMode is ExpenseReportAllRows or ExpenseReportPaymentRows)
         {
             var paymentsQuery = dbContext.FinancialOperations.AsNoTracking()
