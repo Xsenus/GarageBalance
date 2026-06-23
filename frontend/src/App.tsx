@@ -3903,6 +3903,7 @@ type DictionaryListItem = {
 function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+  const visibleItems = items.slice(0, 5)
   useRestoreFocusOnClose(Boolean(pendingArchive))
   const archiveCancelButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingArchive) && !confirmingArchive)
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingArchive))
@@ -3930,7 +3931,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
   return (
     <>
       <ul className="dictionary-list">
-        {items.slice(0, 5).map((item) => (
+        {visibleItems.map((item) => (
           <li className={item.isActive ? 'is-active' : undefined} aria-current={item.isActive ? 'true' : undefined} key={item.id}>
             <span>
               <strong>
@@ -3954,6 +3955,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
           </li>
         ))}
       </ul>
+      {items.length > visibleItems.length ? <p className="empty-state">Показано {visibleItems.length} из {items.length} записей</p> : null}
       {pendingArchive ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
           if (!confirmingArchive) {

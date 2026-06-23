@@ -584,6 +584,25 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
   })
 
+  it('shows dictionary list truncation counter when there are more rows', async () => {
+    const user = userEvent.setup()
+    const owners = Array.from({ length: 6 }, (_, index) => createOwner({ id: `owner-${index + 1}`, lastName: `Владелец${index + 1}`, firstName: 'Тест' }))
+    const dictionaryClient: DictionaryClient = {
+      ...createStatefulDictionaryClient(),
+      getOwners: async () => owners,
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
+
+    expect(await within(ownerForm as HTMLElement).findByText('Владелец1 Тест')).toBeInTheDocument()
+    expect(within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')).toBeInTheDocument()
+    expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
+  })
+
   it('does not call dictionary APIs when owner and garage forms fail client validation', async () => {
     const user = userEvent.setup()
     let createOwnerCalled = false
