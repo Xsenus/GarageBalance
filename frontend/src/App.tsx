@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import {
   Bell,
@@ -2457,11 +2457,13 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
   const [garageSearch, setGarageSearch] = useState('')
   const [garageSearchStatus, setGarageSearchStatus] = useState<string | null>(null)
+  const garageSearchInitialized = useRef(false)
   const [selectedGarage, setSelectedGarage] = useState<GarageDto | null>(null)
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
   const [supplierSearch, setSupplierSearch] = useState('')
   const [supplierSearchStatus, setSupplierSearchStatus] = useState<string | null>(null)
+  const supplierSearchInitialized = useRef(false)
   const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
   const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
   const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
@@ -2517,7 +2519,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   useEffect(() => {
     const query = garageSearch.trim()
-    if (!query) {
+    if (!garageSearchInitialized.current) {
+      garageSearchInitialized.current = true
       return
     }
 
@@ -2525,11 +2528,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     const timeoutId = window.setTimeout(() => {
       setError(null)
       dictionaryClient
-        .getGarages(auth.accessToken, query)
+        .getGarages(auth.accessToken, query || undefined)
         .then((result) => {
           if (!ignore) {
             setGarages(result)
-            setGarageSearchStatus(`Найдено гаражей: ${result.length}`)
+            setGarageSearchStatus(query ? `Найдено гаражей: ${result.length}` : 'Показаны все гаражи')
           }
         })
         .catch((caught) => {
@@ -2547,7 +2550,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   useEffect(() => {
     const query = supplierSearch.trim()
-    if (!query) {
+    if (!supplierSearchInitialized.current) {
+      supplierSearchInitialized.current = true
       return
     }
 
@@ -2555,11 +2559,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     const timeoutId = window.setTimeout(() => {
       setError(null)
       dictionaryClient
-        .getSuppliers(auth.accessToken, undefined, query)
+        .getSuppliers(auth.accessToken, undefined, query || undefined)
         .then((result) => {
           if (!ignore) {
             setSuppliers(result)
-            setSupplierSearchStatus(`Найдено поставщиков: ${result.length}`)
+            setSupplierSearchStatus(query ? `Найдено поставщиков: ${result.length}` : 'Показаны все поставщики')
           }
         })
         .catch((caught) => {

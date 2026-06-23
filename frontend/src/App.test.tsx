@@ -508,6 +508,15 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Гараж 12')).not.toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toBeInTheDocument()
+
+    await user.clear(within(dictionaryPanel).getByLabelText('Поиск гаража или владельца'))
+
+    await waitFor(() => {
+      expect(garageSearch).toBeUndefined()
+    })
+    expect(await within(dictionaryPanel).findByText('Гараж 12')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Гараж 21')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Показаны все гаражи')).toBeInTheDocument()
   })
 
   it('searches suppliers by name or inn from dictionaries workspace', async () => {
@@ -538,6 +547,15 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Альфа-Банк')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Водоканал')).not.toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Найдено поставщиков: 1')).toBeInTheDocument()
+
+    await user.clear(within(dictionaryPanel).getByLabelText('Поиск поставщика'))
+
+    await waitFor(() => {
+      expect(supplierSearch).toBeUndefined()
+    })
+    expect(await within(dictionaryPanel).findByText('Водоканал')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Альфа-Банк')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Показаны все поставщики')).toBeInTheDocument()
   })
 
   it('archives owner from dictionaries workspace', async () => {
