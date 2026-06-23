@@ -132,6 +132,28 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.FirstGarage.StartingBalance = 750m;
+        await database.Context.SaveChangesAsync();
+        var service = new ReportService(database.Context);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "accruals"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(750m, result.Value!.AccrualTotal);
+        Assert.Equal(750m, result.Value.Debt);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("starting_balance", row.RowType);
+        Assert.Equal("Стартовый баланс", row.IncomeTypeName);
+        Assert.Equal(750m, row.AccrualAmount);
+    }
+
+    [Fact]
     public async Task GetIncomeReportAsync_FiltersByOwnerIncomeTypeAndRowMode()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -200,6 +222,28 @@ public sealed class ReportServiceTests
         Assert.Equal("Vodokanal", row.SupplierName);
         Assert.Equal("RKO-1", row.DocumentNumber);
         Assert.Equal(400m, row.ExpenseAmount);
+    }
+
+    [Fact]
+    public async Task GetExpenseReportAsync_IncludesSupplierStartingBalanceAsObligation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.StartingBalance = 1200m;
+        await database.Context.SaveChangesAsync();
+        var service = new ReportService(database.Context);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "accruals"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1200m, result.Value!.AccrualTotal);
+        Assert.Equal(1200m, result.Value.Difference);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("starting_balance", row.RowType);
+        Assert.Equal("Стартовый баланс", row.ExpenseTypeName);
+        Assert.Equal(1200m, row.AccrualAmount);
     }
 
     [Fact]

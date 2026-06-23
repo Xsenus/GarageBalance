@@ -16,7 +16,7 @@ public sealed class DictionariesControllerTests
             CreateGarageResult = DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Гараж с таким номером уже существует.")
         });
 
-        var result = await controller.CreateGarage(new UpsertGarageRequest("12", 1, 1, null, null, null, null), CancellationToken.None);
+        var result = await controller.CreateGarage(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);

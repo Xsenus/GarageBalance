@@ -10,6 +10,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     private const string IncomeReportAllRows = "all";
     private const string IncomeReportAccrualRows = "accruals";
     private const string IncomeReportPaymentRows = "payments";
+    private const string StartingBalanceRows = "starting_balance";
     private const string ExpenseReportAllRows = "all";
     private const string ExpenseReportAccrualRows = "accruals";
     private const string ExpenseReportPaymentRows = "payments";
@@ -48,6 +49,9 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             .GroupBy(reading => reading.AccountingMonth)
             .Select(group => new CountByMonth(group.Key, group.Count()))
             .ToListAsync(cancellationToken);
+        var garageStartingBalanceTotal = await dbContext.Garages.AsNoTracking()
+            .Where(garage => !garage.IsArchived && garage.StartingBalance != 0)
+            .SumAsync(garage => garage.StartingBalance, cancellationToken);
 
         var months = EnumerateMonths(periodFrom, periodTo).ToList();
         var monthlyRows = months
@@ -57,15 +61,16 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 var expense = expenseByMonth.SingleOrDefault(row => row.Month == month);
                 var accrual = accrualByMonth.SingleOrDefault(row => row.Month == month);
                 var readings = readingsByMonth.SingleOrDefault(row => row.Month == month);
+                var startingBalance = month == periodFrom ? garageStartingBalanceTotal : 0m;
                 return new MonthlyReportRowDto(
                     month,
                     income.Amount,
                     expense.Amount,
-                    accrual.Amount,
+                    accrual.Amount + startingBalance,
                     income.Amount - expense.Amount,
-                    accrual.Amount - income.Amount,
+                    accrual.Amount + startingBalance - income.Amount,
                     income.Count + expense.Count,
-                    accrual.Count,
+                    accrual.Count + (startingBalance != 0 ? 1 : 0),
                     readings.Count);
             })
             .ToList();
@@ -222,6 +227,43 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
 
         if (rowMode is IncomeReportAllRows or IncomeReportAccrualRows)
         {
+            if (incomeTypeIds.Count == 0)
+            {
+                var garagesQuery = dbContext.Garages.AsNoTracking()
+                    .Include(garage => garage.Owner)
+                    .Where(garage => !garage.IsArchived && garage.StartingBalance != 0);
+
+                if (garageIds.Count > 0)
+                {
+                    garagesQuery = garagesQuery.Where(garage => garageIds.Contains(garage.Id));
+                }
+
+                if (ownerIds.Count > 0)
+                {
+                    garagesQuery = garagesQuery.Where(garage => garage.OwnerId != null && ownerIds.Contains(garage.OwnerId.Value));
+                }
+
+                var startingBalanceRows = await garagesQuery
+                    .OrderBy(garage => garage.Number)
+                    .ToListAsync(cancellationToken);
+
+                rows.AddRange(startingBalanceRows.Select(garage => new IncomeReportRowDto(
+                    StartingBalanceRows,
+                    dateFrom,
+                    dateFrom,
+                    garage.Id,
+                    garage.Number,
+                    garage.OwnerId,
+                    garage.Owner?.FullName,
+                    Guid.Empty,
+                    "Стартовый баланс",
+                    garage.StartingBalance,
+                    0m,
+                    garage.StartingBalance,
+                    null,
+                    "Начальная задолженность гаража")));
+            }
+
             var accrualsQuery = dbContext.Accruals.AsNoTracking()
                 .Include(accrual => accrual.Garage)
                 .ThenInclude(garage => garage.Owner)
@@ -368,6 +410,35 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
 
         if (rowMode is ExpenseReportAllRows or ExpenseReportAccrualRows)
         {
+            if (expenseTypeIds.Count == 0)
+            {
+                var suppliersQuery = dbContext.Suppliers.AsNoTracking()
+                    .Where(supplier => !supplier.IsArchived && supplier.StartingBalance != 0);
+
+                if (supplierIds.Count > 0)
+                {
+                    suppliersQuery = suppliersQuery.Where(supplier => supplierIds.Contains(supplier.Id));
+                }
+
+                var startingBalanceRows = await suppliersQuery
+                    .OrderBy(supplier => supplier.Name)
+                    .ToListAsync(cancellationToken);
+
+                rows.AddRange(startingBalanceRows.Select(supplier => new ExpenseReportRowDto(
+                    StartingBalanceRows,
+                    dateFrom,
+                    dateFrom,
+                    supplier.Id,
+                    supplier.Name,
+                    Guid.Empty,
+                    "Стартовый баланс",
+                    supplier.StartingBalance,
+                    0m,
+                    supplier.StartingBalance,
+                    null,
+                    "Начальное обязательство перед поставщиком")));
+            }
+
             var accrualsQuery = dbContext.SupplierAccruals.AsNoTracking()
                 .Include(accrual => accrual.Supplier)
                 .Include(accrual => accrual.ExpenseType)
@@ -703,7 +774,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 var income = incomeByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Amount;
                 var accrual = accrualByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Amount;
                 var readings = readingsByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Count;
-                return new GarageReportRowDto(garage.Id, garage.Number, garage.Owner?.FullName, income, accrual, accrual - income, readings);
+                var accrualWithStartingBalance = accrual + garage.StartingBalance;
+                return new GarageReportRowDto(garage.Id, garage.Number, garage.Owner?.FullName, income, accrualWithStartingBalance, accrualWithStartingBalance - income, readings);
             })
             .Where(row => row.IncomeTotal != 0 || row.AccrualTotal != 0 || row.MeterReadingCount != 0)
             .ToList();
@@ -741,6 +813,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     {
         return rowType switch
         {
+            StartingBalanceRows => "Стартовый баланс",
             IncomeReportAccrualRows => "Начисление",
             IncomeReportPaymentRows => "Оплата",
             _ => rowType
@@ -751,6 +824,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     {
         return rowType switch
         {
+            StartingBalanceRows => "Стартовый баланс",
             ExpenseReportAccrualRows => "Начисление",
             ExpenseReportPaymentRows => "Выплата",
             _ => rowType

@@ -6,6 +6,7 @@ public sealed class Garage
     public required string Number { get; set; }
     public int PeopleCount { get; set; }
     public int FloorCount { get; set; }
+    public decimal StartingBalance { get; set; }
     public decimal? InitialWaterMeterValue { get; set; }
     public decimal? InitialElectricityMeterValue { get; set; }
     public string? Comment { get; set; }

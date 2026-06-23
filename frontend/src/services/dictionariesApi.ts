@@ -17,6 +17,7 @@ export type GarageDto = {
   floorCount: number
   ownerId: string | null
   ownerName: string | null
+  startingBalance: number
   initialWaterMeterValue: number | null
   initialElectricityMeterValue: number | null
   comment: string | null
@@ -77,6 +78,7 @@ export type UpsertGarageRequest = {
   peopleCount: number
   floorCount: number
   ownerId?: string | null
+  startingBalance: number
   initialWaterMeterValue?: number | null
   initialElectricityMeterValue?: number | null
   comment?: string

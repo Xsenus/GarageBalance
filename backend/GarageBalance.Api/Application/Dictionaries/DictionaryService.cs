@@ -125,6 +125,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             Number = number,
             PeopleCount = request.PeopleCount,
             FloorCount = request.FloorCount,
+            StartingBalance = request.StartingBalance,
             OwnerId = request.OwnerId,
             Owner = owner,
             InitialWaterMeterValue = request.InitialWaterMeterValue,
@@ -161,6 +162,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         garage.Number = number;
         garage.PeopleCount = request.PeopleCount;
         garage.FloorCount = request.FloorCount;
+        garage.StartingBalance = request.StartingBalance;
         garage.OwnerId = request.OwnerId;
         garage.Owner = owner;
         garage.InitialWaterMeterValue = request.InitialWaterMeterValue;
@@ -536,6 +538,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             garage.FloorCount,
             garage.OwnerId,
             garage.Owner?.FullName,
+            garage.StartingBalance,
             garage.InitialWaterMeterValue,
             garage.InitialElectricityMeterValue,
             garage.Comment,

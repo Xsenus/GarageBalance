@@ -80,7 +80,7 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
 
         var result = await service.CreateGarageAsync(
-            new UpsertGarageRequest("A-1", 1, 1, Guid.NewGuid(), 10, 20, null),
+            new UpsertGarageRequest("A-1", 1, 1, Guid.NewGuid(), 0, 10, 20, null),
             null,
             CancellationToken.None);
 
@@ -93,9 +93,9 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
-        await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, null, null, null), null, CancellationToken.None);
+        await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
-        var result = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, null, null, null, null), null, CancellationToken.None);
+        var result = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, null, 0, null, null, null), null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("garage_number_duplicate", result.ErrorCode);
@@ -107,11 +107,11 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Кузнецов", "Олег", null, null, null, null), null, CancellationToken.None);
-        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, null, null, null), null, CancellationToken.None);
+        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
         var result = await service.UpdateGarageAsync(
             garageResult.Value!.Id,
-            new UpsertGarageRequest("15A", 3, 2, ownerResult.Value!.Id, 1.5m, 9.75m, "угловой"),
+            new UpsertGarageRequest("15A", 3, 2, ownerResult.Value!.Id, 250m, 1.5m, 9.75m, "угловой"),
             null,
             CancellationToken.None);
 
@@ -119,6 +119,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal("15A", result.Value!.Number);
         Assert.Equal("Кузнецов Олег", result.Value.OwnerName);
         Assert.Equal(3, result.Value.PeopleCount);
+        Assert.Equal(250m, result.Value.StartingBalance);
     }
 
     [Fact]
@@ -126,7 +127,7 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
-        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, null, null, null), null, CancellationToken.None);
+        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
         var result = await service.ArchiveGarageAsync(garageResult.Value!.Id, null, CancellationToken.None);
         var garages = await service.GetGaragesAsync(null, CancellationToken.None);

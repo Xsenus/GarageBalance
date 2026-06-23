@@ -28,6 +28,7 @@ public sealed record GarageDto(
     int FloorCount,
     Guid? OwnerId,
     string? OwnerName,
+    decimal StartingBalance,
     decimal? InitialWaterMeterValue,
     decimal? InitialElectricityMeterValue,
     string? Comment,
@@ -38,6 +39,7 @@ public sealed record UpsertGarageRequest(
     [property: Range(0, 1000)] int PeopleCount,
     [property: Range(0, 100)] int FloorCount,
     Guid? OwnerId,
+    decimal StartingBalance,
     [property: Range(0, 999999999)] decimal? InitialWaterMeterValue,
     [property: Range(0, 999999999)] decimal? InitialElectricityMeterValue,
     [property: MaxLength(1000)] string? Comment);

@@ -107,18 +107,23 @@ describe('App', () => {
     expect((await within(dictionaryPanel).findAllByText('Петров Петр')).length).toBeGreaterThan(0)
 
     await user.type(within(dictionaryPanel).getByLabelText('Номер гаража'), '21')
+    await user.clear(within(dictionaryPanel).getByLabelText('Стартовый баланс гаража'))
+    await user.type(within(dictionaryPanel).getByLabelText('Стартовый баланс гаража'), '350')
     await user.selectOptions(within(dictionaryPanel).getByLabelText('Владелец гаража'), within(dictionaryPanel).getByRole('option', { name: 'Петров Петр' }))
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[1])
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).getAllByText('Петров Петр').length).toBeGreaterThan(0)
+    expect(within(dictionaryPanel).getByText(/старт 350,00/)).toBeInTheDocument()
 
     await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), 'Связь')
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
     await user.type(within(dictionaryPanel).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
     await user.type(within(dictionaryPanel).getByLabelText('ИНН поставщика'), '5401000000')
+    await user.clear(within(dictionaryPanel).getByLabelText('Стартовый баланс поставщика'))
+    await user.type(within(dictionaryPanel).getByLabelText('Стартовый баланс поставщика'), '1200')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
   })
 
   it('archives owner from dictionaries workspace', async () => {
@@ -919,6 +924,7 @@ function createStatefulDictionaryClient(): DictionaryClient {
         number: request.number,
         ownerId: owner?.id ?? null,
         ownerName: owner?.fullName ?? null,
+        startingBalance: request.startingBalance,
       })
     },
     archiveGarage: async () => undefined,
@@ -938,6 +944,7 @@ function createStatefulDictionaryClient(): DictionaryClient {
         groupId: group.id,
         groupName: group.name,
         inn: request.inn ?? null,
+        startingBalance: request.startingBalance,
       })
     },
     archiveSupplier: async () => undefined,
@@ -1051,6 +1058,7 @@ function createGarage(overrides: Partial<GarageDto>): GarageDto {
     floorCount: 1,
     ownerId: null,
     ownerName: null,
+    startingBalance: 0,
     initialWaterMeterValue: null,
     initialElectricityMeterValue: null,
     comment: null,

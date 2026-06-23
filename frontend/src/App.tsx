@@ -1663,7 +1663,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
             <span role="cell">
               <strong>{row.date}</strong>
-              <small>{row.rowType === 'accruals' ? 'начисление' : 'оплата'}</small>
+              <small>{row.rowType === 'starting_balance' ? 'стартовый баланс' : row.rowType === 'accruals' ? 'начисление' : 'оплата'}</small>
             </span>
             <span role="cell">
               <strong>Гараж {row.garageNumber} · {row.incomeTypeName}</strong>
@@ -1749,7 +1749,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
             <span role="cell">
               <strong>{row.date}</strong>
-              <small>{row.rowType === 'accruals' ? 'начисление' : 'выплата'}</small>
+              <small>{row.rowType === 'starting_balance' ? 'стартовый баланс' : row.rowType === 'accruals' ? 'начисление' : 'выплата'}</small>
             </span>
             <span role="cell">
               <strong>{row.supplierName} · {row.expenseTypeName}</strong>
@@ -1891,7 +1891,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [ownerForm, setOwnerForm] = useState({ lastName: '', firstName: '', phone: '' })
-  const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '' })
+  const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0 })
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
   const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
@@ -1961,9 +1961,10 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
         peopleCount: garageForm.peopleCount,
         floorCount: garageForm.floorCount,
         ownerId: garageForm.ownerId || null,
+        startingBalance: garageForm.startingBalance,
       })
       setGarages((items) => [garage, ...items])
-      setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '' })
+      setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0 })
     })
   }
 
@@ -2078,6 +2079,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Количество людей" type="number" min="0" value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />
             <input aria-label="Количество этажей" type="number" min="0" value={garageForm.floorCount} onChange={(event) => setGarageForm({ ...garageForm, floorCount: Number(event.target.value) })} />
           </div>
+          <input aria-label="Стартовый баланс гаража" type="number" step="0.01" value={garageForm.startingBalance} onChange={(event) => setGarageForm({ ...garageForm, startingBalance: Number(event.target.value) })} />
           <select aria-label="Владелец гаража" value={garageForm.ownerId} onChange={(event) => setGarageForm({ ...garageForm, ownerId: event.target.value })}>
             <option value="">Без владельца</option>
             {owners.map((owner) => (
@@ -2094,7 +2096,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             items={garages.map((garage) => ({
               id: garage.id,
               title: `Гараж ${garage.number}`,
-              meta: garage.ownerName ?? 'владелец не указан',
+              meta: `${garage.ownerName ?? 'владелец не указан'} · старт ${formatMoney(garage.startingBalance)}`,
               archiveLabel: `Архивировать гараж ${garage.number}`,
               onArchive: () => archiveDictionaryItem('garage', async () => {
                 await dictionaryClient.archiveGarage(auth.accessToken, garage.id)
@@ -2126,6 +2128,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               ))}
             </select>
             <input aria-label="ИНН поставщика" placeholder="ИНН" value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />
+            <input aria-label="Стартовый баланс поставщика" type="number" step="0.01" value={supplierForm.startingBalance} onChange={(event) => setSupplierForm({ ...supplierForm, startingBalance: Number(event.target.value) })} />
             <button className="secondary-button" type="submit" disabled={!defaultGroupId || saving === 'supplier'}>
               <Plus size={16} />
               <span>Добавить</span>
@@ -2135,7 +2138,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             items={suppliers.map((supplier) => ({
               id: supplier.id,
               title: supplier.name,
-              meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''}`,
+              meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''} · старт ${formatMoney(supplier.startingBalance)}`,
               archiveLabel: `Архивировать поставщика ${supplier.name}`,
               onArchive: () => archiveDictionaryItem('supplier', async () => {
                 await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id)

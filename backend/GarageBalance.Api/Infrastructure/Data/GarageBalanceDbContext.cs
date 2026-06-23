@@ -105,6 +105,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("garages");
             entity.HasKey(garage => garage.Id);
             entity.Property(garage => garage.Number).HasMaxLength(80).IsRequired();
+            entity.Property(garage => garage.StartingBalance).HasPrecision(18, 2);
             entity.Property(garage => garage.InitialWaterMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.InitialElectricityMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.Comment).HasMaxLength(1000);
