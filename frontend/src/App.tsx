@@ -1950,13 +1950,13 @@ function FinancePanel({
       </div>
       {accrualBreakdown ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setAccrualBreakdown(null)}>
-          <section ref={accrualBreakdownDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="accrual-breakdown-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={accrualBreakdownDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="accrual-breakdown-title" aria-describedby="accrual-breakdown-period" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <h3 id="accrual-breakdown-title">
                   {accrualBreakdown.kind === 'garage' ? 'Разбивка начисления' : 'Разбивка начисления поставщику'}
                 </h3>
-                <p>{formatMonth(accrualBreakdown.accrual.accountingMonth)}</p>
+                <p id="accrual-breakdown-period">{formatMonth(accrualBreakdown.accrual.accountingMonth)}</p>
               </div>
               <button ref={accrualBreakdownCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть разбивку" onClick={() => setAccrualBreakdown(null)}>
                 <X size={18} aria-hidden="true" />

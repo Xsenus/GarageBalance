@@ -1103,6 +1103,9 @@ describe('App', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
     const closeBreakdownButton = within(dialog).getByRole('button', { name: 'Закрыть разбивку' })
+    const accrualPeriodDescription = dialog.querySelector('#accrual-breakdown-period') as HTMLElement
+    expect(accrualPeriodDescription).toHaveTextContent('06.2026')
+    expect(dialog).toHaveAttribute('aria-describedby', accrualPeriodDescription.id)
     await waitFor(() => expect(closeBreakdownButton).toHaveFocus())
     await user.tab()
     expect(closeBreakdownButton).toHaveFocus()
