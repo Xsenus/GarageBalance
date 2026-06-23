@@ -881,7 +881,8 @@ button.operation-row:hover {
 
 .money-income,
 .money-expense,
-.money-accrual {
+.money-accrual,
+.money-overpayment {
   font-weight: 750;
   text-align: right;
 }
@@ -896,6 +897,10 @@ button.operation-row:hover {
 
 .money-accrual {
   color: #1849a9;
+}
+
+.money-overpayment {
+  color: #027a48;
 }
 
 .operation-amount {

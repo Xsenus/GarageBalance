@@ -935,8 +935,8 @@ function FinancePanel({
           <strong>{formatMoney(summary.accrualTotal)}</strong>
         </div>
         <div>
-          <span>Задолженность</span>
-          <strong>{formatMoney(summary.debt)}</strong>
+          <span>{formatDebtLabel(summary.debt)}</span>
+          <strong className={getDebtClassName(summary.debt)}>{formatDebtAmount(summary.debt)}</strong>
         </div>
         <div>
           <span>Выплаты</span>
@@ -1993,8 +1993,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <strong>{formatMoney(report?.incomeTotal ?? 0)}</strong>
         </div>
         <div>
-          <span>Задолженность</span>
-          <strong>{formatMoney(report?.debt ?? 0)}</strong>
+          <span>{formatDebtLabel(report?.debt ?? 0)}</span>
+          <strong className={getDebtClassName(report?.debt ?? 0)}>{formatDebtAmount(report?.debt ?? 0)}</strong>
         </div>
         <div>
           <span>Выплаты</span>
@@ -2023,8 +2023,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
                   {formatMoney(row.incomeTotal)} поступило, {formatMoney(row.expenseTotal)} выплат
                 </small>
               </span>
-              <span role="cell" className="money-accrual">
-                {formatMoney(row.debt)}
+              <span role="cell" className={getDebtClassName(row.debt)}>
+                {formatDebtAmount(row.debt)}
               </span>
             </div>
           ))}
@@ -2047,8 +2047,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
                 <strong>{formatMoney(row.accrualTotal)}</strong>
                 <small>{formatMoney(row.incomeTotal)} оплачено</small>
               </span>
-              <span role="cell" className="money-accrual">
-                {formatMoney(row.debt)}
+              <span role="cell" className={getDebtClassName(row.debt)}>
+                {formatDebtAmount(row.debt)}
               </span>
             </div>
           ))}
@@ -2119,8 +2119,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <strong>{formatMoney(incomeReport?.incomeTotal ?? 0)}</strong>
         </div>
         <div>
-          <span>Разница</span>
-          <strong>{formatMoney(incomeReport?.debt ?? 0)}</strong>
+          <span>{formatDebtLabel(incomeReport?.debt ?? 0)}</span>
+          <strong className={getDebtClassName(incomeReport?.debt ?? 0)}>{formatDebtAmount(incomeReport?.debt ?? 0)}</strong>
         </div>
       </div>
 
@@ -2923,6 +2923,18 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
+}
+
+function formatDebtLabel(value: number): string {
+  return value < 0 ? 'Переплата' : 'Задолженность'
+}
+
+function formatDebtAmount(value: number): string {
+  return formatMoney(Math.abs(value))
+}
+
+function getDebtClassName(value: number): string {
+  return value < 0 ? 'money-overpayment' : 'money-accrual'
 }
 
 function getLocalDateInputValue(date = new Date()): string {

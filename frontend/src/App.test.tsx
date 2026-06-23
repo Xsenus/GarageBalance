@@ -554,6 +554,7 @@ describe('App', () => {
 
     expect(await within(financePanel).findByText('-500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Переплата')).toBeInTheDocument()
   })
 
   it('cancels income operation with required reason from payments workspace', async () => {
@@ -922,6 +923,7 @@ describe('App', () => {
 
     expect((await within(reportsPanel).findAllByText('1 строк')).length).toBeGreaterThan(0)
     expect((await within(reportsPanel).findAllByText('1 500,00')).length).toBeGreaterThan(0)
+    expect(within(reportsPanel).getByText('Переплата')).toBeInTheDocument()
     expect(incomeRequest?.garageIds).toEqual(['garage-1'])
     expect(incomeRequest?.ownerIds).toEqual(['owner-1'])
     expect(incomeRequest?.incomeTypeIds).toEqual(['income-type-1'])
