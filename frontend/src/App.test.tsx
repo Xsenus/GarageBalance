@@ -249,6 +249,14 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сформировать' }))
 
     expect(await within(reportsPanel).findByText('Гараж 21')).toBeInTheDocument()
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный XLSX' }))
+
+    expect(await within(reportsPanel).findByText('XLSX по сводному отчету готов.')).toBeInTheDocument()
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный PDF' }))
+
+    expect(await within(reportsPanel).findByText('PDF по сводному отчету готов.')).toBeInTheDocument()
   })
 
   it('shows income report and applies income filters', async () => {
@@ -574,6 +582,8 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
       }
       return report
     },
+    exportConsolidatedReportXlsx: async () => new Blob(['consolidated xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportConsolidatedReportPdf: async () => new Blob(['consolidated pdf'], { type: 'application/pdf' }),
     getIncomeReport: async (_token, params) => {
       const report = createIncomeReport()
       if (params?.rowMode === 'payments') {

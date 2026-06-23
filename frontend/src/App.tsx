@@ -1007,6 +1007,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [incomeLoading, setIncomeLoading] = useState(true)
   const [expenseLoading, setExpenseLoading] = useState(true)
   const [incomeExporting, setIncomeExporting] = useState(false)
@@ -1164,6 +1165,36 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     })
   }
 
+  async function exportConsolidatedXlsx() {
+    setExporting(true)
+    setExportError(null)
+    setExportMessage(null)
+    try {
+      const blob = await reportClient.exportConsolidatedReportXlsx(auth.accessToken, filters)
+      downloadBlob(blob, buildReportFileName('consolidated', filters.monthFrom, filters.monthTo, 'xlsx'))
+      setExportMessage('XLSX по сводному отчету готов.')
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить XLSX по сводному отчету.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function exportConsolidatedPdf() {
+    setExporting(true)
+    setExportError(null)
+    setExportMessage(null)
+    try {
+      const blob = await reportClient.exportConsolidatedReportPdf(auth.accessToken, filters)
+      downloadBlob(blob, buildReportFileName('consolidated', filters.monthFrom, filters.monthTo, 'pdf'))
+      setExportMessage('PDF по сводному отчету готов.')
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить PDF по сводному отчету.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function exportIncomeXlsx() {
     setIncomeExporting(true)
     setExportError(null)
@@ -1275,6 +1306,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <button className="secondary-button" type="submit">
           <Search size={16} />
           <span>Сформировать</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={exportConsolidatedXlsx} disabled={loading || exporting}>
+          <FileSpreadsheet size={16} />
+          <span>{exporting ? 'Готовим XLSX' : 'Скачать сводный XLSX'}</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={exportConsolidatedPdf} disabled={loading || exporting}>
+          <FileText size={16} />
+          <span>{exporting ? 'Готовим PDF' : 'Скачать сводный PDF'}</span>
         </button>
       </form>
 
@@ -1942,7 +1981,7 @@ function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
 }
 
-function buildReportFileName(type: 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
+function buildReportFileName(type: 'consolidated' | 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
   return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
 }
 

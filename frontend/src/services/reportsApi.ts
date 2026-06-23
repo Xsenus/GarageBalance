@@ -89,6 +89,8 @@ export type ExpenseReportDto = {
 
 export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<ConsolidatedReportDto>
+  exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
+  exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
   getIncomeReport(
     accessToken: string,
     params?: {
@@ -218,6 +220,20 @@ function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport
   return searchParams.toString()
 }
 
+function buildConsolidatedReportQuery(params: Parameters<ReportClient['getConsolidatedReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.monthFrom) {
+    searchParams.set('monthFrom', params.monthFrom)
+  }
+  if (params.monthTo) {
+    searchParams.set('monthTo', params.monthTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  return searchParams.toString()
+}
+
 function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseReport']>[1] = {}) {
   const searchParams = new URLSearchParams()
   if (params.dateFrom) {
@@ -243,18 +259,16 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
 
 export const reportsApi: ReportClient = {
   getConsolidatedReport(accessToken, params = {}) {
-    const searchParams = new URLSearchParams()
-    if (params.monthFrom) {
-      searchParams.set('monthFrom', params.monthFrom)
-    }
-    if (params.monthTo) {
-      searchParams.set('monthTo', params.monthTo)
-    }
-    if (params.search) {
-      searchParams.set('search', params.search)
-    }
-    const query = searchParams.toString()
+    const query = buildConsolidatedReportQuery(params)
     return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`)
+  },
+  exportConsolidatedReportXlsx(accessToken, params = {}) {
+    const query = buildConsolidatedReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/consolidated/export/xlsx${query ? `?${query}` : ''}`)
+  },
+  exportConsolidatedReportPdf(accessToken, params = {}) {
+    const query = buildConsolidatedReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/consolidated/export/pdf${query ? `?${query}` : ''}`)
   },
   getIncomeReport(accessToken, params = {}) {
     const query = buildIncomeReportQuery(params)

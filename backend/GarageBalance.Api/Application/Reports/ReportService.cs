@@ -88,6 +88,117 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
         return ReportResult<ConsolidatedReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetConsolidatedReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Месяцы",
+                    ["Месяц", "Начислено", "Поступило", "Выплаты", "Баланс", "Долг", "Операций", "Начислений", "Показаний"],
+                    report.MonthlyRows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
+                        XlsxCell.Number(row.AccrualTotal),
+                        XlsxCell.Number(row.IncomeTotal),
+                        XlsxCell.Number(row.ExpenseTotal),
+                        XlsxCell.Number(row.Balance),
+                        XlsxCell.Number(row.Debt),
+                        XlsxCell.Number(row.OperationCount),
+                        XlsxCell.Number(row.AccrualCount),
+                        XlsxCell.Number(row.MeterReadingCount)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Гаражи",
+                    ["Гараж", "Владелец", "Начислено", "Поступило", "Долг", "Показаний"],
+                    report.GarageRows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.GarageNumber),
+                        XlsxCell.Text(row.OwnerName),
+                        XlsxCell.Number(row.AccrualTotal),
+                        XlsxCell.Number(row.IncomeTotal),
+                        XlsxCell.Number(row.Debt),
+                        XlsxCell.Number(row.MeterReadingCount)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Начислено", "Поступило", "Выплаты", "Баланс", "Долг", "Операций", "Начислений", "Показаний"],
+                    [
+                        [
+                            XlsxCell.Text(report.PeriodFrom.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.PeriodTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Number(report.AccrualTotal),
+                            XlsxCell.Number(report.IncomeTotal),
+                            XlsxCell.Number(report.ExpenseTotal),
+                            XlsxCell.Number(report.Balance),
+                            XlsxCell.Number(report.Debt),
+                            XlsxCell.Number(report.OperationCount),
+                            XlsxCell.Number(report.AccrualCount),
+                            XlsxCell.Number(report.MeterReadingCount)
+                        ]
+                    ])
+            ]);
+
+        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+            BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "xlsx"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content));
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportPdfAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetConsolidatedReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.PeriodFrom:yyyy-MM-dd} - {report.PeriodTo:yyyy-MM-dd}",
+            $"Accrued: {FormatAmount(report.AccrualTotal)} | Income: {FormatAmount(report.IncomeTotal)} | Expenses: {FormatAmount(report.ExpenseTotal)} | Balance: {FormatAmount(report.Balance)} | Debt: {FormatAmount(report.Debt)}",
+            $"Operations: {report.OperationCount} | Accruals: {report.AccrualCount} | Meter readings: {report.MeterReadingCount}",
+            string.Empty,
+            "Monthly rows",
+            "Month | Accrued | Income | Expenses | Balance | Debt | Operations | Accruals | Readings"
+        };
+        lines.AddRange(report.MonthlyRows.Select(row =>
+            string.Join(" | ",
+                row.AccountingMonth.ToString("yyyy-MM"),
+                FormatAmount(row.AccrualTotal),
+                FormatAmount(row.IncomeTotal),
+                FormatAmount(row.ExpenseTotal),
+                FormatAmount(row.Balance),
+                FormatAmount(row.Debt),
+                row.OperationCount,
+                row.AccrualCount,
+                row.MeterReadingCount)));
+        lines.Add(string.Empty);
+        lines.Add("Garage rows");
+        lines.Add("Garage | Owner | Accrued | Income | Debt | Readings");
+        lines.AddRange(report.GarageRows.Select(row =>
+            string.Join(" | ",
+                row.GarageNumber,
+                row.OwnerName ?? string.Empty,
+                FormatAmount(row.AccrualTotal),
+                FormatAmount(row.IncomeTotal),
+                FormatAmount(row.Debt),
+                row.MeterReadingCount)));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance consolidated report", lines);
+        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+            BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "pdf"),
+            "application/pdf",
+            content));
+    }
+
     public async Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);

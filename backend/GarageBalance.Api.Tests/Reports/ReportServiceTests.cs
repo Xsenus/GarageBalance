@@ -72,6 +72,43 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportConsolidatedReportXlsxAsync_ReturnsWorkbookWithMonthlyAndGarageRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
+
+        var result = await service.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-consolidated-20260601-20260601.xlsx", result.Value!.FileName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
+        AssertWorkbookContains(result.Value.Content, "Месяцы");
+        AssertWorkbookContains(result.Value.Content, "Гаражи");
+        AssertWorkbookContains(result.Value.Content, "2026-06");
+    }
+
+    [Fact]
+    public async Task ExportConsolidatedReportPdfAsync_ReturnsDocumentWithMonthlyAndGarageRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
+
+        var result = await service.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-consolidated-20260601-20260601.pdf", result.Value!.FileName);
+        Assert.Equal("application/pdf", result.Value.ContentType);
+        AssertPdfContains(result.Value.Content, "GarageBalance consolidated report");
+        AssertPdfContains(result.Value.Content, "2026-06");
+    }
+
+    [Fact]
     public async Task GetIncomeReportAsync_ReturnsAccrualAndPaymentRows()
     {
         await using var database = await TestDatabase.CreateAsync();

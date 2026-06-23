@@ -37,6 +37,75 @@ public sealed class ReportsControllerTests
     }
 
     [Fact]
+    public async Task ExportConsolidatedReportXlsx_ReturnsFile()
+    {
+        var content = new byte[] { 1, 2, 3 };
+        var export = new ReportExportFileDto(
+            "garagebalance-consolidated-20260601-20260601.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        var controller = new ReportsController(new FakeReportService
+        {
+            ConsolidatedXlsxExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        });
+
+        var result = await controller.ExportConsolidatedReportXlsx(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+    }
+
+    [Fact]
+    public async Task ExportConsolidatedReportXlsx_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            ConsolidatedXlsxExportResult = ReportResult<ReportExportFileDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.ExportConsolidatedReportXlsx(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task ExportConsolidatedReportPdf_ReturnsFile()
+    {
+        var content = new byte[] { 4, 5, 6 };
+        var export = new ReportExportFileDto("garagebalance-consolidated-20260601-20260601.pdf", "application/pdf", content);
+        var controller = new ReportsController(new FakeReportService
+        {
+            ConsolidatedPdfExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        });
+
+        var result = await controller.ExportConsolidatedReportPdf(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+    }
+
+    [Fact]
+    public async Task ExportConsolidatedReportPdf_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            ConsolidatedPdfExportResult = ReportResult<ReportExportFileDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.ExportConsolidatedReportPdf(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
     public async Task GetIncomeReport_ReturnsOk()
     {
         var report = CreateIncomeReport();
@@ -334,6 +403,10 @@ public sealed class ReportsControllerTests
     {
         public ReportResult<ConsolidatedReportDto> Result { get; init; } = ReportResult<ConsolidatedReportDto>.Failure("not_configured", "Not configured.");
 
+        public ReportResult<ReportExportFileDto> ConsolidatedXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ReportExportFileDto> ConsolidatedPdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
         public ReportResult<IncomeReportDto> IncomeResult { get; init; } = ReportResult<IncomeReportDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<ExpenseReportDto> ExpenseResult { get; init; } = ReportResult<ExpenseReportDto>.Failure("not_configured", "Not configured.");
@@ -349,6 +422,16 @@ public sealed class ReportsControllerTests
         public Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
         {
             return Task.FromResult(Result);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ConsolidatedXlsxExportResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportPdfAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ConsolidatedPdfExportResult);
         }
 
         public Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)

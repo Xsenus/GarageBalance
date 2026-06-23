@@ -25,6 +25,36 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
     }
 
+    [HttpGet("consolidated/export/xlsx")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportConsolidatedReportXlsx(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+    }
+
+    [HttpGet("consolidated/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportConsolidatedReportPdf(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+    }
+
     [HttpGet("income")]
     [ProducesResponseType<IncomeReportDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

@@ -62,6 +62,8 @@ npm run dev
 - `GET /api/import/access/runs` - журнал dry-run проверок Access-БД.
 - `POST /api/import/access/dry-run` - загрузка `.accdb`/`.mdb` и первичная проверка перед импортом.
 - `GET /api/reports/consolidated` - консолидированный отчет за период с итогами по месяцам и гаражам.
+- `GET /api/reports/consolidated/export/xlsx` - XLSX-выгрузка консолидированного отчета за период.
+- `GET /api/reports/consolidated/export/pdf` - PDF-выгрузка консолидированного отчета за период.
 - `GET /api/reports/income` - отчет по поступлениям: начисления, оплаты, фильтры по датам, поиску, гаражам, владельцам и видам поступлений.
 - `GET /api/reports/income/export/xlsx` - XLSX-выгрузка отчета по поступлениям с теми же фильтрами, что экранный отчет.
 - `GET /api/reports/income/export/pdf` - PDF-выгрузка отчета по поступлениям с теми же фильтрами, что экранный отчет.
