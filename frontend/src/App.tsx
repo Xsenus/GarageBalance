@@ -1522,7 +1522,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
           </button>
           {currentRun ? (
             <>
-              <p className="empty-state">{currentRun.originalFileName} · {currentRun.passedChecks}/{currentRun.totalChecks}</p>
+              <p className="empty-state">{currentRun.originalFileName} · {formatImportRunCheckSummary(currentRun)}</p>
               <div className="summary-strip" aria-label="Итоги dry-run импорта">
                 <div>
                   <span>Статус</span>
@@ -1583,7 +1583,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 {formatImportRunStatus(run.status)}
               </span>
               <span role="cell">
-                {run.passedChecks}/{run.totalChecks}
+                {formatImportRunCheckSummary(run)}
               </span>
             </button>
           ))}
@@ -3123,6 +3123,18 @@ function formatImportCheckStatus(status: AccessImportCheckDto['status']): string
   }
 
   return 'Ошибка'
+}
+
+function formatImportRunCheckSummary(run: AccessImportRunDto): string {
+  return `${run.passedChecks}/${run.totalChecks} · ${formatCount(run.warningCount, 'предупреждение', 'предупреждения', 'предупреждений')} · ${formatCount(run.errorCount, 'ошибка', 'ошибки', 'ошибок')}`
+}
+
+function formatCount(value: number, one: string, few: string, many: string): string {
+  const absoluteValue = Math.abs(value)
+  const lastTwoDigits = absoluteValue % 100
+  const lastDigit = absoluteValue % 10
+  const form = lastTwoDigits >= 11 && lastTwoDigits <= 14 ? many : lastDigit === 1 ? one : lastDigit >= 2 && lastDigit <= 4 ? few : many
+  return `${value} ${form}`
 }
 
 function formatNullableNumber(value: number | null): string {

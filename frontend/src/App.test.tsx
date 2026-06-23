@@ -815,6 +815,7 @@ describe('App', () => {
     expect(within(importPanel).getAllByText('Пройдено').length).toBeGreaterThan(0)
     expect(within(importPanel).getByText('Предупреждение')).toBeInTheDocument()
     expect(within(importPanel).getAllByText('Завершен').length).toBeGreaterThan(0)
+    expect(within(importPanel).getAllByText('2/3 · 1 предупреждение · 0 ошибок').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
 
     await user.click(within(importPanel).getByRole('button', { name: 'Скачать отчет JSON' }))
