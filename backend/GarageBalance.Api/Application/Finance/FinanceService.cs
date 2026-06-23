@@ -388,8 +388,9 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .Where(reading => !reading.IsCanceled && reading.GarageId == garage.Id && reading.MeterKind == meterKind && reading.AccountingMonth < month)
             .OrderByDescending(reading => reading.AccountingMonth)
             .FirstOrDefaultAsync(cancellationToken);
-        var previousValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m;
-        var consumption = request.CurrentValue - previousValue;
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue);
+        var previousValue = MoneyMath.RoundMeterValue(previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m);
+        var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
         if (consumption < 0)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
@@ -403,7 +404,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             MeterKind = meterKind,
             AccountingMonth = month,
             ReadingDate = request.ReadingDate,
-            CurrentValue = request.CurrentValue,
+            CurrentValue = currentValue,
             PreviousValue = previousValue,
             Consumption = consumption,
             HasGapWarning = hasGapWarning,

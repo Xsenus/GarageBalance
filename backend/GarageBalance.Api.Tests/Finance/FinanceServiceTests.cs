@@ -415,6 +415,26 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateMeterReadingAsync_RoundsMeterValuesAndConsumptionAwayFromZero()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.InitialWaterMeterValue = 10.0005m;
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5555m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(15.556m, result.Value!.CurrentValue);
+        Assert.Equal(10.001m, result.Value.PreviousValue);
+        Assert.Equal(5.555m, result.Value.Consumption);
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_WarnsWhenElectricityPreviousMonthIsMissing()
     {
         await using var database = await TestDatabase.CreateAsync();

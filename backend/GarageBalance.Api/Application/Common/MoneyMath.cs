@@ -11,4 +11,14 @@ public static class MoneyMath
     {
         return Math.Round(value, 4, MidpointRounding.AwayFromZero);
     }
+
+    public static decimal RoundMeterValue(decimal value)
+    {
+        return Math.Round(value, 3, MidpointRounding.AwayFromZero);
+    }
+
+    public static decimal? RoundMeterValue(decimal? value)
+    {
+        return value is null ? null : RoundMeterValue(value.Value);
+    }
 }

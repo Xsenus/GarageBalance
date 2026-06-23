@@ -139,12 +139,14 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var supplierGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
 
-        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("17", 1, 1, null, 10.005m, null, null, null), null, CancellationToken.None);
+        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("17", 1, 1, null, 10.005m, 1.2345m, 9.8765m, null), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", supplierGroup.Value!.Id, null, null, null, null, null, 20.005m, null), null, CancellationToken.None);
         var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
 
         Assert.True(garage.Succeeded);
         Assert.Equal(10.01m, garage.Value!.StartingBalance);
+        Assert.Equal(1.235m, garage.Value.InitialWaterMeterValue);
+        Assert.Equal(9.877m, garage.Value.InitialElectricityMeterValue);
         Assert.True(supplier.Succeeded);
         Assert.Equal(20.01m, supplier.Value!.StartingBalance);
         Assert.True(tariff.Succeeded);

@@ -127,8 +127,8 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             StartingBalance = MoneyMath.RoundMoney(request.StartingBalance),
             OwnerId = request.OwnerId,
             Owner = owner,
-            InitialWaterMeterValue = request.InitialWaterMeterValue,
-            InitialElectricityMeterValue = request.InitialElectricityMeterValue,
+            InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue),
+            InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue),
             Comment = NormalizeOptional(request.Comment)
         };
 
@@ -164,8 +164,8 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         garage.StartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         garage.OwnerId = request.OwnerId;
         garage.Owner = owner;
-        garage.InitialWaterMeterValue = request.InitialWaterMeterValue;
-        garage.InitialElectricityMeterValue = request.InitialElectricityMeterValue;
+        garage.InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
+        garage.InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
         garage.Comment = NormalizeOptional(request.Comment);
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
