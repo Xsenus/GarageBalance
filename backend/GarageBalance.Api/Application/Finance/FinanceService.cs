@@ -1,3 +1,4 @@
+using System.Globalization;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -10,6 +11,7 @@ namespace GarageBalance.Api.Application.Finance;
 public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceService
 {
     private const int ListLimit = 100;
+    private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {
@@ -425,7 +427,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
                 AccountingMonth = month,
                 Amount = amount,
                 Source = AccrualSources.Regular,
-                Comment = NormalizeOptional(request.Comment) ?? $"Автоначисление по тарифу {tariff.Name}"
+                Comment = BuildRegularAccrualComment(tariff, request.Comment)
             };
             dbContext.Accruals.Add(accrual);
             created.Add(ToDto(accrual));
@@ -548,6 +550,16 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             "meter_electricity" => await CalculateMeterAmountAsync(garage.Id, MeterKinds.Electricity, tariff.Rate, month, cancellationToken),
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
         };
+    }
+
+    private static string BuildRegularAccrualComment(Tariff tariff, string? comment)
+    {
+        var tariffRate = tariff.Rate.ToString("0.####", RussianCulture);
+        var snapshot = $"тариф {tariff.Name}: ставка {tariffRate}, действует с {tariff.EffectiveFrom:dd.MM.yyyy}";
+        var userComment = NormalizeOptional(comment);
+        return userComment is null
+            ? $"Автоначисление; {snapshot}."
+            : $"{userComment}; {snapshot}.";
     }
 
     private async Task<AmountCalculationResult> CalculateMeterAmountAsync(Guid garageId, string meterKind, decimal rate, DateOnly month, CancellationToken cancellationToken)

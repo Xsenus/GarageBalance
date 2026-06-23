@@ -776,6 +776,9 @@ describe('App', () => {
     expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(within(accrualTable).getByText('Авто')).toBeInTheDocument()
+    await user.dblClick(within(accrualTable).getByLabelText(/Разбивка начисления/i))
+    const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
+    expect(within(dialog).getByText('Начисление за месяц')).toBeInTheDocument()
   })
 
   it('creates meter reading and shows calculated consumption', async () => {

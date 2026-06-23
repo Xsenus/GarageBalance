@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Infrastructure.Data;
@@ -439,7 +440,46 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal("regular", accrual.Source);
         Assert.Equal(300m, accrual.Amount);
+        Assert.Equal("Июнь; тариф Членский тариф: ставка 300, действует с 01.01.2026.", accrual.Comment);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_KeepsExistingAccrualAmountAfterTariffUpdate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var finance = new FinanceService(database.Context);
+        var dictionaries = new DictionaryService(database.Context);
+
+        await finance.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        await dictionaries.UpdateTariffAsync(
+            tariff.Id,
+            new UpsertTariffRequest("Членский тариф", "fixed", 500m, new DateOnly(2026, 1, 1), "Новая ставка"),
+            null,
+            CancellationToken.None);
+
+        var july = await finance.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 7, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(july.Succeeded);
+        var accruals = await finance.GetAccrualsAsync(new AccrualListRequest(null, null, null), CancellationToken.None);
+        Assert.Contains(accruals, item =>
+            item.AccountingMonth == new DateOnly(2026, 6, 1) &&
+            item.Amount == 300m &&
+            item.Comment == "Автоначисление; тариф Членский тариф: ставка 300, действует с 01.01.2026.");
+        Assert.Contains(accruals, item =>
+            item.AccountingMonth == new DateOnly(2026, 7, 1) &&
+            item.Amount == 500m &&
+            item.Comment == "Автоначисление; тариф Членский тариф: ставка 500, действует с 01.01.2026.");
     }
 
     [Fact]
