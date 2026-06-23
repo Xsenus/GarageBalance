@@ -28,6 +28,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         var result = await authService.LoginAsync(request, cancellationToken);
@@ -39,6 +40,11 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         if (result.ErrorCode == "user_inactive")
         {
             return StatusCode(StatusCodes.Status403Forbidden, ToProblem(result));
+        }
+
+        if (result.ErrorCode == "too_many_login_attempts")
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests, ToProblem(result));
         }
 
         return Unauthorized(ToProblem(result));

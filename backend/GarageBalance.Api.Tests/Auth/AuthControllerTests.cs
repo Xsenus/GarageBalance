@@ -69,6 +69,22 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task Login_ReturnsTooManyRequestsForRateLimitedLogin()
+    {
+        var controller = new AuthController(new FakeAuthService
+        {
+            LoginResult = AuthResult<AuthResponse>.Failure("too_many_login_attempts", "Слишком много неуспешных попыток входа. Повторите позже.")
+        });
+
+        var result = await controller.Login(new LoginRequest("admin@example.com", "StrongPass123"), CancellationToken.None);
+
+        var tooManyRequests = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, tooManyRequests.StatusCode);
+        var problem = Assert.IsType<ProblemDetails>(tooManyRequests.Value);
+        Assert.Equal("too_many_login_attempts", problem.Title);
+    }
+
+    [Fact]
     public async Task Me_ReturnsCurrentUser()
     {
         var user = CreateResponse().User;

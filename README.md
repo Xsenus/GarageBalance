@@ -40,7 +40,7 @@ npm run dev
 
 - `GET /health` - проверка, что API отвечает.
 - `POST /api/auth/bootstrap-admin` - создание первого администратора.
-- `POST /api/auth/login` - вход по email и паролю.
+- `POST /api/auth/login` - вход по email и паролю; после 5 неуспешных попыток за 15 минут возвращает `429 Too Many Requests`.
 - `GET /api/auth/me` - текущий пользователь.
 - `GET /api/users/roles` - доступные системные роли.
 - `GET/POST /api/users` - список и создание пользователей.

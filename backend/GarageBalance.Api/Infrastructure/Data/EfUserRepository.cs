@@ -44,6 +44,17 @@ public sealed class EfUserRepository(GarageBalanceDbContext dbContext) : IUserRe
             .ToListAsync(cancellationToken);
     }
 
+    public Task<int> CountAuditEventsAsync(string action, string entityType, string? entityId, DateTimeOffset createdSinceUtc, CancellationToken cancellationToken)
+    {
+        return dbContext.AuditEvents
+            .CountAsync(auditEvent =>
+                auditEvent.Action == action &&
+                auditEvent.EntityType == entityType &&
+                auditEvent.EntityId == entityId &&
+                auditEvent.CreatedAtUtc >= createdSinceUtc,
+                cancellationToken);
+    }
+
     public async Task EnsureSystemRolesAsync(CancellationToken cancellationToken)
     {
         await EnsureRoleAsync(SystemRoles.Administrator, "Администратор", SystemPermissions.Administrator, cancellationToken);

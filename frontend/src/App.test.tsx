@@ -441,6 +441,23 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 
+  it('shows rate limit message without opening protected workspace', async () => {
+    const user = userEvent.setup()
+    const authClient = createAuthClient({
+      login: async () => {
+        throw new Error('Слишком много неуспешных попыток входа. Повторите позже.')
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Вход' }))
+    await user.type(screen.getByLabelText('Пароль'), 'WrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByText('Слишком много неуспешных попыток входа. Повторите позже.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
+  })
+
   it('shows first release notes for authenticated users', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

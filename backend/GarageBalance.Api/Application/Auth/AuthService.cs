@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Security.Claims;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Security;
@@ -7,6 +9,9 @@ namespace GarageBalance.Api.Application.Auth;
 
 public sealed class AuthService(IUserRepository users, IPasswordHasher passwordHasher, ITokenService tokenService) : IAuthService
 {
+    private const int MaxFailedLoginAttempts = 5;
+    private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
+
     public async Task<AuthResult<AuthResponse>> BootstrapAdminAsync(BootstrapAdminRequest request, CancellationToken cancellationToken)
     {
         if (await users.HasAnyUsersAsync(cancellationToken))
@@ -50,13 +55,37 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
     {
         var normalizedEmail = NormalizeEmail(request.Email);
         var user = await users.FindUserByEmailAsync(normalizedEmail, cancellationToken);
+
+        var attemptEntityType = user is null ? "login_email" : "user";
+        var attemptEntityId = user?.Id.ToString() ?? CreateLoginEmailHash(normalizedEmail);
+        if (await IsLoginRateLimitedAsync(attemptEntityType, attemptEntityId, cancellationToken))
+        {
+            await AddLoginRateLimitedAuditAsync(user, attemptEntityType, attemptEntityId, cancellationToken);
+            await users.SaveChangesAsync(cancellationToken);
+
+            return AuthResult<AuthResponse>.Failure("too_many_login_attempts", "Слишком много неуспешных попыток входа. Повторите позже.");
+        }
+
         if (user is null || !passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
+            await AddLoginFailedAuditAsync(user, attemptEntityType, attemptEntityId, cancellationToken);
+            await users.SaveChangesAsync(cancellationToken);
+
             return AuthResult<AuthResponse>.Failure("invalid_credentials", "Неверный email или пароль.");
         }
 
         if (!user.IsActive)
         {
+            await users.AddAuditEventAsync(new AuditEvent
+            {
+                ActorUserId = user.Id,
+                Action = "auth.login_inactive",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                Summary = $"Отклонен вход отключенного пользователя {user.Email}."
+            }, cancellationToken);
+            await users.SaveChangesAsync(cancellationToken);
+
             return AuthResult<AuthResponse>.Failure("user_inactive", "Пользователь отключен.");
         }
 
@@ -110,5 +139,58 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
     private static string NormalizeEmail(string email)
     {
         return email.Trim().ToUpperInvariant();
+    }
+
+    private async Task<bool> IsLoginRateLimitedAsync(string entityType, string entityId, CancellationToken cancellationToken)
+    {
+        var createdSinceUtc = DateTimeOffset.UtcNow.Subtract(LoginAttemptWindow);
+        var failedAttempts = await users.CountAuditEventsAsync("auth.login_failed", entityType, entityId, createdSinceUtc, cancellationToken);
+
+        return failedAttempts >= MaxFailedLoginAttempts;
+    }
+
+    private Task AddLoginFailedAuditAsync(AppUser? user, string entityType, string entityId, CancellationToken cancellationToken)
+    {
+        var summary = user is null
+            ? "Неуспешная попытка входа: пользователь не найден."
+            : $"Неуспешная попытка входа пользователя {user.Email}: неверный пароль.";
+
+        return users.AddAuditEventAsync(new AuditEvent
+        {
+            ActorUserId = user?.Id,
+            Action = "auth.login_failed",
+            EntityType = entityType,
+            EntityId = entityId,
+            Summary = summary,
+            MetadataJson = JsonSerializer.Serialize(new
+            {
+                reason = user is null ? "unknown_user" : "invalid_password"
+            })
+        }, cancellationToken);
+    }
+
+    private Task AddLoginRateLimitedAuditAsync(AppUser? user, string entityType, string entityId, CancellationToken cancellationToken)
+    {
+        return users.AddAuditEventAsync(new AuditEvent
+        {
+            ActorUserId = user?.Id,
+            Action = "auth.login_rate_limited",
+            EntityType = entityType,
+            EntityId = entityId,
+            Summary = user is null
+                ? "Вход временно ограничен после серии неуспешных попыток для указанного email."
+                : $"Вход пользователя {user.Email} временно ограничен после серии неуспешных попыток.",
+            MetadataJson = JsonSerializer.Serialize(new
+            {
+                failedAttempts = MaxFailedLoginAttempts,
+                windowMinutes = (int)LoginAttemptWindow.TotalMinutes
+            })
+        }, cancellationToken);
+    }
+
+    private static string CreateLoginEmailHash(string normalizedEmail)
+    {
+        var hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalizedEmail));
+        return $"email-sha256:{Convert.ToHexString(hashBytes).ToLowerInvariant()}";
     }
 }

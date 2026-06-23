@@ -37,6 +37,17 @@ internal sealed class InMemoryUserRepository : IUserRepository
         return Task.FromResult<IReadOnlyList<AppRole>>(user.UserRoles.Select(userRole => userRole.Role).ToList());
     }
 
+    public Task<int> CountAuditEventsAsync(string action, string entityType, string? entityId, DateTimeOffset createdSinceUtc, CancellationToken cancellationToken)
+    {
+        var count = AuditEvents.Count(auditEvent =>
+            auditEvent.Action == action &&
+            auditEvent.EntityType == entityType &&
+            auditEvent.EntityId == entityId &&
+            auditEvent.CreatedAtUtc >= createdSinceUtc);
+
+        return Task.FromResult(count);
+    }
+
     public Task EnsureSystemRolesAsync(CancellationToken cancellationToken)
     {
         EnsureRole(SystemRoles.Administrator, "Администратор", SystemPermissions.Administrator);

@@ -75,6 +75,54 @@ public sealed class AuthServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("invalid_credentials", result.ErrorCode);
+        var audit = Assert.Single(repository.AuditEvents, item => item.Action == "auth.login_failed");
+        Assert.Equal(repository.Users[0].Id, audit.ActorUserId);
+        Assert.Equal("user", audit.EntityType);
+        Assert.DoesNotContain("wrong", audit.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WritesAuditForUnknownEmailWithoutPlainEmail()
+    {
+        var repository = new InMemoryUserRepository();
+        var service = CreateService(repository);
+
+        var result = await service.LoginAsync(new LoginRequest("missing@example.com", "wrong"), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("invalid_credentials", result.ErrorCode);
+        var audit = Assert.Single(repository.AuditEvents, item => item.Action == "auth.login_failed");
+        Assert.Null(audit.ActorUserId);
+        Assert.Equal("login_email", audit.EntityType);
+        Assert.StartsWith("email-sha256:", audit.EntityId, StringComparison.Ordinal);
+        Assert.DoesNotContain("missing@example.com", audit.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("missing@example.com", audit.EntityId, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wrong", audit.MetadataJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LoginAsync_RateLimitsAfterFailedAttempts()
+    {
+        var repository = new InMemoryUserRepository();
+        var service = CreateService(repository);
+        await service.BootstrapAdminAsync(
+            new BootstrapAdminRequest("admin@example.com", "StrongPass123", "Администратор"),
+            CancellationToken.None);
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var failed = await service.LoginAsync(new LoginRequest("admin@example.com", $"wrong-{attempt}"), CancellationToken.None);
+            Assert.False(failed.Succeeded);
+            Assert.Equal("invalid_credentials", failed.ErrorCode);
+        }
+
+        var result = await service.LoginAsync(new LoginRequest("admin@example.com", "StrongPass123"), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("too_many_login_attempts", result.ErrorCode);
+        Assert.Null(repository.Users[0].LastLoginAtUtc);
+        Assert.Equal(5, repository.AuditEvents.Count(item => item.Action == "auth.login_failed"));
+        Assert.Contains(repository.AuditEvents, item => item.Action == "auth.login_rate_limited");
     }
 
     [Fact]
@@ -91,6 +139,7 @@ public sealed class AuthServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("user_inactive", result.ErrorCode);
+        Assert.Contains(repository.AuditEvents, item => item.Action == "auth.login_inactive");
     }
 
     [Fact]
