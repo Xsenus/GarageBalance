@@ -722,6 +722,35 @@ h1 {
   background: #fcfcfd;
 }
 
+.role-matrix {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.compact-heading {
+  align-items: end;
+}
+
+.role-matrix-table {
+  overflow-x: auto;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+
+.role-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.2fr) repeat(8, minmax(96px, 1fr));
+  min-width: 940px;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid #e4e7ec;
+  padding: 10px 12px;
+  color: #344054;
+  font-size: 13px;
+}
+
 .user-table-row,
 .operation-row {
   display: grid;
@@ -815,6 +844,7 @@ button.operation-row:hover {
   padding: 10px 12px;
 }
 
+.role-matrix-row.header,
 .user-table-row.header,
 .operation-row.header {
   border-top: 0;
@@ -825,6 +855,8 @@ button.operation-row:hover {
   text-transform: uppercase;
 }
 
+.role-matrix-row strong,
+.role-matrix-row small,
 .user-table-row strong,
 .user-table-row small,
 .operation-row strong,
@@ -832,6 +864,7 @@ button.operation-row:hover {
   display: block;
 }
 
+.role-matrix-row small,
 .user-table-row small,
 .operation-row small {
   margin-top: 3px;

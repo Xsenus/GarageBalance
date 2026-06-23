@@ -55,6 +55,12 @@ describe('App', () => {
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     expect(within(usersPanel).getByText('Администратор ГСК')).toBeInTheDocument()
     expect(within(usersPanel).getByText('admin@example.com')).toBeInTheDocument()
+    const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
+    expect(within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })).toBeInTheDocument()
+    expect(within(roleMatrix).getByText('Администратор')).toBeInTheDocument()
+    expect(within(roleMatrix).getByText('Бухгалтер')).toBeInTheDocument()
+    expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы - разрешено' })).toHaveTextContent('Да')
+    expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(within(dictionaryPanel).getAllByText('Иванов Иван').length).toBeGreaterThan(0)

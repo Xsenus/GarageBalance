@@ -88,7 +88,19 @@ const permissions = {
   importRun: 'import.run',
   auditRead: 'audit.read',
   tariffsManage: 'tariffs.manage',
+  appReleasesManage: 'app_releases.manage',
 } as const
+
+const rolePermissionGroups = [
+  { label: 'Пользователи', permission: permissions.usersManage },
+  { label: 'Справочники', permission: permissions.dictionariesWrite },
+  { label: 'Тарифы', permission: permissions.tariffsManage },
+  { label: 'Платежи', permission: permissions.paymentsWrite },
+  { label: 'Отчеты', permission: permissions.reportsRead },
+  { label: 'Импорт', permission: permissions.importRun },
+  { label: 'Audit', permission: permissions.auditRead },
+  { label: 'Что нового', permission: permissions.appReleasesManage },
+] as const
 
 const navigation: NavigationItem[] = [
   { label: 'Панель', icon: Gauge, active: true },
@@ -2167,6 +2179,48 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             </div>
           ))}
         </div>
+      </div>
+
+      <RolePermissionMatrix roles={roles} />
+    </section>
+  )
+}
+
+function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
+  return (
+    <section className="role-matrix" aria-label="Матрица ролей">
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">Роли и права</p>
+          <h3>Матрица доступов</h3>
+        </div>
+        <span>{roles.length} ролей</span>
+      </div>
+
+      <div className="role-matrix-table" role="table" aria-label="Матрица ролей и прав">
+        <div className="role-matrix-row header" role="row">
+          <span role="columnheader">Роль</span>
+          {rolePermissionGroups.map((group) => (
+            <span role="columnheader" key={group.permission}>{group.label}</span>
+          ))}
+        </div>
+        {roles.length === 0 ? <p className="empty-state">Роли пока не загружены</p> : null}
+        {roles.map((role) => (
+          <div className="role-matrix-row" role="row" key={role.code}>
+            <span role="cell">
+              <strong>{role.name}</strong>
+              <small>{role.code}</small>
+            </span>
+            {rolePermissionGroups.map((group) => {
+              const allowed = role.permissions.includes(group.permission)
+              return (
+                <span role="cell" aria-label={`${role.name}: ${group.label} - ${allowed ? 'разрешено' : 'нет доступа'}`} className={allowed ? 'status-active' : 'status-disabled'} key={group.permission}>
+                  {allowed ? 'Да' : 'Нет'}
+                </span>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </section>
   )
