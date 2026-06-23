@@ -19,6 +19,8 @@ import {
 } from 'lucide-react'
 import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
+import { auditApi } from './services/auditApi'
+import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
@@ -35,6 +37,7 @@ import './App.css'
 
 type AppProps = {
   authClient?: AuthClient
+  auditClient?: AuditClient
   dictionaryClient?: DictionaryClient
   financeClient?: FinanceClient
   importClient?: ImportClient
@@ -94,7 +97,7 @@ const roadmap = [
   },
 ]
 
-function App({ authClient = authApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
 
   return (
@@ -131,7 +134,7 @@ function App({ authClient = authApi, dictionaryClient = dictionariesApi, finance
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onLogout={() => setAuth(null)} />
+          <Workspace auth={auth} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onLogout={() => setAuth(null)} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -216,6 +219,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
 function Workspace({
   auth,
+  auditClient,
   dictionaryClient,
   financeClient,
   importClient,
@@ -225,6 +229,7 @@ function Workspace({
   onLogout,
 }: {
   auth: AuthResponse
+  auditClient: AuditClient
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   importClient: ImportClient
@@ -287,6 +292,8 @@ function Workspace({
       <ImportPanel auth={auth} importClient={importClient} />
 
       <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
+
+      {auth.user.permissions.includes('audit.read') ? <AuditPanel auth={auth} auditClient={auditClient} /> : null}
 
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
         {roadmap.map((item) => {
@@ -1098,6 +1105,81 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             </button>
           ))}
         </div>
+      </div>
+    </section>
+  )
+}
+
+function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
+  const [events, setEvents] = useState<AuditEventDto[]>([])
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const loadedEvents = await auditClient.getEvents(auth.accessToken, { search })
+        if (!ignore) {
+          setEvents(loadedEvents)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить audit-журнал.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, auditClient, search])
+
+  return (
+    <section className="dictionary-panel" aria-label="Audit-журнал">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Audit</p>
+          <h2>Журнал действий пользователей и системы</h2>
+        </div>
+        <span>{loading ? 'Загрузка...' : `${events.length} событий`}</span>
+      </div>
+
+      {error ? <div className="form-error">{error}</div> : null}
+
+      <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
+        <input aria-label="Поиск в audit-журнале" placeholder="Действие, сущность или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
+      </form>
+
+      <div className="operation-list" role="table" aria-label="События audit-журнала">
+        <div className="operation-row header" role="row">
+          <span role="columnheader">Дата</span>
+          <span role="columnheader">Событие</span>
+          <span role="columnheader">Сущность</span>
+        </div>
+        {!loading && events.length === 0 ? <p className="empty-state">Событий пока нет</p> : null}
+        {events.map((auditEvent) => (
+          <div className="operation-row" role="row" key={auditEvent.id}>
+            <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
+            <span role="cell">
+              <strong>{auditEvent.action}</strong>
+              <small>{auditEvent.summary}</small>
+            </span>
+            <span role="cell">
+              <strong>{auditEvent.entityType}</strong>
+              <small>{auditEvent.entityId ?? 'без идентификатора'}</small>
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   )
@@ -2122,6 +2204,10 @@ function downloadBlob(blob: Blob, fileName: string) {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
 function formatReleaseDate(value: string): string {

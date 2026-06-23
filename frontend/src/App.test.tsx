@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto } from './services/financeApi'
@@ -256,6 +257,46 @@ describe('App', () => {
     expect(await within(importPanel).findByText('Отчет dry-run импорта готов.')).toBeInTheDocument()
   })
 
+  it('shows audit journal for users with audit permission', async () => {
+    const user = userEvent.setup()
+    let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEvents: async (_token, params) => {
+        auditRequest = params
+        if (params?.search?.toLowerCase().includes('import')) {
+          return [createAuditEvent({ action: 'import.access_dry_run', entityType: 'access_import_run', summary: 'Проверка Access.' })]
+        }
+        return [
+          createAuditEvent({ action: 'auth.login_success', entityType: 'user', summary: 'Вход пользователя.' }),
+          createAuditEvent({ action: 'finance.income_created', entityType: 'financial_operation', summary: 'Создано поступление.' }),
+        ]
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
+
+    expect(await within(auditPanel).findByText('auth.login_success')).toBeInTheDocument()
+    expect(within(auditPanel).getByText('finance.income_created')).toBeInTheDocument()
+
+    await user.type(within(auditPanel).getByLabelText('Поиск в audit-журнале'), 'import')
+
+    expect(await within(auditPanel).findByText('import.access_dry_run')).toBeInTheDocument()
+    expect(auditRequest?.search).toBe('import')
+  })
+
   it('shows consolidated report and applies garage search', async () => {
     const user = userEvent.setup()
     const reportClient = createReportClient()
@@ -476,6 +517,13 @@ function createAuthClient(overrides: Partial<AuthClient> = {}): AuthClient {
 function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseClient {
   return {
     getReleases: async () => [createAppRelease()],
+    ...overrides,
+  }
+}
+
+function createAuditClient(overrides: Partial<AuditClient> = {}): AuditClient {
+  return {
+    getEvents: async () => [createAuditEvent({})],
     ...overrides,
   }
 }
@@ -857,6 +905,19 @@ function createAppRelease(overrides: Partial<AppReleaseDto> = {}): AppReleaseDto
         text: 'Добавлена панель "Отчеты" с выбором периода, поиском по гаражу или владельцу и итогами.',
       },
     ],
+    ...overrides,
+  }
+}
+
+function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
+  return {
+    id: overrides.id ?? `audit-${overrides.action ?? 'event'}`,
+    createdAtUtc: '2026-06-23T04:00:00Z',
+    actorUserId: '5df20dec-2959-4726-a1cb-0e6ec6b28674',
+    action: 'auth.login_success',
+    entityType: 'user',
+    entityId: '5df20dec-2959-4726-a1cb-0e6ec6b28674',
+    summary: 'Вход пользователя.',
     ...overrides,
   }
 }
