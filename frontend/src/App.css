@@ -682,8 +682,28 @@ button.operation-row:hover {
   margin-bottom: 16px;
 }
 
-.report-filter input {
+.report-filter input,
+.report-filter select {
+  width: 100%;
   min-width: 160px;
+  min-height: 40px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #101828;
+  padding: 9px 10px;
+  font: inherit;
+}
+
+.report-filter select[multiple] {
+  min-height: 74px;
+  padding: 7px 10px;
+}
+
+.report-filter input:focus,
+.report-filter select:focus {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
 }
 
 .form-note {

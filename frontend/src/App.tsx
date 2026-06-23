@@ -42,6 +42,25 @@ type AppProps = {
   userClient?: UserManagementClient
 }
 
+type IncomeReportFilters = {
+  dateFrom: string
+  dateTo: string
+  search: string
+  garageIds: string[]
+  ownerIds: string[]
+  incomeTypeIds: string[]
+  rowMode: string
+}
+
+type ExpenseReportFilters = {
+  dateFrom: string
+  dateTo: string
+  search: string
+  supplierIds: string[]
+  expenseTypeIds: string[]
+  rowMode: string
+}
+
 const navigation = [
   { label: 'Панель', icon: Gauge, active: true },
   { label: 'Справочники', icon: UsersRound },
@@ -976,11 +995,13 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const today = new Date().toISOString().slice(0, 10)
   const month = `${today.slice(0, 7)}-01`
   const [filters, setFilters] = useState({ monthFrom: month, monthTo: month, search: '' })
-  const [incomeFilters, setIncomeFilters] = useState({ dateFrom: month, dateTo: today, search: '', incomeTypeId: '', rowMode: 'all' })
-  const [expenseFilters, setExpenseFilters] = useState({ dateFrom: month, dateTo: today, search: '', supplierId: '', expenseTypeId: '', rowMode: 'all' })
+  const [incomeFilters, setIncomeFilters] = useState<IncomeReportFilters>({ dateFrom: month, dateTo: today, search: '', garageIds: [], ownerIds: [], incomeTypeIds: [], rowMode: 'all' })
+  const [expenseFilters, setExpenseFilters] = useState<ExpenseReportFilters>({ dateFrom: month, dateTo: today, search: '', supplierIds: [], expenseTypeIds: [], rowMode: 'all' })
   const [report, setReport] = useState<ConsolidatedReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
   const [expenseReport, setExpenseReport] = useState<ExpenseReportDto | null>(null)
+  const [incomeGarages, setIncomeGarages] = useState<GarageDto[]>([])
+  const [incomeOwners, setIncomeOwners] = useState<OwnerDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
@@ -1028,17 +1049,23 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       setIncomeLoading(true)
       setIncomeError(null)
       try {
-        const [loadedIncomeTypes, loadedIncomeReport] = await Promise.all([
+        const [loadedGarages, loadedOwners, loadedIncomeTypes, loadedIncomeReport] = await Promise.all([
+          dictionaryClient.getGarages(auth.accessToken),
+          dictionaryClient.getOwners(auth.accessToken),
           dictionaryClient.getIncomeTypes(auth.accessToken),
           reportClient.getIncomeReport(auth.accessToken, {
             dateFrom: incomeFilters.dateFrom,
             dateTo: incomeFilters.dateTo,
             search: incomeFilters.search,
-            incomeTypeIds: incomeFilters.incomeTypeId ? [incomeFilters.incomeTypeId] : [],
+            garageIds: incomeFilters.garageIds,
+            ownerIds: incomeFilters.ownerIds,
+            incomeTypeIds: incomeFilters.incomeTypeIds,
             rowMode: incomeFilters.rowMode,
           }),
         ])
         if (!ignore) {
+          setIncomeGarages(loadedGarages)
+          setIncomeOwners(loadedOwners)
           setIncomeTypes(loadedIncomeTypes)
           setIncomeReport(loadedIncomeReport)
         }
@@ -1072,8 +1099,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             dateFrom: expenseFilters.dateFrom,
             dateTo: expenseFilters.dateTo,
             search: expenseFilters.search,
-            supplierIds: expenseFilters.supplierId ? [expenseFilters.supplierId] : [],
-            expenseTypeIds: expenseFilters.expenseTypeId ? [expenseFilters.expenseTypeId] : [],
+            supplierIds: expenseFilters.supplierIds,
+            expenseTypeIds: expenseFilters.expenseTypeIds,
             rowMode: expenseFilters.rowMode,
           }),
         ])
@@ -1116,7 +1143,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       dateFrom: String(form.get('dateFrom') ?? today),
       dateTo: String(form.get('dateTo') ?? today),
       search: String(form.get('search') ?? ''),
-      incomeTypeId: String(form.get('incomeTypeId') ?? ''),
+      garageIds: getFormValues(form, 'garageIds'),
+      ownerIds: getFormValues(form, 'ownerIds'),
+      incomeTypeIds: getFormValues(form, 'incomeTypeIds'),
       rowMode: String(form.get('rowMode') ?? 'all'),
     })
   }
@@ -1128,8 +1157,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       dateFrom: String(form.get('dateFrom') ?? today),
       dateTo: String(form.get('dateTo') ?? today),
       search: String(form.get('search') ?? ''),
-      supplierId: String(form.get('supplierId') ?? ''),
-      expenseTypeId: String(form.get('expenseTypeId') ?? ''),
+      supplierIds: getFormValues(form, 'supplierIds'),
+      expenseTypeIds: getFormValues(form, 'expenseTypeIds'),
       rowMode: String(form.get('rowMode') ?? 'all'),
     })
   }
@@ -1143,7 +1172,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         dateFrom: incomeFilters.dateFrom,
         dateTo: incomeFilters.dateTo,
         search: incomeFilters.search,
-        incomeTypeIds: incomeFilters.incomeTypeId ? [incomeFilters.incomeTypeId] : [],
+        garageIds: incomeFilters.garageIds,
+        ownerIds: incomeFilters.ownerIds,
+        incomeTypeIds: incomeFilters.incomeTypeIds,
         rowMode: incomeFilters.rowMode,
       })
       downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo))
@@ -1164,8 +1195,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         dateFrom: expenseFilters.dateFrom,
         dateTo: expenseFilters.dateTo,
         search: expenseFilters.search,
-        supplierIds: expenseFilters.supplierId ? [expenseFilters.supplierId] : [],
-        expenseTypeIds: expenseFilters.expenseTypeId ? [expenseFilters.expenseTypeId] : [],
+        supplierIds: expenseFilters.supplierIds,
+        expenseTypeIds: expenseFilters.expenseTypeIds,
         rowMode: expenseFilters.rowMode,
       })
       downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo))
@@ -1287,8 +1318,21 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <input aria-label="Начало отчета по поступлениям" name="dateFrom" type="date" defaultValue={incomeFilters.dateFrom} required />
         <input aria-label="Конец отчета по поступлениям" name="dateTo" type="date" defaultValue={incomeFilters.dateTo} required />
         <input aria-label="Поиск в поступлениях" name="search" placeholder="Гараж, владелец, документ" defaultValue={incomeFilters.search} />
-        <select aria-label="Вид поступления в отчете" name="incomeTypeId" defaultValue={incomeFilters.incomeTypeId}>
-          <option value="">Все виды</option>
+        <select aria-label="Гаражи в отчете по поступлениям" name="garageIds" multiple defaultValue={incomeFilters.garageIds} size={Math.min(4, Math.max(2, incomeGarages.length))}>
+          {incomeGarages.map((garage) => (
+            <option value={garage.id} key={garage.id}>
+              Гараж {garage.number}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Владельцы в отчете по поступлениям" name="ownerIds" multiple defaultValue={incomeFilters.ownerIds} size={Math.min(4, Math.max(2, incomeOwners.length))}>
+          {incomeOwners.map((owner) => (
+            <option value={owner.id} key={owner.id}>
+              {owner.fullName}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Виды поступлений в отчете" name="incomeTypeIds" multiple defaultValue={incomeFilters.incomeTypeIds} size={Math.min(4, Math.max(2, incomeTypes.length))}>
           {incomeTypes.map((incomeType) => (
             <option value={incomeType.id} key={incomeType.id}>
               {incomeType.name}
@@ -1363,16 +1407,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <input aria-label="Начало отчета по выплатам" name="dateFrom" type="date" defaultValue={expenseFilters.dateFrom} required />
         <input aria-label="Конец отчета по выплатам" name="dateTo" type="date" defaultValue={expenseFilters.dateTo} required />
         <input aria-label="Поиск в выплатах" name="search" placeholder="Поставщик, вид, документ" defaultValue={expenseFilters.search} />
-        <select aria-label="Поставщик в отчете по выплатам" name="supplierId" defaultValue={expenseFilters.supplierId}>
-          <option value="">Все поставщики</option>
+        <select aria-label="Поставщики в отчете по выплатам" name="supplierIds" multiple defaultValue={expenseFilters.supplierIds} size={Math.min(4, Math.max(2, suppliers.length))}>
           {suppliers.map((supplier) => (
             <option value={supplier.id} key={supplier.id}>
               {supplier.name}
             </option>
           ))}
         </select>
-        <select aria-label="Вид выплаты в отчете" name="expenseTypeId" defaultValue={expenseFilters.expenseTypeId}>
-          <option value="">Все виды</option>
+        <select aria-label="Виды выплат в отчете" name="expenseTypeIds" multiple defaultValue={expenseFilters.expenseTypeIds} size={Math.min(4, Math.max(2, expenseTypes.length))}>
           {expenseTypes.map((expenseType) => (
             <option value={expenseType.id} key={expenseType.id}>
               {expenseType.name}
@@ -1848,6 +1890,13 @@ function formatMoney(value: number): string {
 
 function buildReportFileName(type: 'income' | 'expense', dateFrom: string, dateTo: string): string {
   return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.xlsx`
+}
+
+function getFormValues(form: FormData, name: string): string[] {
+  return form
+    .getAll(name)
+    .map((value) => String(value))
+    .filter(Boolean)
 }
 
 function downloadBlob(blob: Blob, fileName: string) {

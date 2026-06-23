@@ -243,7 +243,7 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText('Консолидированный отчет за период')).toBeInTheDocument()
     expect(within(reportsPanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('Гараж 12')).toBeInTheDocument()
+    expect(within(reportsPanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
 
     await user.type(within(reportsPanel).getByLabelText('Поиск в отчете'), 'Петров')
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сформировать' }))
@@ -253,7 +253,23 @@ describe('App', () => {
 
   it('shows income report and applies income filters', async () => {
     const user = userEvent.setup()
-    const reportClient = createReportClient()
+    let incomeRequest: Parameters<ReportClient['getIncomeReport']>[1] = undefined
+    const reportClient = createReportClient({
+      getIncomeReport: async (_token, params) => {
+        incomeRequest = params
+        const report = createIncomeReport()
+        if (params?.rowMode === 'payments') {
+          return createIncomeReport({
+            accrualTotal: 0,
+            incomeTotal: 1500,
+            debt: -1500,
+            rowCount: 1,
+            rows: report.rows.filter((row) => row.rowType === 'payments'),
+          })
+        }
+        return report
+      },
+    })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -266,11 +282,16 @@ describe('App', () => {
     expect(within(reportsPanel).getByText(/PKO-1/)).toBeInTheDocument()
 
     await user.selectOptions(within(reportsPanel).getByLabelText('Тип строк отчета по поступлениям'), 'payments')
-    await user.selectOptions(within(reportsPanel).getByLabelText('Вид поступления в отчете'), 'income-type-1')
+    await user.selectOptions(within(reportsPanel).getByLabelText('Гаражи в отчете по поступлениям'), ['garage-1'])
+    await user.selectOptions(within(reportsPanel).getByLabelText('Владельцы в отчете по поступлениям'), ['owner-1'])
+    await user.selectOptions(within(reportsPanel).getByLabelText('Виды поступлений в отчете'), ['income-type-1'])
     await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[0])
 
     expect((await within(reportsPanel).findAllByText('1 строк')).length).toBeGreaterThan(0)
     expect((await within(reportsPanel).findAllByText('1 500,00')).length).toBeGreaterThan(0)
+    expect(incomeRequest?.garageIds).toEqual(['garage-1'])
+    expect(incomeRequest?.ownerIds).toEqual(['owner-1'])
+    expect(incomeRequest?.incomeTypeIds).toEqual(['income-type-1'])
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления XLSX' }))
 
@@ -279,7 +300,23 @@ describe('App', () => {
 
   it('shows expense report and applies expense filters', async () => {
     const user = userEvent.setup()
-    const reportClient = createReportClient()
+    let expenseRequest: Parameters<ReportClient['getExpenseReport']>[1] = undefined
+    const reportClient = createReportClient({
+      getExpenseReport: async (_token, params) => {
+        expenseRequest = params
+        const report = createExpenseReport()
+        if (params?.rowMode === 'payments') {
+          return createExpenseReport({
+            accrualTotal: 0,
+            expenseTotal: 400,
+            difference: -400,
+            rowCount: 1,
+            rows: report.rows.filter((row) => row.rowType === 'payments'),
+          })
+        }
+        return report
+      },
+    })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -292,11 +329,13 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('RKO-1')).toBeInTheDocument()
 
     await user.selectOptions(within(reportsPanel).getByLabelText('Тип строк отчета по выплатам'), 'payments')
-    await user.selectOptions(within(reportsPanel).getByLabelText('Поставщик в отчете по выплатам'), 'supplier-1')
-    await user.selectOptions(within(reportsPanel).getByLabelText('Вид выплаты в отчете'), 'expense-type-1')
+    await user.selectOptions(within(reportsPanel).getByLabelText('Поставщики в отчете по выплатам'), ['supplier-1'])
+    await user.selectOptions(within(reportsPanel).getByLabelText('Виды выплат в отчете'), ['expense-type-1'])
     await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[1])
 
     expect((await within(reportsPanel).findAllByText('400,00')).length).toBeGreaterThan(0)
+    expect(expenseRequest?.supplierIds).toEqual(['supplier-1'])
+    expect(expenseRequest?.expenseTypeIds).toEqual(['expense-type-1'])
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты XLSX' }))
 
@@ -377,7 +416,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     expect(await screen.findByText('Нет доступа к пользователям.')).toBeInTheDocument()
-    expect(await screen.findByText('Нет доступа к справочникам.')).toBeInTheDocument()
+    expect((await screen.findAllByText('Нет доступа к справочникам.')).length).toBeGreaterThan(0)
     expect(await screen.findByText('Нет доступа к платежам.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к импорту.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к отчетам.')).toBeInTheDocument()
