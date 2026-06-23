@@ -29,6 +29,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-garagebalance};Username=${POSTGRES_USER:-garagebalance};Password=${POSTGRES_PASSWORD:-garagebalance_dev_password}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-change-this-development-key-before-real-data-32}
       Cors__AllowedOrigins__0: http://localhost:${FRONTEND_PORT:-5173}
     ports:
       - "${API_PORT:-5080}:8080"

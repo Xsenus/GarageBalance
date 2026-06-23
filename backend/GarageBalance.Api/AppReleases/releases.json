@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-jwt-secret-validation",
+    "version": "0.45.0",
+    "publishedAt": "2026-06-23T23:55:00+07:00",
+    "title": "Усилена проверка JWT-секрета",
+    "summary": "Backend теперь проверяет JWT-настройки на старте и не позволяет запускать production-контур с примерным или слишком коротким ключом подписи.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Вне Development нужно задать реальный Jwt:SigningKey через переменные окружения, user-secrets или секреты контура размещения."
+      },
+      {
+        "type": "important",
+        "text": "Пустой ключ, ключ короче 32 UTF-8 байт и примерные change-this/development/sample/password значения блокируют запуск API."
+      },
+      {
+        "type": "improved",
+        "text": "Docker Compose и .env.example получили явную переменную JWT_SIGNING_KEY для локальной настройки."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-audit-csv-export",
     "version": "0.44.0",
     "publishedAt": "2026-06-23T23:35:00+07:00",
