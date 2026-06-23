@@ -3916,7 +3916,11 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
         ))}
       </ul>
       {pendingArchive ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingArchive(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!confirmingArchive) {
+            setPendingArchive(null)
+          }
+        }}>
           <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>

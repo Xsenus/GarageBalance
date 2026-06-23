@@ -530,7 +530,7 @@ describe('App', () => {
     expect(within(garageDialog).getByText('18,5')).toBeInTheDocument()
     expect(within(garageDialog).getByText('412,75')).toBeInTheDocument()
     expect(within(garageDialog).getByText('Старые счетчики внесены из Access')).toBeInTheDocument()
-    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(garageDialog.parentElement!)
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Гараж 21' })).not.toBeInTheDocument()
     })
@@ -698,7 +698,7 @@ describe('App', () => {
     expect(within(firstDialog).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(firstDialog).getByText('Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.')).toBeInTheDocument()
 
-    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(firstDialog.parentElement!)
     expect(archivedOwnerId).toBeNull()
     expect(screen.queryByRole('dialog', { name: 'Подтвердите архивирование' })).not.toBeInTheDocument()
     expect(firstArchiveButton).toHaveFocus()
