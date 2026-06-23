@@ -1,5 +1,30 @@
 [
   {
+    "releaseId": "2026-06-23-request-validation-net10",
+    "version": "0.63.0",
+    "publishedAt": "2026-06-23T23:59:59+07:00",
+    "title": "Исправлена проверка входных форм на сервере",
+    "summary": "Backend-контракты обновлены под правила MVC в .NET 10, чтобы создание первого администратора и рабочие формы проходили server-side validation без ошибки 500.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "Исправлена ошибка создания первого администратора на staging-сервере."
+      },
+      {
+        "type": "fixed",
+        "text": "Системные роли сохраняются до выдачи роли первому администратору, поэтому чистая PostgreSQL-БД корректно проходит bootstrap."
+      },
+      {
+        "type": "fixed",
+        "text": "Входные request-контракты больше не используют property-targeted validation attributes, которые MVC .NET 10 игнорирует для primary constructor records."
+      },
+      {
+        "type": "improved",
+        "text": "Добавлен backend-тест-конвенция, который запрещает возвращать этот формат атрибутов в application contracts."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-report-screen-row-limit",
     "version": "0.62.0",
     "publishedAt": "2026-06-23T23:59:59+07:00",

@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations;
 namespace GarageBalance.Api.Application.Import;
 
 public sealed record AccessImportDryRunRequest(
-    [property: Required] string FileName,
-    [property: Required] Stream Content);
+    [Required] string FileName,
+    [Required] Stream Content);
 
 public sealed record AccessImportCheckDto(
     string Code,

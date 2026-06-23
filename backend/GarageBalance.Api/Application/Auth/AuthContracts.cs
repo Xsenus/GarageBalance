@@ -3,17 +3,17 @@ using System.ComponentModel.DataAnnotations;
 namespace GarageBalance.Api.Application.Auth;
 
 public sealed record BootstrapAdminRequest(
-    [property: Required, EmailAddress, MaxLength(320)] string Email,
-    [property: Required, MinLength(8), MaxLength(200)] string Password,
-    [property: Required, MaxLength(200)] string DisplayName);
+    [Required, EmailAddress, MaxLength(320)] string Email,
+    [Required, MinLength(8), MaxLength(200)] string Password,
+    [Required, MaxLength(200)] string DisplayName);
 
 public sealed record LoginRequest(
-    [property: Required, EmailAddress, MaxLength(320)] string Email,
-    [property: Required, MaxLength(200)] string Password);
+    [Required, EmailAddress, MaxLength(320)] string Email,
+    [Required, MaxLength(200)] string Password);
 
 public sealed record ChangeOwnPasswordRequest(
-    [property: Required, MaxLength(200)] string CurrentPassword,
-    [property: Required, MinLength(8), MaxLength(200)] string NewPassword);
+    [Required, MaxLength(200)] string CurrentPassword,
+    [Required, MinLength(8), MaxLength(200)] string NewPassword);
 
 public sealed record AuthResponse(
     string AccessToken,

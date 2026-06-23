@@ -30,21 +30,21 @@ public sealed record CreateIncomeOperationRequest(
     Guid IncomeTypeId,
     DateOnly OperationDate,
     DateOnly AccountingMonth,
-    [property: Range(0.01, 999999999)] decimal Amount,
-    [property: MaxLength(120)] string? DocumentNumber,
-    [property: MaxLength(1000)] string? Comment);
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(120)] string? DocumentNumber,
+    [MaxLength(1000)] string? Comment);
 
 public sealed record CreateExpenseOperationRequest(
     Guid SupplierId,
     Guid ExpenseTypeId,
     DateOnly OperationDate,
     DateOnly AccountingMonth,
-    [property: Range(0.01, 999999999)] decimal Amount,
-    [property: MaxLength(120)] string? DocumentNumber,
-    [property: MaxLength(1000)] string? Comment);
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(120)] string? DocumentNumber,
+    [MaxLength(1000)] string? Comment);
 
 public sealed record CancelFinanceEntryRequest(
-    [property: Required, MaxLength(1000)] string Reason);
+    [Required, MaxLength(1000)] string Reason);
 
 public sealed record FinancialOperationListRequest(
     DateOnly? DateFrom,
@@ -82,24 +82,24 @@ public sealed record CreateAccrualRequest(
     Guid GarageId,
     Guid IncomeTypeId,
     DateOnly AccountingMonth,
-    [property: Range(0.01, 999999999)] decimal Amount,
-    [property: Required, MaxLength(40)] string Source,
-    [property: MaxLength(1000)] string? Comment);
+    [Range(0.01, 999999999)] decimal Amount,
+    [Required, MaxLength(40)] string Source,
+    [MaxLength(1000)] string? Comment);
 
 public sealed record CreateSupplierAccrualRequest(
     Guid SupplierId,
     Guid ExpenseTypeId,
     DateOnly AccountingMonth,
-    [property: Range(0.01, 999999999)] decimal Amount,
-    [property: Required, MaxLength(40)] string Source,
-    [property: MaxLength(120)] string? DocumentNumber,
-    [property: MaxLength(1000)] string? Comment);
+    [Range(0.01, 999999999)] decimal Amount,
+    [Required, MaxLength(40)] string Source,
+    [MaxLength(120)] string? DocumentNumber,
+    [MaxLength(1000)] string? Comment);
 
 public sealed record GenerateRegularAccrualsRequest(
     Guid IncomeTypeId,
     Guid TariffId,
     DateOnly AccountingMonth,
-    [property: MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment);
 
 public sealed record RegularAccrualGenerationResultDto(
     DateOnly AccountingMonth,
@@ -141,11 +141,11 @@ public sealed record MeterReadingDto(
 
 public sealed record CreateMeterReadingRequest(
     Guid GarageId,
-    [property: Required, MaxLength(40)] string MeterKind,
+    [Required, MaxLength(40)] string MeterKind,
     DateOnly AccountingMonth,
     DateOnly ReadingDate,
-    [property: Range(0, 999999999)] decimal CurrentValue,
-    [property: MaxLength(1000)] string? Comment);
+    [Range(0, 999999999)] decimal CurrentValue,
+    [MaxLength(1000)] string? Comment);
 
 public sealed record MeterReadingListRequest(
     DateOnly? MonthFrom,

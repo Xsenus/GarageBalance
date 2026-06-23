@@ -15,14 +15,14 @@ public sealed record ManagedUserDto(
     IReadOnlyList<string> Permissions);
 
 public sealed record CreateManagedUserRequest(
-    [property: Required, EmailAddress, MaxLength(320)] string Email,
-    [property: Required, MaxLength(200)] string DisplayName,
-    [property: Required, MinLength(8), MaxLength(200)] string Password,
-    [property: MinLength(1)] IReadOnlyList<string> RoleCodes,
+    [Required, EmailAddress, MaxLength(320)] string Email,
+    [Required, MaxLength(200)] string DisplayName,
+    [Required, MinLength(8), MaxLength(200)] string Password,
+    [MinLength(1)] IReadOnlyList<string> RoleCodes,
     bool IsActive = true);
 
 public sealed record UpdateManagedUserRequest(
-    [property: Required, MaxLength(200)] string DisplayName,
-    [property: MinLength(1)] IReadOnlyList<string> RoleCodes,
+    [Required, MaxLength(200)] string DisplayName,
+    [MinLength(1)] IReadOnlyList<string> RoleCodes,
     bool IsActive,
-    [property: MinLength(8), MaxLength(200)] string? NewPassword);
+    [MinLength(8), MaxLength(200)] string? NewPassword);

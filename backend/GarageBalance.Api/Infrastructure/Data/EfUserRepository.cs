@@ -61,6 +61,7 @@ public sealed class EfUserRepository(GarageBalanceDbContext dbContext) : IUserRe
         await EnsureRoleAsync(SystemRoles.Accountant, "Бухгалтер", SystemPermissions.Accountant, cancellationToken);
         await EnsureRoleAsync(SystemRoles.Operator, "Оператор", SystemPermissions.Operator, cancellationToken);
         await EnsureRoleAsync(SystemRoles.ReportsViewer, "Просмотр отчетов", SystemPermissions.ReportsViewer, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task AddUserAsync(AppUser user, IReadOnlyList<AppRole> roles, AuditEvent auditEvent, CancellationToken cancellationToken)

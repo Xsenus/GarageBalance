@@ -14,12 +14,12 @@ public sealed record OwnerDto(
     bool IsArchived);
 
 public sealed record UpsertOwnerRequest(
-    [property: Required, MaxLength(120)] string LastName,
-    [property: Required, MaxLength(120)] string FirstName,
-    [property: MaxLength(120)] string? MiddleName,
-    [property: MaxLength(80)] string? Phone,
-    [property: MaxLength(500)] string? Address,
-    [property: MaxLength(1000)] string? MeterNotes);
+    [Required, MaxLength(120)] string LastName,
+    [Required, MaxLength(120)] string FirstName,
+    [MaxLength(120)] string? MiddleName,
+    [MaxLength(80)] string? Phone,
+    [MaxLength(500)] string? Address,
+    [MaxLength(1000)] string? MeterNotes);
 
 public sealed record GarageDto(
     Guid Id,
@@ -35,18 +35,18 @@ public sealed record GarageDto(
     bool IsArchived);
 
 public sealed record UpsertGarageRequest(
-    [property: Required, MaxLength(80)] string Number,
-    [property: Range(0, 1000)] int PeopleCount,
-    [property: Range(0, 100)] int FloorCount,
+    [Required, MaxLength(80)] string Number,
+    [Range(0, 1000)] int PeopleCount,
+    [Range(0, 100)] int FloorCount,
     Guid? OwnerId,
     decimal StartingBalance,
-    [property: Range(0, 999999999)] decimal? InitialWaterMeterValue,
-    [property: Range(0, 999999999)] decimal? InitialElectricityMeterValue,
-    [property: MaxLength(1000)] string? Comment);
+    [Range(0, 999999999)] decimal? InitialWaterMeterValue,
+    [Range(0, 999999999)] decimal? InitialElectricityMeterValue,
+    [MaxLength(1000)] string? Comment);
 
 public sealed record SupplierGroupDto(Guid Id, string Name, bool IsSystem, bool IsArchived);
 
-public sealed record UpsertSupplierGroupRequest([property: Required, MaxLength(200)] string Name);
+public sealed record UpsertSupplierGroupRequest([Required, MaxLength(200)] string Name);
 
 public sealed record SupplierDto(
     Guid Id,
@@ -63,21 +63,21 @@ public sealed record SupplierDto(
     bool IsArchived);
 
 public sealed record UpsertSupplierRequest(
-    [property: Required, MaxLength(240)] string Name,
+    [Required, MaxLength(240)] string Name,
     Guid GroupId,
-    [property: MaxLength(20)] string? Inn,
-    [property: MaxLength(500)] string? LegalAddress,
-    [property: MaxLength(200)] string? ContactPerson,
-    [property: MaxLength(80)] string? Phone,
-    [property: EmailAddress, MaxLength(320)] string? Email,
+    [MaxLength(20)] string? Inn,
+    [MaxLength(500)] string? LegalAddress,
+    [MaxLength(200)] string? ContactPerson,
+    [MaxLength(80)] string? Phone,
+    [EmailAddress, MaxLength(320)] string? Email,
     decimal StartingBalance,
-    [property: MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment);
 
 public sealed record AccountingTypeDto(Guid Id, string Name, string? Code, bool IsSystem, bool IsArchived);
 
 public sealed record UpsertAccountingTypeRequest(
-    [property: Required, MaxLength(200)] string Name,
-    [property: MaxLength(80)] string? Code);
+    [Required, MaxLength(200)] string Name,
+    [MaxLength(80)] string? Code);
 
 public sealed record TariffDto(
     Guid Id,
@@ -89,8 +89,8 @@ public sealed record TariffDto(
     bool IsArchived);
 
 public sealed record UpsertTariffRequest(
-    [property: Required, MaxLength(200)] string Name,
-    [property: Required, MaxLength(80)] string CalculationBase,
-    [property: Range(0.0001, 999999999)] decimal Rate,
+    [Required, MaxLength(200)] string Name,
+    [Required, MaxLength(80)] string CalculationBase,
+    [Range(0.0001, 999999999)] decimal Rate,
     DateOnly EffectiveFrom,
-    [property: MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment);
