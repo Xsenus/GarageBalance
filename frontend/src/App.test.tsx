@@ -812,6 +812,9 @@ describe('App', () => {
     expect(within(importSummary).getByText('0')).toBeInTheDocument()
     expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
     expect(within(importPanel).getByText('Формат файла')).toBeInTheDocument()
+    expect(within(importPanel).getAllByText('Пройдено').length).toBeGreaterThan(0)
+    expect(within(importPanel).getByText('Предупреждение')).toBeInTheDocument()
+    expect(within(importPanel).getAllByText('Завершен').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
 
     await user.click(within(importPanel).getByRole('button', { name: 'Скачать отчет JSON' }))

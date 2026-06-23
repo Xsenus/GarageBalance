@@ -28,7 +28,7 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, Supplier
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
-import type { AccessImportRunDto, ImportClient } from './services/importApi'
+import type { AccessImportCheckDto, AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -1526,7 +1526,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               <div className="summary-strip" aria-label="Итоги dry-run импорта">
                 <div>
                   <span>Статус</span>
-                  <strong>{currentRun.status === 'completed' ? 'Завершен' : 'Заблокирован'}</strong>
+                  <strong>{formatImportRunStatus(currentRun.status)}</strong>
                 </div>
                 <div>
                   <span>Успешно</span>
@@ -1559,7 +1559,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <small>{check.message}</small>
               </span>
               <span role="cell" className={check.status === 'passed' ? 'status-active' : check.status === 'warning' ? 'warning-text' : 'status-disabled'}>
-                {check.status}
+                {formatImportCheckStatus(check.status)}
               </span>
               <span role="cell">{currentRun.originalFileName}</span>
             </div>
@@ -1580,7 +1580,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <small>{run.summary}</small>
               </span>
               <span role="cell" className={run.status === 'completed' ? 'status-active' : 'status-disabled'}>
-                {run.status}
+                {formatImportRunStatus(run.status)}
               </span>
               <span role="cell">
                 {run.passedChecks}/{run.totalChecks}
@@ -3107,6 +3107,22 @@ function formatAccrualSource(source: string): string {
   }
 
   return source
+}
+
+function formatImportRunStatus(status: AccessImportRunDto['status']): string {
+  return status === 'completed' ? 'Завершен' : 'Заблокирован'
+}
+
+function formatImportCheckStatus(status: AccessImportCheckDto['status']): string {
+  if (status === 'passed') {
+    return 'Пройдено'
+  }
+
+  if (status === 'warning') {
+    return 'Предупреждение'
+  }
+
+  return 'Ошибка'
 }
 
 function formatNullableNumber(value: number | null): string {
