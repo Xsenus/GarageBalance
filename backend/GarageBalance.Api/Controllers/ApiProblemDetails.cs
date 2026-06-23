@@ -7,6 +7,7 @@ public static class ApiProblemDetails
 {
     public const string CodeExtensionKey = "code";
     public const string ForbiddenCode = "forbidden";
+    public const string InternalErrorCode = "internal_error";
     public const string UnauthorizedCode = "unauthorized";
     public const string ValidationFailedCode = "validation_failed";
 
@@ -50,5 +51,10 @@ public static class ApiProblemDetails
     public static ProblemDetails CreateForbidden()
     {
         return Create(ForbiddenCode, "Недостаточно прав для выполнения действия.", StatusCodes.Status403Forbidden);
+    }
+
+    public static ProblemDetails CreateInternalError()
+    {
+        return Create(InternalErrorCode, "Произошла внутренняя ошибка сервера.", StatusCodes.Status500InternalServerError);
     }
 }
