@@ -26,6 +26,7 @@ export type AccessImportRunDto = {
 export type ImportClient = {
   getAccessRuns(accessToken: string): Promise<AccessImportRunDto[]>
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
+  downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
@@ -47,6 +48,21 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
+async function requestBlob(accessToken: string, path: string): Promise<Blob> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    throw new Error(problem?.detail ?? 'Не удалось скачать отчет импорта.')
+  }
+
+  return response.blob()
+}
+
 export const importApi: ImportClient = {
   getAccessRuns(accessToken) {
     return requestJson(accessToken, '/api/import/access/runs')
@@ -55,5 +71,8 @@ export const importApi: ImportClient = {
     const formData = new FormData()
     formData.append('file', file)
     return requestJson(accessToken, '/api/import/access/dry-run', { method: 'POST', body: formData })
+  },
+  downloadAccessRunReport(accessToken, runId) {
+    return requestBlob(accessToken, `/api/import/access/runs/${runId}/report`)
   },
 }

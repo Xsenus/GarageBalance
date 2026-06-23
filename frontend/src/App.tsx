@@ -947,7 +947,9 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -992,11 +994,31 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       setCurrentRun(run)
       setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)])
       setSelectedFile(null)
+      setExportMessage(null)
       form.reset()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось выполнить dry-run импорта.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function downloadCurrentReport() {
+    if (!currentRun) {
+      return
+    }
+
+    setExporting(true)
+    setError(null)
+    setExportMessage(null)
+    try {
+      const blob = await importClient.downloadAccessRunReport(auth.accessToken, currentRun.id)
+      downloadBlob(blob, buildImportReportFileName(currentRun))
+      setExportMessage('Отчет dry-run импорта готов.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось скачать отчет dry-run импорта.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -1011,6 +1033,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       </div>
 
       {error ? <div className="form-error">{error}</div> : null}
+      {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <div className="finance-grid">
         <form className="dictionary-form" onSubmit={runDryRun}>
@@ -1022,6 +1045,15 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
           </button>
           {selectedFile ? <p className="empty-state">{selectedFile.name}</p> : null}
         </form>
+
+        <div className="dictionary-form">
+          <h3>Отчет проверки</h3>
+          <button className="secondary-button" type="button" disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
+            <FileText size={16} />
+            <span>Скачать отчет JSON</span>
+          </button>
+          {currentRun ? <p className="empty-state">{currentRun.originalFileName} · {currentRun.passedChecks}/{currentRun.totalChecks}</p> : <p className="empty-state">Выберите запуск dry-run</p>}
+        </div>
 
         <div className="operation-list" role="table" aria-label="Проверки импорта">
           <div className="operation-row header" role="row">
@@ -2062,6 +2094,12 @@ function formatMoney(value: number): string {
 
 function buildReportFileName(type: 'consolidated' | 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
   return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
+}
+
+function buildImportReportFileName(run: AccessImportRunDto): string {
+  const startedAt = run.startedAtUtc.slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '-')
+  const sourceName = run.originalFileName.replace(/\.[^.]+$/, '').replaceAll(' ', '-').toLowerCase()
+  return `garagebalance-access-dry-run-${sourceName}-${startedAt}.json`
 }
 
 function getFormValues(form: FormData, name: string): string[] {

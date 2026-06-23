@@ -18,6 +18,17 @@ public sealed class ImportController(IImportService importService) : ControllerB
         return Ok(await importService.GetAccessImportRunsAsync(cancellationToken));
     }
 
+    [HttpGet("runs/{id:guid}/report")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportAccessImportRunReport(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await importService.ExportAccessImportRunReportAsync(id, cancellationToken);
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : NotFound(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+    }
+
     [HttpPost("dry-run")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status201Created)]

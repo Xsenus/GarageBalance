@@ -55,6 +55,36 @@ public sealed class ImportServiceTests
         Assert.Equal("second.accdb", result[0].OriginalFileName);
     }
 
+    [Fact]
+    public async Task ExportAccessImportRunReportAsync_ReturnsJsonReportFile()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.ExportAccessImportRunReportAsync(dryRun.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("application/json; charset=utf-8", result.Value!.ContentType);
+        Assert.StartsWith("garagebalance-access-dry-run-gsk-archive-", result.Value.FileName);
+        var text = Encoding.UTF8.GetString(result.Value.Content);
+        Assert.Contains("\"originalFileName\": \"GSK archive.accdb\"", text);
+        Assert.Contains("\"checks\":", text);
+        Assert.Contains("\"schema_hints\"", text);
+    }
+
+    [Fact]
+    public async Task ExportAccessImportRunReportAsync_ReturnsNotFoundForMissingRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportService(database.Context);
+
+        var result = await service.ExportAccessImportRunReportAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_not_found", result.ErrorCode);
+    }
+
     private static MemoryStream CreateAccessLikeStream(string text)
     {
         var oleSignature = new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };

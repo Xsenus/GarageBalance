@@ -12,6 +12,10 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
 {
     private const long MaxDryRunFileSizeBytes = 512L * 1024L * 1024L;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions ReportJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
 
     public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(CancellationToken cancellationToken)
     {
@@ -21,6 +25,45 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             .Take(50)
             .Select(ToDto)
             .ToList();
+    }
+
+    public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        var run = await dbContext.AccessImportRuns.AsNoTracking().SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        if (run is null)
+        {
+            return ImportResult<ImportReportFileDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
+        }
+
+        var dto = ToDto(run);
+        var report = new
+        {
+            dto.Id,
+            dto.Mode,
+            dto.Status,
+            dto.OriginalFileName,
+            dto.FileExtension,
+            dto.FileSizeBytes,
+            dto.ContentSha256,
+            dto.StartedAtUtc,
+            dto.FinishedAtUtc,
+            dto.TotalChecks,
+            dto.PassedChecks,
+            dto.WarningCount,
+            dto.ErrorCount,
+            dto.Summary,
+            dto.Checks
+        };
+        var content = JsonSerializer.SerializeToUtf8Bytes(report, ReportJsonOptions);
+        var safeFileName = Path.GetFileNameWithoutExtension(dto.OriginalFileName)
+            .Replace(' ', '-')
+            .ToLowerInvariant();
+        var timestamp = dto.StartedAtUtc.ToString("yyyyMMdd-HHmmss");
+
+        return ImportResult<ImportReportFileDto>.Success(new ImportReportFileDto(
+            $"garagebalance-access-dry-run-{safeFileName}-{timestamp}.json",
+            "application/json; charset=utf-8",
+            content));
     }
 
     public async Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)

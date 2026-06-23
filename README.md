@@ -61,6 +61,7 @@ npm run dev
 - `POST /api/finance/income` - внесение поступления по гаражу.
 - `POST /api/finance/expense` - внесение выплаты поставщику.
 - `GET /api/import/access/runs` - журнал dry-run проверок Access-БД.
+- `GET /api/import/access/runs/{id}/report` - скачивание JSON-отчета конкретного dry-run импорта.
 - `POST /api/import/access/dry-run` - загрузка `.accdb`/`.mdb` и первичная проверка перед импортом.
 - `GET /api/reports/consolidated` - консолидированный отчет за период с итогами по месяцам и гаражам.
 - `GET /api/reports/consolidated/export/xlsx` - XLSX-выгрузка консолидированного отчета за период.

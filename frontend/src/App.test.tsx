@@ -250,6 +250,10 @@ describe('App', () => {
     expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
     expect(within(importPanel).getByText('Формат файла')).toBeInTheDocument()
     expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
+
+    await user.click(within(importPanel).getByRole('button', { name: 'Скачать отчет JSON' }))
+
+    expect(await within(importPanel).findByText('Отчет dry-run импорта готов.')).toBeInTheDocument()
   })
 
   it('shows consolidated report and applies garage search', async () => {
@@ -581,6 +585,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
   return {
     getAccessRuns: async () => [],
     dryRunAccess: async () => run,
+    downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
     ...overrides,
   }
 }
@@ -655,6 +660,10 @@ function createStatefulImportClient(): ImportClient {
       })
       runs = [run, ...runs]
       return run
+    },
+    downloadAccessRunReport: async (_token, runId) => {
+      const run = runs.find((item) => item.id === runId)
+      return new Blob([JSON.stringify(run ?? {})], { type: 'application/json' })
     },
   }
 }

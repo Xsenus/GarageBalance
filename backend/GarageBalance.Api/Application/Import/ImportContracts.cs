@@ -28,3 +28,8 @@ public sealed record AccessImportRunDto(
     int ErrorCount,
     string Summary,
     IReadOnlyList<AccessImportCheckDto> Checks);
+
+public sealed record ImportReportFileDto(
+    string FileName,
+    string ContentType,
+    byte[] Content);

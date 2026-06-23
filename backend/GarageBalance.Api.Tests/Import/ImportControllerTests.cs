@@ -56,6 +56,40 @@ public sealed class ImportControllerTests
         Assert.Equal("access_extension_required", problem.Title);
     }
 
+    [Fact]
+    public async Task ExportAccessImportRunReport_ReturnsFile()
+    {
+        var service = new FakeImportService
+        {
+            ExportResult = ImportResult<ImportReportFileDto>.Success(new ImportReportFileDto("report.json", "application/json; charset=utf-8", Encoding.UTF8.GetBytes("{}")))
+        };
+        var controller = CreateController(service);
+        var runId = Guid.NewGuid();
+
+        var result = await controller.ExportAccessImportRunReport(runId, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("report.json", file.FileDownloadName);
+        Assert.Equal("application/json; charset=utf-8", file.ContentType);
+        Assert.Equal(runId, service.LastExportRunId);
+    }
+
+    [Fact]
+    public async Task ExportAccessImportRunReport_ReturnsNotFoundForMissingRun()
+    {
+        var service = new FakeImportService
+        {
+            ExportResult = ImportResult<ImportReportFileDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.ExportAccessImportRunReport(Guid.NewGuid(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("import_run_not_found", problem.Title);
+    }
+
     private static ImportController CreateController(FakeImportService service, Guid? actorUserId = null)
     {
         var controller = new ImportController(service);
@@ -97,11 +131,19 @@ public sealed class ImportControllerTests
     {
         public Guid? LastActorUserId { get; private set; }
         public string? LastFileName { get; private set; }
+        public Guid? LastExportRunId { get; private set; }
         public ImportResult<AccessImportRunDto> DryRunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
+        public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlyList<AccessImportRunDto>>([]);
+        }
+
+        public Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, CancellationToken cancellationToken)
+        {
+            LastExportRunId = runId;
+            return Task.FromResult(ExportResult);
         }
 
         public Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)
