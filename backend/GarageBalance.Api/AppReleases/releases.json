@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-api-security-headers",
+    "version": "0.47.0",
+    "publishedAt": "2026-06-23T23:59:00+07:00",
+    "title": "Добавлены защитные HTTP-заголовки API",
+    "summary": "API теперь добавляет security headers и запрещает кэширование JSON-ответов рабочих маршрутов.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Для маршрутов /api/* выставляются Cache-Control: no-store, Pragma: no-cache и Expires: 0, чтобы ответы с персональными и финансовыми данными не сохранялись в браузере или прокси."
+      },
+      {
+        "type": "improved",
+        "text": "Все ответы API получают X-Content-Type-Options: nosniff, X-Frame-Options: DENY и Referrer-Policy: no-referrer."
+      },
+      {
+        "type": "improved",
+        "text": "Добавлены backend-тесты middleware защитных заголовков."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-api-secret-exposure-tests",
     "version": "0.46.0",
     "publishedAt": "2026-06-23T23:58:00+07:00",

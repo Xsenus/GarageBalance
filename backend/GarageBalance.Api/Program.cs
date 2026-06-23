@@ -101,6 +101,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ApiExceptionHandlingMiddleware>();
+app.UseMiddleware<ApiSecurityHeadersMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
 
