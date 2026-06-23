@@ -3742,34 +3742,89 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   )
 }
 
-function DictionaryList({ items, emptyText }: { items: { id: string; title: string; meta: string; openLabel?: string; onOpen?: () => void; archiveLabel?: string; onArchive?: () => void }[]; emptyText: string }) {
+type DictionaryListItem = {
+  id: string
+  title: string
+  meta: string
+  openLabel?: string
+  onOpen?: () => void
+  archiveLabel?: string
+  onArchive?: () => Promise<void> | void
+}
+
+function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
+  const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
+  const [confirmingArchive, setConfirmingArchive] = useState(false)
+
+  async function confirmArchive() {
+    if (!pendingArchive?.onArchive) {
+      return
+    }
+
+    setConfirmingArchive(true)
+    try {
+      await pendingArchive.onArchive()
+      setPendingArchive(null)
+    } finally {
+      setConfirmingArchive(false)
+    }
+  }
+
   if (items.length === 0) {
     return <p className="empty-state">{emptyText}</p>
   }
 
   return (
-    <ul className="dictionary-list">
-      {items.slice(0, 5).map((item) => (
-        <li key={item.id}>
-          <span>
-            <strong>{item.title}</strong>
-            <span>{item.meta}</span>
-          </span>
-          <span className="dictionary-actions">
-            {item.onOpen ? (
-              <button className="icon-button" type="button" aria-label={item.openLabel ?? `Открыть ${item.title}`} onClick={item.onOpen}>
-                <FileText size={16} />
+    <>
+      <ul className="dictionary-list">
+        {items.slice(0, 5).map((item) => (
+          <li key={item.id}>
+            <span>
+              <strong>{item.title}</strong>
+              <span>{item.meta}</span>
+            </span>
+            <span className="dictionary-actions">
+              {item.onOpen ? (
+                <button className="icon-button" type="button" aria-label={item.openLabel ?? `Открыть ${item.title}`} onClick={item.onOpen}>
+                  <FileText size={16} />
+                </button>
+              ) : null}
+              {item.onArchive ? (
+                <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={() => setPendingArchive(item)}>
+                  <Trash2 size={16} />
+                </button>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {pendingArchive ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingArchive(null)}>
+          <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Архивирование</p>
+                <h3 id={`archive-confirmation-${pendingArchive.id}`}>Подтвердите архивирование</h3>
+                <p>{pendingArchive.title}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить архивирование" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
+                <X size={18} />
               </button>
-            ) : null}
-            {item.onArchive ? (
-              <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={item.onArchive}>
+            </div>
+            <p className="confirmation-text">Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.</p>
+            <div className="detail-dialog-actions">
+              <button className="ghost-button" type="button" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
+                Отменить
+              </button>
+              <button className="secondary-button" type="button" onClick={() => void confirmArchive()} disabled={confirmingArchive}>
                 <Trash2 size={16} />
+                <span>{confirmingArchive ? 'Архивируем...' : 'Архивировать запись'}</span>
               </button>
-            ) : null}
-          </span>
-        </li>
-      ))}
-    </ul>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   )
 }
 

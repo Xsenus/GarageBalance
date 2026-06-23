@@ -476,6 +476,10 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('Изменение тарифа')).not.toBeInTheDocument()
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать тариф Вода после собрания' }))
+    expect(archivedTariffId).toBeNull()
+    const archiveDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
+    await user.click(within(archiveDialog).getByRole('button', { name: 'Архивировать запись' }))
+
     expect(archivedTariffId).toBe('tariff-1')
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
   })
@@ -671,6 +675,19 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
+
+    expect(archivedOwnerId).toBeNull()
+    const firstDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
+    expect(within(firstDialog).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(firstDialog).getByText('Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.')).toBeInTheDocument()
+
+    await user.click(within(firstDialog).getByRole('button', { name: 'Отменить' }))
+    expect(archivedOwnerId).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите архивирование' })).not.toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
+    const confirmDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
+    await user.click(within(confirmDialog).getByRole('button', { name: 'Архивировать запись' }))
 
     expect(archivedOwnerId).toBe('owner-1')
     await waitFor(() => {

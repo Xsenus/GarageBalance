@@ -992,6 +992,19 @@ button.operation-row:hover {
   font-size: 14px;
 }
 
+.confirmation-text {
+  margin: 0 0 16px;
+  color: #475467;
+  line-height: 1.5;
+}
+
+.detail-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
