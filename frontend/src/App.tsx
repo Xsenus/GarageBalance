@@ -232,6 +232,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
           Пароль
           <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
         </label>
+        <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
         {error ? <div className="form-error">{error}</div> : null}
 
@@ -430,6 +431,7 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
             <input aria-label="Повтор нового пароля" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
           </label>
         </div>
+        <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
         {error ? <div className="form-error">{error}</div> : null}
         {message ? <div className="form-success">{message}</div> : null}
         <button className="secondary-button" type="submit" disabled={saving}>
@@ -2131,6 +2133,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
           <input aria-label="Email пользователя" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
           <input aria-label="Имя пользователя" placeholder="Имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
           <input aria-label="Пароль пользователя" placeholder="Пароль" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" minLength={8} required />
+          <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
           <select aria-label="Роль пользователя" value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })} required>
             {roles.map((role) => (
               <option value={role.code} key={role.code}>

@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Users;
 
-public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPasswordHasher passwordHasher) : IUserManagementService
+public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPasswordHasher passwordHasher, IPasswordPolicyValidator passwordPolicyValidator) : IUserManagementService
 {
     private const int ListLimit = 100;
 
@@ -53,6 +53,12 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
         if (await dbContext.Users.AnyAsync(user => user.NormalizedEmail == normalizedEmail, cancellationToken))
         {
             return UserManagementResult<ManagedUserDto>.Failure("user_email_duplicate", "Пользователь с таким email уже существует.");
+        }
+
+        var passwordPolicy = passwordPolicyValidator.Validate(request.Password);
+        if (!passwordPolicy.Succeeded)
+        {
+            return UserManagementResult<ManagedUserDto>.Failure("password_policy_violation", passwordPolicy.ErrorMessage!);
         }
 
         var rolesResult = await GetRolesOrFailureAsync(request.RoleCodes, cancellationToken);
@@ -116,6 +122,12 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
         user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.NewPassword))
         {
+            var passwordPolicy = passwordPolicyValidator.Validate(request.NewPassword);
+            if (!passwordPolicy.Succeeded)
+            {
+                return UserManagementResult<ManagedUserDto>.Failure("password_policy_violation", passwordPolicy.ErrorMessage!);
+            }
+
             user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
         }
 

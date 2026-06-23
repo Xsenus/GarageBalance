@@ -17,6 +17,11 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         var result = await authService.BootstrapAdminAsync(request, cancellationToken);
         if (!result.Succeeded)
         {
+            if (result.ErrorCode == "password_policy_violation")
+            {
+                return BadRequest(ToProblem(result));
+            }
+
             return Conflict(ToProblem(result));
         }
 

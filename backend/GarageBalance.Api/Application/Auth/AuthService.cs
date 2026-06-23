@@ -7,13 +7,19 @@ using GarageBalance.Api.Domain.Users;
 
 namespace GarageBalance.Api.Application.Auth;
 
-public sealed class AuthService(IUserRepository users, IPasswordHasher passwordHasher, ITokenService tokenService) : IAuthService
+public sealed class AuthService(IUserRepository users, IPasswordHasher passwordHasher, IPasswordPolicyValidator passwordPolicyValidator, ITokenService tokenService) : IAuthService
 {
     private const int MaxFailedLoginAttempts = 5;
     private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
 
     public async Task<AuthResult<AuthResponse>> BootstrapAdminAsync(BootstrapAdminRequest request, CancellationToken cancellationToken)
     {
+        var passwordPolicy = passwordPolicyValidator.Validate(request.Password);
+        if (!passwordPolicy.Succeeded)
+        {
+            return AuthResult<AuthResponse>.Failure("password_policy_violation", passwordPolicy.ErrorMessage!);
+        }
+
         if (await users.HasAnyUsersAsync(cancellationToken))
         {
             return AuthResult<AuthResponse>.Failure("bootstrap_closed", "Первый администратор уже создан.");
@@ -168,6 +174,12 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
         if (passwordHasher.VerifyPassword(request.NewPassword, user.PasswordHash))
         {
             return AuthResult<CurrentUserDto>.Failure("new_password_same_as_current", "Новый пароль должен отличаться от текущего.");
+        }
+
+        var passwordPolicy = passwordPolicyValidator.Validate(request.NewPassword);
+        if (!passwordPolicy.Succeeded)
+        {
+            return AuthResult<CurrentUserDto>.Failure("password_policy_violation", passwordPolicy.ErrorMessage!);
         }
 
         user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);

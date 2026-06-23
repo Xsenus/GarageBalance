@@ -40,6 +40,21 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task BootstrapAdmin_ReturnsBadRequestForWeakPassword()
+    {
+        var controller = new AuthController(new FakeAuthService
+        {
+            BootstrapResult = AuthResult<AuthResponse>.Failure("password_policy_violation", "Пароль должен содержать хотя бы одну цифру.")
+        });
+
+        var result = await controller.BootstrapAdmin(new BootstrapAdminRequest("admin@example.com", "password", "Admin"), CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("password_policy_violation", problem.Title);
+    }
+
+    [Fact]
     public async Task Login_ReturnsUnauthorizedForInvalidCredentials()
     {
         var controller = new AuthController(new FakeAuthService

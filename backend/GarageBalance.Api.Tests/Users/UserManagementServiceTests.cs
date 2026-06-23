@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
@@ -60,6 +61,23 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task CreateUserAsync_RejectsWeakPassword()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.CreateUserAsync(
+            new CreateManagedUserRequest("operator@example.com", "Оператор", "password", [SystemRoles.Operator]),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("password_policy_violation", result.ErrorCode);
+        Assert.Empty(database.Context.Users);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateUserAsync_RejectsUnknownRole()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -119,6 +137,28 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task UpdateUserAsync_RejectsWeakNewPasswordWithoutChangingHash()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("user@example.com", "Пользователь", "StrongPass123", [SystemRoles.Operator]),
+            null,
+            CancellationToken.None);
+        var oldHash = database.Context.Users.Single().PasswordHash;
+
+        var result = await service.UpdateUserAsync(
+            created.Value!.Id,
+            new UpdateManagedUserRequest("Пользователь", [SystemRoles.Operator], true, "password"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("password_policy_violation", result.ErrorCode);
+        Assert.Equal(oldHash, database.Context.Users.Single().PasswordHash);
+    }
+
+    [Fact]
     public async Task GetUsersAsync_SearchesByEmailAndDisplayName()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -134,7 +174,7 @@ public sealed class UserManagementServiceTests
 
     private static UserManagementService CreateService(GarageBalanceDbContext context)
     {
-        return new UserManagementService(context, new Pbkdf2PasswordHasher());
+        return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator());
     }
 
     private sealed class TestDatabase : IAsyncDisposable

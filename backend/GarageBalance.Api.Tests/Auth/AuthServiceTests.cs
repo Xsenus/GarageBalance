@@ -46,6 +46,22 @@ public sealed class AuthServiceTests
     }
 
     [Fact]
+    public async Task BootstrapAdminAsync_RejectsWeakPassword()
+    {
+        var repository = new InMemoryUserRepository();
+        var service = CreateService(repository);
+
+        var result = await service.BootstrapAdminAsync(
+            new BootstrapAdminRequest("admin@example.com", "password", "Администратор"),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("password_policy_violation", result.ErrorCode);
+        Assert.Empty(repository.Users);
+        Assert.Empty(repository.AuditEvents);
+    }
+
+    [Fact]
     public async Task LoginAsync_ReturnsTokenAndWritesAuditForValidPassword()
     {
         var repository = new InMemoryUserRepository();
@@ -237,6 +253,31 @@ public sealed class AuthServiceTests
             !item.Summary.Contains("NewStrongPass123", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task ChangeOwnPasswordAsync_RejectsWeakNewPasswordWithoutChangingHash()
+    {
+        var repository = new InMemoryUserRepository();
+        var service = CreateService(repository);
+        await service.BootstrapAdminAsync(
+            new BootstrapAdminRequest("admin@example.com", "StrongPass123", "Администратор"),
+            CancellationToken.None);
+        var user = repository.Users[0];
+        var oldHash = user.PasswordHash;
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())],
+            "Test"));
+
+        var result = await service.ChangeOwnPasswordAsync(
+            principal,
+            new ChangeOwnPasswordRequest("StrongPass123", "password"),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("password_policy_violation", result.ErrorCode);
+        Assert.Equal(oldHash, user.PasswordHash);
+        Assert.DoesNotContain(repository.AuditEvents, item => item.Action == "auth.password_changed");
+    }
+
     private static AuthService CreateService(InMemoryUserRepository repository)
     {
         var jwtOptions = Options.Create(new JwtOptions
@@ -246,6 +287,6 @@ public sealed class AuthServiceTests
             SigningKey = "test-signing-key-that-is-long-enough-32",
             AccessTokenMinutes = 15
         });
-        return new AuthService(repository, new Pbkdf2PasswordHasher(), new JwtTokenService(jwtOptions));
+        return new AuthService(repository, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator(), new JwtTokenService(jwtOptions));
     }
 }

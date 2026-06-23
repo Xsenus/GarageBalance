@@ -910,6 +910,24 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 
+  it('shows password policy error without opening workspace', async () => {
+    const user = userEvent.setup()
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () => {
+        throw new Error('Пароль должен содержать хотя бы одну цифру.')
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    expect(screen.getByText('Минимум 8 символов: заглавная буква, строчная буква и цифра.')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Пароль'), 'Password')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    expect(await screen.findByText('Пароль должен содержать хотя бы одну цифру.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
+  })
+
   it('shows rate limit message without opening protected workspace', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
