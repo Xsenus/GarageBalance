@@ -706,6 +706,89 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('150,00 с 01.07.2026')).toBeInTheDocument()
   })
 
+  it('does not call dictionary APIs when supplier and finance dictionary forms fail client validation', async () => {
+    const user = userEvent.setup()
+    let createSupplierGroupCalls = 0
+    let createSupplierCalled = false
+    let createIncomeTypeCalled = false
+    let createExpenseTypeCalled = false
+    let createTariffCalled = false
+    const statefulDictionaryClient = createStatefulDictionaryClient()
+    const dictionaryClient: DictionaryClient = {
+      ...statefulDictionaryClient,
+      createSupplierGroup: async (...args) => {
+        createSupplierGroupCalls += 1
+        return statefulDictionaryClient.createSupplierGroup(...args)
+      },
+      createSupplier: async (...args) => {
+        createSupplierCalled = true
+        return statefulDictionaryClient.createSupplier(...args)
+      },
+      createIncomeType: async (...args) => {
+        createIncomeTypeCalled = true
+        return statefulDictionaryClient.createIncomeType(...args)
+      },
+      createExpenseType: async (...args) => {
+        createExpenseTypeCalled = true
+        return statefulDictionaryClient.createExpenseType(...args)
+      },
+      createTariff: async (...args) => {
+        createTariffCalled = true
+        return statefulDictionaryClient.createTariff(...args)
+      },
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), '   ')
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
+
+    expect(await within(dictionaryPanel).findByText('Проверьте группу поставщиков')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите группу поставщиков.')).toBeInTheDocument()
+    expect(createSupplierGroupCalls).toBe(0)
+
+    await user.clear(within(dictionaryPanel).getByLabelText('Группа поставщиков'))
+    await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), 'Связь')
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
+    await screen.findByRole('option', { name: 'Связь' })
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название поставщика'), '   ')
+    await user.type(within(dictionaryPanel).getByLabelText('ИНН поставщика'), 'abc')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
+
+    expect(await within(dictionaryPanel).findByText('Проверьте поставщика')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите название поставщика.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('ИНН поставщика должен содержать 10 или 12 цифр.')).toBeInTheDocument()
+    expect(createSupplierCalled).toBe(false)
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название вида поступления'), '   ')
+    await user.type(within(dictionaryPanel).getByLabelText('Код вида поступления'), 'членский')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[3])
+
+    expect(await within(dictionaryPanel).findByText('Проверьте вид поступления')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите название вида поступления.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Код вида поступления должен содержать только латиницу, цифры, дефис или подчеркивание.')).toBeInTheDocument()
+    expect(createIncomeTypeCalled).toBe(false)
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название вида выплаты'), '   ')
+    await user.type(within(dictionaryPanel).getByLabelText('Код вида выплаты'), 'вода')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[4])
+
+    expect(await within(dictionaryPanel).findByText('Проверьте вид выплаты')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите название вида выплаты.')).toBeInTheDocument()
+    expect(createExpenseTypeCalled).toBe(false)
+
+    await user.type(within(dictionaryPanel).getByLabelText('Название тарифа'), '   ')
+    await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[5])
+
+    expect(await within(dictionaryPanel).findByText('Проверьте тариф')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Укажите название тарифа.')).toBeInTheDocument()
+    expect(createTariffCalled).toBe(false)
+  })
+
   it('creates income and expense operations from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()

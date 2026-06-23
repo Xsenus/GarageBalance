@@ -25,7 +25,7 @@ import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authAp
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
@@ -202,6 +202,76 @@ function getGarageValidationErrors(form: UpsertGarageRequest) {
 
   if (form.initialElectricityMeterValue != null && (!Number.isFinite(form.initialElectricityMeterValue) || form.initialElectricityMeterValue < 0)) {
     errors.push('Стартовый счетчик электричества должен быть 0 или больше.')
+  }
+
+  return errors
+}
+
+function getSupplierGroupValidationErrors(form: UpsertSupplierGroupRequest) {
+  const errors: string[] = []
+
+  if (!form.name.trim()) {
+    errors.push('Укажите группу поставщиков.')
+  }
+
+  return errors
+}
+
+function getSupplierValidationErrors(form: UpsertSupplierRequest) {
+  const errors: string[] = []
+  const trimmedInn = form.inn?.trim()
+
+  if (!form.name.trim()) {
+    errors.push('Укажите название поставщика.')
+  }
+
+  if (!form.groupId) {
+    errors.push('Выберите группу поставщика.')
+  }
+
+  if (trimmedInn && !/^\d{10}(\d{2})?$/.test(trimmedInn)) {
+    errors.push('ИНН поставщика должен содержать 10 или 12 цифр.')
+  }
+
+  if (!Number.isFinite(form.startingBalance)) {
+    errors.push('Укажите корректный стартовый баланс поставщика.')
+  }
+
+  return errors
+}
+
+function getAccountingTypeValidationErrors(form: UpsertAccountingTypeRequest, title: string) {
+  const errors: string[] = []
+  const code = form.code?.trim()
+
+  if (!form.name.trim()) {
+    errors.push(`Укажите название ${title}.`)
+  }
+
+  if (code && !/^[a-z0-9_-]+$/i.test(code)) {
+    errors.push(`Код ${title} должен содержать только латиницу, цифры, дефис или подчеркивание.`)
+  }
+
+  return errors
+}
+
+function getTariffValidationErrors(form: UpsertTariffRequest) {
+  const errors: string[] = []
+
+  if (!form.name.trim()) {
+    errors.push('Укажите название тарифа.')
+  }
+
+  if (!['fixed', 'people', 'meter_water', 'meter_electricity'].includes(form.calculationBase)) {
+    errors.push('Выберите базу расчета тарифа.')
+  }
+
+  if (!Number.isFinite(form.rate) || form.rate <= 0) {
+    errors.push('Ставка тарифа должна быть больше 0.')
+  }
+
+  if (!form.effectiveFrom || Number.isNaN(Date.parse(form.effectiveFrom))) {
+    errors.push('Укажите дату начала тарифа.')
   }
 
   return errors
@@ -2651,6 +2721,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
   const [ownerValidationErrors, setOwnerValidationErrors] = useState<string[]>([])
   const [garageValidationErrors, setGarageValidationErrors] = useState<string[]>([])
+  const [supplierGroupValidationErrors, setSupplierGroupValidationErrors] = useState<string[]>([])
+  const [supplierValidationErrors, setSupplierValidationErrors] = useState<string[]>([])
+  const [incomeTypeValidationErrors, setIncomeTypeValidationErrors] = useState<string[]>([])
+  const [expenseTypeValidationErrors, setExpenseTypeValidationErrors] = useState<string[]>([])
+  const [tariffValidationErrors, setTariffValidationErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -2839,6 +2914,14 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const errors = getSupplierGroupValidationErrors({ name: supplierGroupName })
+    if (errors.length > 0) {
+      setError(null)
+      setSupplierGroupValidationErrors(errors)
+      return
+    }
+
+    setSupplierGroupValidationErrors([])
     await runSaving('group', async () => {
       const group = await dictionaryClient.createSupplierGroup(auth.accessToken, { name: supplierGroupName })
       setGroups((items) => [...items, group])
@@ -2854,13 +2937,22 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const request: UpsertSupplierRequest = {
+      name: supplierForm.name,
+      groupId: defaultGroupId,
+      inn: supplierForm.inn,
+      startingBalance: supplierForm.startingBalance,
+    }
+    const errors = getSupplierValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setSupplierValidationErrors(errors)
+      return
+    }
+
+    setSupplierValidationErrors([])
     await runSaving('supplier', async () => {
-      const supplier = await dictionaryClient.createSupplier(auth.accessToken, {
-        name: supplierForm.name,
-        groupId: defaultGroupId,
-        inn: supplierForm.inn,
-        startingBalance: supplierForm.startingBalance,
-      })
+      const supplier = await dictionaryClient.createSupplier(auth.accessToken, request)
       setSuppliers((items) => [supplier, ...items])
       setSupplierForm({ name: '', groupId: defaultGroupId, inn: '', startingBalance: 0 })
     })
@@ -2889,6 +2981,14 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const errors = getAccountingTypeValidationErrors(incomeTypeForm, 'вида поступления')
+    if (errors.length > 0) {
+      setError(null)
+      setIncomeTypeValidationErrors(errors)
+      return
+    }
+
+    setIncomeTypeValidationErrors([])
     await runSaving('income-type', async () => {
       const incomeType = await dictionaryClient.createIncomeType(auth.accessToken, incomeTypeForm)
       setIncomeTypes((items) => [incomeType, ...items])
@@ -2903,6 +3003,14 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const errors = getAccountingTypeValidationErrors(expenseTypeForm, 'вида выплаты')
+    if (errors.length > 0) {
+      setError(null)
+      setExpenseTypeValidationErrors(errors)
+      return
+    }
+
+    setExpenseTypeValidationErrors([])
     await runSaving('expense-type', async () => {
       const expenseType = await dictionaryClient.createExpenseType(auth.accessToken, expenseTypeForm)
       setExpenseTypes((items) => [expenseType, ...items])
@@ -2917,6 +3025,14 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       return
     }
 
+    const errors = getTariffValidationErrors(tariffForm)
+    if (errors.length > 0) {
+      setError(null)
+      setTariffValidationErrors(errors)
+      return
+    }
+
+    setTariffValidationErrors([])
     await runSaving('tariff', async () => {
       if (editingTariffId) {
         const tariff = await dictionaryClient.updateTariff(auth.accessToken, editingTariffId, tariffForm)
@@ -2933,6 +3049,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   function editTariff(tariff: TariffDto) {
     setEditingTariffId(tariff.id)
+    setTariffValidationErrors([])
     setTariffForm({
       name: tariff.name,
       calculationBase: tariff.calculationBase,
@@ -2944,6 +3061,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   function resetTariffForm() {
     setEditingTariffId(null)
+    setTariffValidationErrors([])
     setTariffForm((value) => ({ ...value, name: '', rate: 1, comment: '' }))
   }
 
@@ -3100,6 +3218,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               <Plus size={17} />
             </button>
           </form>
+          <FormValidationSummary title="Проверьте группу поставщиков" items={supplierGroupValidationErrors} />
           <form className="compact-stack" onSubmit={saveSupplier}>
             <input aria-label="Название поставщика" placeholder="Название" value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} required />
             <select aria-label="Группа для поставщика" value={defaultGroupId} onChange={(event) => setSupplierForm({ ...supplierForm, groupId: event.target.value })} required>
@@ -3114,6 +3233,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             </select>
             <input aria-label="ИНН поставщика" placeholder="ИНН" value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />
             <input aria-label="Стартовый баланс поставщика" type="number" step="0.01" value={supplierForm.startingBalance} onChange={(event) => setSupplierForm({ ...supplierForm, startingBalance: Number(event.target.value) })} />
+            <FormValidationSummary title="Проверьте поставщика" items={supplierValidationErrors} />
             <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || !defaultGroupId || saving === 'supplier'}>
               <Plus size={16} />
               <span>Добавить</span>
@@ -3140,6 +3260,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <h3>Виды поступлений</h3>
           <input aria-label="Название вида поступления" placeholder="Членский взнос" value={incomeTypeForm.name} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида поступления" placeholder="Код" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} />
+          <FormValidationSummary title="Проверьте вид поступления" items={incomeTypeValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'income-type'}>
             <Plus size={16} />
             <span>Добавить</span>
@@ -3163,6 +3284,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <h3>Виды выплат</h3>
           <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида выплаты" placeholder="Код" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} />
+          <FormValidationSummary title="Проверьте вид выплаты" items={expenseTypeValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
             <Plus size={16} />
             <span>Добавить</span>
@@ -3196,6 +3318,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
           </div>
           <textarea aria-label="Комментарий тарифа" placeholder="Комментарий" value={tariffForm.comment} onChange={(event) => setTariffForm({ ...tariffForm, comment: event.target.value })} />
+          <FormValidationSummary title="Проверьте тариф" items={tariffValidationErrors} />
           <div className="inline-actions">
             <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
               {editingTariffId ? <Save size={16} /> : <Plus size={16} />}
