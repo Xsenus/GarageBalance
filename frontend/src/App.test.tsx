@@ -21,6 +21,24 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Панель' })).toBeDisabled()
   })
 
+  it('does not call protected workspace clients before authentication', () => {
+    render(
+      <App
+        authClient={createAuthClient()}
+        auditClient={createThrowingClient<AuditClient>()}
+        dictionaryClient={createThrowingClient<DictionaryClient>()}
+        financeClient={createThrowingClient<FinanceClient>()}
+        importClient={createThrowingClient<ImportClient>()}
+        reportClient={createThrowingClient<ReportClient>()}
+        releaseClient={createThrowingClient<ReleaseClient>()}
+        userClient={createThrowingClient<UserManagementClient>()}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
+  })
+
   it('creates first administrator and opens the workspace with users and dictionaries', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -529,6 +547,17 @@ function createAuthClient(overrides: Partial<AuthClient> = {}): AuthClient {
     login: async () => createAuthResponse(),
     ...overrides,
   }
+}
+
+function createThrowingClient<TClient extends object>(): TClient {
+  return new Proxy(
+    {},
+    {
+      get: (_target, property) => {
+        throw new Error(`Protected client was called before authentication: ${String(property)}`)
+      },
+    },
+  ) as TClient
 }
 
 function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseClient {

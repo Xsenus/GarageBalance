@@ -38,6 +38,7 @@ npm run dev
 
 Первые рабочие API:
 
+- Публичные endpoints: `GET /health`, `POST /api/auth/bootstrap-admin`, `POST /api/auth/login`; остальные рабочие endpoints требуют JWT и проверку прав через policies.
 - `GET /health` - проверка, что API отвечает.
 - `POST /api/auth/bootstrap-admin` - создание первого администратора.
 - `POST /api/auth/login` - вход по email и паролю; после 5 неуспешных попыток за 15 минут возвращает `429 Too Many Requests`.
