@@ -515,7 +515,8 @@ describe('App', () => {
     expect(within(dictionaryPanel).getAllByText('Петров Петр').length).toBeGreaterThan(0)
     expect(within(dictionaryPanel).getByText(/старт 350,00/)).toBeInTheDocument()
 
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Открыть карточку гаража 21' }))
+    const openGarageButton = within(dictionaryPanel).getByRole('button', { name: 'Открыть карточку гаража 21' })
+    await user.click(openGarageButton)
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 21' })
     const garageCloseButton = within(garageDialog).getByRole('button', { name: 'Закрыть карточку гаража' })
     await waitFor(() => expect(garageCloseButton).toHaveFocus())
@@ -533,6 +534,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Гараж 21' })).not.toBeInTheDocument()
     })
+    expect(openGarageButton).toHaveFocus()
 
     await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), 'Связь')
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
@@ -678,7 +680,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
+    const firstArchiveButton = within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' })
+    await user.click(firstArchiveButton)
 
     expect(archivedOwnerId).toBeNull()
     const firstDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
@@ -698,12 +701,15 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     expect(archivedOwnerId).toBeNull()
     expect(screen.queryByRole('dialog', { name: 'Подтвердите архивирование' })).not.toBeInTheDocument()
+    expect(firstArchiveButton).toHaveFocus()
 
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
+    const secondArchiveButton = within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' })
+    await user.click(secondArchiveButton)
     const cancelDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить' }))
     expect(archivedOwnerId).toBeNull()
     expect(screen.queryByRole('dialog', { name: 'Подтвердите архивирование' })).not.toBeInTheDocument()
+    expect(secondArchiveButton).toHaveFocus()
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
     const confirmDialog = await screen.findByRole('dialog', { name: 'Подтвердите архивирование' })
@@ -1016,7 +1022,8 @@ describe('App', () => {
     expect(accrualTable).toBeInTheDocument()
     expect(within(accrualTable).getByText('Ручное')).toBeInTheDocument()
 
-    await user.dblClick(within(accrualTable).getByLabelText(/Разбивка начисления/i))
+    const openBreakdownButton = within(accrualTable).getByLabelText(/Разбивка начисления/i)
+    await user.dblClick(openBreakdownButton)
 
     const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
     const closeBreakdownButton = within(dialog).getByRole('button', { name: 'Закрыть разбивку' })
@@ -1028,6 +1035,7 @@ describe('App', () => {
     expect(within(dialog).getByText('Гараж')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Разбивка начисления' })).not.toBeInTheDocument()
+    expect(openBreakdownButton).toHaveFocus()
   })
 
   it('shows garage debt before and after owner payment', async () => {

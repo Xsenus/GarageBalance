@@ -104,6 +104,26 @@ function useFocusOnOpen<TElement extends HTMLElement>(enabled: boolean) {
   return ref
 }
 
+function useRestoreFocusOnClose(enabled: boolean) {
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined
+    }
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+
+    return () => {
+      const previousFocus = previousFocusRef.current
+      previousFocusRef.current = null
+      if (previousFocus?.isConnected) {
+        previousFocus.focus()
+      }
+    }
+  }, [enabled])
+}
+
 function useFocusTrap<TElement extends HTMLElement>(enabled: boolean) {
   const ref = useRef<TElement | null>(null)
 
@@ -1128,6 +1148,7 @@ function FinancePanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  useRestoreFocusOnClose(Boolean(accrualBreakdown))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
 
@@ -3157,6 +3178,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  useRestoreFocusOnClose(Boolean(selectedGarage))
   const selectedGarageCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(selectedGarage))
   const selectedGarageDialogRef = useFocusTrap<HTMLElement>(Boolean(selectedGarage))
 
@@ -3845,6 +3867,7 @@ type DictionaryListItem = {
 function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+  useRestoreFocusOnClose(Boolean(pendingArchive))
   const archiveCancelButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingArchive) && !confirmingArchive)
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingArchive))
 
