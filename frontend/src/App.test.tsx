@@ -126,6 +126,36 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
   })
 
+  it('searches garages by number or owner from dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    let garageSearch: string | undefined
+    const ivan = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван' })
+    const petr = createOwner({ id: 'owner-2', lastName: 'Петров', firstName: 'Петр' })
+    const garage12 = createGarage({ id: 'garage-1', number: '12', ownerId: ivan.id, ownerName: ivan.fullName })
+    const garage21 = createGarage({ id: 'garage-2', number: '21', ownerId: petr.id, ownerName: petr.fullName })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [ivan, petr],
+      getGarages: async (_token, search) => {
+        garageSearch = search
+        return search?.toLowerCase().includes('петров') ? [garage21] : [garage12, garage21]
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
+    await user.type(within(dictionaryPanel).getByLabelText('Поиск гаража или владельца'), 'Петров')
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Найти гараж' }))
+
+    expect(garageSearch).toBe('Петров')
+    expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Гараж 12')).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toBeInTheDocument()
+  })
+
   it('archives owner from dictionaries workspace', async () => {
     const user = userEvent.setup()
     let archivedOwnerId: string | null = null
@@ -993,6 +1023,7 @@ function createStatefulFinanceClient(): FinanceClient {
 function createStatefulDictionaryClient(): DictionaryClient {
   let lastOwner: OwnerDto | null = null
   let lastGroup: SupplierGroupDto | null = null
+  let garages: GarageDto[] = []
 
   return {
     getOwners: async () => [],
@@ -1002,16 +1033,25 @@ function createStatefulDictionaryClient(): DictionaryClient {
       return owner
     },
     archiveOwner: async () => undefined,
-    getGarages: async () => [],
+    getGarages: async (_token, search) => {
+      const normalized = search?.trim().toLowerCase()
+      if (!normalized) {
+        return garages
+      }
+
+      return garages.filter((garage) => garage.number.toLowerCase().includes(normalized) || (garage.ownerName?.toLowerCase().includes(normalized) ?? false))
+    },
     createGarage: async (_token, request) => {
       const owner = lastOwner?.id === request.ownerId ? lastOwner : null
-      return createGarage({
+      const garage = createGarage({
         id: crypto.randomUUID(),
         number: request.number,
         ownerId: owner?.id ?? null,
         ownerName: owner?.fullName ?? null,
         startingBalance: request.startingBalance,
       })
+      garages = [garage, ...garages]
+      return garage
     },
     archiveGarage: async () => undefined,
     getSupplierGroups: async () => [],

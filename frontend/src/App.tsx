@@ -2003,6 +2003,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [ownerForm, setOwnerForm] = useState({ lastName: '', firstName: '', phone: '' })
   const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0 })
+  const [garageSearch, setGarageSearch] = useState('')
+  const [garageSearchStatus, setGarageSearchStatus] = useState<string | null>(null)
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
   const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
@@ -2077,6 +2079,22 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       setGarages((items) => [garage, ...items])
       setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0 })
     })
+  }
+
+  async function searchGarages() {
+    setSaving('garage-search')
+    setError(null)
+    setGarageSearchStatus(null)
+    try {
+      const result = await dictionaryClient.getGarages(auth.accessToken, garageSearch)
+      setGarages(result)
+      const query = garageSearch.trim()
+      setGarageSearchStatus(query ? `Найдено гаражей: ${result.length}` : 'Показаны все гаражи')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск гаражей.')
+    } finally {
+      setSaving(null)
+    }
   }
 
   async function saveSupplierGroup(event: FormEvent<HTMLFormElement>) {
@@ -2185,6 +2203,24 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
         <form className="dictionary-form" onSubmit={saveGarage}>
           <h3>Гаражи</h3>
+          <div className="compact-form">
+            <input
+              aria-label="Поиск гаража или владельца"
+              placeholder="Номер или ФИО владельца"
+              value={garageSearch}
+              onChange={(event) => setGarageSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void searchGarages()
+                }
+              }}
+            />
+            <button className="icon-button" type="button" aria-label="Найти гараж" disabled={saving === 'garage-search'} onClick={() => void searchGarages()}>
+              <Search size={17} />
+            </button>
+          </div>
+          {garageSearchStatus ? <p className="form-hint">{garageSearchStatus}</p> : null}
           <input aria-label="Номер гаража" placeholder="Номер" value={garageForm.number} onChange={(event) => setGarageForm({ ...garageForm, number: event.target.value })} required />
           <div className="inline-fields">
             <input aria-label="Количество людей" type="number" min="0" value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />

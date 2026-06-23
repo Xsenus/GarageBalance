@@ -561,6 +561,12 @@ h1 {
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }
 
+.form-hint {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+}
+
 .inline-fields,
 .compact-form {
   display: grid;

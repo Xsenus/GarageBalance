@@ -89,21 +89,19 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     {
         var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => !garage.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
+        var garages = await query
+            .OrderBy(garage => garage.Number)
+            .ToListAsync(cancellationToken);
         if (normalizedSearch is not null)
         {
-            query = query.Where(garage =>
-                garage.Number.ToLower().Contains(normalizedSearch) ||
-                (garage.Owner != null && (
-                    garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
-                    garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                    (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)))));
+            garages = garages
+                .Where(garage =>
+                    garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
         }
 
-        return await query
-            .OrderBy(garage => garage.Number)
-            .Take(ListLimit)
-            .Select(garage => ToGarageDto(garage))
-            .ToListAsync(cancellationToken);
+        return garages.Take(ListLimit).Select(garage => ToGarageDto(garage)).ToList();
     }
 
     public async Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)

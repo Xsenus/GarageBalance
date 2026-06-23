@@ -138,6 +138,25 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetGaragesAsync_SearchesByNumberAndOwnerName()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var firstOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
+        var secondOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Петров", "Петр", null, null, null, null), null, CancellationToken.None);
+        await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, firstOwner.Value!.Id, 0, null, null, null), null, CancellationToken.None);
+        await service.CreateGarageAsync(new UpsertGarageRequest("21", 1, 1, secondOwner.Value!.Id, 0, null, null, null), null, CancellationToken.None);
+
+        var byNumber = await service.GetGaragesAsync("12", CancellationToken.None);
+        var byOwner = await service.GetGaragesAsync("петров", CancellationToken.None);
+
+        var garageByNumber = Assert.Single(byNumber);
+        Assert.Equal("Иванов Иван", garageByNumber.OwnerName);
+        var garageByOwner = Assert.Single(byOwner);
+        Assert.Equal("21", garageByOwner.Number);
+    }
+
+    [Fact]
     public async Task CreateSupplierGroupAsync_RejectsDuplicateName()
     {
         await using var database = await TestDatabase.CreateAsync();
