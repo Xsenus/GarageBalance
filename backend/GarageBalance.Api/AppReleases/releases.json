@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-russian-document-metadata",
+    "version": "0.94.0",
+    "publishedAt": "2026-06-24T06:45:00+07:00",
+    "title": "Страница получила русское имя",
+    "summary": "HTML-оболочка frontend теперь размечена как русскоязычная и показывает понятное название вкладки.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Корневой HTML теперь использует lang=\"ru\" вместо шаблонного lang=\"en\"."
+      },
+      {
+        "type": "improved",
+        "text": "Заголовок вкладки заменен с frontend на GarageBalance - учет ГСК."
+      },
+      {
+        "type": "improved",
+        "text": "Добавлен Vitest-тест, который проверяет lang, viewport и title production-оболочки."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-accrual-breakdown-dialog-description",
     "version": "0.93.0",
     "publishedAt": "2026-06-23T23:59:59+07:00",
