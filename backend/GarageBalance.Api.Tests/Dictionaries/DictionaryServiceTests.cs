@@ -41,6 +41,23 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ArchiveOwnerAsync_HidesOwnerFromListAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
+
+        var result = await service.ArchiveOwnerAsync(ownerResult.Value!.Id, actorUserId, CancellationToken.None);
+        var owners = await service.GetOwnersAsync(null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsArchived);
+        Assert.Empty(owners);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task UpdateOwnerAsync_ReturnsNotFoundForMissingOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -105,6 +122,21 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ArchiveGarageAsync_HidesGarageFromList()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, null, null, null), null, CancellationToken.None);
+
+        var result = await service.ArchiveGarageAsync(garageResult.Value!.Id, null, CancellationToken.None);
+        var garages = await service.GetGaragesAsync(null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsArchived);
+        Assert.Empty(garages);
+    }
+
+    [Fact]
     public async Task CreateSupplierGroupAsync_RejectsDuplicateName()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -160,6 +192,27 @@ public sealed class DictionaryServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("income_type_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ArchiveIncomeTypeAsync_RejectsSystemType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var systemType = new IncomeType
+        {
+            Name = "Членский взнос",
+            Code = "membership",
+            IsSystem = true
+        };
+        database.Context.IncomeTypes.Add(systemType);
+        await database.Context.SaveChangesAsync();
+        var service = new DictionaryService(database.Context);
+
+        var result = await service.ArchiveIncomeTypeAsync(systemType.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("income_type_system", result.ErrorCode);
+        Assert.False(systemType.IsArchived);
     }
 
     [Fact]

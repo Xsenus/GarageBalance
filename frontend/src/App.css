@@ -609,9 +609,17 @@ h1 {
 
 .dictionary-list li {
   display: grid;
-  gap: 3px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
   border-top: 1px solid #e4e7ec;
   padding-top: 8px;
+}
+
+.dictionary-list li > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .dictionary-list strong {

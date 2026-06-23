@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Trash2,
   UsersRound,
   WalletCards,
 } from 'lucide-react'
@@ -2017,6 +2018,10 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     })
   }
 
+  async function archiveDictionaryItem(scope: string, action: () => Promise<void>) {
+    await runSaving(`archive-${scope}`, action)
+  }
+
   async function runSaving(scope: string, action: () => Promise<void>) {
     setSaving(scope)
     setError(null)
@@ -2051,7 +2056,19 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <Plus size={16} />
             <span>Добавить</span>
           </button>
-          <DictionaryList items={owners.map((owner) => ({ id: owner.id, title: owner.fullName, meta: owner.phone ?? 'телефон не указан' }))} emptyText="Владельцев пока нет" />
+          <DictionaryList
+            items={owners.map((owner) => ({
+              id: owner.id,
+              title: owner.fullName,
+              meta: owner.phone ?? 'телефон не указан',
+              archiveLabel: `Архивировать владельца ${owner.fullName}`,
+              onArchive: () => archiveDictionaryItem('owner', async () => {
+                await dictionaryClient.archiveOwner(auth.accessToken, owner.id)
+                setOwners((items) => items.filter((item) => item.id !== owner.id))
+              }),
+            }))}
+            emptyText="Владельцев пока нет"
+          />
         </form>
 
         <form className="dictionary-form" onSubmit={saveGarage}>
@@ -2073,7 +2090,19 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <Plus size={16} />
             <span>Добавить</span>
           </button>
-          <DictionaryList items={garages.map((garage) => ({ id: garage.id, title: `Гараж ${garage.number}`, meta: garage.ownerName ?? 'владелец не указан' }))} emptyText="Гаражей пока нет" />
+          <DictionaryList
+            items={garages.map((garage) => ({
+              id: garage.id,
+              title: `Гараж ${garage.number}`,
+              meta: garage.ownerName ?? 'владелец не указан',
+              archiveLabel: `Архивировать гараж ${garage.number}`,
+              onArchive: () => archiveDictionaryItem('garage', async () => {
+                await dictionaryClient.archiveGarage(auth.accessToken, garage.id)
+                setGarages((items) => items.filter((item) => item.id !== garage.id))
+              }),
+            }))}
+            emptyText="Гаражей пока нет"
+          />
         </form>
 
         <div className="dictionary-form">
@@ -2102,7 +2131,19 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               <span>Добавить</span>
             </button>
           </form>
-          <DictionaryList items={suppliers.map((supplier) => ({ id: supplier.id, title: supplier.name, meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''}` }))} emptyText="Поставщиков пока нет" />
+          <DictionaryList
+            items={suppliers.map((supplier) => ({
+              id: supplier.id,
+              title: supplier.name,
+              meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''}`,
+              archiveLabel: `Архивировать поставщика ${supplier.name}`,
+              onArchive: () => archiveDictionaryItem('supplier', async () => {
+                await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id)
+                setSuppliers((items) => items.filter((item) => item.id !== supplier.id))
+              }),
+            }))}
+            emptyText="Поставщиков пока нет"
+          />
         </div>
       </div>
 
@@ -2115,7 +2156,19 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <Plus size={16} />
             <span>Добавить</span>
           </button>
-          <DictionaryList items={incomeTypes.map((item) => ({ id: item.id, title: item.name, meta: item.code ?? 'код не указан' }))} emptyText="Видов поступлений пока нет" />
+          <DictionaryList
+            items={incomeTypes.map((item) => ({
+              id: item.id,
+              title: item.name,
+              meta: item.code ?? 'код не указан',
+              archiveLabel: `Архивировать вид поступления ${item.name}`,
+              onArchive: () => archiveDictionaryItem('income-type', async () => {
+                await dictionaryClient.archiveIncomeType(auth.accessToken, item.id)
+                setIncomeTypes((items) => items.filter((incomeType) => incomeType.id !== item.id))
+              }),
+            }))}
+            emptyText="Видов поступлений пока нет"
+          />
         </form>
 
         <form className="dictionary-form" onSubmit={saveExpenseType}>
@@ -2126,7 +2179,19 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <Plus size={16} />
             <span>Добавить</span>
           </button>
-          <DictionaryList items={expenseTypes.map((item) => ({ id: item.id, title: item.name, meta: item.code ?? 'код не указан' }))} emptyText="Видов выплат пока нет" />
+          <DictionaryList
+            items={expenseTypes.map((item) => ({
+              id: item.id,
+              title: item.name,
+              meta: item.code ?? 'код не указан',
+              archiveLabel: `Архивировать вид выплаты ${item.name}`,
+              onArchive: () => archiveDictionaryItem('expense-type', async () => {
+                await dictionaryClient.archiveExpenseType(auth.accessToken, item.id)
+                setExpenseTypes((items) => items.filter((expenseType) => expenseType.id !== item.id))
+              }),
+            }))}
+            emptyText="Видов выплат пока нет"
+          />
         </form>
 
         <form className="dictionary-form" onSubmit={saveTariff}>
@@ -2146,14 +2211,26 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <Plus size={16} />
             <span>Добавить</span>
           </button>
-          <DictionaryList items={tariffs.map((item) => ({ id: item.id, title: item.name, meta: `${item.rate} с ${item.effectiveFrom}` }))} emptyText="Тарифов пока нет" />
+          <DictionaryList
+            items={tariffs.map((item) => ({
+              id: item.id,
+              title: item.name,
+              meta: `${item.rate} с ${item.effectiveFrom}`,
+              archiveLabel: `Архивировать тариф ${item.name}`,
+              onArchive: () => archiveDictionaryItem('tariff', async () => {
+                await dictionaryClient.archiveTariff(auth.accessToken, item.id)
+                setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
+              }),
+            }))}
+            emptyText="Тарифов пока нет"
+          />
         </form>
       </div>
     </section>
   )
 }
 
-function DictionaryList({ items, emptyText }: { items: { id: string; title: string; meta: string }[]; emptyText: string }) {
+function DictionaryList({ items, emptyText }: { items: { id: string; title: string; meta: string; archiveLabel?: string; onArchive?: () => void }[]; emptyText: string }) {
   if (items.length === 0) {
     return <p className="empty-state">{emptyText}</p>
   }
@@ -2162,8 +2239,15 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
     <ul className="dictionary-list">
       {items.slice(0, 5).map((item) => (
         <li key={item.id}>
-          <strong>{item.title}</strong>
-          <span>{item.meta}</span>
+          <span>
+            <strong>{item.title}</strong>
+            <span>{item.meta}</span>
+          </span>
+          {item.onArchive ? (
+            <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={item.onArchive}>
+              <Trash2 size={16} />
+            </button>
+          ) : null}
         </li>
       ))}
     </ul>

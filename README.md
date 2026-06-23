@@ -46,13 +46,13 @@ npm run dev
 - `GET /api/users/roles` - доступные системные роли.
 - `GET/POST /api/users` - список и создание пользователей.
 - `PUT /api/users/{id}` - изменение пользователя, ролей, активности и пароля.
-- `GET/POST /api/dictionaries/owners` - владельцы.
-- `GET/POST /api/dictionaries/garages` - гаражи.
-- `GET/POST /api/dictionaries/supplier-groups` - группы поставщиков.
-- `GET/POST /api/dictionaries/suppliers` - поставщики.
-- `GET/POST /api/dictionaries/income-types` - виды поступлений.
-- `GET/POST /api/dictionaries/expense-types` - виды выплат.
-- `GET/POST /api/dictionaries/tariffs` - тарифы с датой действия.
+- `GET/POST /api/dictionaries/owners`, `DELETE /api/dictionaries/owners/{id}` - владельцы и архивирование владельца.
+- `GET/POST /api/dictionaries/garages`, `DELETE /api/dictionaries/garages/{id}` - гаражи и архивирование гаража.
+- `GET/POST /api/dictionaries/supplier-groups`, `DELETE /api/dictionaries/supplier-groups/{id}` - группы поставщиков и архивирование группы.
+- `GET/POST /api/dictionaries/suppliers`, `DELETE /api/dictionaries/suppliers/{id}` - поставщики и архивирование поставщика.
+- `GET/POST /api/dictionaries/income-types`, `DELETE /api/dictionaries/income-types/{id}` - виды поступлений и архивирование вида.
+- `GET/POST /api/dictionaries/expense-types`, `DELETE /api/dictionaries/expense-types/{id}` - виды выплат и архивирование вида.
+- `GET/POST /api/dictionaries/tariffs`, `DELETE /api/dictionaries/tariffs/{id}` - тарифы с датой действия и архивирование тарифа.
 - `GET /api/finance/operations` - последние финансовые операции с фильтрами.
 - `GET/POST /api/finance/accruals` - начисления по гаражам.
 - `GET/POST /api/finance/supplier-accruals` - начисления поставщикам для сверки обязательств и выплат.

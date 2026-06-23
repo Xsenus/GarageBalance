@@ -43,6 +43,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("owners/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveOwner(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveOwnerAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
     [HttpGet("garages")]
     [ProducesResponseType<IReadOnlyList<GarageDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<GarageDto>>> GetGarages([FromQuery] string? search, CancellationToken cancellationToken)
@@ -77,6 +87,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("garages/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveGarage(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveGarageAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
     [HttpGet("supplier-groups")]
     [ProducesResponseType<IReadOnlyList<SupplierGroupDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups(CancellationToken cancellationToken)
@@ -97,6 +117,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         }
 
         return CreatedAtAction(nameof(GetSupplierGroups), result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("supplier-groups/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArchiveSupplierGroup(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveSupplierGroupAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
     [HttpGet("suppliers")]
@@ -131,6 +162,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("suppliers/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveSupplier(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveSupplierAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
     [HttpGet("income-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes(CancellationToken cancellationToken)
@@ -151,6 +192,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         }
 
         return CreatedAtAction(nameof(GetIncomeTypes), result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("income-types/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArchiveIncomeType(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveIncomeTypeAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
     [HttpGet("expense-types")]
@@ -175,6 +227,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return CreatedAtAction(nameof(GetExpenseTypes), result.Value);
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("expense-types/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArchiveExpenseType(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveExpenseTypeAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
     [HttpGet("tariffs")]
     [ProducesResponseType<IReadOnlyList<TariffDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, CancellationToken cancellationToken)
@@ -197,6 +260,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return CreatedAtAction(nameof(GetTariffs), new { search = result.Value!.Name }, result.Value);
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("tariffs/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveTariff(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.ArchiveTariffAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
@@ -212,8 +285,8 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
         return result.ErrorCode switch
         {
-            "owner_not_found" or "garage_not_found" or "supplier_not_found" => NotFound(problem),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "income_type_duplicate" or "expense_type_duplicate" or "tariff_duplicate" => Conflict(problem),
+            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(problem),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" => Conflict(problem),
             _ => BadRequest(problem)
         };
     }

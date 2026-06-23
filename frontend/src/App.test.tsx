@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
@@ -119,6 +119,28 @@ describe('App', () => {
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000')).toBeInTheDocument()
+  })
+
+  it('archives owner from dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    let archivedOwnerId: string | null = null
+    const dictionaryClient = createDictionaryClient({
+      archiveOwner: async (_token, id) => {
+        archivedOwnerId = id
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' }))
+
+    expect(archivedOwnerId).toBe('owner-1')
+    await waitFor(() => {
+      expect(within(dictionaryPanel).queryByRole('button', { name: 'Архивировать владельца Иванов Иван' })).not.toBeInTheDocument()
+    })
   })
 
   it('adds income type, expense type and tariff from dictionaries workspace', async () => {
@@ -630,18 +652,25 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   return {
     getOwners: async () => [owner],
     createOwner: async () => owner,
+    archiveOwner: async () => undefined,
     getGarages: async () => [garage],
     createGarage: async () => garage,
+    archiveGarage: async () => undefined,
     getSupplierGroups: async () => [group],
     createSupplierGroup: async () => group,
+    archiveSupplierGroup: async () => undefined,
     getSuppliers: async () => [supplier],
     createSupplier: async () => supplier,
+    archiveSupplier: async () => undefined,
     getIncomeTypes: async () => [incomeType],
     createIncomeType: async () => incomeType,
+    archiveIncomeType: async () => undefined,
     getExpenseTypes: async () => [expenseType],
     createExpenseType: async () => expenseType,
+    archiveExpenseType: async () => undefined,
     getTariffs: async () => [tariff],
     createTariff: async () => tariff,
+    archiveTariff: async () => undefined,
     ...overrides,
   }
 }
@@ -881,6 +910,7 @@ function createStatefulDictionaryClient(): DictionaryClient {
       lastOwner = owner
       return owner
     },
+    archiveOwner: async () => undefined,
     getGarages: async () => [],
     createGarage: async (_token, request) => {
       const owner = lastOwner?.id === request.ownerId ? lastOwner : null
@@ -891,12 +921,14 @@ function createStatefulDictionaryClient(): DictionaryClient {
         ownerName: owner?.fullName ?? null,
       })
     },
+    archiveGarage: async () => undefined,
     getSupplierGroups: async () => [],
     createSupplierGroup: async (_token, request) => {
       const group = createGroup({ id: crypto.randomUUID(), name: request.name })
       lastGroup = group
       return group
     },
+    archiveSupplierGroup: async () => undefined,
     getSuppliers: async () => [],
     createSupplier: async (_token, request) => {
       const group = lastGroup?.id === request.groupId ? lastGroup : createGroup({ id: request.groupId, name: 'Поставщики' })
@@ -908,10 +940,13 @@ function createStatefulDictionaryClient(): DictionaryClient {
         inn: request.inn ?? null,
       })
     },
+    archiveSupplier: async () => undefined,
     getIncomeTypes: async () => [],
     createIncomeType: async (_token, request) => createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null }),
+    archiveIncomeType: async () => undefined,
     getExpenseTypes: async () => [],
     createExpenseType: async (_token, request) => createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null }),
+    archiveExpenseType: async () => undefined,
     getTariffs: async () => [],
     createTariff: async (_token, request) =>
       createTariff({
@@ -921,6 +956,7 @@ function createStatefulDictionaryClient(): DictionaryClient {
         rate: request.rate,
         effectiveFrom: request.effectiveFrom,
       }),
+    archiveTariff: async () => undefined,
   }
 }
 
