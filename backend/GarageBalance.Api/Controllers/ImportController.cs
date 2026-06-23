@@ -26,7 +26,7 @@ public sealed class ImportController(IImportService importService) : ControllerB
         var result = await importService.ExportAccessImportRunReportAsync(id, cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : NotFound(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
     }
 
     [HttpPost("dry-run")]
@@ -37,18 +37,14 @@ public sealed class ImportController(IImportService importService) : ControllerB
     {
         if (file is null)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Title = "file_required",
-                Detail = "Нужно выбрать файл Access для проверки."
-            });
+            return BadRequest(ApiProblemDetails.Create("file_required", "Нужно выбрать файл Access для проверки.", StatusCodes.Status400BadRequest));
         }
 
         await using var stream = file.OpenReadStream();
         var result = await importService.DryRunAccessImportAsync(new AccessImportDryRunRequest(file.FileName, stream), GetActorUserId(), cancellationToken);
         return result.Succeeded
             ? CreatedAtAction(nameof(GetAccessImportRuns), new { id = result.Value!.Id }, result.Value)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     private Guid? GetActorUserId()

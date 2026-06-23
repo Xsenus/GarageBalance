@@ -19,10 +19,10 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         {
             if (result.ErrorCode == "password_policy_violation")
             {
-                return BadRequest(ToProblem(result));
+                return BadRequest(ToProblem(result, StatusCodes.Status400BadRequest));
             }
 
-            return Conflict(ToProblem(result));
+            return Conflict(ToProblem(result, StatusCodes.Status409Conflict));
         }
 
         return CreatedAtAction(nameof(Me), result.Value);
@@ -44,15 +44,15 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 
         if (result.ErrorCode == "user_inactive")
         {
-            return StatusCode(StatusCodes.Status403Forbidden, ToProblem(result));
+            return StatusCode(StatusCodes.Status403Forbidden, ToProblem(result, StatusCodes.Status403Forbidden));
         }
 
         if (result.ErrorCode == "too_many_login_attempts")
         {
-            return StatusCode(StatusCodes.Status429TooManyRequests, ToProblem(result));
+            return StatusCode(StatusCodes.Status429TooManyRequests, ToProblem(result, StatusCodes.Status429TooManyRequests));
         }
 
-        return Unauthorized(ToProblem(result));
+        return Unauthorized(ToProblem(result, StatusCodes.Status401Unauthorized));
     }
 
     [Authorize]
@@ -64,7 +64,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         var result = await authService.GetCurrentUserAsync(User, cancellationToken);
         if (!result.Succeeded)
         {
-            return Unauthorized(ToProblem(result));
+            return Unauthorized(ToProblem(result, StatusCodes.Status401Unauthorized));
         }
 
         return Ok(result.Value);
@@ -85,18 +85,14 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 
         if (result.ErrorCode is "invalid_token" or "user_not_found")
         {
-            return Unauthorized(ToProblem(result));
+            return Unauthorized(ToProblem(result, StatusCodes.Status401Unauthorized));
         }
 
-        return BadRequest(ToProblem(result));
+        return BadRequest(ToProblem(result, StatusCodes.Status400BadRequest));
     }
 
-    private static ProblemDetails ToProblem<T>(AuthResult<T> result)
+    private static ProblemDetails ToProblem<T>(AuthResult<T> result, int statusCode)
     {
-        return new ProblemDetails
-        {
-            Title = result.ErrorCode,
-            Detail = result.ErrorMessage
-        };
+        return ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, statusCode);
     }
 }

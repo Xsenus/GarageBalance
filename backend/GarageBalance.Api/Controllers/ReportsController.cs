@@ -22,7 +22,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("consolidated/export/xlsx")]
@@ -37,7 +37,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         var result = await reportService.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("consolidated/export/pdf")]
@@ -52,7 +52,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         var result = await reportService.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("income")]
@@ -81,7 +81,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? Ok(result.Value)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("income/export/xlsx")]
@@ -110,7 +110,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("income/export/pdf")]
@@ -139,7 +139,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("expense")]
@@ -166,7 +166,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? Ok(result.Value)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("expense/export/xlsx")]
@@ -193,7 +193,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
     [HttpGet("expense/export/pdf")]
@@ -220,6 +220,6 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
-            : BadRequest(new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 }

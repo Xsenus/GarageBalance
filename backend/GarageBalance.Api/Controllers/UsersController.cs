@@ -57,17 +57,11 @@ public sealed class UsersController(IUserManagementService userManagementService
 
     private ActionResult<T> ToError<T>(UserManagementResult<T> result)
     {
-        var problem = new ProblemDetails
-        {
-            Title = result.ErrorCode,
-            Detail = result.ErrorMessage
-        };
-
         return result.ErrorCode switch
         {
-            "user_not_found" => NotFound(problem),
-            "user_email_duplicate" => Conflict(problem),
-            _ => BadRequest(problem)
+            "user_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "user_email_duplicate" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }
 }

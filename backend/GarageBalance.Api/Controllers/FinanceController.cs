@@ -160,17 +160,11 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
 
     private ActionResult<T> ToError<T>(FinanceResult<T> result)
     {
-        var problem = new ProblemDetails
-        {
-            Title = result.ErrorCode,
-            Detail = result.ErrorMessage
-        };
-
         return result.ErrorCode switch
         {
-            "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(problem),
-            "operation_duplicate" or "accrual_duplicate" or "supplier_accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(problem),
-            _ => BadRequest(problem)
+            "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "operation_duplicate" or "accrual_duplicate" or "supplier_accrual_duplicate" or "meter_reading_duplicate" or "regular_accruals_empty" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }
 }

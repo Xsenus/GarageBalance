@@ -17,6 +17,6 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
         var result = await appReleaseService.GetReleasesAsync(limit, cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
-            : StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails { Title = result.ErrorCode, Detail = result.ErrorMessage });
+            : StatusCode(StatusCodes.Status500InternalServerError, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status500InternalServerError));
     }
 }

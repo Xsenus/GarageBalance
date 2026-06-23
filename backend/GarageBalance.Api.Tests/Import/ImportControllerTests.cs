@@ -19,6 +19,8 @@ public sealed class ImportControllerTests
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
         Assert.Equal("file_required", problem.Title);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
+        Assert.Equal("file_required", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
     }
 
     [Fact]
@@ -88,6 +90,8 @@ public sealed class ImportControllerTests
         var notFound = Assert.IsType<NotFoundObjectResult>(result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
         Assert.Equal("import_run_not_found", problem.Title);
+        Assert.Equal(StatusCodes.Status404NotFound, problem.Status);
+        Assert.Equal("import_run_not_found", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
     }
 
     private static ImportController CreateController(FakeImportService service, Guid? actorUserId = null)

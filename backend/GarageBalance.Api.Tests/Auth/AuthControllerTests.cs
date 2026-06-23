@@ -37,6 +37,8 @@ public sealed class AuthControllerTests
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal("bootstrap_closed", problem.Title);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+        Assert.Equal("bootstrap_closed", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
     }
 
     [Fact]
@@ -67,6 +69,8 @@ public sealed class AuthControllerTests
         var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(unauthorized.Value);
         Assert.Equal("invalid_credentials", problem.Title);
+        Assert.Equal(StatusCodes.Status401Unauthorized, problem.Status);
+        Assert.Equal("invalid_credentials", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
     }
 
     [Fact]

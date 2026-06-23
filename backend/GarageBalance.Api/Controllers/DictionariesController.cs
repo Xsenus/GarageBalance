@@ -277,17 +277,11 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     private ActionResult<T> ToError<T>(DictionaryResult<T> result)
     {
-        var problem = new ProblemDetails
-        {
-            Title = result.ErrorCode,
-            Detail = result.ErrorMessage
-        };
-
         return result.ErrorCode switch
         {
-            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(problem),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" => Conflict(problem),
-            _ => BadRequest(problem)
+            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }
 }
