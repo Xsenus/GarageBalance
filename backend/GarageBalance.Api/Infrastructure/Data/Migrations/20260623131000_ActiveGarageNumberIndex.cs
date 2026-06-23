@@ -1,3 +1,5 @@
+using GarageBalance.Api.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(GarageBalanceDbContext))]
+    [Migration("20260623131000_ActiveGarageNumberIndex")]
     public partial class ActiveGarageNumberIndex : Migration
     {
         /// <inheritdoc />

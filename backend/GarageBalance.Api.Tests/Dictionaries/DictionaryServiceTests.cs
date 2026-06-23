@@ -288,6 +288,49 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public void DefaultAccountingTypesMigration_ContainsInitialIncomeAndExpenseTypes()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260623152000_DefaultAccountingTypes.cs"));
+
+        string[] incomeTypes =
+        [
+            "Вода",
+            "Мусор",
+            "Электроэнергия",
+            "Членский взнос",
+            "Целевой взнос",
+            "Вступительный взнос",
+            "Подключения",
+            "Штраф",
+            "Предписание"
+        ];
+        string[] expenseTypes =
+        [
+            "Электроэнергия",
+            "Вывоз мусора",
+            "Водоснабжение",
+            "Банковские расходы",
+            "Юридические расходы",
+            "Зарплата",
+            "Прочие расходы",
+            "Штрафы"
+        ];
+
+        foreach (var type in incomeTypes.Concat(expenseTypes))
+        {
+            Assert.Contains(type, migration, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(9, CountOccurrences(migration, "InsertIncomeType(migrationBuilder"));
+        Assert.Equal(8, CountOccurrences(migration, "InsertExpenseType(migrationBuilder"));
+    }
+
+    [Fact]
     public async Task CreateExpenseTypeAsync_WritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -360,5 +403,35 @@ public sealed class DictionaryServiceTests
             await Context.DisposeAsync();
             await connection.DisposeAsync();
         }
+    }
+
+    private static string FindApiProjectRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "backend", "GarageBalance.Api");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Не удалось найти проект GarageBalance.Api.");
+    }
+
+    private static int CountOccurrences(string text, string pattern)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(pattern, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += pattern.Length;
+        }
+
+        return count;
     }
 }
