@@ -197,6 +197,36 @@ describe('App', () => {
     expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
   })
 
+  it('does not call user API when managed user password violates policy', async () => {
+    const user = userEvent.setup()
+    let createCalled = false
+    const statefulUserClient = createStatefulUserClient()
+    const userClient: UserManagementClient = {
+      ...statefulUserClient,
+      createUser: async (...args) => {
+        createCalled = true
+        return statefulUserClient.createUser(...args)
+      },
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+
+    await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(usersPanel).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(usersPanel).getByLabelText('Пароль пользователя'), 'Password')
+    await user.selectOptions(within(usersPanel).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+
+    expect(await within(usersPanel).findByText('Проверьте нового пользователя')).toBeInTheDocument()
+    expect(within(usersPanel).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(within(usersPanel).getByRole('alert')).toBeInTheDocument()
+    expect(createCalled).toBe(false)
+    expect(within(usersPanel).queryByText('operator@example.com')).not.toBeInTheDocument()
+  })
+
   it('keeps restricted sections closed after administrator creates an operator', async () => {
     const user = userEvent.setup()
     let operatorSession = false

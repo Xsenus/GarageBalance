@@ -136,6 +136,29 @@ function getPasswordChangeValidationErrors(currentPassword: string, newPassword:
   return errors
 }
 
+function getManagedUserValidationErrors(email: string, displayName: string, password: string, roleCode: string) {
+  const errors: string[] = []
+  const trimmedEmail = email.trim()
+
+  if (!trimmedEmail) {
+    errors.push('Укажите email пользователя.')
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    errors.push('Проверьте формат email пользователя.')
+  }
+
+  if (!displayName.trim()) {
+    errors.push('Укажите имя пользователя.')
+  }
+
+  errors.push(...getPasswordPolicyErrors(password, 'Укажите пароль пользователя.'))
+
+  if (!roleCode) {
+    errors.push('Выберите роль пользователя.')
+  }
+
+  return errors
+}
+
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
   | { kind: 'supplier'; accrual: SupplierAccrualDto }
@@ -2392,6 +2415,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   useEffect(() => {
     let ignore = false
@@ -2427,6 +2451,14 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const errors = getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCode)
+    if (errors.length > 0) {
+      setError(null)
+      setValidationErrors(errors)
+      return
+    }
+
+    setValidationErrors([])
     setSaving(true)
     setError(null)
     try {
@@ -2472,6 +2504,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
               </option>
             ))}
           </select>
+          <FormValidationSummary title="Проверьте нового пользователя" items={validationErrors} />
           <button className="secondary-button" type="submit" disabled={saving || roles.length === 0}>
             <Plus size={16} />
             <span>Добавить</span>
