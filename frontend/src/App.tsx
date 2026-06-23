@@ -74,22 +74,10 @@ function FormValidationSummary({ title, items }: { title: string; items: string[
   )
 }
 
-function getAuthValidationErrors(mode: 'bootstrap' | 'login', email: string, displayName: string, password: string) {
+function getPasswordPolicyErrors(password: string, emptyMessage = 'Укажите пароль.') {
   const errors: string[] = []
-  const trimmedEmail = email.trim()
-
-  if (!trimmedEmail) {
-    errors.push('Укажите email.')
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-    errors.push('Проверьте формат email.')
-  }
-
-  if (mode === 'bootstrap' && !displayName.trim()) {
-    errors.push('Укажите имя пользователя.')
-  }
-
   if (!password) {
-    errors.push('Укажите пароль.')
+    errors.push(emptyMessage)
   } else {
     if (password.length < 8) {
       errors.push('Пароль должен быть не короче 8 символов.')
@@ -106,6 +94,43 @@ function getAuthValidationErrors(mode: 'bootstrap' | 'login', email: string, dis
     if (!/\d/.test(password)) {
       errors.push('Добавьте хотя бы одну цифру в пароль.')
     }
+  }
+
+  return errors
+}
+
+function getAuthValidationErrors(mode: 'bootstrap' | 'login', email: string, displayName: string, password: string) {
+  const errors: string[] = []
+  const trimmedEmail = email.trim()
+
+  if (!trimmedEmail) {
+    errors.push('Укажите email.')
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    errors.push('Проверьте формат email.')
+  }
+
+  if (mode === 'bootstrap' && !displayName.trim()) {
+    errors.push('Укажите имя пользователя.')
+  }
+
+  errors.push(...getPasswordPolicyErrors(password))
+
+  return errors
+}
+
+function getPasswordChangeValidationErrors(currentPassword: string, newPassword: string, repeatPassword: string) {
+  const errors: string[] = []
+
+  if (!currentPassword) {
+    errors.push('Укажите текущий пароль.')
+  }
+
+  errors.push(...getPasswordPolicyErrors(newPassword, 'Укажите новый пароль.'))
+
+  if (!repeatPassword) {
+    errors.push('Повторите новый пароль.')
+  } else if (newPassword !== repeatPassword) {
+    errors.push('Новый пароль и повтор пароля не совпадают.')
   }
 
   return errors
@@ -479,6 +504,7 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -486,11 +512,13 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
     setError(null)
     setMessage(null)
 
-    if (form.newPassword !== form.repeatPassword) {
-      setError('Новый пароль и повтор пароля не совпадают.')
+    const errors = getPasswordChangeValidationErrors(form.currentPassword, form.newPassword, form.repeatPassword)
+    if (errors.length > 0) {
+      setValidationErrors(errors)
       return
     }
 
+    setValidationErrors([])
     setSaving(true)
     try {
       const user = await authClient.changeOwnPassword(auth.accessToken, {
@@ -530,6 +558,7 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
           </label>
         </div>
         <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+        <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
         {error ? <FormError>{error}</FormError> : null}
         {message ? <div className="form-success">{message}</div> : null}
         <button className="secondary-button" type="submit" disabled={saving}>

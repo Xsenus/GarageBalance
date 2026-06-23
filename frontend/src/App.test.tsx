@@ -145,7 +145,35 @@ describe('App', () => {
     await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'AnotherStrongPass123')
     await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
 
+    expect(await within(passwordPanel).findByText('Проверьте смену пароля')).toBeInTheDocument()
     expect(await within(passwordPanel).findByText('Новый пароль и повтор пароля не совпадают.')).toBeInTheDocument()
+    expect(within(passwordPanel).getByRole('alert')).toBeInTheDocument()
+    expect(changeCalled).toBe(false)
+  })
+
+  it('does not call password API when new password violates policy', async () => {
+    const user = userEvent.setup()
+    let changeCalled = false
+    const authClient = createAuthClient({
+      changeOwnPassword: async () => {
+        changeCalled = true
+        throw new Error('Смена пароля не должна вызываться при слабом новом пароле.')
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
+
+    await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'Password')
+    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'Password')
+    await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
+
+    expect(await within(passwordPanel).findByText('Проверьте смену пароля')).toBeInTheDocument()
+    expect(within(passwordPanel).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(within(passwordPanel).getByRole('alert')).toBeInTheDocument()
     expect(changeCalled).toBe(false)
   })
 
