@@ -1236,6 +1236,66 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText('PDF по сводному отчету готов.')).toBeInTheDocument()
   })
 
+  it('does not call report APIs when report periods fail client validation', async () => {
+    const user = userEvent.setup()
+    let consolidatedCalls = 0
+    let incomeCalls = 0
+    let expenseCalls = 0
+    const reportClient = createReportClient({
+      getConsolidatedReport: async () => {
+        consolidatedCalls += 1
+        return createConsolidatedReport()
+      },
+      getIncomeReport: async () => {
+        incomeCalls += 1
+        return createIncomeReport()
+      },
+      getExpenseReport: async () => {
+        expenseCalls += 1
+        return createExpenseReport()
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await within(reportsPanel).findByText('Консолидированный отчет за период')
+    await waitFor(() => {
+      expect(consolidatedCalls).toBeGreaterThan(0)
+      expect(incomeCalls).toBeGreaterThan(0)
+      expect(expenseCalls).toBeGreaterThan(0)
+    })
+
+    const initialConsolidatedCalls = consolidatedCalls
+    const initialIncomeCalls = incomeCalls
+    const initialExpenseCalls = expenseCalls
+
+    fireEvent.change(within(reportsPanel).getByLabelText('Начало периода отчета'), { target: { value: '2026-07' } })
+    fireEvent.change(within(reportsPanel).getByLabelText('Конец периода отчета'), { target: { value: '2026-06' } })
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Сформировать' }))
+
+    expect(await within(reportsPanel).findByText('Проверьте период отчета')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Начало периода отчета не может быть позже конца.')).toBeInTheDocument()
+    expect(consolidatedCalls).toBe(initialConsolidatedCalls)
+
+    fireEvent.change(within(reportsPanel).getByLabelText('Начало отчета по поступлениям'), { target: { value: '2026-07-01' } })
+    fireEvent.change(within(reportsPanel).getByLabelText('Конец отчета по поступлениям'), { target: { value: '2026-06-01' } })
+    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[0])
+
+    expect(await within(reportsPanel).findByText('Проверьте отчет по поступлениям')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Начало отчета по поступлениям не может быть позже конца.')).toBeInTheDocument()
+    expect(incomeCalls).toBe(initialIncomeCalls)
+
+    fireEvent.change(within(reportsPanel).getByLabelText('Начало отчета по выплатам'), { target: { value: '2026-07-01' } })
+    fireEvent.change(within(reportsPanel).getByLabelText('Конец отчета по выплатам'), { target: { value: '2026-06-01' } })
+    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[1])
+
+    expect(await within(reportsPanel).findByText('Проверьте отчет по выплатам')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Начало отчета по выплатам не может быть позже конца.')).toBeInTheDocument()
+    expect(expenseCalls).toBe(initialExpenseCalls)
+  })
+
   it('restores report filters from session storage before first report load', async () => {
     const user = userEvent.setup()
     let consolidatedRequest: Parameters<ReportClient['getConsolidatedReport']>[1] = undefined

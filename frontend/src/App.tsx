@@ -460,6 +460,50 @@ type ExpenseReportFilters = {
   rowMode: string
 }
 
+function getReportMonthRangeValidationErrors(filters: ConsolidatedReportFilters) {
+  const errors: string[] = []
+
+  if (!isAccountingMonthValue(filters.monthFrom)) {
+    errors.push('Укажите начало периода отчета.')
+  }
+
+  if (!isAccountingMonthValue(filters.monthTo)) {
+    errors.push('Укажите конец периода отчета.')
+  }
+
+  if (isAccountingMonthValue(filters.monthFrom) && isAccountingMonthValue(filters.monthTo) && filters.monthFrom > filters.monthTo) {
+    errors.push('Начало периода отчета не может быть позже конца.')
+  }
+
+  return errors
+}
+
+function getReportDateRangeValidationErrors(dateFrom: string, dateTo: string, label: string) {
+  const errors: string[] = []
+
+  if (!isDateInputValue(dateFrom)) {
+    errors.push(`Укажите начало ${label}.`)
+  }
+
+  if (!isDateInputValue(dateTo)) {
+    errors.push(`Укажите конец ${label}.`)
+  }
+
+  if (isDateInputValue(dateFrom) && isDateInputValue(dateTo) && dateFrom > dateTo) {
+    errors.push(`Начало ${label} не может быть позже конца.`)
+  }
+
+  return errors
+}
+
+function getIncomeReportValidationErrors(filters: IncomeReportFilters) {
+  return getReportDateRangeValidationErrors(filters.dateFrom, filters.dateTo, 'отчета по поступлениям')
+}
+
+function getExpenseReportValidationErrors(filters: ExpenseReportFilters) {
+  return getReportDateRangeValidationErrors(filters.dateFrom, filters.dateTo, 'отчета по выплатам')
+}
+
 const reportFilterStorageKeys = {
   consolidated: 'garagebalance.reports.consolidatedFilters',
   income: 'garagebalance.reports.incomeFilters',
@@ -2181,6 +2225,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [expenseError, setExpenseError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [reportValidationErrors, setReportValidationErrors] = useState<string[]>([])
+  const [incomeReportValidationErrors, setIncomeReportValidationErrors] = useState<string[]>([])
+  const [expenseReportValidationErrors, setExpenseReportValidationErrors] = useState<string[]>([])
 
   useEffect(() => {
     let ignore = false
@@ -2302,6 +2349,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       monthTo: `${form.get('monthTo')}-01`,
       search: String(form.get('search') ?? ''),
     }
+    const errors = getReportMonthRangeValidationErrors(nextFilters)
+    if (errors.length > 0) {
+      setError(null)
+      setReportValidationErrors(errors)
+      return
+    }
+
+    setReportValidationErrors([])
     setFilters(nextFilters)
     saveSessionJson(reportFilterStorageKeys.consolidated, nextFilters)
   }
@@ -2318,6 +2373,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       incomeTypeIds: getFormValues(form, 'incomeTypeIds'),
       rowMode: String(form.get('rowMode') ?? 'all'),
     }
+    const errors = getIncomeReportValidationErrors(nextFilters)
+    if (errors.length > 0) {
+      setIncomeError(null)
+      setIncomeReportValidationErrors(errors)
+      return
+    }
+
+    setIncomeReportValidationErrors([])
     setIncomeFilters(nextFilters)
     saveSessionJson(reportFilterStorageKeys.income, nextFilters)
   }
@@ -2333,11 +2396,27 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       expenseTypeIds: getFormValues(form, 'expenseTypeIds'),
       rowMode: String(form.get('rowMode') ?? 'all'),
     }
+    const errors = getExpenseReportValidationErrors(nextFilters)
+    if (errors.length > 0) {
+      setExpenseError(null)
+      setExpenseReportValidationErrors(errors)
+      return
+    }
+
+    setExpenseReportValidationErrors([])
     setExpenseFilters(nextFilters)
     saveSessionJson(reportFilterStorageKeys.expense, nextFilters)
   }
 
   async function exportConsolidatedXlsx() {
+    const errors = getReportMonthRangeValidationErrors(filters)
+    if (errors.length > 0) {
+      setExportError(null)
+      setReportValidationErrors(errors)
+      return
+    }
+
+    setReportValidationErrors([])
     setExporting(true)
     setExportError(null)
     setExportMessage(null)
@@ -2353,6 +2432,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   }
 
   async function exportConsolidatedPdf() {
+    const errors = getReportMonthRangeValidationErrors(filters)
+    if (errors.length > 0) {
+      setExportError(null)
+      setReportValidationErrors(errors)
+      return
+    }
+
+    setReportValidationErrors([])
     setExporting(true)
     setExportError(null)
     setExportMessage(null)
@@ -2368,6 +2455,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   }
 
   async function exportIncomeXlsx() {
+    const errors = getIncomeReportValidationErrors(incomeFilters)
+    if (errors.length > 0) {
+      setExportError(null)
+      setIncomeReportValidationErrors(errors)
+      return
+    }
+
+    setIncomeReportValidationErrors([])
     setIncomeExporting(true)
     setExportError(null)
     setExportMessage(null)
@@ -2391,6 +2486,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   }
 
   async function exportIncomePdf() {
+    const errors = getIncomeReportValidationErrors(incomeFilters)
+    if (errors.length > 0) {
+      setExportError(null)
+      setIncomeReportValidationErrors(errors)
+      return
+    }
+
+    setIncomeReportValidationErrors([])
     setIncomeExporting(true)
     setExportError(null)
     setExportMessage(null)
@@ -2414,6 +2517,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   }
 
   async function exportExpenseXlsx() {
+    const errors = getExpenseReportValidationErrors(expenseFilters)
+    if (errors.length > 0) {
+      setExportError(null)
+      setExpenseReportValidationErrors(errors)
+      return
+    }
+
+    setExpenseReportValidationErrors([])
     setExpenseExporting(true)
     setExportError(null)
     setExportMessage(null)
@@ -2436,6 +2547,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   }
 
   async function exportExpensePdf() {
+    const errors = getExpenseReportValidationErrors(expenseFilters)
+    if (errors.length > 0) {
+      setExportError(null)
+      setExpenseReportValidationErrors(errors)
+      return
+    }
+
+    setExpenseReportValidationErrors([])
     setExpenseExporting(true)
     setExportError(null)
     setExportMessage(null)
@@ -2475,6 +2594,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <input aria-label="Начало периода отчета" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
         <input aria-label="Конец периода отчета" name="monthTo" type="month" defaultValue={filters.monthTo.slice(0, 7)} required />
         <input aria-label="Поиск в отчете" name="search" placeholder="Гараж или владелец" defaultValue={filters.search} />
+        <FormValidationSummary title="Проверьте период отчета" items={reportValidationErrors} />
         <button className="secondary-button" type="submit">
           <Search size={16} />
           <span>Сформировать</span>
@@ -2602,6 +2722,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <option value="accruals">Только начисления</option>
           <option value="payments">Только оплаты</option>
         </select>
+        <FormValidationSummary title="Проверьте отчет по поступлениям" items={incomeReportValidationErrors} />
         <button className="secondary-button" type="submit">
           <Search size={16} />
           <span>Показать</span>
@@ -2689,6 +2810,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <option value="accruals">Только начисления</option>
           <option value="payments">Только выплаты</option>
         </select>
+        <FormValidationSummary title="Проверьте отчет по выплатам" items={expenseReportValidationErrors} />
         <button className="secondary-button" type="submit">
           <Search size={16} />
           <span>Показать</span>
