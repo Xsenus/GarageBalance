@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, KeyboardEvent } from 'react'
 import {
   Bell,
   BookOpenCheck,
@@ -17,6 +17,7 @@ import {
   Trash2,
   UsersRound,
   WalletCards,
+  X,
 } from 'lucide-react'
 import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
@@ -46,6 +47,10 @@ type AppProps = {
   releaseClient?: ReleaseClient
   userClient?: UserManagementClient
 }
+
+type AccrualBreakdown =
+  | { kind: 'garage'; accrual: AccrualDto }
+  | { kind: 'supplier'; accrual: SupplierAccrualDto }
 
 type IncomeReportFilters = {
   dateFrom: string
@@ -419,6 +424,7 @@ function FinancePanel({
   const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
   const [regularStatus, setRegularStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
+  const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -583,6 +589,17 @@ function FinancePanel({
       setSummary((value) => ({ ...value, meterReadingCount: value.meterReadingCount + 1 }))
       setMeterForm((value) => ({ ...value, currentValue: 0, comment: '' }))
     })
+  }
+
+  function openAccrualBreakdown(value: AccrualBreakdown) {
+    setAccrualBreakdown(value)
+  }
+
+  function handleAccrualBreakdownKeyDown(event: KeyboardEvent<HTMLDivElement>, value: AccrualBreakdown) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openAccrualBreakdown(value)
+    }
   }
 
   function addOperation(operation: FinancialOperationDto) {
@@ -887,7 +904,15 @@ function FinancePanel({
           </div>
           {accruals.length === 0 ? <p className="empty-state">Начислений пока нет</p> : null}
           {accruals.slice(0, 8).map((accrual) => (
-            <div className="operation-row" role="row" key={accrual.id}>
+            <div
+              className="operation-row operation-row--interactive"
+              role="row"
+              tabIndex={0}
+              aria-label={`Разбивка начисления ${accrual.incomeTypeName} гараж ${accrual.garageNumber}`}
+              key={accrual.id}
+              onDoubleClick={() => openAccrualBreakdown({ kind: 'garage', accrual })}
+              onKeyDown={(event) => handleAccrualBreakdownKeyDown(event, { kind: 'garage', accrual })}
+            >
               <span role="cell">{accrual.accountingMonth.slice(0, 7)}</span>
               <span role="cell">
                 <strong>{accrual.incomeTypeName}</strong>
@@ -908,7 +933,15 @@ function FinancePanel({
           </div>
           {supplierAccruals.length === 0 ? <p className="empty-state">Начислений поставщикам пока нет</p> : null}
           {supplierAccruals.slice(0, 8).map((accrual) => (
-            <div className="operation-row" role="row" key={accrual.id}>
+            <div
+              className="operation-row operation-row--interactive"
+              role="row"
+              tabIndex={0}
+              aria-label={`Разбивка начисления поставщику ${accrual.supplierName}`}
+              key={accrual.id}
+              onDoubleClick={() => openAccrualBreakdown({ kind: 'supplier', accrual })}
+              onKeyDown={(event) => handleAccrualBreakdownKeyDown(event, { kind: 'supplier', accrual })}
+            >
               <span role="cell">{accrual.accountingMonth.slice(0, 7)}</span>
               <span role="cell">
                 <strong>{accrual.supplierName}</strong>
@@ -945,6 +978,78 @@ function FinancePanel({
           ))}
         </div>
       </div>
+      {accrualBreakdown ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setAccrualBreakdown(null)}>
+          <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="accrual-breakdown-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <h3 id="accrual-breakdown-title">
+                  {accrualBreakdown.kind === 'garage' ? 'Разбивка начисления' : 'Разбивка начисления поставщику'}
+                </h3>
+                <p>{accrualBreakdown.accrual.accountingMonth.slice(0, 7)}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть разбивку" onClick={() => setAccrualBreakdown(null)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            {accrualBreakdown.kind === 'garage' ? (
+              <dl className="detail-grid">
+                <div>
+                  <dt>Гараж</dt>
+                  <dd>{accrualBreakdown.accrual.garageNumber}</dd>
+                </div>
+                <div>
+                  <dt>Владелец</dt>
+                  <dd>{accrualBreakdown.accrual.ownerName ?? 'Не указан'}</dd>
+                </div>
+                <div>
+                  <dt>Вид начисления</dt>
+                  <dd>{accrualBreakdown.accrual.incomeTypeName}</dd>
+                </div>
+                <div>
+                  <dt>Источник</dt>
+                  <dd>{accrualBreakdown.accrual.source === 'regular' ? 'Регулярное' : 'Ручное'}</dd>
+                </div>
+                <div>
+                  <dt>Сумма</dt>
+                  <dd className="money-accrual">{formatMoney(accrualBreakdown.accrual.amount)}</dd>
+                </div>
+                <div>
+                  <dt>Комментарий</dt>
+                  <dd>{accrualBreakdown.accrual.comment ?? 'Нет комментария'}</dd>
+                </div>
+              </dl>
+            ) : (
+              <dl className="detail-grid">
+                <div>
+                  <dt>Поставщик</dt>
+                  <dd>{accrualBreakdown.accrual.supplierName}</dd>
+                </div>
+                <div>
+                  <dt>Вид выплаты</dt>
+                  <dd>{accrualBreakdown.accrual.expenseTypeName}</dd>
+                </div>
+                <div>
+                  <dt>Источник</dt>
+                  <dd>{accrualBreakdown.accrual.source === 'regular' ? 'Регулярное' : 'Ручное'}</dd>
+                </div>
+                <div>
+                  <dt>Документ</dt>
+                  <dd>{accrualBreakdown.accrual.documentNumber ?? 'Не указан'}</dd>
+                </div>
+                <div>
+                  <dt>Сумма</dt>
+                  <dd className="money-expense">{formatMoney(accrualBreakdown.accrual.amount)}</dd>
+                </div>
+                <div>
+                  <dt>Комментарий</dt>
+                  <dd>{accrualBreakdown.accrual.comment ?? 'Нет комментария'}</dd>
+                </div>
+              </dl>
+            )}
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }

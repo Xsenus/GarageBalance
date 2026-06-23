@@ -670,6 +670,20 @@ h1 {
   grid-template-columns: 110px minmax(170px, 1fr) 130px;
 }
 
+.operation-row--interactive {
+  cursor: pointer;
+}
+
+.operation-row--interactive:hover,
+.operation-row--interactive:focus-visible {
+  background: #f8fafc;
+}
+
+.operation-row--interactive:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+  outline-offset: -3px;
+}
+
 button.operation-row {
   width: 100%;
   border-right: 0;
@@ -772,6 +786,73 @@ button.operation-row:hover {
   font-weight: 700;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(16, 24, 40, 0.36);
+  padding: 24px;
+}
+
+.detail-dialog {
+  width: min(560px, 100%);
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(16, 24, 40, 0.18);
+  padding: 18px;
+}
+
+.detail-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.detail-dialog-header h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.detail-dialog-header p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 14px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.detail-grid div {
+  min-width: 0;
+  border-top: 1px solid #eaecf0;
+  padding-top: 10px;
+}
+
+.detail-grid dt {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.detail-grid dd {
+  margin: 4px 0 0;
+  color: #101828;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .status-active,
 .status-disabled {
   border-radius: 999px;
@@ -830,6 +911,10 @@ button.operation-row:hover {
 
   .user-table-row,
   .operation-row {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -217,7 +217,17 @@ describe('App', () => {
     await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
 
     expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
-    expect(within(financePanel).getByRole('table', { name: 'Последние начисления' })).toBeInTheDocument()
+    const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    expect(accrualTable).toBeInTheDocument()
+
+    await user.dblClick(within(accrualTable).getByLabelText(/Разбивка начисления/i))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
+    expect(within(dialog).getByText('Ручная корректировка')).toBeInTheDocument()
+    expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
+    expect(within(dialog).getByText('Гараж')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть разбивку' }))
+    expect(screen.queryByRole('dialog', { name: 'Разбивка начисления' })).not.toBeInTheDocument()
   })
 
   it('creates supplier accrual from payments workspace', async () => {
@@ -239,6 +249,13 @@ describe('App', () => {
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
     expect(supplierAccrualTable).toBeInTheDocument()
     expect(within(supplierAccrualTable).getByText('Водоканал')).toBeInTheDocument()
+
+    await user.dblClick(within(supplierAccrualTable).getByLabelText(/Разбивка начисления поставщику/i))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления поставщику' })
+    expect(within(dialog).getByText('INV-1')).toBeInTheDocument()
+    expect(within(dialog).getByText('Счет за воду')).toBeInTheDocument()
+    expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
   })
 
   it('generates regular accruals from tariff in payments workspace', async () => {
