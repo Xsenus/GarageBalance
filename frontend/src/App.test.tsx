@@ -74,6 +74,9 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1')).toBeInTheDocument()
+    expect(within(financePanel).getByText('19.06.2026')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
+    expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
@@ -524,7 +527,7 @@ describe('App', () => {
     await user.type(within(dictionaryPanel).getByLabelText('Ставка тарифа'), '150')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[5])
     expect(await within(dictionaryPanel).findByText('Мусор')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('150 с 2026-07-01')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('150,00 с 01.07.2026')).toBeInTheDocument()
   })
 
   it('creates income and expense operations from payments workspace', async () => {

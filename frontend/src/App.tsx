@@ -563,7 +563,7 @@ function FinancePanel({
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
 }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
@@ -1073,7 +1073,7 @@ function FinancePanel({
           {operations.length === 0 ? <p className="empty-state">Операций пока нет</p> : null}
           {operations.slice(0, 8).map((operation) => (
             <div className="operation-row" role="row" key={operation.id}>
-              <span role="cell">{operation.operationDate}</span>
+              <span role="cell">{formatDateOnly(operation.operationDate)}</span>
               <span role="cell">
                 <strong>{operation.operationKind === 'income' ? operation.incomeTypeName : operation.expenseTypeName}</strong>
                 <small>{operation.operationKind === 'income' ? `Гараж ${operation.garageNumber}` : operation.supplierName}</small>
@@ -1109,7 +1109,7 @@ function FinancePanel({
               onDoubleClick={() => openAccrualBreakdown({ kind: 'garage', accrual })}
               onKeyDown={(event) => handleAccrualBreakdownKeyDown(event, { kind: 'garage', accrual })}
             >
-              <span role="cell">{accrual.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">{formatMonth(accrual.accountingMonth)}</span>
               <span role="cell">
                 <strong>{accrual.incomeTypeName}</strong>
                 <small>Гараж {accrual.garageNumber}</small>
@@ -1138,7 +1138,7 @@ function FinancePanel({
               onDoubleClick={() => openAccrualBreakdown({ kind: 'supplier', accrual })}
               onKeyDown={(event) => handleAccrualBreakdownKeyDown(event, { kind: 'supplier', accrual })}
             >
-              <span role="cell">{accrual.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">{formatMonth(accrual.accountingMonth)}</span>
               <span role="cell">
                 <strong>{accrual.supplierName}</strong>
                 <small>{accrual.expenseTypeName}</small>
@@ -1159,7 +1159,7 @@ function FinancePanel({
           {meterReadings.length === 0 ? <p className="empty-state">Показаний пока нет</p> : null}
           {meterReadings.slice(0, 8).map((reading) => (
             <div className="operation-row" role="row" key={reading.id}>
-              <span role="cell">{reading.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">{formatMonth(reading.accountingMonth)}</span>
               <span role="cell">
                 <strong>{reading.meterKind === 'water' ? 'Вода' : 'Электричество'}</strong>
                 <small>
@@ -1182,7 +1182,7 @@ function FinancePanel({
                 <h3 id="accrual-breakdown-title">
                   {accrualBreakdown.kind === 'garage' ? 'Разбивка начисления' : 'Разбивка начисления поставщику'}
                 </h3>
-                <p>{accrualBreakdown.accrual.accountingMonth.slice(0, 7)}</p>
+                <p>{formatMonth(accrualBreakdown.accrual.accountingMonth)}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Закрыть разбивку" onClick={() => setAccrualBreakdown(null)}>
                 <X size={18} aria-hidden="true" />
@@ -1512,7 +1512,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
 }
 
 function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
   const [filters, setFilters] = useState({ monthFrom: month, monthTo: month, search: '' })
   const [incomeFilters, setIncomeFilters] = useState<IncomeReportFilters>({ dateFrom: month, dateTo: today, search: '', garageIds: [], ownerIds: [], incomeTypeIds: [], rowMode: 'all' })
@@ -1869,7 +1869,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           {report?.monthlyRows.length === 0 ? <p className="empty-state">Строк отчета пока нет</p> : null}
           {report?.monthlyRows.map((row) => (
             <div className="operation-row" role="row" key={row.accountingMonth}>
-              <span role="cell">{row.accountingMonth.slice(0, 7)}</span>
+              <span role="cell">{formatMonth(row.accountingMonth)}</span>
               <span role="cell">
                 <strong>{formatMoney(row.accrualTotal)} начислено</strong>
                 <small>
@@ -1987,7 +1987,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         {incomeReport?.rows.slice(0, 16).map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
             <span role="cell">
-              <strong>{row.date}</strong>
+              <strong>{formatDateOnly(row.date)}</strong>
               <small>{row.rowType === 'starting_balance' ? 'стартовый баланс' : row.rowType === 'accruals' ? 'начисление' : 'оплата'}</small>
             </span>
             <span role="cell">
@@ -2073,7 +2073,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         {expenseReport?.rows.slice(0, 16).map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
             <span role="cell">
-              <strong>{row.date}</strong>
+              <strong>{formatDateOnly(row.date)}</strong>
               <small>{row.rowType === 'starting_balance' ? 'стартовый баланс' : row.rowType === 'accruals' ? 'начисление' : 'выплата'}</small>
             </span>
             <span role="cell">
@@ -2682,7 +2682,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             items={tariffs.map((item) => ({
               id: item.id,
               title: item.name,
-              meta: `${item.rate} с ${item.effectiveFrom}`,
+              meta: `${formatMoney(item.rate)} с ${formatDateOnly(item.effectiveFrom)}`,
               archiveLabel: canManageTariffs ? `Архивировать тариф ${item.name}` : undefined,
               onArchive: canManageTariffs ? () => archiveDictionaryItem('tariff', async () => {
                 await dictionaryClient.archiveTariff(auth.accessToken, item.id)
@@ -2776,6 +2776,31 @@ function DictionaryList({ items, emptyText }: { items: { id: string; title: stri
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
+}
+
+function getLocalDateInputValue(date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatDateOnly(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) {
+    return value
+  }
+
+  return `${match[3]}.${match[2]}.${match[1]}`
+}
+
+function formatMonth(value: string): string {
+  const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value)
+  if (!match) {
+    return value
+  }
+
+  return `${match[2]}.${match[1]}`
 }
 
 function formatNullableNumber(value: number | null): string {
