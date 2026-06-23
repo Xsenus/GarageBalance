@@ -259,6 +259,66 @@ describe('App', () => {
     expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
   })
 
+  it('allows tariff management without broad dictionary write permission', async () => {
+    const user = userEvent.setup()
+    let createdTariffs = 0
+    let archivedTariffId: string | null = null
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () =>
+        createAuthResponse({
+          user: {
+            email: 'tariff@example.com',
+            displayName: 'Тарифный специалист',
+            roles: ['tariff_manager'],
+            permissions: ['dictionaries.read', 'tariffs.manage'],
+          },
+        }),
+    })
+    const dictionaryClient = createDictionaryClient({
+      createOwner: async () => {
+        throw new Error('Создание владельца не должно вызываться без dictionaries.write.')
+      },
+      createTariff: async (_token, request) => {
+        createdTariffs += 1
+        return createTariff({
+          id: `tariff-${createdTariffs}`,
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+        })
+      },
+      archiveTariff: async (_token, id) => {
+        archivedTariffId = id
+      },
+    })
+
+    render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Режим просмотра тарифов: для добавления и архивирования тарифов нужно право tariffs.manage.')).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!.querySelector('button[type="submit"]')).toBeDisabled()
+
+    const tariffForm = within(dictionaryPanel).getByLabelText('Название тарифа').closest('form')!
+    const tariffSubmit = within(tariffForm as HTMLElement).getByRole('button', { name: 'Добавить' })
+    expect(tariffSubmit).toBeEnabled()
+
+    await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
+    await user.type(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'), 'Тариф обслуживания')
+    await user.click(tariffSubmit)
+
+    expect(createdTariffs).toBe(1)
+    expect(await within(dictionaryPanel).findByText('Тариф обслуживания')).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Архивировать тариф Тариф воды' }))
+    expect(archivedTariffId).toBe('tariff-1')
+    expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
+  })
+
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()

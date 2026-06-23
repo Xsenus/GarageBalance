@@ -2120,6 +2120,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
+  const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
 
   const defaultGroupId = useMemo(() => supplierForm.groupId || groups[0]?.id || '', [groups, supplierForm.groupId])
 
@@ -2281,8 +2282,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveTariff(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
+    if (!canManageTariffs) {
+      setError('Для изменения тарифов нужно право tariffs.manage.')
       return
     }
 
@@ -2294,7 +2295,12 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   }
 
   async function archiveDictionaryItem(scope: string, action: () => Promise<void>) {
-    if (!canWriteDictionaries) {
+    if (scope === 'tariff' && !canManageTariffs) {
+      setError('Для архивирования тарифов нужно право tariffs.manage.')
+      return
+    }
+
+    if (scope !== 'tariff' && !canWriteDictionaries) {
       setError('Для архивирования справочников нужно право dictionaries.write.')
       return
     }
@@ -2326,6 +2332,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
       {error ? <div className="form-error">{error}</div> : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.</p> : null}
+      {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для добавления и архивирования тарифов нужно право tariffs.manage.</p> : null}
 
       <div className="dictionary-grid">
         <form className="dictionary-form" onSubmit={saveOwner}>
@@ -2515,7 +2522,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
           </div>
-          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'tariff'}>
+          <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
             <Plus size={16} />
             <span>Добавить</span>
           </button>
@@ -2524,8 +2531,8 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: item.id,
               title: item.name,
               meta: `${item.rate} с ${item.effectiveFrom}`,
-              archiveLabel: canWriteDictionaries ? `Архивировать тариф ${item.name}` : undefined,
-              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('tariff', async () => {
+              archiveLabel: canManageTariffs ? `Архивировать тариф ${item.name}` : undefined,
+              onArchive: canManageTariffs ? () => archiveDictionaryItem('tariff', async () => {
                 await dictionaryClient.archiveTariff(auth.accessToken, item.id)
                 setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
               }) : undefined,

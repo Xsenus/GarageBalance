@@ -1,5 +1,6 @@
 using System.Reflection;
 using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
@@ -51,6 +52,20 @@ public sealed class ControllerAuthorizationCoverageTests
             .ToList();
 
         Assert.Empty(unprotectedActions);
+    }
+
+    [Theory]
+    [InlineData(nameof(DictionariesController.CreateTariff))]
+    [InlineData(nameof(DictionariesController.ArchiveTariff))]
+    public void TariffWriteActionsRequireTariffManagementPermission(string actionName)
+    {
+        var action = typeof(DictionariesController).GetMethod(actionName);
+        Assert.NotNull(action);
+
+        var policy = action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.TariffsManage);
+
+        Assert.NotNull(policy);
     }
 
     private static IEnumerable<MethodInfo> GetControllerActionMethods()

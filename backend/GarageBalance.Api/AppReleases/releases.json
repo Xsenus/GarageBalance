@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-tariff-management-permission",
+    "version": "0.34.0",
+    "publishedAt": "2026-06-23T18:35:00+07:00",
+    "title": "Тарифы вынесены в отдельное право управления",
+    "summary": "Создание и архивирование тарифов теперь требует tariffs.manage, а не общего права редактирования справочников.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Backend endpoints POST/DELETE для тарифов защищены policy tariffs.manage, поэтому оператор с dictionaries.write без тарифного права не сможет менять ставки."
+      },
+      {
+        "type": "improved",
+        "text": "Во frontend форма тарифов и архивирование тарифов завязаны на tariffs.manage отдельно от остальных справочников."
+      },
+      {
+        "type": "new",
+        "text": "Добавлен тест роли, которая может управлять тарифами без широкого dictionaries.write."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-readonly-action-guards",
     "version": "0.33.0",
     "publishedAt": "2026-06-23T18:10:00+07:00",

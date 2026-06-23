@@ -245,7 +245,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetTariffsAsync(search, cancellationToken));
     }
 
-    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpPost("tariffs")]
     [ProducesResponseType<TariffDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -260,7 +260,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return CreatedAtAction(nameof(GetTariffs), new { search = result.Value!.Name }, result.Value);
     }
 
-    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpDelete("tariffs/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
