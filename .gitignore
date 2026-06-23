@@ -20,13 +20,21 @@ appsettings.Local.json
 
 # Data and imports
 *.bak
+*.backup
 *.dump
+*.pgdump
+*.sql.gz
 *.db
 *.sqlite
+*.sqlite3
 *.accdb
 *.mdb
+backups/
+dumps/
 local-db-backups/
+private-imports/
 imports/private/
+imports/raw/
 
 # OS/editor
 .DS_Store

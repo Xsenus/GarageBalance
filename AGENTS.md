@@ -68,6 +68,8 @@ Treat personal, payment, contract, and Access import data as sensitive. Do not c
 
 Secrets must not be committed. Use environment variables, `.env.example`, user secrets, or deployment secrets. Keep real `.env`, database dumps, `.accdb`, `.mdb`, backups, and private import files out of Git.
 
+Do not weaken the root `.gitignore` rules for secrets, Access files, database dumps, backups, and private import folders. Before committing security/data-handling changes, run the backend test that verifies these ignore rules and keep it green together with the full test suite.
+
 Authentication and authorization must be enforced on the backend, not only hidden in the UI. Financial data, reports, import tools, settings, and audit logs require explicit permissions.
 
 All changes to financial values, tariffs, permissions, imports, manual corrections, and integrations must create audit history.

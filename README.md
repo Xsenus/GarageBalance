@@ -109,4 +109,6 @@ docker compose up --build
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.
 
+Приватные данные кооператива нельзя добавлять в Git: реальные `.env`, `appsettings.Local.json`, `.accdb`/`.mdb`, дампы, backup-файлы и папки `private-imports/`, `imports/private/`, `imports/raw/` должны оставаться только локально. Это правило закреплено в корневом `.gitignore` и backend-тесте `SensitiveFileGitIgnoreTests`.
+
 Главный roadmap: `docs/project-roadmap.md`.
