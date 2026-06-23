@@ -195,6 +195,70 @@ describe('App', () => {
     expect(screen.queryByText('Аудит не должен загружаться для оператора.')).not.toBeInTheDocument()
   })
 
+  it('keeps dictionary and payment actions read-only without write permissions', async () => {
+    const user = userEvent.setup()
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () =>
+        createAuthResponse({
+          user: {
+            email: 'viewer@example.com',
+            displayName: 'Наблюдатель',
+            roles: ['read_only'],
+            permissions: ['dictionaries.read', 'payments.read', 'reports.read'],
+          },
+        }),
+    })
+    const dictionaryClient = createDictionaryClient({
+      createOwner: async () => {
+        throw new Error('Создание владельца не должно вызываться без dictionaries.write.')
+      },
+      archiveOwner: async () => {
+        throw new Error('Архивирование владельца не должно вызываться без dictionaries.write.')
+      },
+    })
+    const financeClient = createFinanceClient({
+      createIncome: async () => {
+        throw new Error('Поступление не должно вызываться без payments.write.')
+      },
+      createExpense: async () => {
+        throw new Error('Выплата не должна вызываться без payments.write.')
+      },
+      createAccrual: async () => {
+        throw new Error('Начисление не должно вызываться без payments.write.')
+      },
+      createMeterReading: async () => {
+        throw new Error('Показание не должно вызываться без payments.write.')
+      },
+    })
+
+    render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.')).toBeInTheDocument()
+    for (const button of within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })) {
+      expect(button).toBeDisabled()
+    }
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' })).toBeDisabled()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Найти гараж' })).toBeEnabled()
+    expect(within(dictionaryPanel).queryByRole('button', { name: /Архивировать/ })).not.toBeInTheDocument()
+
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    expect(within(financePanel).getByText('Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.')).toBeInTheDocument()
+    for (const button of within(financePanel).getAllByRole('button', { name: 'Провести' })) {
+      expect(button).toBeDisabled()
+    }
+    for (const button of within(financePanel).getAllByRole('button', { name: 'Начислить' })) {
+      expect(button).toBeDisabled()
+    }
+    expect(within(financePanel).getByRole('button', { name: 'Создать месяц' })).toBeDisabled()
+    expect(within(financePanel).getByRole('button', { name: 'Внести' })).toBeDisabled()
+    expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
+  })
+
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()

@@ -81,7 +81,9 @@ type NavigationItem = {
 const permissions = {
   usersManage: 'users.manage',
   dictionariesRead: 'dictionaries.read',
+  dictionariesWrite: 'dictionaries.write',
   paymentsRead: 'payments.read',
+  paymentsWrite: 'payments.write',
   reportsRead: 'reports.read',
   importRun: 'import.run',
   auditRead: 'audit.read',
@@ -499,6 +501,7 @@ function FinancePanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
 
   useEffect(() => {
     let ignore = false
@@ -555,6 +558,11 @@ function FinancePanel({
 
   async function saveIncome(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     await runSaving('income', async () => {
       const operation = await financeClient.createIncome(auth.accessToken, {
         garageId: incomeForm.garageId,
@@ -571,6 +579,11 @@ function FinancePanel({
 
   async function saveExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     await runSaving('expense', async () => {
       const operation = await financeClient.createExpense(auth.accessToken, {
         supplierId: expenseForm.supplierId,
@@ -587,6 +600,11 @@ function FinancePanel({
 
   async function saveAccrual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     await runSaving('accrual', async () => {
       const accrual = await financeClient.createAccrual(auth.accessToken, {
         garageId: accrualForm.garageId,
@@ -609,6 +627,11 @@ function FinancePanel({
 
   async function saveRegularAccruals(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     await runSaving('regular-accruals', async () => {
       const result = await financeClient.generateRegularAccruals(auth.accessToken, {
         incomeTypeId: regularForm.incomeTypeId,
@@ -630,6 +653,11 @@ function FinancePanel({
 
   async function saveSupplierAccrual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     await runSaving('supplier-accrual', async () => {
       const accrual = await financeClient.createSupplierAccrual(auth.accessToken, {
         supplierId: supplierAccrualForm.supplierId,
@@ -647,6 +675,11 @@ function FinancePanel({
 
   async function saveMeterReading(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     await runSaving('meter-reading', async () => {
       const reading = await financeClient.createMeterReading(auth.accessToken, {
         garageId: meterForm.garageId,
@@ -714,6 +747,7 @@ function FinancePanel({
       </div>
 
       {error ? <div className="form-error">{error}</div> : null}
+      {!canWritePayments ? <p className="form-hint">Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.</p> : null}
 
       <div className="summary-strip" aria-label="Итоги платежей">
         <div>
@@ -773,7 +807,7 @@ function FinancePanel({
             <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
-          <button className="secondary-button" type="submit" disabled={saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
+          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
             <Plus size={16} />
             <span>Провести</span>
           </button>
@@ -809,7 +843,7 @@ function FinancePanel({
             <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
-          <button className="secondary-button" type="submit" disabled={saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
+          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
             <Plus size={16} />
             <span>Провести</span>
           </button>
@@ -842,7 +876,7 @@ function FinancePanel({
             <input aria-label="Сумма начисления" type="number" min="0.01" step="0.01" value={accrualForm.amount} onChange={(event) => setAccrualForm({ ...accrualForm, amount: Number(event.target.value) })} required />
           </div>
           <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
-          <button className="secondary-button" type="submit" disabled={saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
+          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
             <Plus size={16} />
             <span>Начислить</span>
           </button>
@@ -878,7 +912,7 @@ function FinancePanel({
             <input aria-label="Документ начисления поставщику" placeholder="Документ" value={supplierAccrualForm.documentNumber} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, documentNumber: event.target.value })} />
             <input aria-label="Комментарий начисления поставщику" placeholder="Комментарий" value={supplierAccrualForm.comment} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, comment: event.target.value })} required />
           </div>
-          <button className="secondary-button" type="submit" disabled={saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
+          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
             <Plus size={16} />
             <span>Начислить</span>
           </button>
@@ -908,7 +942,7 @@ function FinancePanel({
           </select>
           <input aria-label="Месяц регулярных начислений" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />
           <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
-          <button className="secondary-button" type="submit" disabled={saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
+          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
             <Plus size={16} />
             <span>Создать месяц</span>
           </button>
@@ -939,7 +973,7 @@ function FinancePanel({
             <input aria-label="Новое показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />
             <input aria-label="Комментарий счетчика" placeholder="Комментарий" value={meterForm.comment} onChange={(event) => setMeterForm({ ...meterForm, comment: event.target.value })} />
           </div>
-          <button className="secondary-button" type="submit" disabled={saving === 'meter-reading' || !meterForm.garageId}>
+          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'meter-reading' || !meterForm.garageId}>
             <Plus size={16} />
             <span>Внести</span>
           </button>
@@ -2085,6 +2119,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
 
   const defaultGroupId = useMemo(() => supplierForm.groupId || groups[0]?.id || '', [groups, supplierForm.groupId])
 
@@ -2131,6 +2166,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveOwner(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('owner', async () => {
       const owner = await dictionaryClient.createOwner(auth.accessToken, ownerForm)
       setOwners((items) => [owner, ...items])
@@ -2140,6 +2180,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveGarage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('garage', async () => {
       const garage = await dictionaryClient.createGarage(auth.accessToken, {
         number: garageForm.number,
@@ -2174,6 +2219,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveSupplierGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('group', async () => {
       const group = await dictionaryClient.createSupplierGroup(auth.accessToken, { name: supplierGroupName })
       setGroups((items) => [...items, group])
@@ -2184,6 +2234,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('supplier', async () => {
       const supplier = await dictionaryClient.createSupplier(auth.accessToken, {
         name: supplierForm.name,
@@ -2198,6 +2253,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveIncomeType(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('income-type', async () => {
       const incomeType = await dictionaryClient.createIncomeType(auth.accessToken, incomeTypeForm)
       setIncomeTypes((items) => [incomeType, ...items])
@@ -2207,6 +2267,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveExpenseType(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('expense-type', async () => {
       const expenseType = await dictionaryClient.createExpenseType(auth.accessToken, expenseTypeForm)
       setExpenseTypes((items) => [expenseType, ...items])
@@ -2216,6 +2281,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
 
   async function saveTariff(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canWriteDictionaries) {
+      setError('Для изменения справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving('tariff', async () => {
       const tariff = await dictionaryClient.createTariff(auth.accessToken, tariffForm)
       setTariffs((items) => [tariff, ...items])
@@ -2224,6 +2294,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   }
 
   async function archiveDictionaryItem(scope: string, action: () => Promise<void>) {
+    if (!canWriteDictionaries) {
+      setError('Для архивирования справочников нужно право dictionaries.write.')
+      return
+    }
+
     await runSaving(`archive-${scope}`, action)
   }
 
@@ -2250,6 +2325,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       </div>
 
       {error ? <div className="form-error">{error}</div> : null}
+      {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.</p> : null}
 
       <div className="dictionary-grid">
         <form className="dictionary-form" onSubmit={saveOwner}>
@@ -2257,7 +2333,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <input aria-label="Фамилия владельца" placeholder="Фамилия" value={ownerForm.lastName} onChange={(event) => setOwnerForm({ ...ownerForm, lastName: event.target.value })} required />
           <input aria-label="Имя владельца" placeholder="Имя" value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />
           <input aria-label="Телефон владельца" placeholder="Телефон" value={ownerForm.phone} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />
-          <button className="secondary-button" type="submit" disabled={saving === 'owner'}>
+          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'owner'}>
             <Plus size={16} />
             <span>Добавить</span>
           </button>
@@ -2266,11 +2342,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: owner.id,
               title: owner.fullName,
               meta: owner.phone ?? 'телефон не указан',
-              archiveLabel: `Архивировать владельца ${owner.fullName}`,
-              onArchive: () => archiveDictionaryItem('owner', async () => {
+              archiveLabel: canWriteDictionaries ? `Архивировать владельца ${owner.fullName}` : undefined,
+              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('owner', async () => {
                 await dictionaryClient.archiveOwner(auth.accessToken, owner.id)
                 setOwners((items) => items.filter((item) => item.id !== owner.id))
-              }),
+              }) : undefined,
             }))}
             emptyText="Владельцев пока нет"
           />
@@ -2315,7 +2391,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               </option>
             ))}
           </select>
-          <button className="secondary-button" type="submit" disabled={saving === 'garage'}>
+          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'garage'}>
             <Plus size={16} />
             <span>Добавить</span>
           </button>
@@ -2326,11 +2402,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               meta: `${garage.ownerName ?? 'владелец не указан'} · старт ${formatMoney(garage.startingBalance)}`,
               openLabel: `Открыть карточку гаража ${garage.number}`,
               onOpen: () => setSelectedGarage(garage),
-              archiveLabel: `Архивировать гараж ${garage.number}`,
-              onArchive: () => archiveDictionaryItem('garage', async () => {
+              archiveLabel: canWriteDictionaries ? `Архивировать гараж ${garage.number}` : undefined,
+              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('garage', async () => {
                 await dictionaryClient.archiveGarage(auth.accessToken, garage.id)
                 setGarages((items) => items.filter((item) => item.id !== garage.id))
-              }),
+              }) : undefined,
             }))}
             emptyText="Гаражей пока нет"
           />
@@ -2340,7 +2416,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <h3>Поставщики</h3>
           <form className="compact-form" onSubmit={saveSupplierGroup}>
             <input aria-label="Группа поставщиков" placeholder="Группа" value={supplierGroupName} onChange={(event) => setSupplierGroupName(event.target.value)} required />
-            <button className="icon-button" type="submit" aria-label="Добавить группу" disabled={saving === 'group'}>
+            <button className="icon-button" type="submit" aria-label="Добавить группу" disabled={!canWriteDictionaries || saving === 'group'}>
               <Plus size={17} />
             </button>
           </form>
@@ -2358,7 +2434,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             </select>
             <input aria-label="ИНН поставщика" placeholder="ИНН" value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />
             <input aria-label="Стартовый баланс поставщика" type="number" step="0.01" value={supplierForm.startingBalance} onChange={(event) => setSupplierForm({ ...supplierForm, startingBalance: Number(event.target.value) })} />
-            <button className="secondary-button" type="submit" disabled={!defaultGroupId || saving === 'supplier'}>
+            <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || !defaultGroupId || saving === 'supplier'}>
               <Plus size={16} />
               <span>Добавить</span>
             </button>
@@ -2368,11 +2444,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: supplier.id,
               title: supplier.name,
               meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''} · старт ${formatMoney(supplier.startingBalance)}`,
-              archiveLabel: `Архивировать поставщика ${supplier.name}`,
-              onArchive: () => archiveDictionaryItem('supplier', async () => {
+              archiveLabel: canWriteDictionaries ? `Архивировать поставщика ${supplier.name}` : undefined,
+              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('supplier', async () => {
                 await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id)
                 setSuppliers((items) => items.filter((item) => item.id !== supplier.id))
-              }),
+              }) : undefined,
             }))}
             emptyText="Поставщиков пока нет"
           />
@@ -2384,7 +2460,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <h3>Виды поступлений</h3>
           <input aria-label="Название вида поступления" placeholder="Членский взнос" value={incomeTypeForm.name} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида поступления" placeholder="Код" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} />
-          <button className="secondary-button" type="submit" disabled={saving === 'income-type'}>
+          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'income-type'}>
             <Plus size={16} />
             <span>Добавить</span>
           </button>
@@ -2393,11 +2469,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: item.id,
               title: item.name,
               meta: item.code ?? 'код не указан',
-              archiveLabel: `Архивировать вид поступления ${item.name}`,
-              onArchive: () => archiveDictionaryItem('income-type', async () => {
+              archiveLabel: canWriteDictionaries ? `Архивировать вид поступления ${item.name}` : undefined,
+              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('income-type', async () => {
                 await dictionaryClient.archiveIncomeType(auth.accessToken, item.id)
                 setIncomeTypes((items) => items.filter((incomeType) => incomeType.id !== item.id))
-              }),
+              }) : undefined,
             }))}
             emptyText="Видов поступлений пока нет"
           />
@@ -2407,7 +2483,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
           <h3>Виды выплат</h3>
           <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида выплаты" placeholder="Код" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} />
-          <button className="secondary-button" type="submit" disabled={saving === 'expense-type'}>
+          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
             <Plus size={16} />
             <span>Добавить</span>
           </button>
@@ -2416,11 +2492,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: item.id,
               title: item.name,
               meta: item.code ?? 'код не указан',
-              archiveLabel: `Архивировать вид выплаты ${item.name}`,
-              onArchive: () => archiveDictionaryItem('expense-type', async () => {
+              archiveLabel: canWriteDictionaries ? `Архивировать вид выплаты ${item.name}` : undefined,
+              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('expense-type', async () => {
                 await dictionaryClient.archiveExpenseType(auth.accessToken, item.id)
                 setExpenseTypes((items) => items.filter((expenseType) => expenseType.id !== item.id))
-              }),
+              }) : undefined,
             }))}
             emptyText="Видов выплат пока нет"
           />
@@ -2439,7 +2515,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
           </div>
-          <button className="secondary-button" type="submit" disabled={saving === 'tariff'}>
+          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'tariff'}>
             <Plus size={16} />
             <span>Добавить</span>
           </button>
@@ -2448,11 +2524,11 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               id: item.id,
               title: item.name,
               meta: `${item.rate} с ${item.effectiveFrom}`,
-              archiveLabel: `Архивировать тариф ${item.name}`,
-              onArchive: () => archiveDictionaryItem('tariff', async () => {
+              archiveLabel: canWriteDictionaries ? `Архивировать тариф ${item.name}` : undefined,
+              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('tariff', async () => {
                 await dictionaryClient.archiveTariff(auth.accessToken, item.id)
                 setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
-              }),
+              }) : undefined,
             }))}
             emptyText="Тарифов пока нет"
           />
