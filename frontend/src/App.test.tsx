@@ -464,6 +464,23 @@ describe('App', () => {
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' }))
     expect(within(dictionaryPanel).getByText('Изменение тарифа')).toBeInTheDocument()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
+    await user.type(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'), 'Вода черновик')
+    expect(within(tariffForm as HTMLElement).getByText('Есть несохраненные изменения тарифа.')).toBeInTheDocument()
+    await user.click(within(tariffForm as HTMLElement).getByRole('button', { name: 'Отменить' }))
+    expect(confirmSpy).toHaveBeenCalledWith('Отменить редактирование тарифа без сохранения изменений?')
+    expect(within(dictionaryPanel).getByText('Изменение тарифа')).toBeInTheDocument()
+    expect(within(tariffForm as HTMLElement).getByLabelText('Название тарифа')).toHaveValue('Вода черновик')
+
+    confirmSpy.mockReturnValue(true)
+    await user.click(within(tariffForm as HTMLElement).getByRole('button', { name: 'Отменить' }))
+    expect(within(dictionaryPanel).queryByText('Изменение тарифа')).not.toBeInTheDocument()
+    expect(within(tariffForm as HTMLElement).getByLabelText('Название тарифа')).toHaveValue('')
+    confirmSpy.mockRestore()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф воды' }))
+    expect(within(dictionaryPanel).getByText('Изменение тарифа')).toBeInTheDocument()
     await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
     await user.type(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'), 'Вода после собрания')
     await user.clear(within(tariffForm as HTMLElement).getByLabelText('Ставка тарифа'))

@@ -3168,6 +3168,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
   const [tariffForm, setTariffForm] = useState({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
+  const [editingTariffBaseline, setEditingTariffBaseline] = useState<typeof tariffForm | null>(null)
   const [ownerValidationErrors, setOwnerValidationErrors] = useState<string[]>([])
   const [garageValidationErrors, setGarageValidationErrors] = useState<string[]>([])
   const [supplierGroupValidationErrors, setSupplierGroupValidationErrors] = useState<string[]>([])
@@ -3492,6 +3493,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
         const tariff = await dictionaryClient.updateTariff(auth.accessToken, editingTariffId, tariffForm)
         setTariffs((items) => items.map((item) => (item.id === tariff.id ? tariff : item)))
         setEditingTariffId(null)
+        setEditingTariffBaseline(null)
       } else {
         const tariff = await dictionaryClient.createTariff(auth.accessToken, tariffForm)
         setTariffs((items) => [tariff, ...items])
@@ -3502,19 +3504,40 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   }
 
   function editTariff(tariff: TariffDto) {
-    setEditingTariffId(tariff.id)
-    setTariffValidationErrors([])
-    setTariffForm({
+    const nextForm = {
       name: tariff.name,
       calculationBase: tariff.calculationBase,
       rate: tariff.rate,
       effectiveFrom: tariff.effectiveFrom,
       comment: tariff.comment ?? '',
-    })
+    }
+
+    setEditingTariffId(tariff.id)
+    setTariffValidationErrors([])
+    setTariffForm(nextForm)
+    setEditingTariffBaseline(nextForm)
   }
 
-  function resetTariffForm() {
+  function hasUnsavedTariffChanges() {
+    return Boolean(
+      editingTariffBaseline
+      && (
+        tariffForm.name !== editingTariffBaseline.name
+        || tariffForm.calculationBase !== editingTariffBaseline.calculationBase
+        || tariffForm.rate !== editingTariffBaseline.rate
+        || tariffForm.effectiveFrom !== editingTariffBaseline.effectiveFrom
+        || tariffForm.comment !== editingTariffBaseline.comment
+      ),
+    )
+  }
+
+  function resetTariffForm(options?: { skipConfirmation?: boolean }) {
+    if (editingTariffId && !options?.skipConfirmation && hasUnsavedTariffChanges() && !window.confirm('Отменить редактирование тарифа без сохранения изменений?')) {
+      return
+    }
+
     setEditingTariffId(null)
+    setEditingTariffBaseline(null)
     setTariffValidationErrors([])
     setTariffForm((value) => ({ ...value, name: '', rate: 1, comment: '' }))
   }
@@ -3772,6 +3795,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
           </div>
           <textarea aria-label="Комментарий тарифа" placeholder="Комментарий" value={tariffForm.comment} onChange={(event) => setTariffForm({ ...tariffForm, comment: event.target.value })} />
+          {editingTariffId && hasUnsavedTariffChanges() ? <p className="form-hint">Есть несохраненные изменения тарифа.</p> : null}
           <FormValidationSummary title="Проверьте тариф" items={tariffValidationErrors} />
           <div className="inline-actions">
             <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
@@ -3779,7 +3803,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               <span>{editingTariffId ? 'Сохранить' : 'Добавить'}</span>
             </button>
             {editingTariffId ? (
-              <button className="ghost-button" type="button" onClick={resetTariffForm}>
+              <button className="ghost-button" type="button" onClick={() => resetTariffForm()}>
                 Отменить
               </button>
             ) : null}
@@ -3796,7 +3820,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
                 await dictionaryClient.archiveTariff(auth.accessToken, item.id)
                 setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
                 if (editingTariffId === item.id) {
-                  resetTariffForm()
+                  resetTariffForm({ skipConfirmation: true })
                 }
               }) : undefined,
             }))}
