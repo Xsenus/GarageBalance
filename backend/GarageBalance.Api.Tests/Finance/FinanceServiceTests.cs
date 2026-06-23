@@ -37,6 +37,40 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateFinanceDocuments_RoundsManualMoneyAmountsAwayFromZero()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var income = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100.005m, "PKO-round", null),
+            null,
+            CancellationToken.None);
+        var expense = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200.005m, "RKO-round", null),
+            null,
+            CancellationToken.None);
+        var accrual = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 300.005m, "manual", "Округление ручного начисления"),
+            null,
+            CancellationToken.None);
+        var supplierAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), 400.005m, "manual", "INV-round", "Округление начисления поставщику"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(income.Succeeded);
+        Assert.Equal(100.01m, income.Value!.Amount);
+        Assert.True(expense.Succeeded);
+        Assert.Equal(200.01m, expense.Value!.Amount);
+        Assert.True(accrual.Succeeded);
+        Assert.Equal(300.01m, accrual.Value!.Amount);
+        Assert.True(supplierAccrual.Succeeded);
+        Assert.Equal(400.01m, supplierAccrual.Value!.Amount);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -95,7 +96,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             OperationKind = FinancialOperationKinds.Income,
             OperationDate = request.OperationDate,
             AccountingMonth = NormalizeMonth(request.AccountingMonth),
-            Amount = request.Amount,
+            Amount = MoneyMath.RoundMoney(request.Amount),
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
             GarageId = garage.Id,
@@ -135,7 +136,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             OperationKind = FinancialOperationKinds.Expense,
             OperationDate = request.OperationDate,
             AccountingMonth = NormalizeMonth(request.AccountingMonth),
-            Amount = request.Amount,
+            Amount = MoneyMath.RoundMoney(request.Amount),
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
             SupplierId = supplier.Id,
@@ -195,7 +196,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             IncomeTypeId = incomeType.Id,
             IncomeType = incomeType,
             AccountingMonth = month,
-            Amount = request.Amount,
+            Amount = MoneyMath.RoundMoney(request.Amount),
             Source = source,
             Comment = NormalizeOptional(request.Comment)
         };
@@ -253,7 +254,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             ExpenseTypeId = expenseType.Id,
             ExpenseType = expenseType,
             AccountingMonth = month,
-            Amount = request.Amount,
+            Amount = MoneyMath.RoundMoney(request.Amount),
             Source = source,
             DocumentNumber = documentNumber,
             Comment = NormalizeOptional(request.Comment)
@@ -419,8 +420,8 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     {
         return tariff.CalculationBase switch
         {
-            "fixed" => AmountCalculationResult.Success(RoundMoney(tariff.Rate)),
-            "people" => AmountCalculationResult.Success(RoundMoney(tariff.Rate * garage.PeopleCount)),
+            "fixed" => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate)),
+            "people" => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount)),
             "meter_water" => await CalculateMeterAmountAsync(garage.Id, MeterKinds.Water, tariff.Rate, month, cancellationToken),
             "meter_electricity" => await CalculateMeterAmountAsync(garage.Id, MeterKinds.Electricity, tariff.Rate, month, cancellationToken),
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
@@ -434,7 +435,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             cancellationToken);
         return reading is null
             ? AmountCalculationResult.Failure("нет показания счетчика за месяц.")
-            : AmountCalculationResult.Success(RoundMoney(reading.Consumption * rate));
+            : AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * rate));
     }
 
     private IQueryable<FinancialOperation> QueryOperations()
@@ -626,11 +627,6 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : garage.InitialElectricityMeterValue;
     }
 
-    private static decimal RoundMoney(decimal value)
-    {
-        return Math.Round(value, 2, MidpointRounding.AwayFromZero);
-    }
-
     private static bool HasGapWarning(string meterKind, DateOnly month, MeterReading? previousReading)
     {
         return meterKind == MeterKinds.Electricity && (previousReading is null || previousReading.AccountingMonth < month.AddMonths(-1));
@@ -686,7 +682,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
                 previous.OperationDate < operation.OperationDate)
             .SumAsync(previous => previous.Amount, cancellationToken);
 
-        return RoundMoney(startingBalance + accrualTotal - previousIncomeTotal);
+        return MoneyMath.RoundMoney(startingBalance + accrualTotal - previousIncomeTotal);
     }
 
     private async Task<decimal> CalculateSupplierDebtBeforeExpenseAsync(FinancialOperation operation, CancellationToken cancellationToken)
@@ -708,7 +704,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
                 previous.OperationDate < operation.OperationDate)
             .SumAsync(previous => previous.Amount, cancellationToken);
 
-        return RoundMoney(startingBalance + accrualTotal - previousExpenseTotal);
+        return MoneyMath.RoundMoney(startingBalance + accrualTotal - previousExpenseTotal);
     }
 
     private static FinancialOperationDto ToDto(

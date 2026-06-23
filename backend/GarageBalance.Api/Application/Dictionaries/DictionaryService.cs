@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Infrastructure.Data;
@@ -123,7 +124,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             Number = number,
             PeopleCount = request.PeopleCount,
             FloorCount = request.FloorCount,
-            StartingBalance = request.StartingBalance,
+            StartingBalance = MoneyMath.RoundMoney(request.StartingBalance),
             OwnerId = request.OwnerId,
             Owner = owner,
             InitialWaterMeterValue = request.InitialWaterMeterValue,
@@ -160,7 +161,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         garage.Number = number;
         garage.PeopleCount = request.PeopleCount;
         garage.FloorCount = request.FloorCount;
-        garage.StartingBalance = request.StartingBalance;
+        garage.StartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         garage.OwnerId = request.OwnerId;
         garage.Owner = owner;
         garage.InitialWaterMeterValue = request.InitialWaterMeterValue;
@@ -277,7 +278,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             ContactPerson = NormalizeOptional(request.ContactPerson),
             Phone = NormalizeOptional(request.Phone),
             Email = NormalizeOptional(request.Email),
-            StartingBalance = request.StartingBalance,
+            StartingBalance = MoneyMath.RoundMoney(request.StartingBalance),
             Comment = NormalizeOptional(request.Comment)
         };
 
@@ -309,7 +310,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         supplier.ContactPerson = NormalizeOptional(request.ContactPerson);
         supplier.Phone = NormalizeOptional(request.Phone);
         supplier.Email = NormalizeOptional(request.Email);
-        supplier.StartingBalance = request.StartingBalance;
+        supplier.StartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         supplier.Comment = NormalizeOptional(request.Comment);
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -466,7 +467,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         {
             Name = name,
             CalculationBase = calculationBase,
-            Rate = request.Rate,
+            Rate = MoneyMath.RoundRate(request.Rate),
             EffectiveFrom = request.EffectiveFrom,
             Comment = NormalizeOptional(request.Comment)
         };

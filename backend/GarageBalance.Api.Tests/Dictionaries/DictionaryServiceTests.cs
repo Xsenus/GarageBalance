@@ -102,6 +102,25 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task Dictionaries_RoundMoneyAndTariffRateBeforeSaving()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var supplierGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+
+        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("17", 1, 1, null, 10.005m, null, null, null), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", supplierGroup.Value!.Id, null, null, null, null, null, 20.005m, null), null, CancellationToken.None);
+        var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
+
+        Assert.True(garage.Succeeded);
+        Assert.Equal(10.01m, garage.Value!.StartingBalance);
+        Assert.True(supplier.Succeeded);
+        Assert.Equal(20.01m, supplier.Value!.StartingBalance);
+        Assert.True(tariff.Succeeded);
+        Assert.Equal(12.3456m, tariff.Value!.Rate);
+    }
+
+    [Fact]
     public async Task UpdateGarageAsync_ChangesOwnerAndKeepsDtoOwnerName()
     {
         await using var database = await TestDatabase.CreateAsync();
