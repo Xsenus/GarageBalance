@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import {
   Bell,
   BookOpenCheck,
@@ -47,6 +47,14 @@ type AppProps = {
   reportClient?: ReportClient
   releaseClient?: ReleaseClient
   userClient?: UserManagementClient
+}
+
+function FormError({ children }: { children: ReactNode }) {
+  return (
+    <div className="form-error" role="alert">
+      {children}
+    </div>
+  )
 }
 
 type AccrualBreakdown =
@@ -261,7 +269,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
         </label>
         <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
-        {error ? <div className="form-error">{error}</div> : null}
+        {error ? <FormError>{error}</FormError> : null}
 
         <button className="primary-button" type="submit" disabled={loading}>
           {loading ? 'Проверяем...' : mode === 'bootstrap' ? 'Создать администратора' : 'Войти'}
@@ -459,7 +467,7 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
           </label>
         </div>
         <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
-        {error ? <div className="form-error">{error}</div> : null}
+        {error ? <FormError>{error}</FormError> : null}
         {message ? <div className="form-success">{message}</div> : null}
         <button className="secondary-button" type="submit" disabled={saving}>
           <ShieldCheck size={16} />
@@ -538,7 +546,7 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
       </div>
 
       {loading ? <p className="muted">Загружаем историю обновлений...</p> : null}
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
       {!loading && !error && releases.length === 0 ? <p className="muted">Пока нет опубликованных изменений.</p> : null}
 
       {!loading && !error && releases.length > 0 ? (
@@ -937,7 +945,7 @@ function FinancePanel({
         <span>{loading ? 'Загрузка...' : `${summary.operationCount} операций`}</span>
       </div>
 
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.</p> : null}
 
       <div className="summary-strip" aria-label="Итоги платежей">
@@ -1503,7 +1511,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
         <span>{loading ? 'Загрузка...' : `${runs.length} запусков`}</span>
       </div>
 
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
       {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <div className="finance-grid">
@@ -1663,7 +1671,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
         </div>
       </div>
 
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
       {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
@@ -2006,8 +2014,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <span>{loading ? 'Формируем...' : `${report?.monthlyRows.length ?? 0} месяцев`}</span>
       </div>
 
-      {error ? <div className="form-error">{error}</div> : null}
-      {exportError ? <div className="form-error">{exportError}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
+      {exportError ? <FormError>{exportError}</FormError> : null}
       {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <form className="compact-form report-filter" onSubmit={applyFilters}>
@@ -2109,7 +2117,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <span>{incomeLoading ? 'Формируем...' : `${incomeReport?.rowCount ?? 0} строк`}</span>
       </div>
 
-      {incomeError ? <div className="form-error">{incomeError}</div> : null}
+      {incomeError ? <FormError>{incomeError}</FormError> : null}
 
       <form className="compact-form report-filter" onSubmit={applyIncomeFilters}>
         <input aria-label="Начало отчета по поступлениям" name="dateFrom" type="date" defaultValue={incomeFilters.dateFrom} required />
@@ -2203,7 +2211,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <span>{expenseLoading ? 'Формируем...' : `${expenseReport?.rowCount ?? 0} строк`}</span>
       </div>
 
-      {expenseError ? <div className="form-error">{expenseError}</div> : null}
+      {expenseError ? <FormError>{expenseError}</FormError> : null}
 
       <form className="compact-form report-filter" onSubmit={applyExpenseFilters}>
         <input aria-label="Начало отчета по выплатам" name="dateFrom" type="date" defaultValue={expenseFilters.dateFrom} required />
@@ -2356,7 +2364,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
         <span>{loading ? 'Загрузка...' : `${users.length} пользователей`}</span>
       </div>
 
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
 
       <div className="user-management-grid">
         <form className="dictionary-form" onSubmit={saveUser}>
@@ -2783,7 +2791,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
         <span>{loading ? 'Загрузка...' : `${owners.length + garages.length + suppliers.length} записей`}</span>
       </div>
 
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <FormError>{error}</FormError> : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.</p> : null}
       {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для добавления и архивирования тарифов нужно право tariffs.manage.</p> : null}
 

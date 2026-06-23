@@ -1196,6 +1196,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByText('Неверный email или пароль.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 
@@ -1214,6 +1215,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     expect(await screen.findByText('Пароль должен содержать хотя бы одну цифру.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 
@@ -1231,6 +1233,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByText('Слишком много неуспешных попыток входа. Повторите позже.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 
@@ -1296,6 +1299,16 @@ describe('App', () => {
     expect(await screen.findByText('Нет доступа к импорту.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к отчетам.')).toBeInTheDocument()
     expect(await screen.findByText('Нет доступа к истории обновлений.')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(
+      expect.arrayContaining([
+        'Нет доступа к пользователям.',
+        'Нет доступа к справочникам.',
+        'Нет доступа к платежам.',
+        'Нет доступа к импорту.',
+        'Нет доступа к отчетам.',
+        'Нет доступа к истории обновлений.',
+      ]),
+    )
   })
 })
 
