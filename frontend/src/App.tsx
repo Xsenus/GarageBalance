@@ -62,6 +62,12 @@ type IncomeReportFilters = {
   rowMode: string
 }
 
+type ConsolidatedReportFilters = {
+  monthFrom: string
+  monthTo: string
+  search: string
+}
+
 type ExpenseReportFilters = {
   dateFrom: string
   dateTo: string
@@ -70,6 +76,12 @@ type ExpenseReportFilters = {
   expenseTypeIds: string[]
   rowMode: string
 }
+
+const reportFilterStorageKeys = {
+  consolidated: 'garagebalance.reports.consolidatedFilters',
+  income: 'garagebalance.reports.incomeFilters',
+  expense: 'garagebalance.reports.expenseFilters',
+} as const
 
 type NavigationItem = {
   label: string
@@ -1661,9 +1673,9 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
 function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
-  const [filters, setFilters] = useState({ monthFrom: month, monthTo: month, search: '' })
-  const [incomeFilters, setIncomeFilters] = useState<IncomeReportFilters>({ dateFrom: month, dateTo: today, search: '', garageIds: [], ownerIds: [], incomeTypeIds: [], rowMode: 'all' })
-  const [expenseFilters, setExpenseFilters] = useState<ExpenseReportFilters>({ dateFrom: month, dateTo: today, search: '', supplierIds: [], expenseTypeIds: [], rowMode: 'all' })
+  const [filters, setFilters] = useState<ConsolidatedReportFilters>(() => loadConsolidatedReportFilters(month))
+  const [incomeFilters, setIncomeFilters] = useState<IncomeReportFilters>(() => loadIncomeReportFilters(month, today))
+  const [expenseFilters, setExpenseFilters] = useState<ExpenseReportFilters>(() => loadExpenseReportFilters(month, today))
   const [report, setReport] = useState<ConsolidatedReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
   const [expenseReport, setExpenseReport] = useState<ExpenseReportDto | null>(null)
@@ -1797,17 +1809,19 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setFilters({
+    const nextFilters = {
       monthFrom: `${form.get('monthFrom')}-01`,
       monthTo: `${form.get('monthTo')}-01`,
       search: String(form.get('search') ?? ''),
-    })
+    }
+    setFilters(nextFilters)
+    saveSessionJson(reportFilterStorageKeys.consolidated, nextFilters)
   }
 
   function applyIncomeFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setIncomeFilters({
+    const nextFilters = {
       dateFrom: String(form.get('dateFrom') ?? today),
       dateTo: String(form.get('dateTo') ?? today),
       search: String(form.get('search') ?? ''),
@@ -1815,20 +1829,24 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       ownerIds: getFormValues(form, 'ownerIds'),
       incomeTypeIds: getFormValues(form, 'incomeTypeIds'),
       rowMode: String(form.get('rowMode') ?? 'all'),
-    })
+    }
+    setIncomeFilters(nextFilters)
+    saveSessionJson(reportFilterStorageKeys.income, nextFilters)
   }
 
   function applyExpenseFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setExpenseFilters({
+    const nextFilters = {
       dateFrom: String(form.get('dateFrom') ?? today),
       dateTo: String(form.get('dateTo') ?? today),
       search: String(form.get('search') ?? ''),
       supplierIds: getFormValues(form, 'supplierIds'),
       expenseTypeIds: getFormValues(form, 'expenseTypeIds'),
       rowMode: String(form.get('rowMode') ?? 'all'),
-    })
+    }
+    setExpenseFilters(nextFilters)
+    saveSessionJson(reportFilterStorageKeys.expense, nextFilters)
   }
 
   async function exportConsolidatedXlsx() {
@@ -2935,6 +2953,101 @@ function formatDebtAmount(value: number): string {
 
 function getDebtClassName(value: number): string {
   return value < 0 ? 'money-overpayment' : 'money-accrual'
+}
+
+function createDefaultConsolidatedReportFilters(month: string): ConsolidatedReportFilters {
+  return { monthFrom: month, monthTo: month, search: '' }
+}
+
+function createDefaultIncomeReportFilters(month: string, today: string): IncomeReportFilters {
+  return { dateFrom: month, dateTo: today, search: '', garageIds: [], ownerIds: [], incomeTypeIds: [], rowMode: 'all' }
+}
+
+function createDefaultExpenseReportFilters(month: string, today: string): ExpenseReportFilters {
+  return { dateFrom: month, dateTo: today, search: '', supplierIds: [], expenseTypeIds: [], rowMode: 'all' }
+}
+
+function loadConsolidatedReportFilters(month: string): ConsolidatedReportFilters {
+  const parsed = readSessionJson(reportFilterStorageKeys.consolidated)
+  if (!isRecord(parsed)) {
+    return createDefaultConsolidatedReportFilters(month)
+  }
+
+  return {
+    monthFrom: getDateOnlyOrDefault(parsed.monthFrom, month),
+    monthTo: getDateOnlyOrDefault(parsed.monthTo, month),
+    search: getStringOrDefault(parsed.search, ''),
+  }
+}
+
+function loadIncomeReportFilters(month: string, today: string): IncomeReportFilters {
+  const parsed = readSessionJson(reportFilterStorageKeys.income)
+  if (!isRecord(parsed)) {
+    return createDefaultIncomeReportFilters(month, today)
+  }
+
+  return {
+    dateFrom: getDateOnlyOrDefault(parsed.dateFrom, month),
+    dateTo: getDateOnlyOrDefault(parsed.dateTo, today),
+    search: getStringOrDefault(parsed.search, ''),
+    garageIds: getStringArrayOrDefault(parsed.garageIds),
+    ownerIds: getStringArrayOrDefault(parsed.ownerIds),
+    incomeTypeIds: getStringArrayOrDefault(parsed.incomeTypeIds),
+    rowMode: getRowModeOrDefault(parsed.rowMode),
+  }
+}
+
+function loadExpenseReportFilters(month: string, today: string): ExpenseReportFilters {
+  const parsed = readSessionJson(reportFilterStorageKeys.expense)
+  if (!isRecord(parsed)) {
+    return createDefaultExpenseReportFilters(month, today)
+  }
+
+  return {
+    dateFrom: getDateOnlyOrDefault(parsed.dateFrom, month),
+    dateTo: getDateOnlyOrDefault(parsed.dateTo, today),
+    search: getStringOrDefault(parsed.search, ''),
+    supplierIds: getStringArrayOrDefault(parsed.supplierIds),
+    expenseTypeIds: getStringArrayOrDefault(parsed.expenseTypeIds),
+    rowMode: getRowModeOrDefault(parsed.rowMode),
+  }
+}
+
+function readSessionJson(key: string): unknown {
+  try {
+    const value = window.sessionStorage.getItem(key)
+    return value ? JSON.parse(value) : null
+  } catch {
+    return null
+  }
+}
+
+function saveSessionJson(key: string, value: unknown) {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Session storage is a convenience only; reports must still work without it.
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getStringOrDefault(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function getDateOnlyOrDefault(value: unknown, fallback: string): string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback
+}
+
+function getStringArrayOrDefault(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+}
+
+function getRowModeOrDefault(value: unknown): string {
+  return value === 'accruals' || value === 'payments' ? value : 'all'
 }
 
 function getLocalDateInputValue(date = new Date()): string {

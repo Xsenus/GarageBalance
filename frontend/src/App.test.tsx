@@ -11,6 +11,10 @@ import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear()
+  })
+
   it('shows auth gate before workspace is available', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -883,6 +887,66 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный PDF' }))
 
     expect(await within(reportsPanel).findByText('PDF по сводному отчету готов.')).toBeInTheDocument()
+  })
+
+  it('restores report filters from session storage before first report load', async () => {
+    const user = userEvent.setup()
+    let consolidatedRequest: Parameters<ReportClient['getConsolidatedReport']>[1] = undefined
+    let incomeRequest: Parameters<ReportClient['getIncomeReport']>[1] = undefined
+    let expenseRequest: Parameters<ReportClient['getExpenseReport']>[1] = undefined
+
+    window.sessionStorage.setItem(
+      'garagebalance.reports.consolidatedFilters',
+      JSON.stringify({ monthFrom: '2026-05-01', monthTo: '2026-06-01', search: 'Петров' }),
+    )
+    window.sessionStorage.setItem(
+      'garagebalance.reports.incomeFilters',
+      JSON.stringify({ dateFrom: '2026-05-01', dateTo: '2026-06-19', search: 'PKO', garageIds: ['garage-1'], ownerIds: ['owner-1'], incomeTypeIds: ['income-type-1'], rowMode: 'payments' }),
+    )
+    window.sessionStorage.setItem(
+      'garagebalance.reports.expenseFilters',
+      JSON.stringify({ dateFrom: '2026-05-01', dateTo: '2026-06-19', search: 'RKO', supplierIds: ['supplier-1'], expenseTypeIds: ['expense-type-1'], rowMode: 'payments' }),
+    )
+
+    const reportClient = createReportClient({
+      getConsolidatedReport: async (_token, params) => {
+        consolidatedRequest = params
+        return createConsolidatedReport()
+      },
+      getIncomeReport: async (_token, params) => {
+        incomeRequest = params
+        return createIncomeReport()
+      },
+      getExpenseReport: async (_token, params) => {
+        expenseRequest = params
+        return createExpenseReport()
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    await waitFor(() => {
+      expect(consolidatedRequest).toEqual({ monthFrom: '2026-05-01', monthTo: '2026-06-01', search: 'Петров' })
+      expect(incomeRequest).toEqual({
+        dateFrom: '2026-05-01',
+        dateTo: '2026-06-19',
+        search: 'PKO',
+        garageIds: ['garage-1'],
+        ownerIds: ['owner-1'],
+        incomeTypeIds: ['income-type-1'],
+        rowMode: 'payments',
+      })
+      expect(expenseRequest).toEqual({
+        dateFrom: '2026-05-01',
+        dateTo: '2026-06-19',
+        search: 'RKO',
+        supplierIds: ['supplier-1'],
+        expenseTypeIds: ['expense-type-1'],
+        rowMode: 'payments',
+      })
+    })
   })
 
   it('shows income report and applies income filters', async () => {
