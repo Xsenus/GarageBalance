@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-23-api-secret-exposure-tests",
+    "version": "0.46.0",
+    "publishedAt": "2026-06-23T23:58:00+07:00",
+    "title": "Добавлена защита API-контрактов от утечки секретов",
+    "summary": "Backend-тесты теперь автоматически проверяют, что HTTP-ответы контроллеров не начинают отдавать секретоподобные поля наружу.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Если в response DTO случайно появится поле вроде password, passwordHash, signingKey, secret, apiKey или token, тесты остановят изменение до релиза."
+      },
+      {
+        "type": "important",
+        "text": "Единственное разрешенное исключение - AccessToken в ответах bootstrap-admin и login, потому что это штатная выдача JWT после входа."
+      },
+      {
+        "type": "improved",
+        "text": "Дополнительно проверяется, что контроллеры не возвращают наружу доменные сущности и конфигурационные Options-типы."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-23-jwt-secret-validation",
     "version": "0.45.0",
     "publishedAt": "2026-06-23T23:55:00+07:00",

@@ -105,6 +105,8 @@ Audit-журнал перед выдачей в API/UI маскирует чув
 
 JWT-секрет хранится только во внешней конфигурации: для локальной разработки можно использовать `Jwt:SigningKey` из `appsettings.json` или `JWT_SIGNING_KEY` в `.env`, но вне `Development` backend не запустится с примерным `change-this`/`development` ключом, пустым значением или ключом короче 32 UTF-8 байт. Для локального production-like запуска задавайте секрет через переменную окружения `Jwt__SigningKey`, user-secrets или секреты контура размещения.
 
+API-контракты дополнительно защищены backend-тестом от случайной выдачи секретов: response DTO не должны содержать поля вроде `password`, `passwordHash`, `signingKey`, `secret`, `apiKey` или `token`, кроме штатного `AuthResponse.AccessToken` в ответах входа и создания первого администратора.
+
 Docker-заготовка:
 
 ```powershell
