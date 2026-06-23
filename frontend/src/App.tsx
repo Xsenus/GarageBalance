@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import {
   Bell,
@@ -3904,6 +3904,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [showAllItems, setShowAllItems] = useState(false)
+  const listId = useId()
   const compactLimit = 5
   const visibleItems = showAllItems ? items : items.slice(0, compactLimit)
   const hasHiddenItems = items.length > compactLimit
@@ -3933,7 +3934,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
 
   return (
     <>
-      <ul className="dictionary-list">
+      <ul className="dictionary-list" id={listId}>
         {visibleItems.map((item) => (
           <li className={item.isActive ? 'is-active' : undefined} aria-current={item.isActive ? 'true' : undefined} key={item.id}>
             <span>
@@ -3961,7 +3962,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
       {hasHiddenItems ? (
         <div className="dictionary-list-footer">
           <p className="empty-state">Показано {visibleItems.length} из {items.length} записей</p>
-          <button className="ghost-button" type="button" onClick={() => setShowAllItems((value) => !value)}>
+          <button className="ghost-button" type="button" aria-controls={listId} aria-expanded={showAllItems} onClick={() => setShowAllItems((value) => !value)}>
             {showAllItems ? 'Свернуть список' : 'Показать все записи'}
           </button>
         </div>
