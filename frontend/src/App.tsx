@@ -3504,6 +3504,14 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   }
 
   function editTariff(tariff: TariffDto) {
+    if (editingTariffId === tariff.id) {
+      return
+    }
+
+    if (editingTariffId && hasUnsavedTariffChanges() && !window.confirm('Перейти к другому тарифу без сохранения изменений?')) {
+      return
+    }
+
     const nextForm = {
       name: tariff.name,
       calculationBase: tariff.calculationBase,
