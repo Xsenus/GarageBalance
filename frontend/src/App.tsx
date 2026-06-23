@@ -104,6 +104,58 @@ function useFocusOnOpen<TElement extends HTMLElement>(enabled: boolean) {
   return ref
 }
 
+function useFocusTrap<TElement extends HTMLElement>(enabled: boolean) {
+  const ref = useRef<TElement | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined
+    }
+
+    function getFocusableElements() {
+      const container = ref.current
+      if (!container) {
+        return []
+      }
+
+      return Array.from(
+        container.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+      )
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Tab') {
+        return
+      }
+
+      const focusableElements = getFocusableElements()
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+        return
+      }
+
+      if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [enabled])
+
+  return ref
+}
+
 function getPasswordPolicyErrors(password: string, emptyMessage = 'Укажите пароль.') {
   const errors: string[] = []
   if (!password) {
@@ -1077,6 +1129,7 @@ function FinancePanel({
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
+  const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
 
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
@@ -1876,7 +1929,7 @@ function FinancePanel({
       </div>
       {accrualBreakdown ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setAccrualBreakdown(null)}>
-          <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="accrual-breakdown-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={accrualBreakdownDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="accrual-breakdown-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <h3 id="accrual-breakdown-title">
@@ -3105,6 +3158,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const selectedGarageCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(selectedGarage))
+  const selectedGarageDialogRef = useFocusTrap<HTMLElement>(Boolean(selectedGarage))
 
   useEscapeKey(Boolean(selectedGarage), () => setSelectedGarage(null))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
@@ -3730,7 +3784,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       </div>
       {selectedGarage ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedGarage(null)}>
-          <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={selectedGarageDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Карточка гаража</p>
@@ -3792,6 +3846,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const archiveCancelButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingArchive) && !confirmingArchive)
+  const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingArchive))
 
   useEscapeKey(Boolean(pendingArchive) && !confirmingArchive, () => setPendingArchive(null))
 
@@ -3839,7 +3894,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
       </ul>
       {pendingArchive ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingArchive(null)}>
-          <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Архивирование</p>
