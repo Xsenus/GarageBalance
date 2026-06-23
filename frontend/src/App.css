@@ -189,6 +189,40 @@
   font-size: 14px;
 }
 
+.access-notice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.04);
+}
+
+.access-notice svg {
+  color: #475467;
+  margin-top: 2px;
+}
+
+.access-notice h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+}
+
+.access-notice p:not(.eyebrow) {
+  margin: 6px 0 8px;
+  color: #475467;
+  font-size: 14px;
+}
+
+.access-notice small {
+  color: #667085;
+  font-size: 12px;
+}
+
 .primary-button {
   background: #1d4ed8;
   color: #ffffff;

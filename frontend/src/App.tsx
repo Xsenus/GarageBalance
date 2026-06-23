@@ -71,13 +71,30 @@ type ExpenseReportFilters = {
   rowMode: string
 }
 
-const navigation = [
+type NavigationItem = {
+  label: string
+  icon: typeof Gauge
+  active?: boolean
+  requiredAny?: readonly string[]
+}
+
+const permissions = {
+  usersManage: 'users.manage',
+  dictionariesRead: 'dictionaries.read',
+  paymentsRead: 'payments.read',
+  reportsRead: 'reports.read',
+  importRun: 'import.run',
+  auditRead: 'audit.read',
+  tariffsManage: 'tariffs.manage',
+} as const
+
+const navigation: NavigationItem[] = [
   { label: 'Панель', icon: Gauge, active: true },
-  { label: 'Справочники', icon: UsersRound },
-  { label: 'Тарифы', icon: Settings },
-  { label: 'Платежи', icon: WalletCards },
-  { label: 'Отчеты', icon: FileSpreadsheet },
-  { label: 'Импорт', icon: DatabaseZap },
+  { label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
+  { label: 'Тарифы', icon: Settings, requiredAny: [permissions.tariffsManage] },
+  { label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
+  { label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
+  { label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
 ]
 
 const roadmap = [
@@ -120,8 +137,9 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
         <nav className="nav-list" aria-label="Основные разделы" aria-disabled={!auth}>
           {navigation.map((item) => {
             const Icon = item.icon
+            const canOpen = Boolean(auth && hasAnyPermission(auth, item.requiredAny))
             return (
-              <button className={item.active ? 'nav-item active' : 'nav-item'} type="button" key={item.label} disabled={!auth}>
+              <button className={item.active ? 'nav-item active' : 'nav-item'} type="button" key={item.label} disabled={!canOpen}>
                 <Icon size={18} />
                 <span>{item.label}</span>
               </button>
@@ -244,6 +262,13 @@ function Workspace({
   userClient: UserManagementClient
   onLogout: () => void
 }) {
+  const canManageUsers = hasPermission(auth, permissions.usersManage)
+  const canReadDictionaries = hasPermission(auth, permissions.dictionariesRead)
+  const canReadPayments = hasPermission(auth, permissions.paymentsRead)
+  const canRunImport = hasPermission(auth, permissions.importRun)
+  const canReadReports = hasPermission(auth, permissions.reportsRead)
+  const canReadAudit = hasPermission(auth, permissions.auditRead)
+
   return (
     <>
       <header className="topbar">
@@ -289,17 +314,41 @@ function Workspace({
         </div>
       </section>
 
-      <UserManagementPanel auth={auth} userClient={userClient} />
+      {canManageUsers ? (
+        <UserManagementPanel auth={auth} userClient={userClient} />
+      ) : (
+        <AccessNotice label="Пользователи недоступны" title="Пользователи" permission={permissions.usersManage} description="Управлять сотрудниками и ролями может только пользователь с правом администрирования." />
+      )}
 
-      <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
+      {canReadDictionaries ? (
+        <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
+      ) : (
+        <AccessNotice label="Справочники недоступны" title="Справочники" permission={permissions.dictionariesRead} description="Для просмотра гаражей, владельцев и поставщиков нужно право на чтение справочников." />
+      )}
 
-      <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+      {canReadPayments && canReadDictionaries ? (
+        <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+      ) : (
+        <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
+      )}
 
-      <ImportPanel auth={auth} importClient={importClient} />
+      {canRunImport ? (
+        <ImportPanel auth={auth} importClient={importClient} />
+      ) : (
+        <AccessNotice label="Импорт недоступен" title="Импорт Access" permission={permissions.importRun} description="Запускать проверку и перенос старой базы может только пользователь с правом импорта." />
+      )}
 
-      <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
+      {canReadReports && canReadDictionaries ? (
+        <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
+      ) : (
+        <AccessNotice label="Отчеты недоступны" title="Отчеты" permission={permissions.reportsRead} description="Для отчетов нужно право просмотра отчетности; справочники используются только для фильтров." />
+      )}
 
-      {auth.user.permissions.includes('audit.read') ? <AuditPanel auth={auth} auditClient={auditClient} /> : null}
+      {canReadAudit ? (
+        <AuditPanel auth={auth} auditClient={auditClient} />
+      ) : (
+        <AccessNotice label="Аудит недоступен" title="Аудит" permission={permissions.auditRead} description="Журнал действий доступен только пользователям с правом просмотра audit-событий." />
+      )}
 
       <section className="roadmap-grid" aria-label="Ближайшая очередь">
         {roadmap.map((item) => {
@@ -317,6 +366,28 @@ function Workspace({
       <ReleasePanel auth={auth} releaseClient={releaseClient} />
     </>
   )
+}
+
+function AccessNotice({ label, title, permission, description }: { label: string; title: string; permission: string; description: string }) {
+  return (
+    <section className="access-notice" aria-label={label}>
+      <LockKeyhole size={20} />
+      <div>
+        <p className="eyebrow">Раздел недоступен</p>
+        <h2>{title}</h2>
+        <p>{description}</p>
+        <small>Требуется право: {permission}</small>
+      </div>
+    </section>
+  )
+}
+
+function hasPermission(auth: AuthResponse, permission: string): boolean {
+  return auth.user.permissions.includes(permission)
+}
+
+function hasAnyPermission(auth: AuthResponse, requiredAny?: readonly string[]): boolean {
+  return !requiredAny || requiredAny.some((permission) => hasPermission(auth, permission))
 }
 
 function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClient: ReleaseClient }) {

@@ -91,6 +91,110 @@ describe('App', () => {
     expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
   })
 
+  it('keeps restricted sections closed after administrator creates an operator', async () => {
+    const user = userEvent.setup()
+    let operatorSession = false
+    const authClient = createAuthClient({
+      login: async () => {
+        operatorSession = true
+        return createAuthResponse({
+          accessToken: 'operator-token',
+          user: {
+            email: 'operator@example.com',
+            displayName: 'Оператор',
+            roles: ['operator'],
+            permissions: ['dictionaries.read', 'payments.read', 'payments.write'],
+          },
+        })
+      },
+    })
+    const statefulUserClient = createStatefulUserClient()
+    const userClient: UserManagementClient = {
+      ...statefulUserClient,
+      getRoles: async (...args) => {
+        if (operatorSession) {
+          throw new Error('Панель пользователей не должна загружаться для оператора.')
+        }
+        return statefulUserClient.getRoles(...args)
+      },
+      getUsers: async (...args) => {
+        if (operatorSession) {
+          throw new Error('Панель пользователей не должна загружаться для оператора.')
+        }
+        return statefulUserClient.getUsers(...args)
+      },
+    }
+    const importClient = createImportClient({
+      getAccessRuns: async () => {
+        if (operatorSession) {
+          throw new Error('Импорт не должен загружаться для оператора.')
+        }
+        return []
+      },
+    })
+    const reportClient = createReportClient({
+      getConsolidatedReport: async (accessToken, params) => {
+        if (operatorSession) {
+          throw new Error('Отчеты не должны загружаться для оператора.')
+        }
+        return createReportClient().getConsolidatedReport(accessToken, params)
+      },
+      getIncomeReport: async (accessToken, params) => {
+        if (operatorSession) {
+          throw new Error('Отчеты не должны загружаться для оператора.')
+        }
+        return createReportClient().getIncomeReport(accessToken, params)
+      },
+      getExpenseReport: async (accessToken, params) => {
+        if (operatorSession) {
+          throw new Error('Отчеты не должны загружаться для оператора.')
+        }
+        return createReportClient().getExpenseReport(accessToken, params)
+      },
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => {
+        if (operatorSession) {
+          throw new Error('Аудит не должен загружаться для оператора.')
+        }
+        return [createAuditEvent({})]
+      },
+    })
+
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+
+    await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(usersPanel).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(usersPanel).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.selectOptions(within(usersPanel).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: 'Выйти' }))
+    await user.click(screen.getByRole('button', { name: 'Вход' }))
+    await user.clear(screen.getByLabelText('Email'))
+    await user.type(screen.getByLabelText('Email'), 'operator@example.com')
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByText('Оператор')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Пользователи' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Пользователи недоступны' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Платежи' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Импорт недоступен' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Отчеты недоступны' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Аудит недоступен' })).toBeInTheDocument()
+    expect(screen.queryByText('Панель пользователей не должна загружаться для оператора.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Импорт не должен загружаться для оператора.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Отчеты не должны загружаться для оператора.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Аудит не должен загружаться для оператора.')).not.toBeInTheDocument()
+  })
+
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()
@@ -1120,8 +1224,8 @@ function createStatefulDictionaryClient(): DictionaryClient {
   }
 }
 
-function createAuthResponse(): AuthResponse {
-  return {
+function createAuthResponse(overrides: Partial<AuthResponse> & { user?: Partial<AuthResponse['user']> } = {}): AuthResponse {
+  const response: AuthResponse = {
     accessToken: 'token',
     expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
     user: {
@@ -1129,7 +1233,16 @@ function createAuthResponse(): AuthResponse {
       email: 'admin@example.com',
       displayName: 'Администратор',
       roles: ['administrator'],
-      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'payments.read'],
+      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'],
+    },
+  }
+
+  return {
+    ...response,
+    ...overrides,
+    user: {
+      ...response.user,
+      ...overrides.user,
     },
   }
 }
@@ -1166,9 +1279,10 @@ function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
 
 function createRoles(): ManagedRoleDto[] {
   return [
-    { code: 'administrator', name: 'Администратор', permissions: ['users.manage'] },
-    { code: 'operator', name: 'Оператор', permissions: ['dictionaries.read', 'payments.write'] },
-    { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.write', 'payments.write'] },
+    { code: 'administrator', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
+    { code: 'operator', name: 'Оператор', permissions: ['dictionaries.read', 'payments.read', 'payments.write'] },
+    { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run'] },
+    { code: 'reports_viewer', name: 'Просмотр отчетов', permissions: ['dictionaries.read', 'reports.read'] },
   ]
 }
 
