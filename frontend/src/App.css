@@ -908,6 +908,10 @@ button.operation-row:hover {
   grid-column: 1 / -1;
 }
 
+.report-accounting-rule {
+  margin: -6px 0 16px;
+}
+
 .report-filter input:focus,
 .report-filter select:focus {
   border-color: #2e90fa;

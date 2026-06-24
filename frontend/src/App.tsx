@@ -2739,6 +2739,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <strong>{formatMoney(report?.balance ?? 0)}</strong>
         </div>
       </div>
+      <p className="form-hint report-accounting-rule">
+        Начисления попадают в сводный отчет по учетному месяцу, поступления и выплаты - по фактической дате операции.
+      </p>
 
       <div className="finance-grid">
         <div className="operation-list" role="table" aria-label="Помесячный отчет">
@@ -2860,6 +2863,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <strong className={getDebtClassName(incomeReport?.debt ?? 0)}>{formatDebtAmount(incomeReport?.debt ?? 0)}</strong>
         </div>
       </div>
+      <p className="form-hint report-accounting-rule">
+        В поступлениях начисления считаются по учетному месяцу, оплаты - по фактической дате поступления.
+      </p>
 
       <div className="operation-list" role="table" aria-label="Отчет по поступлениям">
         <div className="operation-row header" role="row">
@@ -2949,6 +2955,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <strong>{formatMoney(expenseReport?.difference ?? 0)}</strong>
         </div>
       </div>
+      <p className="form-hint report-accounting-rule">
+        В выплатах начисления поставщикам считаются по учетному месяцу, фактические выплаты - по дате оплаты.
+      </p>
 
       <div className="operation-list" role="table" aria-label="Отчет по выплатам">
         <div className="operation-row header" role="row">
