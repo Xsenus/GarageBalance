@@ -960,6 +960,67 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateSupplierGroupSalaryAccrualsAsync_CreatesSalaryForEveryActiveSupplierInGroup()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var group = fixtures.Supplier.Group;
+        var secondSupplier = new Supplier { Name = "Бухгалтер", GroupId = group.Id };
+        var archivedSupplier = new Supplier { Name = "Архивный сотрудник", GroupId = group.Id, IsArchived = true };
+        var otherGroup = new SupplierGroup { Name = "Юристы" };
+        var otherSupplier = new Supplier { Name = "Юрист", Group = otherGroup };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.AddRange(secondSupplier, archivedSupplier, otherSupplier, salaryType);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GenerateSupplierGroupSalaryAccrualsAsync(
+            new GenerateSupplierGroupSalaryAccrualsRequest(group.Id, new DateOnly(2026, 6, 20), 7000.005m, "PAY-06", "Июнь"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
+        Assert.Equal(2, result.Value.CreatedCount);
+        Assert.Equal(0, result.Value.SkippedCount);
+        Assert.Equal(14000.02m, result.Value.TotalAmount);
+        Assert.All(result.Value.CreatedAccruals, accrual =>
+        {
+            Assert.Equal("Зарплата", accrual.ExpenseTypeName);
+            Assert.Equal("regular", accrual.Source);
+            Assert.Equal("PAY-06", accrual.DocumentNumber);
+            Assert.Equal(7000.01m, accrual.Amount);
+            Assert.Contains("Зарплата по группе Коммунальные услуги", accrual.Comment, StringComparison.Ordinal);
+            Assert.Contains("Июнь", accrual.Comment, StringComparison.Ordinal);
+        });
+        Assert.DoesNotContain(result.Value.CreatedAccruals, accrual => accrual.SupplierName == archivedSupplier.Name || accrual.SupplierName == otherSupplier.Name);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_group_salary_accruals_generated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Создано начислений зарплаты: 2", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("группа Коммунальные услуги", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateSupplierGroupSalaryAccrualsAsync_RejectsSecondRunForSameMonthAndDocument()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.Add(salaryType);
+        await database.Context.SaveChangesAsync();
+        var request = new GenerateSupplierGroupSalaryAccrualsRequest(fixtures.Supplier.GroupId, new DateOnly(2026, 6, 1), 7000m, null, null);
+
+        var first = await service.GenerateSupplierGroupSalaryAccrualsAsync(request, null, CancellationToken.None);
+        var second = await service.GenerateSupplierGroupSalaryAccrualsAsync(request, null, CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.False(second.Succeeded);
+        Assert.Equal("salary_accruals_empty", second.ErrorCode);
+    }
+
+    [Fact]
     public async Task GetAccrualsAsync_SearchesAndOrdersByMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

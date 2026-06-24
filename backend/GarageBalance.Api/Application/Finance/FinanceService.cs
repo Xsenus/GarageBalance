@@ -796,6 +796,93 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<RegularAccrualGenerationResultDto>.Success(result);
     }
 
+    public async Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var documentNumber = NormalizeOptional(request.DocumentNumber);
+        var comment = NormalizeOptional(request.Comment);
+
+        var group = await dbContext.SupplierGroups.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == request.SupplierGroupId && !item.IsArchived, cancellationToken);
+        if (group is null)
+        {
+            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("supplier_group_not_found", "Группа персонала не найдена.");
+        }
+
+        var salaryExpenseType = await dbContext.ExpenseTypes
+            .SingleOrDefaultAsync(item => item.Code == "salary" && !item.IsArchived, cancellationToken);
+        if (salaryExpenseType is null)
+        {
+            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системный вид выплаты Зарплата не найден.");
+        }
+
+        var suppliers = await dbContext.Suppliers
+            .Where(item => !item.IsArchived && item.GroupId == group.Id)
+            .OrderBy(item => item.Name)
+            .ToListAsync(cancellationToken);
+        if (suppliers.Count == 0)
+        {
+            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("supplier_group_empty", "В выбранной группе нет активных поставщиков или сотрудников.");
+        }
+
+        var created = new List<SupplierAccrualDto>();
+        var skipped = new List<string>();
+        foreach (var supplier in suppliers)
+        {
+            var duplicate = await dbContext.SupplierAccruals.AnyAsync(
+                accrual =>
+                    !accrual.IsCanceled &&
+                    accrual.SupplierId == supplier.Id &&
+                    accrual.ExpenseTypeId == salaryExpenseType.Id &&
+                    accrual.AccountingMonth == month &&
+                    accrual.Source == AccrualSources.Regular &&
+                    accrual.DocumentNumber == documentNumber,
+                cancellationToken);
+            if (duplicate)
+            {
+                skipped.Add($"{supplier.Name}: зарплата за месяц уже начислена.");
+                continue;
+            }
+
+            var accrual = new SupplierAccrual
+            {
+                SupplierId = supplier.Id,
+                Supplier = supplier,
+                ExpenseTypeId = salaryExpenseType.Id,
+                ExpenseType = salaryExpenseType,
+                AccountingMonth = month,
+                Amount = amount,
+                Source = AccrualSources.Regular,
+                DocumentNumber = documentNumber,
+                Comment = BuildSupplierGroupSalaryComment(group.Name, comment)
+            };
+            dbContext.SupplierAccruals.Add(accrual);
+            created.Add(ToDto(accrual));
+        }
+
+        if (created.Count == 0)
+        {
+            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_accruals_empty", "Не создано ни одного начисления зарплаты.");
+        }
+
+        AddAudit(actorUserId, "finance.supplier_group_salary_accruals_generated", "supplier_accrual", Guid.NewGuid(), FormatSupplierGroupSalaryAccrualGenerationAuditSummary(month, group.Name, salaryExpenseType.Name, created, skipped));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var result = new SupplierGroupSalaryAccrualGenerationResultDto(
+            month,
+            group.Id,
+            group.Name,
+            salaryExpenseType.Id,
+            salaryExpenseType.Name,
+            created.Count,
+            skipped.Count,
+            created.Sum(item => item.Amount),
+            created,
+            skipped);
+        return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Success(result);
+    }
+
     private static bool IsIncomeTypeCompatibleWithTariff(string? incomeTypeCode, string calculationBase)
     {
         return NormalizeIncomeTypeCode(incomeTypeCode) switch
@@ -1107,6 +1194,18 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     {
         var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
         return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff)}; пропущено {skipped.Count}.";
+    }
+
+    private static string FormatSupplierGroupSalaryAccrualGenerationAuditSummary(DateOnly month, string groupName, string expenseTypeName, IReadOnlyCollection<SupplierAccrualDto> created, IReadOnlyCollection<string> skipped)
+    {
+        var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
+        return $"Создано начислений зарплаты: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; группа {groupName}; вид {expenseTypeName}; пропущено {skipped.Count}.";
+    }
+
+    private static string BuildSupplierGroupSalaryComment(string groupName, string? comment)
+    {
+        var baseComment = $"Зарплата по группе {groupName}";
+        return comment is null ? baseComment : $"{baseComment}. {comment}";
     }
 
     private async Task<AmountCalculationResult> CalculateMeterAmountAsync(Guid garageId, string meterKind, decimal rate, DateOnly month, CancellationToken cancellationToken)

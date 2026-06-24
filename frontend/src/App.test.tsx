@@ -4,7 +4,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -1848,6 +1848,33 @@ describe('App', () => {
     expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
   })
 
+  it('generates supplier group salary accruals from payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
+    await user.click(within(financePanel).getByRole('button', { name: 'Зарплата группы' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Зарплата группы' })
+
+    expect(within(dialog).getByLabelText('Группа для зарплаты')).toHaveValue('group-1')
+    await user.clear(within(dialog).getByLabelText('Сумма зарплаты'))
+    await user.type(within(dialog).getByLabelText('Сумма зарплаты'), '7000')
+    await user.type(within(dialog).getByLabelText('Документ зарплаты'), 'PAY-06')
+    await user.type(within(dialog).getByLabelText('Комментарий зарплаты'), 'Июнь')
+    await user.click(within(dialog).getByRole('button', { name: 'Начислить зарплату' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Зарплата группы' })).not.toBeInTheDocument())
+    expect((await within(financePanel).findAllByText('Зарплата')).length).toBeGreaterThan(0)
+    expect(within(financePanel).getByText('PAY-06')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('Авто').length).toBeGreaterThan(0)
+  })
+
   it('shows supplier obligation before and after expense payment', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
@@ -3025,6 +3052,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
+    generateSupplierGroupSalaryAccruals: async () => createSupplierGroupSalaryAccrualGenerationResult({ createdAccruals: [supplierAccrual], totalAmount: supplierAccrual.amount }),
     createMeterReading: async () => meterReading,
     updateMeterReading: async (_token, meterReadingId) => ({ ...meterReading, id: meterReadingId }),
     cancelMeterReading: async (_token, meterReadingId, request) => {
@@ -3292,6 +3320,30 @@ function createStatefulFinanceClient(): FinanceClient {
         accountingMonth: request.accountingMonth,
         incomeTypeId: request.incomeTypeId,
         tariffId: request.tariffId,
+        createdAccruals: [accrual],
+        totalAmount: accrual.amount,
+      })
+    },
+    generateSupplierGroupSalaryAccruals: async (_token, request) => {
+      const accrual = createSupplierAccrual({
+        id: crypto.randomUUID(),
+        supplierId: 'supplier-1',
+        supplierName: 'Водоканал',
+        expenseTypeId: 'expense-salary',
+        expenseTypeName: 'Зарплата',
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        source: 'regular',
+        documentNumber: request.documentNumber ?? null,
+        comment: request.comment ? `Зарплата по группе. ${request.comment}` : 'Зарплата по группе',
+      })
+      supplierAccruals = [accrual, ...supplierAccruals]
+      return createSupplierGroupSalaryAccrualGenerationResult({
+        accountingMonth: request.accountingMonth,
+        supplierGroupId: request.supplierGroupId,
+        supplierGroupName: 'Коммунальные услуги',
+        expenseTypeId: accrual.expenseTypeId,
+        expenseTypeName: accrual.expenseTypeName,
         createdAccruals: [accrual],
         totalAmount: accrual.amount,
       })
@@ -3684,6 +3736,22 @@ function createRegularAccrualGenerationResult(overrides: Partial<RegularAccrualG
     totalAmount: 300,
     createdAccruals: [createAccrual({ amount: 300, source: 'regular' })],
     skippedGarages: [],
+    ...overrides,
+  }
+}
+
+function createSupplierGroupSalaryAccrualGenerationResult(overrides: Partial<SupplierGroupSalaryAccrualGenerationResultDto>): SupplierGroupSalaryAccrualGenerationResultDto {
+  return {
+    accountingMonth: '2026-06-01',
+    supplierGroupId: 'group-1',
+    supplierGroupName: 'Коммунальные услуги',
+    expenseTypeId: 'expense-salary',
+    expenseTypeName: 'Зарплата',
+    createdCount: overrides.createdAccruals?.length ?? 1,
+    skippedCount: 0,
+    totalAmount: 7000,
+    createdAccruals: [createSupplierAccrual({ amount: 7000, source: 'regular', expenseTypeName: 'Зарплата' })],
+    skippedSuppliers: [],
     ...overrides,
   }
 }

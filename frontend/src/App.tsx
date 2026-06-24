@@ -26,7 +26,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -582,6 +582,22 @@ function getSupplierAccrualValidationErrors(form: CreateSupplierAccrualRequest) 
   if (!form.comment?.trim()) {
     errors.push('Укажите комментарий начисления поставщику.')
   }
+
+  return errors
+}
+
+function getSupplierGroupSalaryValidationErrors(form: GenerateSupplierGroupSalaryAccrualsRequest) {
+  const errors: string[] = []
+
+  if (!form.supplierGroupId) {
+    errors.push('Выберите группу персонала.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц зарплаты.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма зарплаты')
 
   return errors
 }
@@ -1321,7 +1337,7 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
 }
 
 type FinanceSectionKey = 'income' | 'expense' | 'accruals' | 'supplierAccruals' | 'meterReadings'
-type FinanceEditorKey = FinanceSectionKey | 'regularAccruals'
+type FinanceEditorKey = FinanceSectionKey | 'regularAccruals' | 'supplierGroupSalaryAccruals'
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
 
 const financeSectionOptions: Array<{ key: FinanceSectionKey; label: string; description: string }> = [
@@ -1344,6 +1360,7 @@ function FinancePanel({
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
   const [garages, setGarages] = useState<GarageDto[]>([])
+  const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
@@ -1359,6 +1376,8 @@ function FinancePanel({
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
   const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
   const [regularStatus, setRegularStatus] = useState<string | null>(null)
+  const [salaryForm, setSalaryForm] = useState({ supplierGroupId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
+  const [salaryStatus, setSalaryStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>('income')
   const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
@@ -1371,6 +1390,7 @@ function FinancePanel({
   const [accrualValidationErrors, setAccrualValidationErrors] = useState<string[]>([])
   const [supplierAccrualValidationErrors, setSupplierAccrualValidationErrors] = useState<string[]>([])
   const [regularValidationErrors, setRegularValidationErrors] = useState<string[]>([])
+  const [salaryValidationErrors, setSalaryValidationErrors] = useState<string[]>([])
   const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1399,8 +1419,9 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getSupplierGroups(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
@@ -1413,6 +1434,7 @@ function FinancePanel({
         ])
         if (!ignore) {
           setGarages(loadedGarages)
+          setSupplierGroups(loadedSupplierGroups)
           setSuppliers(loadedSuppliers)
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
@@ -1426,6 +1448,7 @@ function FinancePanel({
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+          setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
           setRegularForm((value) => {
             const incomeTypeId = value.incomeTypeId || loadedIncomeTypes[0]?.id || ''
             return {
@@ -1703,6 +1726,41 @@ function FinancePanel({
     }
   }
 
+  async function saveSupplierGroupSalaryAccruals(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!canWritePayments) {
+      setError('Для начисления зарплаты нужно право payments.write.')
+      return
+    }
+
+    const request: GenerateSupplierGroupSalaryAccrualsRequest = {
+      supplierGroupId: salaryForm.supplierGroupId,
+      accountingMonth: salaryForm.accountingMonth,
+      amount: salaryForm.amount,
+      documentNumber: salaryForm.documentNumber,
+      comment: salaryForm.comment,
+    }
+    const errors = getSupplierGroupSalaryValidationErrors(request)
+    if (errors.length > 0) {
+      setError(null)
+      setSalaryValidationErrors(errors)
+      return
+    }
+
+    setSalaryValidationErrors([])
+    const saved = await runSaving('salary-accruals', async () => {
+      const result = await financeClient.generateSupplierGroupSalaryAccruals(auth.accessToken, request)
+      setSupplierAccruals((items) => [...result.createdAccruals, ...items])
+      setSalaryStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
+      setSalaryForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      await loadFinanceWorkbench('supplierAccruals', 0, financePage.limit)
+    })
+    if (saved) {
+      setFinanceEditor(null)
+      setActiveFinanceSection('supplierAccruals')
+    }
+  }
+
   async function saveMeterReading(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canWritePayments) {
@@ -1840,11 +1898,13 @@ function FinancePanel({
   function openFinanceEditor(section: FinanceEditorKey, record?: FinanceRecord) {
     setError(null)
     setRegularStatus(null)
+    setSalaryStatus(null)
     setIncomeValidationErrors([])
     setExpenseValidationErrors([])
     setAccrualValidationErrors([])
     setSupplierAccrualValidationErrors([])
     setRegularValidationErrors([])
+    setSalaryValidationErrors([])
     setMeterValidationErrors([])
     if (record && section === 'income' && 'operationKind' in record) {
       setIncomeForm({
@@ -1887,6 +1947,8 @@ function FinancePanel({
       })
     } else if (!record && section === 'supplierAccruals') {
       setSupplierAccrualForm((value) => ({ ...value, source: 'manual', amount: 0, documentNumber: '', comment: '' }))
+    } else if (!record && section === 'supplierGroupSalaryAccruals') {
+      setSalaryForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     } else if (record && section === 'meterReadings' && 'meterKind' in record) {
       setMeterForm({
         garageId: record.garageId,
@@ -2141,6 +2203,9 @@ function FinancePanel({
     if (section === 'regularAccruals') {
       return 'Регулярные начисления'
     }
+    if (section === 'supplierGroupSalaryAccruals') {
+      return 'Зарплата группы'
+    }
     if (section === 'supplierAccruals') {
       return 'Начисление поставщику'
     }
@@ -2157,6 +2222,9 @@ function FinancePanel({
     if (section === 'regularAccruals') {
       return 'Создать месяц'
     }
+    if (section === 'supplierGroupSalaryAccruals') {
+      return 'Начислить зарплату'
+    }
     return 'Начислить'
   }
 
@@ -2172,6 +2240,9 @@ function FinancePanel({
     }
     if (section === 'regularAccruals') {
       return 'regular-accruals'
+    }
+    if (section === 'supplierGroupSalaryAccruals') {
+      return 'salary-accruals'
     }
     if (section === 'supplierAccruals') {
       return 'supplier-accrual'
@@ -2199,6 +2270,10 @@ function FinancePanel({
     }
     if (financeEditor.section === 'regularAccruals') {
       void saveRegularAccruals(event)
+      return
+    }
+    if (financeEditor.section === 'supplierGroupSalaryAccruals') {
+      void saveSupplierGroupSalaryAccruals(event)
       return
     }
     if (financeEditor.section === 'supplierAccruals') {
@@ -2391,6 +2466,33 @@ function FinancePanel({
       )
     }
 
+    if (section === 'supplierGroupSalaryAccruals') {
+      return (
+        <>
+          <select aria-label="Группа для зарплаты" value={salaryForm.supplierGroupId} onChange={(event) => setSalaryForm({ ...salaryForm, supplierGroupId: event.target.value })} required>
+            <option value="" disabled>
+              Выберите группу
+            </option>
+            {supplierGroups.map((group) => (
+              <option value={group.id} key={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
+          <div className="inline-fields">
+            <input aria-label="Месяц зарплаты" type="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(event) => setSalaryForm({ ...salaryForm, accountingMonth: `${event.target.value}-01` })} required />
+            <input aria-label="Сумма зарплаты" type="number" min="0.01" step="0.01" value={salaryForm.amount} onChange={(event) => setSalaryForm({ ...salaryForm, amount: Number(event.target.value) })} required />
+          </div>
+          <div className="inline-fields">
+            <input aria-label="Документ зарплаты" placeholder="Документ" value={salaryForm.documentNumber} onChange={(event) => setSalaryForm({ ...salaryForm, documentNumber: event.target.value })} />
+            <input aria-label="Комментарий зарплаты" placeholder="Комментарий" value={salaryForm.comment} onChange={(event) => setSalaryForm({ ...salaryForm, comment: event.target.value })} />
+          </div>
+          <FormValidationSummary title="Проверьте начисление зарплаты" items={salaryValidationErrors} />
+          {salaryStatus ? <p className="form-hint">{salaryStatus}</p> : null}
+        </>
+      )
+    }
+
     return (
       <>
         <select aria-label="Гараж для показания" value={meterForm.garageId} onChange={(event) => setMeterForm({ ...meterForm, garageId: event.target.value })} required>
@@ -2491,6 +2593,12 @@ function FinancePanel({
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('regularAccruals')}>
                 <Plus size={16} aria-hidden="true" />
                 <span>Регулярные</span>
+              </button>
+            ) : null}
+            {activeFinanceSection === 'supplierAccruals' ? (
+              <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('supplierGroupSalaryAccruals')}>
+                <Plus size={16} aria-hidden="true" />
+                <span>Зарплата группы</span>
               </button>
             ) : null}
             <button className="secondary-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor(activeFinanceSection)}>

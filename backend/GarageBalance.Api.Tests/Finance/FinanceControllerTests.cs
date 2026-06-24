@@ -288,6 +288,42 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GenerateSupplierGroupSalaryAccruals_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            GenerateSupplierGroupSalaryAccrualsResult = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Success(CreateSalaryGenerationResult())
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.GenerateSupplierGroupSalaryAccruals(
+            new GenerateSupplierGroupSalaryAccrualsRequest(Guid.NewGuid(), new DateOnly(2026, 6, 1), 7000m, "PAY-06", null),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task GenerateSupplierGroupSalaryAccruals_ReturnsConflictWhenNothingCreated()
+    {
+        var service = new FakeFinanceService
+        {
+            GenerateSupplierGroupSalaryAccrualsResult = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_accruals_empty", "Зарплата уже начислена.")
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.GenerateSupplierGroupSalaryAccruals(
+            new GenerateSupplierGroupSalaryAccrualsRequest(Guid.NewGuid(), new DateOnly(2026, 6, 1), 7000m, null, null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("salary_accruals_empty", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateMeterReading_ReturnsConflictForDuplicateReading()
     {
         var controller = CreateController(new FakeFinanceService
@@ -441,6 +477,22 @@ public sealed class FinanceControllerTests
             []);
     }
 
+    private static SupplierGroupSalaryAccrualGenerationResultDto CreateSalaryGenerationResult()
+    {
+        var accrual = CreateSupplierAccrual();
+        return new SupplierGroupSalaryAccrualGenerationResultDto(
+            new DateOnly(2026, 6, 1),
+            Guid.NewGuid(),
+            "Персонал",
+            accrual.ExpenseTypeId,
+            accrual.ExpenseTypeName,
+            1,
+            0,
+            accrual.Amount,
+            [accrual],
+            []);
+    }
+
     private sealed class FakeFinanceService : IFinanceService
     {
         public Guid? LastActorUserId { get; private set; }
@@ -465,6 +517,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<SupplierAccrualDto> UpdateSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierAccrualDto> CancelSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto> GenerateSupplierGroupSalaryAccrualsResult { get; init; } = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> UpdateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
@@ -598,6 +651,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(GenerateRegularAccrualsResult);
+        }
+
+        public Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(GenerateSupplierGroupSalaryAccrualsResult);
         }
 
         public Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)

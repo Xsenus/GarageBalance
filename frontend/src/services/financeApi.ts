@@ -142,6 +142,14 @@ export type GenerateRegularAccrualsRequest = {
   comment?: string
 }
 
+export type GenerateSupplierGroupSalaryAccrualsRequest = {
+  supplierGroupId: string
+  accountingMonth: string
+  amount: number
+  documentNumber?: string
+  comment?: string
+}
+
 export type RegularAccrualGenerationResultDto = {
   accountingMonth: string
   incomeTypeId: string
@@ -154,6 +162,19 @@ export type RegularAccrualGenerationResultDto = {
   totalAmount: number
   createdAccruals: AccrualDto[]
   skippedGarages: string[]
+}
+
+export type SupplierGroupSalaryAccrualGenerationResultDto = {
+  accountingMonth: string
+  supplierGroupId: string
+  supplierGroupName: string
+  expenseTypeId: string
+  expenseTypeName: string
+  createdCount: number
+  skippedCount: number
+  totalAmount: number
+  createdAccruals: SupplierAccrualDto[]
+  skippedSuppliers: string[]
 }
 
 export type CreateMeterReadingRequest = {
@@ -187,6 +208,7 @@ export type FinanceClient = {
   updateSupplierAccrual(accessToken: string, supplierAccrualId: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
   cancelSupplierAccrual(accessToken: string, supplierAccrualId: string, request: CancelFinanceEntryRequest): Promise<SupplierAccrualDto>
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
+  generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   updateMeterReading(accessToken: string, meterReadingId: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
@@ -334,6 +356,9 @@ export const financeApi: FinanceClient = {
   },
   generateRegularAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals/generate-regular', { method: 'POST', body: JSON.stringify(request) })
+  },
+  generateSupplierGroupSalaryAccruals(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/supplier-accruals/generate-salary', { method: 'POST', body: JSON.stringify(request) })
   },
   createMeterReading(accessToken, request) {
     return requestJson(accessToken, '/api/finance/meter-readings', { method: 'POST', body: JSON.stringify(request) })
