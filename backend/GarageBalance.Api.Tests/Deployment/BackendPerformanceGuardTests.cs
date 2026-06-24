@@ -52,6 +52,37 @@ public sealed class BackendPerformanceGuardTests
             "Dictionary search branches must keep their explicit normalized limit.");
     }
 
+    [Fact]
+    public void DictionarySearchMigration_AddsPostgresTrigramIndexesForContainsSearch()
+    {
+        var source = ReadApiSource("Infrastructure/Data/Migrations/20260625031500_DictionarySearchTrigramIndexes.cs");
+        var expectedIndexNames = new[]
+        {
+            "IX_owners_LastName_trgm",
+            "IX_owners_FirstName_trgm",
+            "IX_owners_MiddleName_trgm",
+            "IX_owners_Phone_trgm",
+            "IX_owners_FullName_trgm",
+            "IX_garages_Number_trgm",
+            "IX_suppliers_Name_trgm",
+            "IX_suppliers_Inn_trgm",
+            "IX_suppliers_ContactPerson_trgm"
+        };
+
+        Assert.Contains("CREATE EXTENSION IF NOT EXISTS pg_trgm", source, StringComparison.Ordinal);
+        Assert.Equal(expectedIndexNames.Length, CountOccurrences(source, "CreateTrigramIndex(migrationBuilder,"));
+        Assert.True(
+            CountOccurrences(source, "USING gin") >= 1,
+            "Dictionary contains-search must keep PostgreSQL GIN trigram indexes.");
+        Assert.True(
+            CountOccurrences(source, "gin_trgm_ops") >= 1,
+            "Dictionary contains-search indexes must use pg_trgm operator class.");
+        Assert.True(
+            CountOccurrences(source, "WHERE \"IsArchived\" = FALSE") >= 1,
+            "Dictionary search indexes must stay scoped to active records.");
+        Assert.All(expectedIndexNames, indexName => Assert.Contains(indexName, source, StringComparison.Ordinal));
+    }
+
     private static string ReadApiSource(string relativePath)
     {
         return File.ReadAllText(Path.Combine(FindApiProjectRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
