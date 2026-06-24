@@ -667,6 +667,21 @@ describe('App', () => {
     expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
   })
 
+  it('announces empty dictionary lists', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
+
+    expect(await within(ownerForm as HTMLElement).findByText('Владельцев пока нет')).toHaveAttribute('aria-live', 'polite')
+  })
+
   it('requests bounded dictionary lists from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const requestedLimits: Record<string, number | undefined> = {}

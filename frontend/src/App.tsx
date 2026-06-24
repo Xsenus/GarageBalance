@@ -4075,7 +4075,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
   }
 
   if (items.length === 0) {
-    return <p className="empty-state">{emptyText}</p>
+    return <p className="empty-state" aria-live="polite">{emptyText}</p>
   }
 
   return (
