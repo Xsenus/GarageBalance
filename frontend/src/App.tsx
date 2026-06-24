@@ -1360,6 +1360,7 @@ function FinancePanel({
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
   const [garages, setGarages] = useState<GarageDto[]>([])
+  const [incomeGarageOptions, setIncomeGarageOptions] = useState<GarageDto[]>([])
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
@@ -1380,6 +1381,8 @@ function FinancePanel({
   const [salaryForm, setSalaryForm] = useState({ supplierGroupId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [salaryStatus, setSalaryStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
+  const [incomeGarageSearch, setIncomeGarageSearch] = useState('')
+  const [incomeGarageSearchStatus, setIncomeGarageSearchStatus] = useState<string | null>(null)
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>('income')
   const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
@@ -1436,6 +1439,7 @@ function FinancePanel({
         ])
         if (!ignore) {
           setGarages(loadedGarages)
+          setIncomeGarageOptions(loadedGarages)
           setSupplierGroups(loadedSupplierGroups)
           setSuppliers(loadedSuppliers)
           setIncomeTypes(loadedIncomeTypes)
@@ -1543,6 +1547,19 @@ function FinancePanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadFinanceWorkbench(activeFinanceSection, 0, financePage.limit)
   }, [activeFinanceSection, financePage.limit, loadFinanceWorkbench])
+
+  async function searchIncomeGarages() {
+    const query = incomeGarageSearch.trim()
+    await runSaving('income-garage-search', async () => {
+      const foundGarages = await dictionaryClient.getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit)
+      setIncomeGarageOptions(foundGarages)
+      setIncomeForm((value) => ({
+        ...value,
+        garageId: foundGarages.some((garage) => garage.id === value.garageId) ? value.garageId : foundGarages[0]?.id ?? '',
+      }))
+      setIncomeGarageSearchStatus(query ? `Найдено гаражей: ${foundGarages.length}` : `Показаны все гаражи: ${foundGarages.length}`)
+    })
+  }
 
   async function saveIncome(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1915,6 +1932,24 @@ function FinancePanel({
     setSalaryValidationErrors([])
     setMeterValidationErrors([])
     if (record && section === 'income' && 'operationKind' in record) {
+      if (record.garageId) {
+        const garageId = record.garageId
+        setIncomeGarageOptions((items) => (items.some((garage) => garage.id === garageId)
+          ? items
+          : [{
+              id: garageId,
+              number: record.garageNumber ?? 'без номера',
+              ownerId: null,
+              ownerName: record.ownerName,
+              peopleCount: 0,
+              floorCount: 0,
+              startingBalance: 0,
+              initialWaterMeterValue: null,
+              initialElectricityMeterValue: null,
+              comment: null,
+              isArchived: false,
+            }, ...items]))
+      }
       setIncomeForm({
         garageId: record.garageId ?? '',
         incomeTypeId: record.incomeTypeId ?? '',
@@ -2312,13 +2347,23 @@ function FinancePanel({
     if (section === 'income') {
       return (
         <>
+          <div className="inline-fields">
+            <label className="dictionary-search">
+              <Search size={16} aria-hidden="true" />
+              <input aria-label="Поиск гаража для поступления" placeholder="Гараж или владелец" value={incomeGarageSearch} onChange={(event) => setIncomeGarageSearch(event.target.value)} />
+            </label>
+            <button className="icon-button" type="button" aria-label="Найти гараж для поступления" disabled={saving === 'income-garage-search'} onClick={() => void searchIncomeGarages()}>
+              <Search size={16} aria-hidden="true" />
+            </button>
+          </div>
+          {incomeGarageSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{incomeGarageSearchStatus}</p> : null}
           <select aria-label="Гараж для поступления" value={incomeForm.garageId} onChange={(event) => setIncomeForm({ ...incomeForm, garageId: event.target.value })} required>
             <option value="" disabled>
               Выберите гараж
             </option>
-            {garages.map((garage) => (
+            {incomeGarageOptions.map((garage) => (
               <option value={garage.id} key={garage.id}>
-                Гараж {garage.number}
+                {garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}`}
               </option>
             ))}
           </select>
@@ -2657,13 +2702,23 @@ function FinancePanel({
       <div className="finance-grid">
         <form className="dictionary-form" onSubmit={saveIncome}>
           <h3>Новое поступление</h3>
+          <div className="inline-fields">
+            <label className="dictionary-search">
+              <Search size={16} aria-hidden="true" />
+              <input aria-label="Поиск гаража для поступления" placeholder="Гараж или владелец" value={incomeGarageSearch} onChange={(event) => setIncomeGarageSearch(event.target.value)} />
+            </label>
+            <button className="icon-button" type="button" aria-label="Найти гараж для поступления" disabled={saving === 'income-garage-search'} onClick={() => void searchIncomeGarages()}>
+              <Search size={16} aria-hidden="true" />
+            </button>
+          </div>
+          {incomeGarageSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{incomeGarageSearchStatus}</p> : null}
           <select aria-label="Гараж для поступления" value={incomeForm.garageId} onChange={(event) => setIncomeForm({ ...incomeForm, garageId: event.target.value })} required>
             <option value="" disabled>
               Выберите гараж
             </option>
-            {garages.map((garage) => (
+            {incomeGarageOptions.map((garage) => (
               <option value={garage.id} key={garage.id}>
-                Гараж {garage.number}
+                {garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}`}
               </option>
             ))}
           </select>

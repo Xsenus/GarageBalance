@@ -1615,6 +1615,45 @@ describe('App', () => {
     expect(within(financePanel).getByText('Оплата счета поставщика')).toBeInTheDocument()
   })
 
+  it('searches garage by owner before creating income operation', async () => {
+    const user = userEvent.setup()
+    const defaultGarage = createGarage({ id: 'garage-1', number: '12', ownerName: 'Иванов Иван' })
+    const foundGarage = createGarage({ id: 'garage-77', number: '77', ownerName: 'Петров Петр' })
+    const garageSearches: Array<string | undefined> = []
+    let incomeGarageId: string | null = null
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async (_token, search) => {
+        garageSearches.push(search)
+        return search?.toLowerCase().includes('петров') ? [foundGarage] : [defaultGarage]
+      },
+    })
+    const financeClient = createFinanceClient({
+      createIncome: async (_token, request) => {
+        incomeGarageId = request.garageId
+        return createFinancialOperation({ id: 'income-search', garageId: request.garageId, garageNumber: foundGarage.number, ownerName: foundGarage.ownerName, amount: request.amount })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.type(within(financePanel).getByLabelText('Поиск гаража для поступления'), 'Петров')
+    await user.click(within(financePanel).getByRole('button', { name: 'Найти гараж для поступления' }))
+
+    expect(await within(financePanel).findByText('Найдено гаражей: 1')).toBeInTheDocument()
+    expect(within(financePanel).getByRole('option', { name: 'Гараж 77 - Петров Петр' })).toBeInTheDocument()
+    expect(garageSearches).toContain('Петров')
+
+    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
+    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '1000')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+
+    await waitFor(() => expect(incomeGarageId).toBe(foundGarage.id))
+  })
+
   it('edits income operation from payments table', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
