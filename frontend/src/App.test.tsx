@@ -660,6 +660,15 @@ describe('App', () => {
     }
     expect(within(financePanel).getByRole('button', { name: 'Создать месяц' })).toBeDisabled()
     expect(within(financePanel).getByRole('button', { name: 'Внести' })).toBeDisabled()
+    const incomeRow = within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!
+    fireEvent.contextMenu(incomeRow)
+    const financeMenu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    expect(within(financeMenu).getByRole('menuitem', { name: 'Добавить' })).toBeDisabled()
+    expect(within(financeMenu).getByRole('menuitem', { name: 'Изменить' })).toBeDisabled()
+    expect(within(financeMenu).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
+    await user.click(incomeRow)
+    expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument()
+    expect(within(financePanel).getByRole('alert')).toHaveTextContent('Для записи платежей нужно право payments.write.')
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
     expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
   })

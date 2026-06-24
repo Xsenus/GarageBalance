@@ -1935,6 +1935,12 @@ function FinancePanel({
   }
 
   function openFinanceEditor(section: FinanceEditorKey, record?: FinanceRecord) {
+    if (!canWritePayments) {
+      setFinanceContextMenu(null)
+      setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
     setError(null)
     setRegularStatus(null)
     setSalaryStatus(null)
