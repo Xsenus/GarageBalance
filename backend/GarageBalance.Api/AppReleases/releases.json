@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-accessible-dialog-gate",
+    "version": "0.183.0",
+    "publishedAt": "2026-06-24T19:17:26+07:00",
+    "title": "Доступные dialog-окна закреплены проверкой",
+    "summary": "Модальные окна защищены от появления без имени, описания и modal-разметки.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Рабочие dialog-окна `detail-dialog` закреплены с role=\"dialog\", aria-modal=\"true\", aria-labelledby и aria-describedby."
+      },
+      {
+        "type": "fixed",
+        "text": "Frontend structural test теперь проверяет базовую доступную разметку будущих модальных окон."
+      },
+      {
+        "type": "important",
+        "text": "Карточки, подтверждения и разбивки остаются понятными для клавиатурной навигации и вспомогательных средств интерфейса."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-accessible-error-gate",
     "version": "0.182.0",
     "publishedAt": "2026-06-24T19:11:54+07:00",

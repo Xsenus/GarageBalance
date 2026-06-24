@@ -20,4 +20,17 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('<div className="form-error" role="alert">')
     expect(appSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
   })
+
+  it('keeps detail dialogs named, described and modal', () => {
+    const dialogLines = appSource
+      .split(/\r?\n/)
+      .map((line, index) => ({ index: index + 1, line: line.trim() }))
+      .filter(({ line }) => line.includes('className="detail-dialog"'))
+
+    expect(dialogLines.length).toBeGreaterThan(0)
+    expect(dialogLines.filter(({ line }) => !line.includes('role="dialog"'))).toEqual([])
+    expect(dialogLines.filter(({ line }) => !line.includes('aria-modal="true"'))).toEqual([])
+    expect(dialogLines.filter(({ line }) => !line.includes('aria-labelledby='))).toEqual([])
+    expect(dialogLines.filter(({ line }) => !line.includes('aria-describedby='))).toEqual([])
+  })
 })
