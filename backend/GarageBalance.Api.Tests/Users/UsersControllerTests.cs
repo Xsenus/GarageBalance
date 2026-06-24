@@ -10,6 +10,17 @@ namespace GarageBalance.Api.Tests.Users;
 public sealed class UsersControllerTests
 {
     [Fact]
+    public async Task GetUsers_PassesLimitToService()
+    {
+        var service = new FakeUserManagementService();
+        var controller = CreateController(service);
+
+        await controller.GetUsers("admin", 50, CancellationToken.None);
+
+        Assert.Equal(("admin", 50), service.LastUserListRequest);
+    }
+
+    [Fact]
     public async Task CreateUser_ReturnsConflictForDuplicateEmail()
     {
         var controller = CreateController(new FakeUserManagementService
@@ -82,6 +93,7 @@ public sealed class UsersControllerTests
     private sealed class FakeUserManagementService : IUserManagementService
     {
         public Guid? LastActorUserId { get; private set; }
+        public (string? Search, int? Limit) LastUserListRequest { get; private set; }
         public UserManagementResult<ManagedUserDto> CreateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
         public UserManagementResult<ManagedUserDto> UpdateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
 
@@ -90,8 +102,9 @@ public sealed class UsersControllerTests
             return Task.FromResult<IReadOnlyList<ManagedRoleDto>>([]);
         }
 
-        public Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken, int? limit = null)
         {
+            LastUserListRequest = (search, limit);
             return Task.FromResult<IReadOnlyList<ManagedUserDto>>([]);
         }
 

@@ -20,9 +20,9 @@ public sealed class UsersController(IUserManagementService userManagementService
 
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<ManagedUserDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ManagedUserDto>>> GetUsers([FromQuery] string? search, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ManagedUserDto>>> GetUsers([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await userManagementService.GetUsersAsync(search, cancellationToken));
+        return Ok(await userManagementService.GetUsersAsync(search, cancellationToken, limit));
     }
 
     [HttpPost]

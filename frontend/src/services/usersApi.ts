@@ -32,12 +32,13 @@ export type UpdateManagedUserRequest = {
 
 export type UserManagementClient = {
   getRoles(accessToken: string): Promise<ManagedRoleDto[]>
-  getUsers(accessToken: string, search?: string): Promise<ManagedUserDto[]>
+  getUsers(accessToken: string, search?: string, limit?: number): Promise<ManagedUserDto[]>
   createUser(accessToken: string, request: CreateManagedUserRequest): Promise<ManagedUserDto>
   updateUser(accessToken: string, userId: string, request: UpdateManagedUserRequest): Promise<ManagedUserDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+const defaultUserListLimit = 50
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -57,11 +58,11 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
-function withQuery(path: string, params: Record<string, string | undefined>): string {
+function withQuery(path: string, params: Record<string, string | number | undefined>): string {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value) {
-      query.set(key, value)
+    if (value !== undefined && value !== '') {
+      query.set(key, String(value))
     }
   }
 
@@ -73,8 +74,8 @@ export const usersApi: UserManagementClient = {
   getRoles(accessToken) {
     return requestJson(accessToken, '/api/users/roles')
   },
-  getUsers(accessToken, search) {
-    return requestJson(accessToken, withQuery('/api/users', { search }))
+  getUsers(accessToken, search, limit = defaultUserListLimit) {
+    return requestJson(accessToken, withQuery('/api/users', { search, limit }))
   },
   createUser(accessToken, request) {
     return requestJson(accessToken, '/api/users', { method: 'POST', body: JSON.stringify(request) })

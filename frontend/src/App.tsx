@@ -616,6 +616,7 @@ const reportScreenRowLimit = 16
 const auditScreenRequestLimit = 50
 const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
+const userScreenRequestLimit = 50
 
 type NavigationItem = {
   label: string
@@ -3130,7 +3131,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
       try {
         const [loadedRoles, loadedUsers] = await Promise.all([
           userClient.getRoles(auth.accessToken),
-          userClient.getUsers(auth.accessToken),
+          userClient.getUsers(auth.accessToken, undefined, userScreenRequestLimit),
         ])
         if (!ignore) {
           setRoles(loadedRoles)

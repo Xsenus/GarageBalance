@@ -9,7 +9,8 @@ namespace GarageBalance.Api.Application.Users;
 
 public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPasswordHasher passwordHasher, IPasswordPolicyValidator passwordPolicyValidator) : IUserManagementService
 {
-    private const int ListLimit = 100;
+    private const int DefaultListLimit = 100;
+    private const int MaxListLimit = 500;
 
     public async Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
     {
@@ -21,7 +22,7 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken, int? limit = null)
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
@@ -39,10 +40,20 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
 
         var users = await query
             .OrderBy(user => user.DisplayName)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(limit))
             .ToListAsync(cancellationToken);
 
         return users.Select(ToDto).ToList();
+    }
+
+    private static int NormalizeListLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return DefaultListLimit;
+        }
+
+        return Math.Min(limit.Value, MaxListLimit);
     }
 
     public async Task<UserManagementResult<ManagedUserDto>> CreateUserAsync(CreateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken)

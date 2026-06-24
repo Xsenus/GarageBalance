@@ -4,7 +4,7 @@ public interface IUserManagementService
 {
     Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken, int? limit = null);
 
     Task<UserManagementResult<ManagedUserDto>> CreateUserAsync(CreateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 

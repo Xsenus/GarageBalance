@@ -86,6 +86,7 @@ describe('App', () => {
 
   it('shows visible user counter when the user list is compacted', async () => {
     const user = userEvent.setup()
+    let requestedLimit: number | undefined
     const users = Array.from({ length: 9 }, (_item, index) =>
       createManagedUser({
         id: `user-${index + 1}`,
@@ -93,7 +94,12 @@ describe('App', () => {
         displayName: `Сотрудник ${index + 1}`,
       }),
     )
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getUsers: async () => users })} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({
+      getUsers: async (_token, _search, limit) => {
+        requestedLimit = limit
+        return users
+      },
+    })} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
@@ -103,6 +109,7 @@ describe('App', () => {
     expect(await within(usersTable).findByText('Показано 8 из 9 пользователей')).toHaveAttribute('aria-live', 'polite')
     expect(within(usersTable).getByText('Сотрудник 8')).toBeInTheDocument()
     expect(within(usersTable).queryByText('Сотрудник 9')).not.toBeInTheDocument()
+    expect(requestedLimit).toBe(50)
   })
 
   it('changes current user password from the workspace', async () => {

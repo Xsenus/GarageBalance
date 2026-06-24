@@ -174,6 +174,25 @@ public sealed class UserManagementServiceTests
         Assert.Equal("accountant@example.com", user.Email);
     }
 
+    [Fact]
+    public async Task GetUsersAsync_AppliesExplicitLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        for (var index = 0; index < 3; index++)
+        {
+            var result = await service.CreateUserAsync(
+                new CreateManagedUserRequest($"user{index}@example.com", $"Сотрудник {index}", "StrongPass123", [SystemRoles.Operator]),
+                null,
+                CancellationToken.None);
+            Assert.True(result.Succeeded);
+        }
+
+        var users = await service.GetUsersAsync(null, CancellationToken.None, 2);
+
+        Assert.Equal(2, users.Count);
+    }
+
     private static UserManagementService CreateService(GarageBalanceDbContext context)
     {
         return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator());
