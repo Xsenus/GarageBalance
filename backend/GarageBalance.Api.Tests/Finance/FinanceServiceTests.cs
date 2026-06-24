@@ -324,7 +324,14 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
         Assert.Equal("manual", result.Value.Source);
         Assert.Equal("12", result.Value.GarageNumber);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.accrual_created" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Создано начисление 700,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Целевой сбор", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -401,7 +408,15 @@ public sealed class FinanceServiceTests
         Assert.Equal("manual", result.Value.Source);
         Assert.Equal("Vodokanal", result.Value.SupplierName);
         Assert.Equal("INV-1", result.Value.DocumentNumber);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_created" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Создано начисление 1200,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.ExpenseType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ INV-1", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Счет за воду", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

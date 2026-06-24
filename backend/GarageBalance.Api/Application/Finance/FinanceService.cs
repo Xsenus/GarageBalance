@@ -278,7 +278,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         };
 
         dbContext.Accruals.Add(accrual);
-        AddAudit(actorUserId, "finance.accrual_created", "accrual", accrual.Id, $"Создано начисление {accrual.Amount:N2} по гаражу {garage.Number} за {accrual.AccountingMonth:MM.yyyy}.");
+        AddAudit(actorUserId, "finance.accrual_created", "accrual", accrual.Id, FormatAccrualCreatedAuditSummary(accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -337,7 +337,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         };
 
         dbContext.SupplierAccruals.Add(accrual);
-        AddAudit(actorUserId, "finance.supplier_accrual_created", "supplier_accrual", accrual.Id, $"Создано начисление {accrual.Amount:N2} поставщику {supplier.Name} за {accrual.AccountingMonth:MM.yyyy}.");
+        AddAudit(actorUserId, "finance.supplier_accrual_created", "supplier_accrual", accrual.Id, FormatSupplierAccrualCreatedAuditSummary(accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -571,6 +571,23 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return userComment is null
             ? $"Автоначисление; {snapshot}."
             : $"{userComment}; {snapshot}.";
+    }
+
+    private static string FormatAccrualCreatedAuditSummary(Accrual accrual)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var comment = NormalizeOptional(accrual.Comment);
+        var summary = $"Создано начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatSupplierAccrualCreatedAuditSummary(SupplierAccrual accrual)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(accrual.Comment);
+        var summary = $"Создано начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
     private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
