@@ -1012,6 +1012,52 @@ describe('App', () => {
     expect(financeCalls.meter).toBe(false)
   })
 
+  it('shows visible counters for long payment workspace lists', async () => {
+    const user = userEvent.setup()
+    const operations = Array.from({ length: 9 }, (_, index) => createFinancialOperation({
+      id: `operation-${index}`,
+      amount: 101 + index,
+      incomeTypeName: `Поступление ${index + 1}`,
+    }))
+    const accruals = Array.from({ length: 9 }, (_, index) => createAccrual({
+      id: `accrual-${index}`,
+      amount: 201 + index,
+      incomeTypeName: `Начисление ${index + 1}`,
+    }))
+    const supplierAccruals = Array.from({ length: 9 }, (_, index) => createSupplierAccrual({
+      id: `supplier-accrual-${index}`,
+      amount: 301 + index,
+      supplierName: `Поставщик ${index + 1}`,
+    }))
+    const meterReadings = Array.from({ length: 9 }, (_, index) => createMeterReading({
+      id: `meter-reading-${index}`,
+      consumption: 401 + index,
+    }))
+    const financeClient = createFinanceClient({
+      getOperations: async () => operations,
+      getAccruals: async () => accruals,
+      getSupplierAccruals: async () => supplierAccruals,
+      getMeterReadings: async () => meterReadings,
+      getSummary: async () => ({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const operationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
+    const accrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    const supplierAccrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
+    const meterReadingsTable = within(financePanel).getByRole('table', { name: 'Последние показания' })
+
+    expect(await within(operationsTable).findByText('Показано 8 из 9 операций')).toHaveAttribute('aria-live', 'polite')
+    expect(within(accrualsTable).getByText('Показано 8 из 9 начислений')).toHaveAttribute('aria-live', 'polite')
+    expect(within(supplierAccrualsTable).getByText('Показано 8 из 9 начислений поставщикам')).toHaveAttribute('aria-live', 'polite')
+    expect(within(meterReadingsTable).getByText('Показано 8 из 9 показаний')).toHaveAttribute('aria-live', 'polite')
+    expect(within(operationsTable).getByText('Поступление 8')).toBeInTheDocument()
+    expect(within(operationsTable).queryByText('Поступление 9')).not.toBeInTheDocument()
+  })
+
   it('cancels income operation with required reason from payments workspace', async () => {
     const user = userEvent.setup()
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный документ')
