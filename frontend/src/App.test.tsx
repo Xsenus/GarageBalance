@@ -1633,7 +1633,7 @@ describe('App', () => {
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
 
-    expect(await within(auditTable).findByText('Показано 12 из 13 событий')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(auditTable).findByText('Показано 12 из 13 событий')).toHaveAttribute('role', 'status')
     expect(within(auditTable).getByText('audit.event_12')).toBeInTheDocument()
     expect(within(auditTable).queryByText('audit.event_13')).not.toBeInTheDocument()
   })
@@ -1660,7 +1660,7 @@ describe('App', () => {
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
 
-    expect(await within(auditTable).findByText('Событий пока нет')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(auditTable).findByText('Событий пока нет')).toHaveAttribute('role', 'status')
   })
 
   it('shows consolidated report and applies garage search', async () => {

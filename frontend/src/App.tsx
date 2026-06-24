@@ -2415,7 +2415,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Событие</span>
           <span role="columnheader">Сущность</span>
         </div>
-        {!loading && events.length === 0 ? <p className="empty-state" aria-live="polite">Событий пока нет</p> : null}
+        {!loading && events.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
         {visibleEvents.map((auditEvent) => (
           <div className="operation-row" role="row" key={auditEvent.id}>
             <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
@@ -2429,7 +2429,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
             </span>
           </div>
         ))}
-        {events.length > visibleEvents.length ? <p className="empty-state" aria-live="polite">Показано {visibleEvents.length} из {events.length} событий</p> : null}
+        {events.length > visibleEvents.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleEvents.length} из {events.length} событий</p> : null}
       </div>
     </section>
   )
