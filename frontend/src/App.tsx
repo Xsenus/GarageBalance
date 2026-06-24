@@ -620,11 +620,13 @@ const userScreenRequestLimit = 50
 const importQuarantineScreenRequestLimit = 50
 
 type NavigationItem = {
+  section: WorkspaceSection
   label: string
   icon: typeof Gauge
-  active?: boolean
   requiredAny?: readonly string[]
 }
+
+type WorkspaceSection = 'dashboard' | 'users' | 'dictionaries' | 'tariffs' | 'payments' | 'reports' | 'import' | 'audit' | 'releases'
 
 const permissions = {
   usersManage: 'users.manage',
@@ -651,12 +653,15 @@ const rolePermissionGroups = [
 ] as const
 
 const navigation: NavigationItem[] = [
-  { label: 'Панель', icon: Gauge, active: true },
-  { label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
-  { label: 'Тарифы', icon: Settings, requiredAny: [permissions.tariffsManage] },
-  { label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
-  { label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
-  { label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
+  { section: 'dashboard', label: 'Панель', icon: Gauge },
+  { section: 'users', label: 'Пользователи', icon: ShieldCheck, requiredAny: [permissions.usersManage] },
+  { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
+  { section: 'tariffs', label: 'Тарифы', icon: Settings, requiredAny: [permissions.dictionariesRead] },
+  { section: 'payments', label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
+  { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
+  { section: 'import', label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
+  { section: 'audit', label: 'Audit', icon: FileText, requiredAny: [permissions.auditRead] },
+  { section: 'releases', label: 'Что нового', icon: BookOpenCheck },
 ]
 
 const roadmap = [
@@ -684,6 +689,9 @@ const roadmap = [
 
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
+  const activeNavigationItem = navigation.find((entry) => entry.section === activeSection)
+  const effectiveActiveSection = auth && activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
 
   return (
     <main className="app-shell">
@@ -700,8 +708,16 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
           {navigation.map((item) => {
             const Icon = item.icon
             const canOpen = Boolean(auth && hasAnyPermission(auth, item.requiredAny))
+            const isActive = auth && effectiveActiveSection === item.section
             return (
-              <button className={item.active ? 'nav-item active' : 'nav-item'} type="button" key={item.label} disabled={!canOpen}>
+              <button
+                className={isActive ? 'nav-item active' : 'nav-item'}
+                type="button"
+                key={item.section}
+                disabled={!canOpen}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => setActiveSection(item.section)}
+              >
                 <Icon size={18} />
                 <span>{item.label}</span>
               </button>
@@ -720,7 +736,10 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
 
       <section className="workspace">
         {auth ? (
-          <Workspace auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onUserChanged={(user) => setAuth((current) => current ? { ...current, user } : current)} onLogout={() => setAuth(null)} />
+          <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onUserChanged={(user) => setAuth((current) => current ? { ...current, user } : current)} onLogout={() => {
+            setAuth(null)
+            setActiveSection('dashboard')
+          }} />
         ) : (
           <AuthGate authClient={authClient} onAuthenticated={setAuth} />
         )}
@@ -814,6 +833,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 }
 
 function Workspace({
+  activeSection,
   auth,
   authClient,
   auditClient,
@@ -826,6 +846,7 @@ function Workspace({
   onUserChanged,
   onLogout,
 }: {
+  activeSection: WorkspaceSection
   auth: AuthResponse
   authClient: AuthClient
   auditClient: AuditClient
@@ -844,6 +865,95 @@ function Workspace({
   const canRunImport = hasPermission(auth, permissions.importRun)
   const canReadReports = hasPermission(auth, permissions.reportsRead)
   const canReadAudit = hasPermission(auth, permissions.auditRead)
+
+  function renderActiveSection() {
+    switch (activeSection) {
+      case 'dashboard':
+        return (
+          <>
+            <section className="hero-panel" aria-label="Панель">
+              <div>
+                <p className="eyebrow">Старт проекта</p>
+                <h1>Финансовый учет ГСК без ручного переноса старой базы</h1>
+                <p className="lead">
+                  Основа проекта уже разложена под пользователей, справочники, тарифы, платежи, отчеты и импорт Access.
+                </p>
+              </div>
+              <div className="status-stack" aria-label="Ключевые статусы">
+                <div>
+                  <span>Этап 1</span>
+                  <strong>ядро учета</strong>
+                </div>
+                <div>
+                  <span>Права</span>
+                  <strong>{auth.user.permissions.length} доступов</strong>
+                </div>
+                <div>
+                  <span>Docker</span>
+                  <strong>готовится сразу</strong>
+                </div>
+              </div>
+            </section>
+
+            <PasswordPanel auth={auth} authClient={authClient} onUserChanged={onUserChanged} />
+
+            <section className="roadmap-grid" aria-label="Ближайшая очередь">
+              {roadmap.map((item) => {
+                const Icon = item.icon
+                return (
+                  <article className="work-card" key={item.title}>
+                    <Icon size={22} />
+                    <h2>{item.title}</h2>
+                    <p>{item.text}</p>
+                  </article>
+                )
+              })}
+            </section>
+          </>
+        )
+      case 'users':
+        return canManageUsers ? (
+          <UserManagementPanel auth={auth} userClient={userClient} />
+        ) : (
+          <AccessNotice label="Пользователи недоступны" title="Пользователи" permission={permissions.usersManage} description="Управлять сотрудниками и ролями может только пользователь с правом администрирования." />
+        )
+      case 'dictionaries':
+      case 'tariffs':
+        return canReadDictionaries ? (
+          <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
+        ) : (
+          <AccessNotice label="Справочники недоступны" title="Справочники" permission={permissions.dictionariesRead} description="Для просмотра гаражей, владельцев и поставщиков нужно право на чтение справочников." />
+        )
+      case 'payments':
+        return canReadPayments && canReadDictionaries ? (
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+        ) : (
+          <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
+        )
+      case 'reports':
+        return canReadReports && canReadDictionaries ? (
+          <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
+        ) : (
+          <AccessNotice label="Отчеты недоступны" title="Отчеты" permission={permissions.reportsRead} description="Для отчетов нужно право просмотра отчетности; справочники используются только для фильтров." />
+        )
+      case 'import':
+        return canRunImport ? (
+          <ImportPanel auth={auth} importClient={importClient} />
+        ) : (
+          <AccessNotice label="Импорт недоступен" title="Импорт Access" permission={permissions.importRun} description="Запускать проверку и перенос старой базы может только пользователь с правом импорта." />
+        )
+      case 'audit':
+        return canReadAudit ? (
+          <AuditPanel auth={auth} auditClient={auditClient} />
+        ) : (
+          <AccessNotice label="Аудит недоступен" title="Аудит" permission={permissions.auditRead} description="Журнал действий доступен только пользователям с правом просмотра audit-событий." />
+        )
+      case 'releases':
+        return <ReleasePanel auth={auth} releaseClient={releaseClient} />
+      default:
+        return null
+    }
+  }
 
   return (
     <>
@@ -865,83 +975,7 @@ function Workspace({
           </button>
         </div>
       </header>
-
-      <section className="hero-panel">
-        <div>
-          <p className="eyebrow">Старт проекта</p>
-          <h1>Финансовый учет ГСК без ручного переноса старой базы</h1>
-          <p className="lead">
-            Основа проекта уже разложена под пользователей, справочники, тарифы, платежи, отчеты и импорт Access.
-          </p>
-        </div>
-        <div className="status-stack" aria-label="Ключевые статусы">
-          <div>
-            <span>Этап 1</span>
-            <strong>ядро учета</strong>
-          </div>
-          <div>
-            <span>Права</span>
-            <strong>{auth.user.permissions.length} доступов</strong>
-          </div>
-          <div>
-            <span>Docker</span>
-            <strong>готовится сразу</strong>
-          </div>
-        </div>
-      </section>
-
-      <PasswordPanel auth={auth} authClient={authClient} onUserChanged={onUserChanged} />
-
-      {canManageUsers ? (
-        <UserManagementPanel auth={auth} userClient={userClient} />
-      ) : (
-        <AccessNotice label="Пользователи недоступны" title="Пользователи" permission={permissions.usersManage} description="Управлять сотрудниками и ролями может только пользователь с правом администрирования." />
-      )}
-
-      {canReadDictionaries ? (
-        <DictionaryPanel auth={auth} dictionaryClient={dictionaryClient} />
-      ) : (
-        <AccessNotice label="Справочники недоступны" title="Справочники" permission={permissions.dictionariesRead} description="Для просмотра гаражей, владельцев и поставщиков нужно право на чтение справочников." />
-      )}
-
-      {canReadPayments && canReadDictionaries ? (
-        <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
-      ) : (
-        <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
-      )}
-
-      {canRunImport ? (
-        <ImportPanel auth={auth} importClient={importClient} />
-      ) : (
-        <AccessNotice label="Импорт недоступен" title="Импорт Access" permission={permissions.importRun} description="Запускать проверку и перенос старой базы может только пользователь с правом импорта." />
-      )}
-
-      {canReadReports && canReadDictionaries ? (
-        <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
-      ) : (
-        <AccessNotice label="Отчеты недоступны" title="Отчеты" permission={permissions.reportsRead} description="Для отчетов нужно право просмотра отчетности; справочники используются только для фильтров." />
-      )}
-
-      {canReadAudit ? (
-        <AuditPanel auth={auth} auditClient={auditClient} />
-      ) : (
-        <AccessNotice label="Аудит недоступен" title="Аудит" permission={permissions.auditRead} description="Журнал действий доступен только пользователям с правом просмотра audit-событий." />
-      )}
-
-      <section className="roadmap-grid" aria-label="Ближайшая очередь">
-        {roadmap.map((item) => {
-          const Icon = item.icon
-          return (
-            <article className="work-card" key={item.title}>
-              <Icon size={22} />
-              <h2>{item.title}</h2>
-              <p>{item.text}</p>
-            </article>
-          )
-        })}
-      </section>
-
-      <ReleasePanel auth={auth} releaseClient={releaseClient} />
+      {renderActiveSection()}
     </>
   )
 }

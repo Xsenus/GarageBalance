@@ -15,6 +15,14 @@ describe('App', () => {
     window.sessionStorage.clear()
   })
 
+  async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
+    const tab = screen.getByRole('button', { name })
+
+    if (tab.getAttribute('aria-current') !== 'page') {
+      await user.click(tab)
+    }
+  }
+
   it('shows auth gate before workspace is available', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -56,6 +64,8 @@ describe('App', () => {
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
 
+    await openSection(user, 'Пользователи')
+
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     expect(within(usersPanel).getByText('Администратор ГСК')).toBeInTheDocument()
     expect(within(usersPanel).getByText('admin@example.com')).toBeInTheDocument()
@@ -66,12 +76,16 @@ describe('App', () => {
     expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы - разрешено' })).toHaveTextContent('Да')
     expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
+    await openSection(user, 'Справочники')
+
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(within(dictionaryPanel).getAllByText('Иванов Иван').length).toBeGreaterThan(0)
     expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Членский взнос')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Тариф воды')).toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     expect(within(financePanel).getAllByText('1 500,00').length).toBeGreaterThan(0)
@@ -82,6 +96,47 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
+  })
+
+  it('switches workspace sections without stacking panels', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Пользователи' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
+
+    await openSection(user, 'Справочники')
+    expect(screen.getByRole('button', { name: 'Справочники' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
+
+    await openSection(user, 'Тарифы')
+    expect(screen.getByRole('button', { name: 'Тарифы' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
+    expect(screen.getByRole('button', { name: 'Платежи' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
+
+    await openSection(user, 'Отчеты')
+    expect(screen.getByRole('button', { name: 'Отчеты' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('region', { name: 'Отчеты' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Платежи' })).not.toBeInTheDocument()
+
+    await openSection(user, 'Импорт')
+    expect(screen.getByRole('button', { name: 'Импорт' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('region', { name: 'Импорт Access' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Отчеты' })).not.toBeInTheDocument()
+
+    await openSection(user, 'Что нового')
+    expect(screen.getByRole('button', { name: 'Что нового' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('region', { name: 'Что нового' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Импорт Access' })).not.toBeInTheDocument()
   })
 
   it('shows visible user counter when the user list is compacted', async () => {
@@ -103,6 +158,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
 
@@ -123,6 +179,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
     const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
@@ -236,6 +293,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
     await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
@@ -264,6 +322,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
     await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
@@ -353,6 +412,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
     await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
@@ -370,13 +430,23 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByText('Оператор')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Пользователи' })).not.toBeInTheDocument()
-    expect(await screen.findByRole('region', { name: 'Пользователи недоступны' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Справочники' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Платежи' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Импорт недоступен' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Отчеты недоступны' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Аудит недоступен' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Пользователи' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Импорт' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Отчеты' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Audit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Справочники' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Платежи' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Что нового' })).toBeEnabled()
+
+    await openSection(user, 'Справочники')
+    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
+    expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
+
     expect(screen.queryByText('Панель пользователей не должна загружаться для оператора.')).not.toBeInTheDocument()
     expect(screen.queryByText('Импорт не должен загружаться для оператора.')).not.toBeInTheDocument()
     expect(screen.queryByText('Отчеты не должны загружаться для оператора.')).not.toBeInTheDocument()
@@ -424,6 +494,8 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
+    await openSection(user, 'Справочники')
+
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.')).toBeInTheDocument()
     for (const button of within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })) {
@@ -432,6 +504,8 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' })).toBeDisabled()
     expect(within(dictionaryPanel).getByRole('button', { name: 'Найти гараж' })).toBeEnabled()
     expect(within(dictionaryPanel).queryByRole('button', { name: /Архивировать/ })).not.toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     expect(within(financePanel).getByText('Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.')).toBeInTheDocument()
@@ -497,6 +571,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.')).toBeInTheDocument()
@@ -580,6 +655,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), 'Петров')
@@ -650,6 +726,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
@@ -686,6 +763,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
@@ -731,6 +809,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     await screen.findByRole('region', { name: 'Справочники' })
 
     await waitFor(() => expect(requestedLimits).toMatchObject({
@@ -764,6 +843,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), '   ')
@@ -802,6 +882,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
@@ -841,6 +922,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
@@ -875,6 +957,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     const firstArchiveButton = within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' })
@@ -927,6 +1010,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await user.type(within(dictionaryPanel).getByLabelText('Название вида поступления'), 'Целевой взнос')
@@ -983,6 +1067,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), '   ')
@@ -1038,6 +1123,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
@@ -1098,6 +1184,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     fireEvent.submit(within(financePanel).getByLabelText('Сумма поступления').closest('form')!)
@@ -1180,6 +1267,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const operationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
     const accrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
@@ -1203,6 +1291,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
@@ -1229,6 +1318,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
@@ -1270,6 +1360,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
@@ -1308,6 +1399,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
@@ -1330,6 +1422,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
@@ -1359,6 +1452,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
@@ -1385,6 +1479,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.type(within(financePanel).getByLabelText('Комментарий регулярных начислений'), 'Начисление за месяц')
@@ -1407,6 +1502,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.selectOptions(within(financePanel).getByLabelText('Тип счетчика'), 'water')
@@ -1425,6 +1521,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.selectOptions(within(financePanel).getByLabelText('Тип счетчика'), 'electricity')
@@ -1442,6 +1539,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
     const file = new File(['garage owner payment'], 'ГСК.accdb', { type: 'application/octet-stream' })
 
@@ -1505,6 +1603,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
     const logCounter = await within(importPanel).findByText('Показано 10 из 11 строк лога')
@@ -1531,6 +1630,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
     const emptyRunState = await within(importPanel).findByText('Выберите запуск dry-run')
@@ -1562,6 +1662,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: /Access/ })
     const quarantineTable = await within(importPanel).findByRole('table', { name: 'Карантин импорта Access' })
 
@@ -1611,6 +1712,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Audit')
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
 
     expect(await within(auditPanel).findByText('auth.login_success')).toBeInTheDocument()
@@ -1656,6 +1758,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Audit')
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
 
@@ -1683,6 +1786,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Audit')
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
 
@@ -1696,6 +1800,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Консолидированный отчет за период')).toBeInTheDocument()
@@ -1749,6 +1854,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await within(reportsPanel).findByText('Консолидированный отчет за период')
     await waitFor(() => {
@@ -1824,6 +1930,8 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
+    await openSection(user, 'Отчеты')
+
     await waitFor(() => {
       expect(consolidatedRequest).toEqual({ monthFrom: '2026-05-01', monthTo: '2026-06-01', search: 'Петров', limit: 12 })
       expect(incomeRequest).toEqual({
@@ -1885,6 +1993,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toHaveAttribute('role', 'status')
@@ -1926,6 +2035,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Помесячных строк отчета пока нет')).toHaveAttribute('role', 'status')
@@ -1961,6 +2071,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Отчет по поступлениям')).toBeInTheDocument()
@@ -2014,6 +2125,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Отчет по выплатам')).toBeInTheDocument()
@@ -2123,6 +2235,8 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
+    await openSection(user, 'Что нового')
+
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
     expect(await within(releasePanel).findByText('История обновлений')).toBeInTheDocument()
     expect(within(releasePanel).getByText('Добавлен консолидированный отчет')).toBeInTheDocument()
@@ -2138,6 +2252,8 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
+    await openSection(user, 'Что нового')
+
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
     expect(await within(releasePanel).findByText('Пока нет опубликованных изменений.')).toHaveAttribute('role', 'status')
   })
@@ -2152,6 +2268,8 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    await openSection(user, 'Что нового')
 
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
     expect(await within(releasePanel).findByText('Загружаем историю обновлений...')).toHaveAttribute('role', 'status')
@@ -2201,22 +2319,29 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
+    await openSection(user, 'Пользователи')
     expect(await screen.findByText('Нет доступа к пользователям.')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к пользователям.']))
+
+    await openSection(user, 'Справочники')
     expect((await screen.findAllByText('Нет доступа к справочникам.')).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к справочникам.']))
+
+    await openSection(user, 'Платежи')
     expect(await screen.findByText('Нет доступа к платежам.')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к платежам.']))
+
+    await openSection(user, 'Импорт')
     expect(await screen.findByText('Нет доступа к импорту.')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к импорту.']))
+
+    await openSection(user, 'Отчеты')
     expect(await screen.findByText('Нет доступа к отчетам.')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к отчетам.']))
+
+    await openSection(user, 'Что нового')
     expect(await screen.findByText('Нет доступа к истории обновлений.')).toBeInTheDocument()
-    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(
-      expect.arrayContaining([
-        'Нет доступа к пользователям.',
-        'Нет доступа к справочникам.',
-        'Нет доступа к платежам.',
-        'Нет доступа к импорту.',
-        'Нет доступа к отчетам.',
-        'Нет доступа к истории обновлений.',
-      ]),
-    )
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к истории обновлений.']))
   })
 })
 
