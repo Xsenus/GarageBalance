@@ -77,6 +77,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             .ToList();
 
         var garageRows = await BuildGarageRowsAsync(request.Search, periodFrom, periodTo, cancellationToken);
+        var garageRowCount = garageRows.Count;
+        var visibleGarageRows = ApplyRowLimit(garageRows, request.Limit);
         var report = new ConsolidatedReportDto(
             periodFrom,
             periodTo,
@@ -89,7 +91,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             monthlyRows.Sum(row => row.AccrualCount),
             monthlyRows.Sum(row => row.MeterReadingCount),
             monthlyRows,
-            garageRows);
+            garageRowCount,
+            visibleGarageRows);
 
         return ReportResult<ConsolidatedReportDto>.Success(report);
     }

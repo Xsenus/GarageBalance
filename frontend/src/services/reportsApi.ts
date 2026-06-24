@@ -32,6 +32,7 @@ export type ConsolidatedReportDto = {
   accrualCount: number
   meterReadingCount: number
   monthlyRows: MonthlyReportRowDto[]
+  garageRowCount: number
   garageRows: GarageReportRowDto[]
 }
 
@@ -88,7 +89,7 @@ export type ExpenseReportDto = {
 }
 
 export type ReportClient = {
-  getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<ConsolidatedReportDto>
+  getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number }): Promise<ConsolidatedReportDto>
   exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
   exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
   getIncomeReport(
@@ -235,6 +236,9 @@ function buildConsolidatedReportQuery(params: Parameters<ReportClient['getConsol
   }
   if (params.search) {
     searchParams.set('search', params.search)
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
   }
   return searchParams.toString()
 }

@@ -2470,7 +2470,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       setLoading(true)
       setError(null)
       try {
-        const loadedReport = await reportClient.getConsolidatedReport(auth.accessToken, filters)
+        const loadedReport = await reportClient.getConsolidatedReport(auth.accessToken, {
+          ...filters,
+          limit: garageReportScreenRowLimit,
+        })
         if (!ignore) {
           setReport(loadedReport)
         }
@@ -2901,7 +2904,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <span role="columnheader">Начисления</span>
             <span role="columnheader">Долг</span>
           </div>
-          {report?.garageRows.length === 0 ? <p className="empty-state">По выбранному фильтру строк нет</p> : null}
+          {report?.garageRowCount === 0 ? <p className="empty-state">По выбранному фильтру строк нет</p> : null}
           {report?.garageRows.slice(0, garageReportScreenRowLimit).map((row) => (
             <div className="operation-row" role="row" key={row.garageId}>
               <span role="cell">
@@ -2917,7 +2920,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               </span>
             </div>
           ))}
-          {report && report.garageRows.length > garageReportScreenRowLimit ? <p className="empty-state" aria-live="polite">Показано {garageReportScreenRowLimit} из {report.garageRows.length} строк</p> : null}
+          {report && report.garageRowCount > report.garageRows.length ? <p className="empty-state" aria-live="polite">Показано {report.garageRows.length} из {report.garageRowCount} строк</p> : null}
         </div>
       </div>
 

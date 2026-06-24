@@ -17,9 +17,10 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? monthFrom,
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
+        var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, limit), cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));

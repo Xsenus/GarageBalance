@@ -10,15 +10,17 @@ public sealed class ReportsControllerTests
     public async Task GetConsolidatedReport_ReturnsOk()
     {
         var report = CreateReport();
-        var controller = new ReportsController(new FakeReportService
+        var reportService = new FakeReportService
         {
             Result = ReportResult<ConsolidatedReportDto>.Success(report)
-        });
+        };
+        var controller = new ReportsController(reportService);
 
-        var result = await controller.GetConsolidatedReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, CancellationToken.None);
+        var result = await controller.GetConsolidatedReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, 12, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
+        Assert.Equal(12, reportService.ConsolidatedRequest?.Limit);
     }
 
     [Fact]
@@ -29,7 +31,7 @@ public sealed class ReportsControllerTests
             Result = ReportResult<ConsolidatedReportDto>.Failure("period_invalid", "Период неверный.")
         });
 
-        var result = await controller.GetConsolidatedReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null, CancellationToken.None);
+        var result = await controller.GetConsolidatedReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -369,6 +371,7 @@ public sealed class ReportsControllerTests
             1,
             0,
             [new MonthlyReportRowDto(month, 1500m, 400m, 2000m, 1100m, 500m, 2, 1, 0)],
+            1,
             [new GarageReportRowDto(Guid.NewGuid(), "12", "Иванов Иван", 1500m, 2000m, 500m, 0)]);
     }
 
@@ -408,6 +411,7 @@ public sealed class ReportsControllerTests
     private sealed class FakeReportService : IReportService
     {
         public ReportResult<ConsolidatedReportDto> Result { get; init; } = ReportResult<ConsolidatedReportDto>.Failure("not_configured", "Not configured.");
+        public ConsolidatedReportRequest? ConsolidatedRequest { get; private set; }
 
         public ReportResult<ReportExportFileDto> ConsolidatedXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
@@ -429,6 +433,7 @@ public sealed class ReportsControllerTests
 
         public Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
         {
+            ConsolidatedRequest = request;
             return Task.FromResult(Result);
         }
 

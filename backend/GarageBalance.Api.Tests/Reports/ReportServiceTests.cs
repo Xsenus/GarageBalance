@@ -36,9 +36,29 @@ public sealed class ReportServiceTests
         Assert.Equal(2, month.OperationCount);
         Assert.Equal(2, month.AccrualCount);
         Assert.Equal(1, month.MeterReadingCount);
+        Assert.Equal(2, result.Value.GarageRowCount);
         Assert.Equal(2, result.Value.GarageRows.Count);
         Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "12" && row.Debt == 500m && row.MeterReadingCount == 1);
         Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "21" && row.Debt == 1000m);
+    }
+
+    [Fact]
+    public async Task GetConsolidatedReportAsync_AppliesGarageRowLimitWithoutChangingTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+
+        var result = await service.GetConsolidatedReportAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, 1), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(3000m, result.Value!.AccrualTotal);
+        Assert.Equal(2, result.Value.GarageRowCount);
+        var row = Assert.Single(result.Value.GarageRows);
+        Assert.Equal("12", row.GarageNumber);
     }
 
     [Fact]

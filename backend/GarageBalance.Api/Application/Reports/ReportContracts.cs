@@ -3,7 +3,8 @@ namespace GarageBalance.Api.Application.Reports;
 public sealed record ConsolidatedReportRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
-    string? Search);
+    string? Search,
+    int? Limit = null);
 
 public sealed record IncomeReportRequest(
     DateOnly? DateFrom,
@@ -36,6 +37,7 @@ public sealed record ConsolidatedReportDto(
     int AccrualCount,
     int MeterReadingCount,
     IReadOnlyList<MonthlyReportRowDto> MonthlyRows,
+    int GarageRowCount,
     IReadOnlyList<GarageReportRowDto> GarageRows);
 
 public sealed record MonthlyReportRowDto(

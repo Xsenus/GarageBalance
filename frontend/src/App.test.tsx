@@ -1719,7 +1719,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     await waitFor(() => {
-      expect(consolidatedRequest).toEqual({ monthFrom: '2026-05-01', monthTo: '2026-06-01', search: 'Петров' })
+      expect(consolidatedRequest).toEqual({ monthFrom: '2026-05-01', monthTo: '2026-06-01', search: 'Петров', limit: 12 })
       expect(incomeRequest).toEqual({
         dateFrom: '2026-05-01',
         dateTo: '2026-06-19',
@@ -1768,7 +1768,10 @@ describe('App', () => {
       documentNumber: `RKO-${index + 1}`,
     }))
     const reportClient = createReportClient({
-      getConsolidatedReport: async () => createConsolidatedReport({ garageRows }),
+      getConsolidatedReport: async (_token, params) => createConsolidatedReport({
+        garageRowCount: garageRows.length,
+        garageRows: garageRows.slice(0, params?.limit ?? garageRows.length),
+      }),
       getIncomeReport: async () => createIncomeReport({ rowCount: incomeRows.length, rows: incomeRows.slice(0, 16) }),
       getExpenseReport: async () => createExpenseReport({ rowCount: expenseRows.length, rows: expenseRows.slice(0, 16) }),
     })
@@ -2858,6 +2861,7 @@ function createConsolidatedReport(overrides: Partial<ConsolidatedReportDto> = {}
         meterReadingCount: 1,
       },
     ],
+    garageRowCount: 1,
     garageRows: [
       {
         garageId: 'garage-1',
