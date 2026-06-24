@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-version-update-checklist",
+    "version": "0.101.0",
+    "publishedAt": "2026-06-24T10:15:00+07:00",
+    "title": "Добавлен checklist обновления версии",
+    "summary": "Обновления проекта теперь описаны через единый проверяемый порядок: backup, restore-check, тесты, миграции, health endpoint и rollback.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен docs/version-update-checklist.md с обязательным backup перед обновлением локального ПК или VPS."
+      },
+      {
+        "type": "added",
+        "text": "Checklist требует restore-check в garagebalance_restore_check, idempotent EF migration script, полный backend/frontend прогон и проверку health endpoint."
+      },
+      {
+        "type": "added",
+        "text": "Отдельно зафиксированы smoke-проверка раздела \"Что нового\", Cache-Control: no-store и порядок rollback."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-postgres-backup-restore-scripts",
     "version": "0.100.0",
     "publishedAt": "2026-06-24T09:45:00+07:00",
