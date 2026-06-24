@@ -46,4 +46,17 @@ describe('accessible dynamic messages', () => {
     expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-controls={listId}'))).toEqual([])
     expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-expanded={showAllItems}'))).toEqual([])
   })
+
+  it('keeps report date format hints linked to date fields', () => {
+    const reportDateHints = [
+      { id: 'consolidated-report-date-format', text: 'Формат периода сводного отчета: ММ.ГГГГ.' },
+      { id: 'income-report-date-format', text: 'Формат дат поступлений: ДД.ММ.ГГГГ.' },
+      { id: 'expense-report-date-format', text: 'Формат дат выплат: ДД.ММ.ГГГГ.' },
+    ]
+
+    for (const hint of reportDateHints) {
+      expect(appSource).toContain(`aria-describedby="${hint.id}"`)
+      expect(appSource).toContain(`id="${hint.id}">${hint.text}</p>`)
+    }
+  })
 })
