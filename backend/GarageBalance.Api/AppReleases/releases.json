@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-form-control-name-gate",
+    "version": "0.189.0",
+    "publishedAt": "2026-06-24T19:52:42+07:00",
+    "title": "Имена полей форм закреплены проверкой",
+    "summary": "Все поля React-форм защищены от появления без доступного имени.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Поля Email, имя пользователя и пароль в стартовой форме получили явные aria-label."
+      },
+      {
+        "type": "fixed",
+        "text": "Frontend structural test проверяет, что каждый input, select и textarea имеет aria-label или aria-labelledby."
+      },
+      {
+        "type": "important",
+        "text": "Вход, платежи, справочники, отчеты, импорт и audit остаются понятными для пользователя screen reader при будущих правках форм."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-explicit-button-type-gate",
     "version": "0.188.0",
     "publishedAt": "2026-06-24T19:47:29+07:00",

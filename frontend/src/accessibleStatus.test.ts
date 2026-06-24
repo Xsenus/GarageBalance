@@ -116,4 +116,18 @@ describe('accessible dynamic messages', () => {
       expect(openingTagSource).toMatch(/\stype="(?:button|submit)"/)
     }
   })
+
+  it('keeps form controls explicitly named', () => {
+    const formControlIndexes = [...appSource.matchAll(/<(?:input|select|textarea)\b/g)].map((match) => match.index ?? -1)
+
+    expect(formControlIndexes.length).toBeGreaterThan(0)
+
+    for (const controlStart of formControlIndexes) {
+      const openingTagEnd = appSource.indexOf('>', controlStart)
+      expect(openingTagEnd).toBeGreaterThan(controlStart)
+
+      const openingTagSource = appSource.slice(controlStart, openingTagEnd + 1)
+      expect(openingTagSource).toMatch(/\saria-label=|\saria-labelledby=/)
+    }
+  })
 })

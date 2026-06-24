@@ -786,19 +786,19 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
         <label>
           Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          <input aria-label="Email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
         </label>
 
         {mode === 'bootstrap' ? (
           <label>
             Имя пользователя
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
+            <input aria-label="Имя пользователя" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
           </label>
         ) : null}
 
         <label>
           Пароль
-          <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
+          <input aria-label="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
         </label>
         <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
