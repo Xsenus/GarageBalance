@@ -1913,6 +1913,35 @@ describe('App', () => {
     expect(within(financePanel).getByText('7 операций')).toBeInTheDocument()
   })
 
+  it('debounces server search in payment tables', async () => {
+    const user = userEvent.setup()
+    const operationSearches: string[] = []
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => {
+        operationSearches.push(params?.search ?? '')
+        return {
+          items: params?.search === 'PKO' ? [createFinancialOperation({ id: 'operation-search', documentNumber: 'PKO-77', amount: 770 })] : [],
+          totalCount: params?.search === 'PKO' ? 1 : 0,
+          offset: params?.offset ?? 0,
+          limit: params?.limit ?? 25,
+        }
+      },
+      getSummary: async () => ({ incomeTotal: 770, expenseTotal: 0, accrualTotal: 0, balance: 770, debt: -770, operationCount: 1, accrualCount: 0, meterReadingCount: 0 }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.type(within(financePanel).getByLabelText('Поиск по платежам'), 'PKO')
+
+    await within(financePanel).findByText('PKO-77')
+    const appliedSearches = operationSearches.filter(Boolean)
+    expect(new Set(appliedSearches)).toEqual(new Set(['PKO']))
+  })
+
   it('cancels income operation with required reason from payments workspace', async () => {
     const user = userEvent.setup()
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный документ')

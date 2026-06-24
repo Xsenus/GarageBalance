@@ -1390,6 +1390,7 @@ function FinancePanel({
   const [incomeGarageSearchStatus, setIncomeGarageSearchStatus] = useState<string | null>(null)
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>('income')
   const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
+  const [financeSearchInput, setFinanceSearchInput] = useState('')
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
@@ -1493,6 +1494,14 @@ function FinancePanel({
     window.addEventListener('click', handleWindowClick)
     return () => window.removeEventListener('click', handleWindowClick)
   }, [])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setFinanceFilter((value) => (value.search === financeSearchInput ? value : { ...value, search: financeSearchInput }))
+    }, 350)
+
+    return () => window.clearTimeout(handle)
+  }, [financeSearchInput])
 
   const loadFinanceWorkbench = useCallback(async (section: FinanceSectionKey, offset: number, limit: number) => {
     setLoading(true)
@@ -2663,7 +2672,7 @@ function FinancePanel({
           </div>
           <label className="dictionary-search">
             <Search size={16} aria-hidden="true" />
-            <input aria-label="Поиск по платежам" placeholder="Гараж, владелец, поставщик или документ" value={financeFilter.search} onChange={(event) => setFinanceFilter((value) => ({ ...value, search: event.target.value }))} />
+            <input aria-label="Поиск по платежам" placeholder="Гараж, владелец, поставщик или документ" value={financeSearchInput} onChange={(event) => setFinanceSearchInput(event.target.value)} />
           </label>
           <div className="finance-toolbar-actions">
             {activeFinanceSection === 'accruals' ? (
