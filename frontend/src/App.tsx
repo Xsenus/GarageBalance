@@ -2230,7 +2230,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 </div>
               </div>
             </>
-          ) : <p className="empty-state" aria-live="polite">Выберите запуск dry-run</p>}
+          ) : <p className="empty-state" role="status" aria-live="polite">Выберите запуск dry-run</p>}
         </div>
 
         <div className="operation-list" role="table" aria-label="Проверки импорта">
@@ -2239,7 +2239,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span role="columnheader">Статус</span>
             <span role="columnheader">Итог</span>
           </div>
-          {!currentRun ? <p className="empty-state" aria-live="polite">Проверок пока нет</p> : null}
+          {!currentRun ? <p className="empty-state" role="status" aria-live="polite">Проверок пока нет</p> : null}
           {currentRun?.checks.map((check) => (
             <div className="operation-row" role="row" key={check.code}>
               <span role="cell">
@@ -2260,8 +2260,8 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span role="columnheader">Уровень</span>
             <span role="columnheader">Сообщение</span>
           </div>
-          {loadingLog ? <p className="empty-state" aria-live="polite">Загрузка лога...</p> : null}
-          {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
+          {loadingLog ? <p className="empty-state" role="status" aria-live="polite">Загрузка лога...</p> : null}
+          {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
           {visibleRunLogEntries.map((entry) => (
             <div className="operation-row" role="row" key={entry.id}>
               <span role="cell">
@@ -2274,7 +2274,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               <span role="cell">{entry.message}</span>
             </div>
           ))}
-          {runLogEntries.length > visibleRunLogEntries.length ? <p className="empty-state" aria-live="polite">Показано {visibleRunLogEntries.length} из {runLogEntries.length} строк лога</p> : null}
+          {runLogEntries.length > visibleRunLogEntries.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleRunLogEntries.length} из {runLogEntries.length} строк лога</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="История импорта Access">
@@ -2283,7 +2283,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span role="columnheader">Статус</span>
             <span role="columnheader">Проверки</span>
           </div>
-          {runs.length === 0 ? <p className="empty-state" aria-live="polite">Истории импорта пока нет</p> : null}
+          {runs.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Истории импорта пока нет</p> : null}
           {visibleRuns.map((run) => (
             <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
               <span role="cell">
@@ -2298,7 +2298,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               </span>
             </button>
           ))}
-          {runs.length > visibleRuns.length ? <p className="empty-state" aria-live="polite">Показано {visibleRuns.length} из {runs.length} запусков</p> : null}
+          {runs.length > visibleRuns.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleRuns.length} из {runs.length} запусков</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Карантин импорта Access">
@@ -2307,7 +2307,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span role="columnheader">Причина</span>
             <span role="columnheader">Действие</span>
           </div>
-          {quarantineItems.length === 0 ? <p className="empty-state" aria-live="polite">Открытых строк карантина нет</p> : null}
+          {quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
           {visibleQuarantineItems.map((item) => (
             <div className="operation-row" role="row" key={item.id}>
               <span role="cell">
@@ -2326,7 +2326,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               </span>
             </div>
           ))}
-          {quarantineItems.length > visibleQuarantineItems.length ? <p className="empty-state" aria-live="polite">Показано {visibleQuarantineItems.length} из {quarantineItems.length} строк карантина</p> : null}
+          {quarantineItems.length > visibleQuarantineItems.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleQuarantineItems.length} из {quarantineItems.length} строк карантина</p> : null}
         </div>
       </div>
     </section>

@@ -1505,9 +1505,15 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
-    expect(await within(importPanel).findByText('Показано 10 из 11 строк лога')).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('Показано 8 из 9 запусков')).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('Показано 8 из 9 строк карантина')).toHaveAttribute('aria-live', 'polite')
+    const logCounter = await within(importPanel).findByText('Показано 10 из 11 строк лога')
+    const runCounter = within(importPanel).getByText('Показано 8 из 9 запусков')
+    const quarantineCounter = within(importPanel).getByText('Показано 8 из 9 строк карантина')
+    expect(logCounter).toHaveAttribute('role', 'status')
+    expect(logCounter).toHaveAttribute('aria-live', 'polite')
+    expect(runCounter).toHaveAttribute('role', 'status')
+    expect(runCounter).toHaveAttribute('aria-live', 'polite')
+    expect(quarantineCounter).toHaveAttribute('role', 'status')
+    expect(quarantineCounter).toHaveAttribute('aria-live', 'polite')
     expect(within(importPanel).getByText('step_10')).toBeInTheDocument()
     expect(within(importPanel).queryByText('step_11')).not.toBeInTheDocument()
     expect(quarantineLimit).toBe(50)
@@ -1525,11 +1531,15 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
-    expect(await within(importPanel).findByText('Выберите запуск dry-run')).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('Проверок пока нет')).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('Лог выбранного запуска пока пуст')).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('Истории импорта пока нет')).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('Открытых строк карантина нет')).toHaveAttribute('aria-live', 'polite')
+    const emptyRunState = await within(importPanel).findByText('Выберите запуск dry-run')
+    const emptyCheckState = within(importPanel).getByText('Проверок пока нет')
+    const emptyLogState = within(importPanel).getByText('Лог выбранного запуска пока пуст')
+    const emptyHistoryState = within(importPanel).getByText('Истории импорта пока нет')
+    const emptyQuarantineState = within(importPanel).getByText('Открытых строк карантина нет')
+    for (const state of [emptyRunState, emptyCheckState, emptyLogState, emptyHistoryState, emptyQuarantineState]) {
+      expect(state).toHaveAttribute('role', 'status')
+      expect(state).toHaveAttribute('aria-live', 'polite')
+    }
   })
 
   it('shows and resolves Access import quarantine rows', async () => {
@@ -1560,7 +1570,9 @@ describe('App', () => {
 
     expect(await within(importPanel).findByText('Строка карантина закрыта.')).toHaveAttribute('role', 'status')
     expect(within(quarantineTable).queryByText('Garage #42')).not.toBeInTheDocument()
-    expect(within(quarantineTable).getByText('Открытых строк карантина нет')).toHaveAttribute('aria-live', 'polite')
+    const emptyQuarantineState = within(quarantineTable).getByText('Открытых строк карантина нет')
+    expect(emptyQuarantineState).toHaveAttribute('role', 'status')
+    expect(emptyQuarantineState).toHaveAttribute('aria-live', 'polite')
   })
 
   it('shows audit journal for users with audit permission', async () => {
