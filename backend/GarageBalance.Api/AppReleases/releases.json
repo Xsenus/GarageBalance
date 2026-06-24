@@ -1,5 +1,30 @@
 [
   {
+    "releaseId": "2026-06-24-frontend-nginx-cache-policy",
+    "version": "0.95.0",
+    "publishedAt": "2026-06-24T07:15:00+07:00",
+    "title": "Frontend-защита от старого кэша",
+    "summary": "Docker-nginx теперь отдает HTML-оболочку без устаревшего кэша, сохраняя быстрый кэш для assets.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "index.html и SPA fallback получают Cache-Control: no-store, no-cache, must-revalidate, max-age=0."
+      },
+      {
+        "type": "improved",
+        "text": "Для HTML-оболочки отключены etag и if_modified_since, чтобы браузер не получал 304 после обновления приложения."
+      },
+      {
+        "type": "improved",
+        "text": "Хэшированные файлы /assets/* остаются кэшируемыми на 30 дней с immutable, чтобы не ухудшать скорость загрузки."
+      },
+      {
+        "type": "improved",
+        "text": "Добавлен Vitest-тест, который фиксирует cache policy Docker-nginx конфигурации."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-russian-document-metadata",
     "version": "0.94.0",
     "publishedAt": "2026-06-24T06:45:00+07:00",

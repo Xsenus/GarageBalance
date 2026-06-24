@@ -323,7 +323,7 @@
 
 ## Этап 11. Docker, Размещение И Финальная Сдача
 
-- `[ ]` Актуализировать Dockerfile API и frontend.
+- `[~]` Актуализировать Dockerfile API и frontend. Frontend nginx уже разделяет кэширование HTML-оболочки и хэшированных assets: `index.html`/SPA fallback без кэша, `/assets/*` с immutable; API Dockerfile и финальная упаковка впереди.
 - `[ ]` Актуализировать `docker-compose.yml` под финальную структуру.
 - `[ ]` Подготовить инструкцию локальной установки на ПК заказчика.
 - `[ ]` Подготовить инструкцию VPS/domain deployment.
@@ -362,6 +362,8 @@
 - `[decision]` Нужно подтвердить стратегию резервного копирования для локальной установки: куда складывать backup и кто отвечает за проверку восстановления.
 
 ## История выполнения
+
+- `[x]` 24.06.2026: frontend Docker-nginx получил cache policy для SPA, чтобы телефон или прокси не оставались на старой HTML-оболочке после обновления стенда. В `frontend/nginx.conf` добавлен отдельный `location = /index.html` с `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`, `etag off` и `if_modified_since off`; тот же no-store применяется к SPA fallback в `location /`. Для `/assets/*` добавлен отдельный блок с `expires 30d` и `Cache-Control: public, max-age=2592000, immutable`, потому что Vite собирает хэшированные JS/CSS и их можно кэшировать долго без риска старой оболочки. Добавлен `frontend/src/nginxConfig.test.ts`, который проверяет no-store для HTML, отключение conditional 304 и immutable-cache для assets. README описывает правило, в "Что нового" добавлена версия `0.95.0`. Проверено через профильный `npm run test -- --runInBand --testNamePattern="frontend nginx config"` (47 frontend-тестов; Vitest выполнил все test-файлы при фильтре имени), полный `dotnet test` (220 backend-тестов), полный `npm run test -- --runInBand` (47 frontend-тестов), `npm run build`, `npm run lint`, `dotnet format --verify-no-changes`, генерацию idempotent EF migration script, `git diff --check`, JSON-валидацию `releases.json` и строгую UTF-8 no-BOM проверку 5 измененных файлов. Схема БД не менялась; локальный PostgreSQL недоступен (`postgresTcp=False; psql=False; docker=False`), поэтому живой прогон на локальной БД в этом окружении выполнить нельзя.
 
 - `[x]` 24.06.2026: production-оболочка frontend получила русскоязычную metadata, чтобы тестовый стенд и будущая production-сборка не выглядели как шаблонный Vite/frontend-проект. В `frontend/index.html` изменен `lang` с `en` на `ru`, а заголовок вкладки заменен с `frontend` на `GarageBalance - учет ГСК`. Добавлен `frontend/src/indexMetadata.test.ts`, который читает HTML-шаблон и проверяет `lang`, `viewport` и `title`, чтобы это не откатилось при следующих сборках. README описывает новое правило, в "Что нового" добавлена версия `0.94.0`. Проверено через профильный `npm run test -- --runInBand --testNamePattern="index.html metadata"` (45 frontend-тестов; Vitest выполнил оба test-файла при фильтре имени), полный `dotnet test` (220 backend-тестов), полный `npm run test -- --runInBand` (45 frontend-тестов), `npm run build`, `npm run lint`, `dotnet format --verify-no-changes`, генерацию idempotent EF migration script, `git diff --check`, JSON-валидацию `releases.json` и строгую UTF-8 no-BOM проверку 5 измененных файлов. Схема БД не менялась; локальный PostgreSQL недоступен (`postgresTcp=False; psql=False; docker=False`), поэтому живой прогон на локальной БД в этом окружении выполнить нельзя.
 
