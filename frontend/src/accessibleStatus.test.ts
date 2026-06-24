@@ -59,4 +59,29 @@ describe('accessible dynamic messages', () => {
       expect(appSource).toContain(`id="${hint.id}">${hint.text}</p>`)
     }
   })
+
+  it('keeps report export buttons out of filter form submission', () => {
+    const reportExportButtons = [
+      'Скачать сводный XLSX',
+      'Скачать сводный PDF',
+      'Скачать поступления XLSX',
+      'Скачать поступления PDF',
+      'Скачать выплаты XLSX',
+      'Скачать выплаты PDF',
+    ]
+
+    for (const label of reportExportButtons) {
+      const labelIndex = appSource.indexOf(`'${label}'`)
+      expect(labelIndex).toBeGreaterThan(-1)
+
+      const buttonStart = appSource.lastIndexOf('<button', labelIndex)
+      const buttonEnd = appSource.indexOf('</button>', labelIndex)
+      expect(buttonStart).toBeGreaterThan(-1)
+      expect(buttonEnd).toBeGreaterThan(labelIndex)
+
+      const buttonSource = appSource.slice(buttonStart, buttonEnd)
+      expect(buttonSource).toContain('className="secondary-button"')
+      expect(buttonSource).toContain('type="button"')
+    }
+  })
 })
