@@ -29,6 +29,25 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
+    {
+        var source = ReadApiSource("Application/Finance/FinanceService.cs");
+
+        Assert.True(
+            CountOccurrences(source, "CountAsync(cancellationToken)") >= 4,
+            "Finance page queries must return total counts without materializing full result sets.");
+        Assert.True(
+            CountOccurrences(source, ".Skip(normalizedOffset)") >= 4,
+            "Finance page queries must apply server-side offset before materialization.");
+        Assert.True(
+            CountOccurrences(source, ".Take(normalizedLimit)") >= 4,
+            "Finance page queries must apply server-side limit before materialization.");
+        Assert.True(
+            CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 8,
+            "Finance list queries should materialize only after ordering and server-side bounds.");
+    }
+
+    [Fact]
     public void ImportSqliteFallbacks_AreExplicitlyScopedToTestProviderAndStillApplyLimit()
     {
         var source = ReadApiSource("Application/Import/ImportService.cs");
