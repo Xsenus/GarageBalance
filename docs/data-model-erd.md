@@ -26,6 +26,7 @@ erDiagram
 
     app_users ||--o{ audit_events : actor
     access_import_runs ||--o{ audit_events : audited
+    integration_secret_settings ||--o{ audit_events : audited
 
     owners {
         uuid Id PK
@@ -182,6 +183,18 @@ erDiagram
         jsonb ReportJson
         timestamp StartedAtUtc
     }
+
+    integration_secret_settings {
+        uuid Id PK
+        string Provider
+        string SettingKey
+        string NormalizedProvider
+        string NormalizedSettingKey
+        string Purpose
+        string ProtectedValue
+        timestamp UpdatedAtUtc
+        uuid UpdatedByUserId
+    }
 ```
 
 ## Справочники
@@ -214,6 +227,7 @@ erDiagram
 
 - `audit_events` - журнал действий. Индексы: `CreatedAtUtc`, `EntityType + EntityId`. События не должны раскрывать пароли, токены, `.env`, дампы и персональные финансовые выгрузки.
 - `access_import_runs` - dry-run и будущие запуски импорта Access. Индексы: `StartedAtUtc`, `Status`, `ContentSha256`. Полный отчет хранится в `ReportJson` как `jsonb`.
+- `integration_secret_settings` - зашифрованные секреты будущих интеграций 1C Fresh, фискального оборудования и похожих адаптеров. `ProtectedValue` хранится только в формате `gb:protected:v1:...`, `Purpose` разделяет секреты по назначению, уникальность задается через `NormalizedProvider + NormalizedSettingKey`, индексы покрывают `Provider` и `UpdatedAtUtc`.
 
 ## Правила Расширения Схемы
 

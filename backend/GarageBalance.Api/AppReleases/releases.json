@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-integration-secret-settings",
+    "version": "0.115.0",
+    "publishedAt": "2026-06-24T09:15:00+07:00",
+    "title": "Добавлено хранилище секретов интеграций",
+    "summary": "Backend получил PostgreSQL-таблицу и сервис для безопасного хранения будущих токенов 1C Fresh, фискального оборудования и других интеграций.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлена таблица integration_secret_settings с зашифрованным ProtectedValue, purpose и уникальностью provider/key без учета регистра."
+      },
+      {
+        "type": "added",
+        "text": "Добавлен IIntegrationSecretSettingsService: запись шифрует plaintext, чтение расшифровывает только сервисному коду, metadata не содержит секрет."
+      },
+      {
+        "type": "added",
+        "text": "Запись секрета пишет audit-событие integration.secret_upserted без попадания plaintext в журнал."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-sensitive-data-protector",
     "version": "0.114.0",
     "publishedAt": "2026-06-24T09:05:00+07:00",

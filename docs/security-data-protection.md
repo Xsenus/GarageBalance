@@ -46,7 +46,7 @@
 3. Rotation ключей должен иметь план: новый ключ для новых записей, безопасная миграция старых значений и audit-событие администраторского действия.
 4. Логи ошибок шифрования не должны содержать plaintext секретов.
 5. Тесты должны проверять, что секретное значение не возвращается из API, не попадает в audit summary и не пишется в release/debug output.
-6. Для интеграционных секретов использовать `ISensitiveDataProtector`: сохранять только значения с префиксом `gb:protected:v1:`, разделять токены по purpose (`OneCFresh.Token`, `FiscalPrinter.Token`) и настраивать `DataProtection:KeysPath` на стендах, где ключи должны переживать перезапуск.
+6. Для интеграционных секретов использовать `ISensitiveDataProtector` и `IIntegrationSecretSettingsService`: сохранять в `integration_secret_settings` только значения с префиксом `gb:protected:v1:`, разделять токены по purpose (`OneCFresh.Token`, `FiscalPrinter.Token`) и настраивать `DataProtection:KeysPath` на стендах, где ключи должны переживать перезапуск.
 
 ## Acceptance-Критерии
 

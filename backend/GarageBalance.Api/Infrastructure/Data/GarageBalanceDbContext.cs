@@ -3,6 +3,7 @@ using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Import;
+using GarageBalance.Api.Domain.Integrations;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -27,6 +28,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
+    public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -287,6 +289,23 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(run => run.StartedAtUtc);
             entity.HasIndex(run => run.Status);
             entity.HasIndex(run => run.ContentSha256);
+        });
+
+        modelBuilder.Entity<IntegrationSecretSetting>(entity =>
+        {
+            entity.ToTable("integration_secret_settings");
+            entity.HasKey(setting => setting.Id);
+            entity.Property(setting => setting.Provider).HasMaxLength(100).IsRequired();
+            entity.Property(setting => setting.SettingKey).HasMaxLength(120).IsRequired();
+            entity.Property(setting => setting.NormalizedProvider).HasMaxLength(100).IsRequired();
+            entity.Property(setting => setting.NormalizedSettingKey).HasMaxLength(120).IsRequired();
+            entity.Property(setting => setting.Purpose).HasMaxLength(240).IsRequired();
+            entity.Property(setting => setting.ProtectedValue).HasColumnType("text").IsRequired();
+            entity.HasIndex(setting => new { setting.NormalizedProvider, setting.NormalizedSettingKey })
+                .IsUnique()
+                .HasDatabaseName("IX_integration_secret_settings_provider_key");
+            entity.HasIndex(setting => setting.Provider);
+            entity.HasIndex(setting => setting.UpdatedAtUtc);
         });
     }
 }
