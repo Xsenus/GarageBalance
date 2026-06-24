@@ -2773,6 +2773,87 @@ describe('App', () => {
     expect(within(reportsPanel).queryByText(/RKO-1/)).not.toBeInTheDocument()
   })
 
+  it('shows report summary totals from API even when visible rows are limited', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient({
+      getConsolidatedReport: async () => createConsolidatedReport({
+        accrualTotal: 9999,
+        incomeTotal: 7777,
+        expenseTotal: 3333,
+        balance: 4444,
+        debt: 2222,
+        garageRowCount: 25,
+        garageRows: [
+          {
+            garageId: 'garage-visible',
+            garageNumber: '1',
+            ownerName: 'Видимый владелец',
+            accrualTotal: 100,
+            incomeTotal: 50,
+            debt: 50,
+            meterReadingCount: 1,
+          },
+        ],
+      }),
+      getIncomeReport: async () => createIncomeReport({
+        accrualTotal: 8888,
+        incomeTotal: 5555,
+        debt: 3333,
+        rowCount: 20,
+        rows: [
+          {
+            ...createIncomeReport().rows[0],
+            accrualAmount: 100,
+            incomeAmount: 0,
+            debt: 100,
+          },
+        ],
+      }),
+      getExpenseReport: async () => createExpenseReport({
+        accrualTotal: 6666,
+        expenseTotal: 4444,
+        difference: 2222,
+        rowCount: 20,
+        rows: [
+          {
+            ...createExpenseReport().rows[0],
+            accrualAmount: 100,
+            expenseAmount: 50,
+            difference: 50,
+          },
+        ],
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    const consolidatedSummary = within(reportsPanel).getByLabelText('Итоги отчета')
+    expect(await within(consolidatedSummary).findByText('9 999,00')).toBeInTheDocument()
+    expect(within(consolidatedSummary).getByText('7 777,00')).toBeInTheDocument()
+    expect(within(consolidatedSummary).getByText('3 333,00')).toBeInTheDocument()
+    expect(within(consolidatedSummary).getByText('4 444,00')).toBeInTheDocument()
+    expect(within(consolidatedSummary).getByText('2 222,00')).toBeInTheDocument()
+    expect(await within(reportsPanel).findByText('Показано 1 из 25 строк')).toHaveAttribute('role', 'status')
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    const incomeSummary = within(reportsPanel).getByLabelText('Итоги отчета по поступлениям')
+    expect(await within(incomeSummary).findByText('8 888,00')).toBeInTheDocument()
+    expect(within(incomeSummary).getByText('5 555,00')).toBeInTheDocument()
+    expect(within(incomeSummary).getByText('3 333,00')).toBeInTheDocument()
+    expect(await within(reportsPanel).findByText('Показано 1 из 20 строк')).toHaveAttribute('role', 'status')
+
+    await openReportTab(user, reportsPanel, 'Выплаты')
+    const expenseSummary = within(reportsPanel).getByLabelText('Итоги отчета по выплатам')
+    expect(await within(expenseSummary).findByText('6 666,00')).toBeInTheDocument()
+    expect(within(expenseSummary).getByText('4 444,00')).toBeInTheDocument()
+    expect(within(expenseSummary).getByText('2 222,00')).toBeInTheDocument()
+    expect(await within(reportsPanel).findByText('Показано 1 из 20 строк')).toHaveAttribute('role', 'status')
+  })
+
   it('shows income report and applies income filters', async () => {
     const user = userEvent.setup()
     let incomeRequest: Parameters<ReportClient['getIncomeReport']>[1] = undefined
