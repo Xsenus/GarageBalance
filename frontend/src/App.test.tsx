@@ -2113,7 +2113,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
-    expect(await within(releasePanel).findByText('Пока нет опубликованных изменений.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(releasePanel).findByText('Пока нет опубликованных изменений.')).toHaveAttribute('role', 'status')
   })
 
   it('announces release notes loading status for authenticated users', async () => {
@@ -2128,7 +2128,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
 
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
-    expect(await within(releasePanel).findByText('Загружаем историю обновлений...')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(releasePanel).findByText('Загружаем историю обновлений...')).toHaveAttribute('role', 'status')
 
     resolveReleases([createAppRelease()])
     expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
