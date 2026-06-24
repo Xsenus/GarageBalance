@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-frontend-bundle-budget",
+    "version": "0.132.0",
+    "publishedAt": "2026-06-24T13:15:00+07:00",
+    "title": "Добавлен контроль размера frontend-сборки",
+    "summary": "Production bundle теперь проверяется отдельной командой, чтобы новые зависимости не замедляли интерфейс незаметно.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлена команда npm run check:bundle для проверки gzip-бюджета JS/CSS после npm run build."
+      },
+      {
+        "type": "changed",
+        "text": "Закреплены бюджеты: основной JS до 180 KiB gzip, основной CSS до 40 KiB gzip и все JS/CSS assets до 260 KiB gzip."
+      },
+      {
+        "type": "fixed",
+        "text": "Пункт roadmap про контроль frontend bundle теперь проверяется автоматически и покрыт тестом."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-import-quarantine-limit",
     "version": "0.131.0",
     "publishedAt": "2026-06-24T13:00:00+07:00",
