@@ -106,7 +106,9 @@ describe('App', () => {
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
 
-    expect(await within(usersTable).findByText('Показано 8 из 9 пользователей')).toHaveAttribute('aria-live', 'polite')
+    const visibleUserCounter = await within(usersTable).findByText('Показано 8 из 9 пользователей')
+    expect(visibleUserCounter).toHaveAttribute('role', 'status')
+    expect(visibleUserCounter).toHaveAttribute('aria-live', 'polite')
     expect(within(usersTable).getByText('Сотрудник 8')).toBeInTheDocument()
     expect(within(usersTable).queryByText('Сотрудник 9')).not.toBeInTheDocument()
     expect(requestedLimit).toBe(50)
@@ -126,8 +128,12 @@ describe('App', () => {
     const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
     const roleTable = within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })
 
-    expect(await within(usersTable).findByText('Пользователей пока нет')).toHaveAttribute('aria-live', 'polite')
-    expect(within(roleTable).getByText('Роли пока не загружены')).toHaveAttribute('aria-live', 'polite')
+    const emptyUsersState = await within(usersTable).findByText('Пользователей пока нет')
+    const emptyRolesState = within(roleTable).getByText('Роли пока не загружены')
+    expect(emptyUsersState).toHaveAttribute('role', 'status')
+    expect(emptyUsersState).toHaveAttribute('aria-live', 'polite')
+    expect(emptyRolesState).toHaveAttribute('role', 'status')
+    expect(emptyRolesState).toHaveAttribute('aria-live', 'polite')
   })
 
   it('changes current user password from the workspace', async () => {

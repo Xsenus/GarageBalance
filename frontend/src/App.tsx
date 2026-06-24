@@ -3229,7 +3229,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <span role="columnheader">Роли</span>
             <span role="columnheader">Статус</span>
           </div>
-          {users.length === 0 ? <p className="empty-state" aria-live="polite">Пользователей пока нет</p> : null}
+          {users.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Пользователей пока нет</p> : null}
           {visibleUsers.map((user) => (
             <div className="user-table-row" role="row" key={user.id}>
               <span role="cell">
@@ -3242,7 +3242,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
               </span>
             </div>
           ))}
-          {users.length > visibleUsers.length ? <p className="empty-state" aria-live="polite">Показано {visibleUsers.length} из {users.length} пользователей</p> : null}
+          {users.length > visibleUsers.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleUsers.length} из {users.length} пользователей</p> : null}
         </div>
       </div>
 
@@ -3269,7 +3269,7 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
             <span role="columnheader" key={group.permission}>{group.label}</span>
           ))}
         </div>
-        {roles.length === 0 ? <p className="empty-state" aria-live="polite">Роли пока не загружены</p> : null}
+        {roles.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Роли пока не загружены</p> : null}
         {roles.map((role) => (
           <div className="role-matrix-row" role="row" key={role.code}>
             <span role="cell">
