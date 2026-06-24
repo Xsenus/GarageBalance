@@ -756,6 +756,34 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Исходная ручная сумма"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateAccrualAsync(
+            created.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 750m, "manual", "Исправили после сверки"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("было 700,00 по гаражу 12 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual; комментарий Исходная ручная сумма", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 750,00 по гаражу 12 за 07.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual; комментарий Исправили после сверки", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreateAccrualAsync_RejectsDuplicateGarageTypeMonthAndSource()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -914,6 +942,34 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_accrual_regular_edit_comment_required", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task UpdateSupplierAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-old", "Исходный счет"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateSupplierAccrualAsync(
+            created.Value!.Id,
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), 1250m, "manual", "INV-new", "Уточненный счет"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("было 1200,00 поставщику Vodokanal за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.ExpenseType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual; документ INV-old; комментарий Исходный счет", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 1250,00 поставщику Vodokanal за 07.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual; документ INV-new; комментарий Уточненный счет", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -644,6 +644,8 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
         }
 
+        var before = AccrualAuditSnapshot.From(accrual);
+
         accrual.GarageId = garage.Id;
         accrual.Garage = garage;
         accrual.IncomeTypeId = incomeType.Id;
@@ -653,7 +655,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         accrual.Source = source;
         accrual.Comment = NormalizeOptional(request.Comment);
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.accrual_updated", "accrual", accrual.Id, FormatAccrualUpdatedAuditSummary(accrual));
+        AddAudit(actorUserId, "finance.accrual_updated", "accrual", accrual.Id, FormatAccrualUpdatedAuditSummary(before, accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -776,6 +778,8 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
         }
 
+        var before = SupplierAccrualAuditSnapshot.From(accrual);
+
         accrual.SupplierId = supplier.Id;
         accrual.Supplier = supplier;
         accrual.ExpenseTypeId = expenseType.Id;
@@ -786,7 +790,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         accrual.DocumentNumber = documentNumber;
         accrual.Comment = NormalizeOptional(request.Comment);
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.supplier_accrual_updated", "supplier_accrual", accrual.Id, FormatSupplierAccrualUpdatedAuditSummary(accrual));
+        AddAudit(actorUserId, "finance.supplier_accrual_updated", "supplier_accrual", accrual.Id, FormatSupplierAccrualUpdatedAuditSummary(before, accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -1265,12 +1269,9 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
-    private static string FormatAccrualUpdatedAuditSummary(Accrual accrual)
+    private static string FormatAccrualUpdatedAuditSummary(AccrualAuditSnapshot before, Accrual accrual)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
-        var comment = NormalizeOptional(accrual.Comment);
-        var summary = $"Изменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
-        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+        return $"Изменено начисление: было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.";
     }
 
     private static string FormatAccrualCanceledAuditSummary(Accrual accrual, string reason)
@@ -1288,13 +1289,26 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
-    private static string FormatSupplierAccrualUpdatedAuditSummary(SupplierAccrual accrual)
+    private static string FormatSupplierAccrualUpdatedAuditSummary(SupplierAccrualAuditSnapshot before, SupplierAccrual accrual)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
-        var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
-        var comment = NormalizeOptional(accrual.Comment);
-        var summary = $"Изменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
-        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+        return $"Изменено начисление поставщику: было {FormatSupplierAccrualSnapshot(before)}; стало {FormatSupplierAccrualSnapshot(SupplierAccrualAuditSnapshot.From(accrual))}.";
+    }
+
+    private static string FormatAccrualSnapshot(AccrualAuditSnapshot snapshot)
+    {
+        var amount = snapshot.Amount.ToString("0.00", RussianCulture);
+        var comment = NormalizeOptional(snapshot.Comment);
+        var summary = $"{amount} по гаражу {snapshot.GarageNumber} за {snapshot.AccountingMonth:MM.yyyy}; вид {snapshot.IncomeTypeName}; источник {snapshot.Source}";
+        return comment is null ? summary : $"{summary}; комментарий {comment}";
+    }
+
+    private static string FormatSupplierAccrualSnapshot(SupplierAccrualAuditSnapshot snapshot)
+    {
+        var amount = snapshot.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(snapshot.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(snapshot.Comment);
+        var summary = $"{amount} поставщику {snapshot.SupplierName} за {snapshot.AccountingMonth:MM.yyyy}; вид {snapshot.ExpenseTypeName}; источник {snapshot.Source}; документ {document}";
+        return comment is null ? summary : $"{summary}; комментарий {comment}";
     }
 
     private static string FormatSupplierAccrualCanceledAuditSummary(SupplierAccrual accrual, string reason)
@@ -1849,6 +1863,48 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     }
 
     private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
+
+    private sealed record AccrualAuditSnapshot(
+        string GarageNumber,
+        string IncomeTypeName,
+        DateOnly AccountingMonth,
+        decimal Amount,
+        string Source,
+        string? Comment)
+    {
+        public static AccrualAuditSnapshot From(Accrual accrual)
+        {
+            return new AccrualAuditSnapshot(
+                accrual.Garage.Number,
+                accrual.IncomeType.Name,
+                accrual.AccountingMonth,
+                accrual.Amount,
+                accrual.Source,
+                accrual.Comment);
+        }
+    }
+
+    private sealed record SupplierAccrualAuditSnapshot(
+        string SupplierName,
+        string ExpenseTypeName,
+        DateOnly AccountingMonth,
+        decimal Amount,
+        string Source,
+        string? DocumentNumber,
+        string? Comment)
+    {
+        public static SupplierAccrualAuditSnapshot From(SupplierAccrual accrual)
+        {
+            return new SupplierAccrualAuditSnapshot(
+                accrual.Supplier.Name,
+                accrual.ExpenseType.Name,
+                accrual.AccountingMonth,
+                accrual.Amount,
+                accrual.Source,
+                accrual.DocumentNumber,
+                accrual.Comment);
+        }
+    }
 
     private static AccrualDto ToDto(Accrual accrual)
     {
