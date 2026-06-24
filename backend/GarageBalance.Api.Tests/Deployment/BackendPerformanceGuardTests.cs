@@ -48,6 +48,27 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ScreenReportQueries_UseDatabaseLimitsForVisibleRows()
+    {
+        var source = ReadApiSource("Application/Reports/ReportService.cs");
+
+        Assert.Contains("GetIncomeReportWithoutSearchAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportWithoutSearchAsync", source, StringComparison.Ordinal);
+        Assert.True(
+            CountOccurrences(source, "ApplyReportRowLimit(") >= 6,
+            "Screen report visible rows must be bounded before materialization for income, expense, accrual and starting-balance segments.");
+        Assert.True(
+            CountOccurrences(source, ".Take(NormalizeReportLimit(limit.Value))") >= 1,
+            "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
+        Assert.True(
+            CountOccurrences(source, "CountAsync(cancellationToken)") >= 6,
+            "Report totals must keep total row counts without materializing every visible-row candidate.");
+        Assert.True(
+            CountOccurrences(source, "SumAsync(") >= 6,
+            "Report totals must be aggregated in the database instead of being derived only from materialized rows.");
+    }
+
+    [Fact]
     public void ImportSqliteFallbacks_AreExplicitlyScopedToTestProviderAndStillApplyLimit()
     {
         var source = ReadApiSource("Application/Import/ImportService.cs");
