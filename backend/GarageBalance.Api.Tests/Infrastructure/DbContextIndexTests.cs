@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,6 +25,25 @@ public sealed class DbContextIndexTests
         Assert.Contains(
             entity!.GetIndexes(),
             index => index.Properties.Select(property => property.Name).SequenceEqual(propertyNames));
+    }
+
+    [Theory]
+    [InlineData(typeof(FinancialOperation), "\"IsCanceled\" = false AND \"DocumentNumber\" IS NOT NULL", nameof(FinancialOperation.OperationKind), nameof(FinancialOperation.OperationDate), nameof(FinancialOperation.DocumentNumber))]
+    [InlineData(typeof(Accrual), "\"IsCanceled\" = false", nameof(Accrual.GarageId), nameof(Accrual.IncomeTypeId), nameof(Accrual.AccountingMonth), nameof(Accrual.Source))]
+    [InlineData(typeof(SupplierAccrual), "\"IsCanceled\" = false", nameof(SupplierAccrual.SupplierId), nameof(SupplierAccrual.ExpenseTypeId), nameof(SupplierAccrual.AccountingMonth), nameof(SupplierAccrual.Source), nameof(SupplierAccrual.DocumentNumber))]
+    [InlineData(typeof(MeterReading), "\"IsCanceled\" = false", nameof(MeterReading.GarageId), nameof(MeterReading.MeterKind), nameof(MeterReading.AccountingMonth))]
+    public void ActiveFinanceEntries_HavePartialUniqueIndexes(Type entityType, string filter, params string[] propertyNames)
+    {
+        using var context = CreateContext();
+        var entity = context.Model.FindEntityType(entityType);
+
+        Assert.NotNull(entity);
+        Assert.Contains(
+            entity!.GetIndexes(),
+            index =>
+                index.IsUnique &&
+                index.GetFilter() == filter &&
+                index.Properties.Select(property => property.Name).SequenceEqual(propertyNames));
     }
 
     private static GarageBalanceDbContext CreateContext()
