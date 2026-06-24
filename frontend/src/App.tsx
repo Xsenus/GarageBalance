@@ -1757,7 +1757,7 @@ function FinancePanel({
             <Plus size={16} />
             <span>Создать месяц</span>
           </button>
-          {regularStatus ? <p className="empty-state">{regularStatus}</p> : null}
+          {regularStatus ? <p className="empty-state" aria-live="polite">{regularStatus}</p> : null}
         </form>
 
         <form className="dictionary-form" onSubmit={saveMeterReading}>

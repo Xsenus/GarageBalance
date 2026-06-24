@@ -1378,7 +1378,7 @@ describe('App', () => {
     await user.type(within(financePanel).getByLabelText('Комментарий регулярных начислений'), 'Начисление за месяц')
     await user.click(within(financePanel).getByRole('button', { name: 'Создать месяц' }))
 
-    expect(await within(financePanel).findByText('Создано 1, пропущено 0')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('Создано 1, пропущено 0')).toHaveAttribute('aria-live', 'polite')
     expect((await within(financePanel).findAllByText('300,00')).length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
