@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-24-favicon-static-asset",
+    "version": "0.126.0",
+    "publishedAt": "2026-06-24T11:45:00+07:00",
+    "title": "Исправлена иконка сайта",
+    "summary": "Frontend теперь поставляет favicon.svg, на который ссылается страница приложения.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "Путь /favicon.svg больше не должен отдавать HTML-страницу вместо SVG-иконки."
+      },
+      {
+        "type": "changed",
+        "text": "Добавлен тест, который закрепляет наличие favicon в статических файлах frontend."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-audit-visible-counter",
     "version": "0.125.0",
     "publishedAt": "2026-06-24T11:30:00+07:00",

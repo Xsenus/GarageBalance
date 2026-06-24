@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GarageBalance">
+  <rect width="64" height="64" rx="14" fill="#1f4fd8" />
+  <path d="M12 32 32 15l20 17v18a3 3 0 0 1-3 3H15a3 3 0 0 1-3-3V32Z" fill="#f8fafc" />
+  <path d="M22 53V34h20v19" fill="#c7d2fe" />
+  <path d="M24 39h16M24 45h16" stroke="#1f4fd8" stroke-width="4" stroke-linecap="round" />
+</svg>
