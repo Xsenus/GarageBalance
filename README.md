@@ -175,6 +175,8 @@ docker compose up --build
 
 API Dockerfile собирает `net10.0` через `mcr.microsoft.com/dotnet/sdk:10.0`, публикует Release-сборку и запускает runtime-образ `mcr.microsoft.com/dotnet/aspnet:10.0` на `http://+:8080`. Этот контракт закреплен backend-тестом, чтобы Docker-упаковка не расходилась с целевой версией приложения.
 
+`docker-compose.yml` поднимает сервисы в проверяемом порядке: PostgreSQL проходит `pg_isready`, API ждет здоровую БД и проверяет `/health` через `curl`, а frontend ждет здоровый API и проверяет nginx через `wget`. Это снижает риск, что локальный стенд покажет интерфейс раньше, чем backend реально готов принимать запросы.
+
 ## Правила проекта
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.

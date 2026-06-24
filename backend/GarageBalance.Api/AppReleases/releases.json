@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-compose-healthchecks",
+    "version": "0.97.0",
+    "publishedAt": "2026-06-24T08:15:00+07:00",
+    "title": "Docker Compose проверяет готовность сервисов",
+    "summary": "Локальный Docker-контур теперь ждет здоровые PostgreSQL и API перед запуском frontend.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "API получил healthcheck на /health через curl, а runtime-образ устанавливает curl без лишнего apt-кэша."
+      },
+      {
+        "type": "improved",
+        "text": "Frontend теперь ждет service_healthy у API и проверяет nginx через wget."
+      },
+      {
+        "type": "improved",
+        "text": "Backend-тесты фиксируют Dockerfile и docker-compose healthcheck-контракт."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-api-dockerfile-contract",
     "version": "0.96.0",
     "publishedAt": "2026-06-24T07:45:00+07:00",
