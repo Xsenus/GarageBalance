@@ -179,6 +179,11 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.CalculationBase).HasMaxLength(80).IsRequired();
             entity.Property(item => item.Rate).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricityFirstThreshold).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricitySecondThreshold).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricityFirstRate).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricitySecondRate).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricityThirdRate).HasPrecision(18, 4);
             entity.Property(item => item.Comment).HasMaxLength(1000);
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique();
             entity.HasIndex(item => item.CalculationBase);

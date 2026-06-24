@@ -455,6 +455,64 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateTariffAsync_SavesElectricityTiersAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                4.5m,
+                new DateOnly(2026, 7, 1),
+                "Три зоны",
+                50.55555m,
+                100.77777m,
+                3.11111m,
+                4.22222m,
+                5.33333m),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(50.556m, result.Value!.ElectricityFirstThreshold);
+        Assert.Equal(100.778m, result.Value.ElectricitySecondThreshold);
+        Assert.Equal(3.1111m, result.Value.ElectricityFirstRate);
+        Assert.Equal(4.2222m, result.Value.ElectricitySecondRate);
+        Assert.Equal(5.3333m, result.Value.ElectricityThirdRate);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("электричество: до 50.556 кВт по 3.1111", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("до 100.778 кВт по 4.2222", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("свыше по 5.3333", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateTariffAsync_RejectsIncompleteElectricityTiers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+
+        var result = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                4.5m,
+                new DateOnly(2026, 7, 1),
+                null,
+                ElectricityFirstThreshold: 50m),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_electricity_tiers_incomplete", result.ErrorCode);
+        Assert.Empty(database.Context.Tariffs);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task UpdateTariffAsync_UpdatesTariffAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -479,6 +537,40 @@ public sealed class DictionaryServiceTests
         Assert.Contains("Вода новая", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("база people", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("ставка 20.5556", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateTariffAsync_ClearsElectricityTiersWhenBaseChanges()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var created = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                4.5m,
+                new DateOnly(2026, 7, 1),
+                null,
+                50m,
+                100m,
+                3m,
+                4m,
+                5m),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateTariffAsync(
+            created.Value!.Id,
+            new UpsertTariffRequest("Вода", "meter_water", 20m, new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Null(result.Value!.ElectricityFirstThreshold);
+        Assert.Null(result.Value.ElectricitySecondThreshold);
+        Assert.Null(result.Value.ElectricityFirstRate);
+        Assert.Null(result.Value.ElectricitySecondRate);
+        Assert.Null(result.Value.ElectricityThirdRate);
     }
 
     [Fact]

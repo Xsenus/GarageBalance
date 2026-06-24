@@ -14,8 +14,9 @@ describe('responsive layout styles', () => {
 
   it('keeps mobile navigation usable without stretching the viewport', () => {
     expect(appCss).toContain('@media (max-width: 640px)')
-    expect(appCss).toContain('.nav-list {\n    display: flex;\n    overflow-x: auto;')
-    expect(appCss).toContain('.nav-item {\n    min-width: 160px;')
+    expect(appCss).toContain('.app-shell {\n    overflow-x: hidden;')
+    expect(appCss).toContain('.nav-list {\n    display: flex;\n    width: 100%;\n    max-width: 100%;\n    overflow-x: auto;')
+    expect(appCss).toContain('.nav-item {\n    flex: 0 0 160px;\n    min-width: 160px;')
     expect(appCss).toContain('.operation-list {\n    overflow-x: hidden;')
   })
 

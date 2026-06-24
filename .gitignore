@@ -35,6 +35,7 @@ local-db-backups/
 private-imports/
 imports/private/
 imports/raw/
+.deploy/
 
 # OS/editor
 .DS_Store

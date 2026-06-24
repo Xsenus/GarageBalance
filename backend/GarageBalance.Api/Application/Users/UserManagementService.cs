@@ -11,6 +11,7 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private const int DefaultPageLimit = 25;
 
     public async Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
     {
@@ -26,6 +27,33 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
+        var users = await BuildUsersQuery(search)
+            .OrderBy(user => user.DisplayName)
+            .Take(NormalizeListLimit(limit))
+            .ToListAsync(cancellationToken);
+
+        return users.Select(ToDto).ToList();
+    }
+
+    public async Task<ManagedUsersPageDto> GetUsersPageAsync(string? search, int offset, int limit, CancellationToken cancellationToken)
+    {
+        await EnsureSystemRolesAsync(cancellationToken);
+
+        var normalizedOffset = NormalizeListOffset(offset);
+        var normalizedLimit = NormalizePageLimit(limit);
+        var query = BuildUsersQuery(search);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var users = await query
+            .OrderBy(user => user.DisplayName)
+            .Skip(normalizedOffset)
+            .Take(normalizedLimit)
+            .ToListAsync(cancellationToken);
+
+        return new ManagedUsersPageDto(users.Select(ToDto).ToList(), totalCount, normalizedOffset, normalizedLimit);
+    }
+
+    private IQueryable<AppUser> BuildUsersQuery(string? search)
+    {
         IQueryable<AppUser> query = dbContext.Users.AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role);
@@ -38,12 +66,7 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
                 user.DisplayName.ToLower().Contains(normalizedSearch));
         }
 
-        var users = await query
-            .OrderBy(user => user.DisplayName)
-            .Take(NormalizeListLimit(limit))
-            .ToListAsync(cancellationToken);
-
-        return users.Select(ToDto).ToList();
+        return query;
     }
 
     private static int NormalizeListLimit(int? limit)
@@ -54,6 +77,16 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
         }
 
         return Math.Min(limit.Value, MaxListLimit);
+    }
+
+    private static int NormalizePageLimit(int limit)
+    {
+        return limit <= 0 ? DefaultPageLimit : Math.Min(limit, MaxListLimit);
+    }
+
+    private static int NormalizeListOffset(int offset)
+    {
+        return Math.Max(0, offset);
     }
 
     public async Task<UserManagementResult<ManagedUserDto>> CreateUserAsync(CreateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken)

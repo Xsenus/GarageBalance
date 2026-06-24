@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GarageBalance.Api.Application.Finance;
 
+public sealed record FinancePagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Offset, int Limit);
+
 public sealed record FinancialOperationDto(
     Guid Id,
     string OperationKind,
@@ -51,7 +53,8 @@ public sealed record FinancialOperationListRequest(
     DateOnly? DateTo,
     string? OperationKind,
     string? Search,
-    int? Limit = null);
+    int? Limit = null,
+    int? Offset = null);
 
 public sealed record AccrualDto(
     Guid Id,
@@ -119,13 +122,15 @@ public sealed record AccrualListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
     string? Search,
-    int? Limit = null);
+    int? Limit = null,
+    int? Offset = null);
 
 public sealed record SupplierAccrualListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
     string? Search,
-    int? Limit = null);
+    int? Limit = null,
+    int? Offset = null);
 
 public sealed record MeterReadingDto(
     Guid Id,
@@ -155,7 +160,8 @@ public sealed record MeterReadingListRequest(
     DateOnly? MonthTo,
     string? MeterKind,
     string? Search,
-    int? Limit = null);
+    int? Limit = null,
+    int? Offset = null);
 
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,

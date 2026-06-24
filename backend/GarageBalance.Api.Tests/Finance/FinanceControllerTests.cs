@@ -454,14 +454,19 @@ public sealed class FinanceControllerTests
         public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> UpdateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CancelOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<AccrualDto> UpdateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CancelAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierAccrualDto> CreateSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<SupplierAccrualDto> UpdateSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierAccrualDto> CancelSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterReadingDto> UpdateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -470,10 +475,22 @@ public sealed class FinanceControllerTests
             return Task.FromResult<IReadOnlyList<FinancialOperationDto>>([]);
         }
 
+        public Task<FinancePagedResult<FinancialOperationDto>> GetOperationsPageAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
+        {
+            LastFinancialOperationListRequest = request;
+            return Task.FromResult(new FinancePagedResult<FinancialOperationDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
+        }
+
         public Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
         {
             LastAccrualListRequest = request;
             return Task.FromResult<IReadOnlyList<AccrualDto>>([]);
+        }
+
+        public Task<FinancePagedResult<AccrualDto>> GetAccrualsPageAsync(AccrualListRequest request, CancellationToken cancellationToken)
+        {
+            LastAccrualListRequest = request;
+            return Task.FromResult(new FinancePagedResult<AccrualDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
         }
 
         public Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
@@ -482,10 +499,22 @@ public sealed class FinanceControllerTests
             return Task.FromResult<IReadOnlyList<SupplierAccrualDto>>([]);
         }
 
+        public Task<FinancePagedResult<SupplierAccrualDto>> GetSupplierAccrualsPageAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
+        {
+            LastSupplierAccrualListRequest = request;
+            return Task.FromResult(new FinancePagedResult<SupplierAccrualDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
+        }
+
         public Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
         {
             LastMeterReadingListRequest = request;
             return Task.FromResult<IReadOnlyList<MeterReadingDto>>([]);
+        }
+
+        public Task<FinancePagedResult<MeterReadingDto>> GetMeterReadingsPageAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
+        {
+            LastMeterReadingListRequest = request;
+            return Task.FromResult(new FinancePagedResult<MeterReadingDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -499,10 +528,22 @@ public sealed class FinanceControllerTests
             return Task.FromResult(CreateIncomeResult);
         }
 
+        public Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateIncomeResult);
+        }
+
         public Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateExpenseResult);
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> UpdateExpenseAsync(Guid operationId, CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateExpenseResult);
         }
 
         public Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -519,6 +560,12 @@ public sealed class FinanceControllerTests
             return Task.FromResult(CreateAccrualResult);
         }
 
+        public Task<FinanceResult<AccrualDto>> UpdateAccrualAsync(Guid accrualId, CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateAccrualResult);
+        }
+
         public Task<FinanceResult<AccrualDto>> CancelAccrualAsync(Guid accrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
@@ -531,6 +578,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateSupplierAccrualResult);
+        }
+
+        public Task<FinanceResult<SupplierAccrualDto>> UpdateSupplierAccrualAsync(Guid supplierAccrualId, CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateSupplierAccrualResult);
         }
 
         public Task<FinanceResult<SupplierAccrualDto>> CancelSupplierAccrualAsync(Guid supplierAccrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -551,6 +604,12 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateMeterReadingResult);
+        }
+
+        public Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(Guid meterReadingId, CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateMeterReadingResult);
         }
 
         public Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)

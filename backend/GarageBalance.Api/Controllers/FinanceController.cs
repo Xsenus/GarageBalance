@@ -24,6 +24,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetOperationsAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit), cancellationToken));
     }
 
+    [HttpGet("operations/page")]
+    [ProducesResponseType<FinancePagedResult<FinancialOperationDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FinancePagedResult<FinancialOperationDto>>> GetOperationsPage(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? operationKind,
+        [FromQuery] string? search,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetOperationsPageAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit, offset), cancellationToken));
+    }
+
     [HttpGet("accruals")]
     [ProducesResponseType<IReadOnlyList<AccrualDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccrualDto>>> GetAccruals(
@@ -34,6 +48,19 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         CancellationToken cancellationToken)
     {
         return Ok(await financeService.GetAccrualsAsync(new AccrualListRequest(monthFrom, monthTo, search, limit), cancellationToken));
+    }
+
+    [HttpGet("accruals/page")]
+    [ProducesResponseType<FinancePagedResult<AccrualDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FinancePagedResult<AccrualDto>>> GetAccrualsPage(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetAccrualsPageAsync(new AccrualListRequest(monthFrom, monthTo, search, limit, offset), cancellationToken));
     }
 
     [HttpGet("supplier-accruals")]
@@ -48,6 +75,19 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit), cancellationToken));
     }
 
+    [HttpGet("supplier-accruals/page")]
+    [ProducesResponseType<FinancePagedResult<SupplierAccrualDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FinancePagedResult<SupplierAccrualDto>>> GetSupplierAccrualsPage(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetSupplierAccrualsPageAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit, offset), cancellationToken));
+    }
+
     [HttpGet("meter-readings")]
     [ProducesResponseType<IReadOnlyList<MeterReadingDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MeterReadingDto>>> GetMeterReadings(
@@ -59,6 +99,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         CancellationToken cancellationToken)
     {
         return Ok(await financeService.GetMeterReadingsAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search, limit), cancellationToken));
+    }
+
+    [HttpGet("meter-readings/page")]
+    [ProducesResponseType<FinancePagedResult<MeterReadingDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FinancePagedResult<MeterReadingDto>>> GetMeterReadingsPage(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? meterKind,
+        [FromQuery] string? search,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetMeterReadingsPageAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search, limit, offset), cancellationToken));
     }
 
     [HttpGet("summary")]
@@ -88,6 +142,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("operations/{operationId:guid}/income")]
+    [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FinancialOperationDto>> UpdateIncome(Guid operationId, CreateIncomeOperationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.UpdateIncomeAsync(operationId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("expense")]
     [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -99,6 +165,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.Succeeded
             ? CreatedAtAction(nameof(GetOperations), new { operationKind = result.Value!.OperationKind }, result.Value)
             : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("operations/{operationId:guid}/expense")]
+    [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FinancialOperationDto>> UpdateExpense(Guid operationId, CreateExpenseOperationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.UpdateExpenseAsync(operationId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
@@ -128,6 +206,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("accruals/{accrualId:guid}")]
+    [ProducesResponseType<AccrualDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccrualDto>> UpdateAccrual(Guid accrualId, CreateAccrualRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.UpdateAccrualAsync(accrualId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("accruals/{accrualId:guid}/cancel")]
     [ProducesResponseType<AccrualDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -151,6 +241,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.Succeeded
             ? CreatedAtAction(nameof(GetSupplierAccruals), new { search = result.Value!.SupplierName }, result.Value)
             : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("supplier-accruals/{supplierAccrualId:guid}")]
+    [ProducesResponseType<SupplierAccrualDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SupplierAccrualDto>> UpdateSupplierAccrual(Guid supplierAccrualId, CreateSupplierAccrualRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.UpdateSupplierAccrualAsync(supplierAccrualId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
@@ -194,6 +296,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("meter-readings/{meterReadingId:guid}")]
+    [ProducesResponseType<MeterReadingDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MeterReadingDto>> UpdateMeterReading(Guid meterReadingId, CreateMeterReadingRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.UpdateMeterReadingAsync(meterReadingId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("meter-readings/{meterReadingId:guid}/cancel")]
     [ProducesResponseType<MeterReadingDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -215,7 +329,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" or "operation_not_found" or "accrual_not_found" or "supplier_accrual_not_found" or "meter_reading_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "operation_duplicate" or "operation_already_canceled" or "accrual_duplicate" or "accrual_already_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "meter_reading_duplicate" or "meter_reading_already_canceled" or "regular_accruals_empty" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "operation_duplicate" or "operation_already_canceled" or "operation_kind_mismatch" or "accrual_duplicate" or "accrual_already_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "meter_reading_duplicate" or "meter_reading_already_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

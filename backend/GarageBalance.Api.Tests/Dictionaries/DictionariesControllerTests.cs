@@ -201,6 +201,11 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<OwnerDto>>([]);
         }
 
+        public Task<PagedResult<OwnerDto>> GetOwnersPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<OwnerDto>([], 0, offset ?? 0, limit ?? 100));
+        }
+
         public Task<DictionaryResult<OwnerDto>> CreateOwnerAsync(UpsertOwnerRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
@@ -222,6 +227,11 @@ public sealed class DictionariesControllerTests
         {
             LastGarageListRequest = (search, limit);
             return Task.FromResult<IReadOnlyList<GarageDto>>([]);
+        }
+
+        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<GarageDto>([], 0, offset ?? 0, limit ?? 100));
         }
 
         public Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -246,9 +256,19 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<SupplierGroupDto>>([]);
         }
 
+        public Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<SupplierGroupDto>([], 0, offset ?? 0, limit ?? 100));
+        }
+
         public Task<DictionaryResult<SupplierGroupDto>> CreateSupplierGroupAsync(UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Duplicate."));
+        }
+
+        public Task<DictionaryResult<SupplierGroupDto>> UpdateSupplierGroupAsync(Guid id, UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
         }
 
         public Task<DictionaryResult<SupplierGroupDto>> ArchiveSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -260,6 +280,11 @@ public sealed class DictionariesControllerTests
         {
             LastSupplierListRequest = (groupId, search, limit);
             return Task.FromResult<IReadOnlyList<SupplierDto>>([]);
+        }
+
+        public Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<SupplierDto>([], 0, offset ?? 0, limit ?? 100));
         }
 
         public Task<DictionaryResult<SupplierDto>> CreateSupplierAsync(UpsertSupplierRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -284,9 +309,19 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
         }
 
+        public Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<AccountingTypeDto>([], 0, offset ?? 0, limit ?? 100));
+        }
+
         public Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Duplicate."));
+        }
+
+        public Task<DictionaryResult<AccountingTypeDto>> UpdateIncomeTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Not found."));
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -300,9 +335,19 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
         }
 
+        public Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<AccountingTypeDto>([], 0, offset ?? 0, limit ?? 100));
+        }
+
         public Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Duplicate."));
+        }
+
+        public Task<DictionaryResult<AccountingTypeDto>> UpdateExpenseTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -314,6 +359,11 @@ public sealed class DictionariesControllerTests
         {
             LastTariffListRequest = (search, limit);
             return Task.FromResult<IReadOnlyList<TariffDto>>([]);
+        }
+
+        public Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new PagedResult<TariffDto>([], 0, offset ?? 0, limit ?? 100));
         }
 
         public Task<DictionaryResult<TariffDto>> CreateTariffAsync(UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)

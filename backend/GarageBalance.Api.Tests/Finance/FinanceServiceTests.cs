@@ -470,6 +470,27 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateAccrualAsync_RequiresCommentForRegularAccrualCorrection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateAccrualAsync(
+            created.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 750m, "regular", " "),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("accrual_regular_edit_comment_required", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateAccrualAsync_RejectsDuplicateGarageTypeMonthAndSource()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -607,6 +628,27 @@ public sealed class FinanceServiceTests
         Assert.Equal("supplier_accrual_source_invalid", result.ErrorCode);
         Assert.Empty(database.Context.SupplierAccruals);
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateSupplierAccrualAsync_RequiresCommentForRegularAccrualCorrection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-regular", null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateSupplierAccrualAsync(
+            created.Value!.Id,
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1250m, "regular", "INV-regular", " "),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_accrual_regular_edit_comment_required", result.ErrorCode);
     }
 
     [Fact]
@@ -791,6 +833,45 @@ public sealed class FinanceServiceTests
         Assert.Equal(275m, result.Value!.TotalAmount);
         Assert.Equal(275m, result.Value.CreatedAccruals[0].Amount);
         Assert.Equal("meter_water", result.Value.CalculationBase);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_CalculatesTieredElectricityAmountFromReading()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff
+        {
+            Name = "Электроэнергия",
+            CalculationBase = "meter_electricity",
+            Rate = 4m,
+            ElectricityFirstThreshold = 50m,
+            ElectricitySecondThreshold = 100m,
+            ElectricityFirstRate = 2m,
+            ElectricitySecondRate = 3m,
+            ElectricityThirdRate = 5m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 230m, null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(400m, result.Value!.TotalAmount);
+        Assert.Equal(400m, result.Value.CreatedAccruals[0].Amount);
+        Assert.Equal("meter_electricity", result.Value.CalculationBase);
+        Assert.Contains("пороги электроэнергии до 50 кВт по 2, до 100 кВт по 3, свыше по 5", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
+        Assert.Contains("пороги электроэнергии до 50 кВт по 2, до 100 кВт по 3, свыше по 5", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

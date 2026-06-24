@@ -15,6 +15,13 @@ export type ManagedUserDto = {
   permissions: string[]
 }
 
+export type PagedManagedUsersDto = {
+  items: ManagedUserDto[]
+  totalCount: number
+  offset: number
+  limit: number
+}
+
 export type CreateManagedUserRequest = {
   email: string
   displayName: string
@@ -33,6 +40,7 @@ export type UpdateManagedUserRequest = {
 export type UserManagementClient = {
   getRoles(accessToken: string): Promise<ManagedRoleDto[]>
   getUsers(accessToken: string, search?: string, limit?: number): Promise<ManagedUserDto[]>
+  getUsersPage(accessToken: string, search?: string, offset?: number, limit?: number): Promise<PagedManagedUsersDto>
   createUser(accessToken: string, request: CreateManagedUserRequest): Promise<ManagedUserDto>
   updateUser(accessToken: string, userId: string, request: UpdateManagedUserRequest): Promise<ManagedUserDto>
 }
@@ -76,6 +84,9 @@ export const usersApi: UserManagementClient = {
   },
   getUsers(accessToken, search, limit = defaultUserListLimit) {
     return requestJson(accessToken, withQuery('/api/users', { search, limit }))
+  },
+  getUsersPage(accessToken, search, offset = 0, limit = 25) {
+    return requestJson(accessToken, withQuery('/api/users/page', { search, offset, limit }))
   },
   createUser(accessToken, request) {
     return requestJson(accessToken, '/api/users', { method: 'POST', body: JSON.stringify(request) })

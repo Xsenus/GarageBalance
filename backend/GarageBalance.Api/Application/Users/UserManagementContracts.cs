@@ -14,6 +14,12 @@ public sealed record ManagedUserDto(
     IReadOnlyList<string> Roles,
     IReadOnlyList<string> Permissions);
 
+public sealed record ManagedUsersPageDto(
+    IReadOnlyList<ManagedUserDto> Items,
+    int TotalCount,
+    int Offset,
+    int Limit);
+
 public sealed record CreateManagedUserRequest(
     [Required, EmailAddress, MaxLength(320)] string Email,
     [Required, MaxLength(200)] string DisplayName,

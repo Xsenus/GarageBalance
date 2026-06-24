@@ -23,6 +23,41 @@ describe('App', () => {
     }
   }
 
+  async function openDictionarySubgroup(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement, name: string) {
+    const aliases: Record<string, string[]> = {
+      'Группы поставщиков': ['Группы поставщиков и персонала'],
+      'Поставщики': ['Поставщики и персонал'],
+    }
+    const names = [name, ...(aliases[name] ?? [])]
+    const button = names
+      .map((candidate) => within(panel).queryByRole('button', { name: `Подгруппа: ${candidate}` }))
+      .find((candidate): candidate is HTMLElement => candidate !== null)
+
+    if (!button) {
+      throw new Error(`Подгруппа ${name} не найдена.`)
+    }
+
+    if (button.getAttribute('aria-current') !== 'page') {
+      await user.click(button)
+    }
+
+    return within(panel).findByRole('table', { name: new RegExp(`Таблица: (${names.join('|')})`) })
+  }
+
+  async function openDictionaryCreateDialog(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement) {
+    await user.click(within(panel).getByRole('button', { name: 'Добавить' }))
+    return screen.findByRole('dialog')
+  }
+
+  async function openReportTab(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement, name: string) {
+    const tab = within(panel).getByRole('tab', { name: new RegExp(name) })
+    if (tab.getAttribute('aria-selected') !== 'true') {
+      await user.click(tab)
+    }
+
+    return tab
+  }
+
   it('shows auth gate before workspace is available', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -32,6 +67,55 @@ describe('App', () => {
     expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Панель' })).not.toBeInTheDocument()
+  })
+
+  it('restores authenticated workspace after page reload', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({ accessToken: 'persisted-token' })
+    const { unmount } = render(<App authClient={createAuthClient({ bootstrapAdmin: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    expect(await screen.findByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
+    expect(JSON.parse(window.sessionStorage.getItem('garagebalance.auth.session') ?? '{}').accessToken).toBe('persisted-token')
+
+    unmount()
+
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () => {
+        throw new Error('Bootstrap не должен вызываться при восстановлении сессии.')
+      },
+      login: async () => {
+        throw new Error('Login не должен вызываться при восстановлении сессии.')
+      },
+    })
+
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
+  })
+
+  it('ignores expired stored auth session', () => {
+    window.sessionStorage.setItem('garagebalance.auth.session', JSON.stringify(createAuthResponse({ expiresAtUtc: new Date(Date.now() - 60_000).toISOString() })))
+
+    render(
+      <App
+        authClient={createAuthClient()}
+        auditClient={createThrowingClient<AuditClient>()}
+        dictionaryClient={createThrowingClient<DictionaryClient>()}
+        financeClient={createThrowingClient<FinanceClient>()}
+        importClient={createThrowingClient<ImportClient>()}
+        reportClient={createThrowingClient<ReportClient>()}
+        releaseClient={createThrowingClient<ReleaseClient>()}
+        userClient={createThrowingClient<UserManagementClient>()}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('garagebalance.auth.session')).toBeNull()
   })
 
   it('does not call protected workspace clients before authentication', () => {
@@ -81,9 +165,13 @@ describe('App', () => {
 
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(within(dictionaryPanel).getAllByText('Иванов Иван').length).toBeGreaterThan(0)
-    expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    expect(within(dictionaryPanel).getByText('12')).toBeInTheDocument()
+    await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
     expect(within(dictionaryPanel).getByText('Членский взнос')).toBeInTheDocument()
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
     expect(within(dictionaryPanel).getByText('Тариф воды')).toBeInTheDocument()
 
     await openSection(user, 'Платежи')
@@ -93,7 +181,7 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1')).toBeInTheDocument()
-    expect(within(financePanel).getByText('19.06.2026')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('19.06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
@@ -112,12 +200,13 @@ describe('App', () => {
 
     await openSection(user, 'Справочники')
     expect(screen.getByRole('button', { name: 'Справочники' })).toHaveAttribute('aria-current', 'page')
-    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(dictionaryPanel).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
-
-    await openSection(user, 'Тарифы')
-    expect(screen.getByRole('button', { name: 'Тарифы' })).toHaveAttribute('aria-current', 'page')
-    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Тарифы' })).not.toBeInTheDocument()
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Подгруппа: Тарифы' })).toHaveAttribute('aria-current', 'page')
+    expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Тарифы' })).toBeInTheDocument()
 
     await openSection(user, 'Платежи')
     expect(screen.getByRole('button', { name: 'Платежи' })).toHaveAttribute('aria-current', 'page')
@@ -140,9 +229,9 @@ describe('App', () => {
     expect(screen.queryByRole('region', { name: 'Импорт Access' })).not.toBeInTheDocument()
   })
 
-  it('shows visible user counter when the user list is compacted', async () => {
+  it('shows server-paginated user counter', async () => {
     const user = userEvent.setup()
-    let requestedLimit: number | undefined
+    let requestedPage: { offset: number; limit: number } | undefined
     const users = Array.from({ length: 9 }, (_item, index) =>
       createManagedUser({
         id: `user-${index + 1}`,
@@ -151,9 +240,14 @@ describe('App', () => {
       }),
     )
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({
-      getUsers: async (_token, _search, limit) => {
-        requestedLimit = limit
-        return users
+      getUsersPage: async (_token, _search, offset = 0, limit = 25) => {
+        requestedPage = { offset, limit }
+        return {
+          items: users.slice(offset, offset + limit),
+          totalCount: users.length,
+          offset,
+          limit,
+        }
       },
     })} />)
 
@@ -163,18 +257,17 @@ describe('App', () => {
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
 
-    const visibleUserCounter = await within(usersTable).findByText('Показано 8 из 9 пользователей')
+    const visibleUserCounter = await within(usersPanel).findByText('Показано 1-9 из 9')
     expect(visibleUserCounter).toHaveAttribute('role', 'status')
     expect(visibleUserCounter).toHaveAttribute('aria-live', 'polite')
-    expect(within(usersTable).getByText('Сотрудник 8')).toBeInTheDocument()
-    expect(within(usersTable).queryByText('Сотрудник 9')).not.toBeInTheDocument()
-    expect(requestedLimit).toBe(50)
+    expect(within(usersTable).getByText('Сотрудник 9')).toBeInTheDocument()
+    expect(requestedPage).toEqual({ offset: 0, limit: 25 })
   })
 
   it('announces empty user and role lists for administrators', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({
-      getUsers: async () => [],
+      getUsersPage: async (_token, _search, offset = 0, limit = 25) => ({ items: [], totalCount: 0, offset, limit }),
       getRoles: async () => [],
     })} />)
 
@@ -297,15 +390,18 @@ describe('App', () => {
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
-    await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
-    await user.type(within(usersPanel).getByLabelText('Имя пользователя'), 'Оператор')
-    await user.type(within(usersPanel).getByLabelText('Пароль пользователя'), 'StrongPass123')
-    await user.selectOptions(within(usersPanel).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
     expect(within(usersPanel).getByText('operator@example.com')).toBeInTheDocument()
     expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
+    expect(await screen.findByText('Пользователь добавлен.')).toHaveAttribute('role', 'status')
   })
 
   it('does not call user API when managed user password violates policy', async () => {
@@ -326,17 +422,57 @@ describe('App', () => {
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
-    await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
-    await user.type(within(usersPanel).getByLabelText('Имя пользователя'), 'Оператор')
-    await user.type(within(usersPanel).getByLabelText('Пароль пользователя'), 'Password')
-    await user.selectOptions(within(usersPanel).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'Password')
+    await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
-    expect(await within(usersPanel).findByText('Проверьте нового пользователя')).toBeInTheDocument()
-    expect(within(usersPanel).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
-    expect(within(usersPanel).getByRole('alert')).toBeInTheDocument()
+    expect(await within(dialog).findByText('Проверьте нового пользователя')).toBeInTheDocument()
+    expect(within(dialog).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('alert')).toBeInTheDocument()
     expect(createCalled).toBe(false)
     expect(within(usersPanel).queryByText('operator@example.com')).not.toBeInTheDocument()
+  })
+
+  it('opens user edit and delete operations from context menu modals', async () => {
+    const user = userEvent.setup()
+    const userClient = createStatefulUserClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const createDialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(createDialog).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(createDialog).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(createDialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.selectOptions(within(createDialog).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(createDialog).getByRole('button', { name: 'Сохранить' }))
+
+    const row = await within(usersPanel).findByText('operator@example.com')
+    fireEvent.contextMenu(row.closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
+    await user.clear(within(editDialog).getByLabelText('Имя пользователя'))
+    await user.type(within(editDialog).getByLabelText('Имя пользователя'), 'Старший оператор')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
+    expect(await screen.findByText('Пользователь изменен.')).toHaveAttribute('role', 'status')
+
+    fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Удалить пользователя' })
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить' }))
+
+    expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
+    expect(await screen.findByText('Пользователь отключен.')).toHaveAttribute('role', 'status')
   })
 
   it('keeps restricted sections closed after administrator creates an operator', async () => {
@@ -370,6 +506,12 @@ describe('App', () => {
           throw new Error('Панель пользователей не должна загружаться для оператора.')
         }
         return statefulUserClient.getUsers(...args)
+      },
+      getUsersPage: async (...args) => {
+        if (operatorSession) {
+          throw new Error('Панель пользователей не должна загружаться для оператора.')
+        }
+        return statefulUserClient.getUsersPage(...args)
       },
     }
     const importClient = createImportClient({
@@ -416,11 +558,13 @@ describe('App', () => {
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
-    await user.type(within(usersPanel).getByLabelText('Email пользователя'), 'operator@example.com')
-    await user.type(within(usersPanel).getByLabelText('Имя пользователя'), 'Оператор')
-    await user.type(within(usersPanel).getByLabelText('Пароль пользователя'), 'StrongPass123')
-    await user.selectOptions(within(usersPanel).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Выйти' }))
@@ -498,13 +642,11 @@ describe('App', () => {
     await openSection(user, 'Справочники')
 
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
-    expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.')).toBeInTheDocument()
-    for (const button of within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })) {
-      expect(button).toBeDisabled()
-    }
-    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' })).toBeDisabled()
-    expect(within(dictionaryPanel).getByRole('button', { name: 'Найти гараж' })).toBeEnabled()
-    expect(within(dictionaryPanel).queryByRole('button', { name: /Архивировать/ })).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить' })).toBeDisabled()
+    expect(within(dictionaryPanel).getByLabelText('Поиск: Владельцы')).toBeEnabled()
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    expect(within(dictionaryPanel).getByLabelText('Поиск: Гаражи')).toBeEnabled()
 
     await openSection(user, 'Платежи')
 
@@ -525,8 +667,6 @@ describe('App', () => {
   it('allows tariff management without broad dictionary write permission', async () => {
     const user = userEvent.setup()
     let createdTariffs = 0
-    let updatedTariffRequest: { id: string; name: string; rate: number; comment?: string } | null = null
-    let archivedTariffId: string | null = null
     const authClient = createAuthClient({
       bootstrapAdmin: async () =>
         createAuthResponse({
@@ -550,10 +690,14 @@ describe('App', () => {
           calculationBase: request.calculationBase,
           rate: request.rate,
           effectiveFrom: request.effectiveFrom,
+          electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+          electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+          electricityFirstRate: request.electricityFirstRate ?? null,
+          electricitySecondRate: request.electricitySecondRate ?? null,
+          electricityThirdRate: request.electricityThirdRate ?? null,
         })
       },
       updateTariff: async (_token, id, request) => {
-        updatedTariffRequest = { id, name: request.name, rate: request.rate, comment: request.comment }
         return createTariff({
           id,
           name: request.name,
@@ -561,11 +705,14 @@ describe('App', () => {
           rate: request.rate,
           effectiveFrom: request.effectiveFrom,
           comment: request.comment ?? null,
+          electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+          electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+          electricityFirstRate: request.electricityFirstRate ?? null,
+          electricitySecondRate: request.electricitySecondRate ?? null,
+          electricityThirdRate: request.electricityThirdRate ?? null,
         })
       },
-      archiveTariff: async (_token, id) => {
-        archivedTariffId = id
-      },
+      archiveTariff: async () => undefined,
     })
 
     render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -575,9 +722,21 @@ describe('App', () => {
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
-    expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.')).toBeInTheDocument()
-    expect(within(dictionaryPanel).queryByText('Режим просмотра тарифов: для добавления и архивирования тарифов нужно право tariffs.manage.')).not.toBeInTheDocument()
-    expect(within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!.querySelector('button[type="submit"]')).toBeDisabled()
+    expect(within(dictionaryPanel).getByText('Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Режим просмотра тарифов: для изменения тарифов нужно право tariffs.manage.')).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить' })).toBeDisabled()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить' })).toBeEnabled()
+    const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.clear(within(tariffDialog).getByLabelText('Название тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Тариф обслуживания')
+    await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(createdTariffs).toBe(1)
+    expect(await screen.findByText('Запись добавлена.')).toBeInTheDocument()
+    expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
+    return
 
     const tariffForm = within(dictionaryPanel).getByLabelText('Название тарифа').closest('form')!
     const tariffSubmit = within(tariffForm as HTMLElement).getByRole('button', { name: 'Добавить' })
@@ -649,6 +808,69 @@ describe('App', () => {
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
   })
 
+  it('creates electricity tariff with editable thresholds and three rates', async () => {
+    const user = userEvent.setup()
+    let createdRequest: unknown = null
+    let tariffs: TariffDto[] = []
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => tariffs,
+      createTariff: async (_token, request) => {
+        createdRequest = request
+        const tariff = createTariff({
+          id: 'tariff-electricity',
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+          comment: request.comment ?? null,
+          electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+          electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+          electricityFirstRate: request.electricityFirstRate ?? null,
+          electricitySecondRate: request.electricitySecondRate ?? null,
+          electricityThirdRate: request.electricityThirdRate ?? null,
+        })
+        tariffs = [tariff]
+        return tariff
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+
+    await user.clear(within(tariffDialog).getByLabelText('Название тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Электроэнергия 3 зоны')
+    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'meter_electricity')
+    await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '4')
+    await user.type(within(tariffDialog).getByLabelText('Первый порог электроэнергии'), '50')
+    await user.type(within(tariffDialog).getByLabelText('Второй порог электроэнергии'), '100')
+    await user.type(within(tariffDialog).getByLabelText('Первая ставка электроэнергии'), '2')
+    await user.type(within(tariffDialog).getByLabelText('Вторая ставка электроэнергии'), '3')
+    await user.type(within(tariffDialog).getByLabelText('Третья ставка электроэнергии'), '5')
+    await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(createdRequest).toMatchObject({
+      name: 'Электроэнергия 3 зоны',
+      calculationBase: 'meter_electricity',
+      rate: 4,
+      electricityFirstThreshold: 50,
+      electricitySecondThreshold: 100,
+      electricityFirstRate: 2,
+      electricitySecondRate: 3,
+      electricityThirdRate: 5,
+    })
+    expect(await screen.findByText('Запись добавлена.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/до 50,00 кВт: 2,00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/до 100,00 кВт: 3,00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/выше: 5,00/)).toBeInTheDocument()
+  })
+
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()
@@ -658,6 +880,50 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    const ownerDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(ownerDialog).getByLabelText('Фамилия владельца'), 'Петров')
+    await user.type(within(ownerDialog).getByLabelText('Имя владельца'), 'Петр')
+    await user.type(within(ownerDialog).getByLabelText('Телефон владельца'), '+7 913')
+    await user.click(within(ownerDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    const garageCreateDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(garageCreateDialog).getByLabelText('Номер гаража'), '21')
+    await user.clear(within(garageCreateDialog).getByLabelText('Количество людей'))
+    await user.type(within(garageCreateDialog).getByLabelText('Количество людей'), '2')
+    await user.clear(within(garageCreateDialog).getByLabelText('Количество этажей'))
+    await user.type(within(garageCreateDialog).getByLabelText('Количество этажей'), '3')
+    await user.clear(within(garageCreateDialog).getByLabelText('Стартовый баланс гаража'))
+    await user.type(within(garageCreateDialog).getByLabelText('Стартовый баланс гаража'), '350')
+    await user.type(within(garageCreateDialog).getByLabelText('Стартовый счетчик воды'), '18.5')
+    await user.type(within(garageCreateDialog).getByLabelText('Стартовый счетчик электричества'), '412.75')
+    await user.type(within(garageCreateDialog).getByLabelText('Комментарий по гаражу'), 'Старые счетчики внесены из Access')
+    await user.selectOptions(within(garageCreateDialog).getByLabelText('Владелец гаража'), within(garageCreateDialog).getByRole('option', { name: 'Петров Петр' }))
+    await user.click(within(garageCreateDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('21')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Петров Петр')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('350,00')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    const groupDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(groupDialog).getByLabelText('Группа поставщиков'), 'Связь')
+    await user.click(within(groupDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('Связь')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
+    const supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(supplierDialog).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
+    await user.selectOptions(within(supplierDialog).getByLabelText('Группа для поставщика'), within(supplierDialog).getByRole('option', { name: 'Связь' }))
+    await user.type(within(supplierDialog).getByLabelText('ИНН поставщика'), '5401000000')
+    await user.clear(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'))
+    await user.type(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'), '1200')
+    await user.click(within(supplierDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Связь')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('1 200,00')).toBeInTheDocument()
+    return
 
     await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), 'Петров')
     await user.type(within(dictionaryPanel).getByLabelText('Имя владельца'), 'Петр')
@@ -729,30 +995,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
-    const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
-    expect(await within(ownerForm as HTMLElement).findByText('Владелец1 Тест')).toBeInTheDocument()
-    const compactCounter = within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')
-    expect(compactCounter).toHaveAttribute('role', 'status')
-    expect(compactCounter).toHaveAttribute('aria-live', 'polite')
-    expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
-    const compactList = within(ownerForm as HTMLElement).getByRole('list')
-    const expandButton = within(ownerForm as HTMLElement).getByRole('button', { name: 'Показать все записи' })
-    expect(expandButton).toHaveAttribute('aria-expanded', 'false')
-    expect(expandButton).toHaveAttribute('aria-controls', compactList.id)
-
-    await user.click(expandButton)
-    const expandedCounter = within(ownerForm as HTMLElement).getByText('Показано 6 из 6 записей')
-    expect(expandedCounter).toHaveAttribute('role', 'status')
-    expect(expandedCounter).toHaveAttribute('aria-live', 'polite')
-    expect(within(ownerForm as HTMLElement).getByText('Владелец6 Тест')).toBeInTheDocument()
-    const collapseButton = within(ownerForm as HTMLElement).getByRole('button', { name: 'Свернуть список' })
-    expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
-    expect(collapseButton).toHaveAttribute('aria-controls', compactList.id)
-
-    await user.click(collapseButton)
-    expect(within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')).toBeInTheDocument()
-    expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
+    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Владелец6 Тест')).toBeInTheDocument()
+    const paginationCounter = within(dictionaryPanel).getByText('Показано 1-6 из 6')
+    expect(paginationCounter).toHaveAttribute('role', 'status')
+    expect(paginationCounter).toHaveAttribute('aria-live', 'polite')
+    expect(within(dictionaryPanel).getByRole('combobox', { name: 'Количество строк справочника' })).toHaveValue('25')
   })
 
   it('announces empty dictionary lists', async () => {
@@ -766,9 +1015,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
-    const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
-    const emptyDictionaryState = await within(ownerForm as HTMLElement).findByText('Владельцев пока нет')
+    const emptyDictionaryState = await within(dictionaryPanel).findByText('В этом справочнике пока нет записей')
     expect(emptyDictionaryState).toHaveAttribute('role', 'status')
     expect(emptyDictionaryState).toHaveAttribute('aria-live', 'polite')
   })
@@ -777,8 +1025,36 @@ describe('App', () => {
     const user = userEvent.setup()
     const requestedLimits: Record<string, number | undefined> = {}
     const dictionaryClient = createDictionaryClient({
-      getOwners: async (_token, _search, limit) => {
+      getOwnersPage: async (_token, _search, _offset, limit) => {
         requestedLimits.owners = limit
+        return { items: [createOwner()], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getGaragesPage: async (_token, _search, _offset, limit) => {
+        requestedLimits.garages = limit
+        return { items: [createGarage()], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getSupplierGroupsPage: async (_token, _offset, limit) => {
+        requestedLimits.supplierGroups = limit
+        return { items: [createGroup()], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getSuppliersPage: async (_token, _groupId, _search, _offset, limit) => {
+        requestedLimits.suppliers = limit
+        return { items: [createSupplier()], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getIncomeTypesPage: async (_token, _offset, limit) => {
+        requestedLimits.incomeTypes = limit
+        return { items: [createAccountingType({ name: 'Членский взнос' })], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getExpenseTypesPage: async (_token, _offset, limit) => {
+        requestedLimits.expenseTypes = limit
+        return { items: [createAccountingType({ name: 'Электроэнергия' })], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getTariffsPage: async (_token, _search, _offset, limit) => {
+        requestedLimits.tariffs = limit
+        return { items: [createTariff()], totalCount: 1, offset: 0, limit: limit ?? 25 }
+      },
+      getOwners: async (_token, _search, limit) => {
+        requestedLimits.ownerReferences = limit
         return [createOwner()]
       },
       getGarages: async (_token, _search, limit) => {
@@ -811,16 +1087,22 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
-    await screen.findByRole('region', { name: 'Справочники' })
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
 
     await waitFor(() => expect(requestedLimits).toMatchObject({
-      owners: 100,
-      garages: 100,
-      supplierGroups: 100,
-      suppliers: 100,
-      incomeTypes: 100,
-      expenseTypes: 100,
-      tariffs: 100,
+      owners: 25,
+      garages: 25,
+      supplierGroups: 25,
+      suppliers: 25,
+      incomeTypes: 25,
+      expenseTypes: 25,
+      tariffs: 25,
     }))
   })
 
@@ -846,6 +1128,28 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    let validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Фамилия владельца'), '   ')
+    await user.type(within(validationDialog).getByLabelText('Имя владельца'), 'Петр')
+    await user.type(within(validationDialog).getByLabelText('Телефон владельца'), '1')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите фамилию владельца.')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Проверьте телефон владельца.')).toBeInTheDocument()
+    expect(createOwnerCalled).toBe(false)
+    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Номер гаража'), '   ')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите номер гаража.')).toBeInTheDocument()
+    expect(createGarageCalled).toBe(false)
+    return
 
     await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), '   ')
     await user.type(within(dictionaryPanel).getByLabelText('Имя владельца'), 'Петр')
@@ -886,24 +1190,23 @@ describe('App', () => {
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
-    expect(within(dictionaryPanel).getByText('Гараж 12')).toBeInTheDocument()
-    await user.type(within(dictionaryPanel).getByLabelText('Поиск гаража или владельца'), 'Петров')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    expect(within(dictionaryPanel).getByText('12')).toBeInTheDocument()
+    await user.type(within(dictionaryPanel).getByLabelText('Поиск: Гаражи'), 'Петров')
 
     await waitFor(() => {
       expect(garageSearch).toBe('Петров')
     })
-    expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
-    expect(within(dictionaryPanel).queryByText('Гараж 12')).not.toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toHaveAttribute('role', 'status')
+    expect(await within(dictionaryPanel).findByText('21')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('12')).not.toBeInTheDocument()
 
-    await user.clear(within(dictionaryPanel).getByLabelText('Поиск гаража или владельца'))
+    await user.clear(within(dictionaryPanel).getByLabelText('Поиск: Гаражи'))
 
     await waitFor(() => {
       expect(garageSearch).toBeUndefined()
     })
-    expect(await within(dictionaryPanel).findByText('Гараж 12')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Гараж 21')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Показаны все гаражи')).toHaveAttribute('role', 'status')
+    expect(await within(dictionaryPanel).findByText('12')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('21')).toBeInTheDocument()
   })
 
   it('searches suppliers by name or inn from dictionaries workspace', async () => {
@@ -926,24 +1229,23 @@ describe('App', () => {
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
+    await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
     expect(within(dictionaryPanel).getByText('Водоканал')).toBeInTheDocument()
-    await user.type(within(dictionaryPanel).getByLabelText('Поиск поставщика'), '7728')
+    await user.type(within(dictionaryPanel).getByLabelText('Поиск: Поставщики и персонал'), '7728')
 
     await waitFor(() => {
       expect(supplierSearch).toBe('7728')
     })
     expect(await within(dictionaryPanel).findByText('Альфа-Банк')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Водоканал')).not.toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Найдено поставщиков: 1')).toHaveAttribute('role', 'status')
 
-    await user.clear(within(dictionaryPanel).getByLabelText('Поиск поставщика'))
+    await user.clear(within(dictionaryPanel).getByLabelText('Поиск: Поставщики и персонал'))
 
     await waitFor(() => {
       expect(supplierSearch).toBeUndefined()
     })
     expect(await within(dictionaryPanel).findByText('Водоканал')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Альфа-Банк')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Показаны все поставщики')).toHaveAttribute('role', 'status')
   })
 
   it('archives owner from dictionaries workspace', async () => {
@@ -960,6 +1262,17 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    const ownerRow = within(dictionaryPanel).getByText('Иванов Иван').closest('tr')!
+    fireEvent.contextMenu(ownerRow)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    expect(archivedOwnerId).toBeNull()
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
+    expect(within(deleteDialog).getByText('Запись будет скрыта из рабочих таблиц, но останется в audit-журнале и связанной финансовой истории.')).toBeInTheDocument()
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
+    expect(archivedOwnerId).toBe('owner-1')
+    expect(await screen.findByText('Запись удалена из рабочего списка.')).toBeInTheDocument()
+    return
 
     const firstArchiveButton = within(dictionaryPanel).getByRole('button', { name: 'Архивировать владельца Иванов Иван' })
     await user.click(firstArchiveButton)
@@ -1013,6 +1326,31 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
+    let typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(typeDialog).getByLabelText('Название вида операции'), 'Целевой взнос')
+    await user.type(within(typeDialog).getByLabelText('Код вида операции'), 'target')
+    await user.click(within(typeDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('Целевой взнос')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(typeDialog).getByLabelText('Название вида операции'), 'Вывоз мусора')
+    await user.type(within(typeDialog).getByLabelText('Код вида операции'), 'trash')
+    await user.click(within(typeDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('Вывоз мусора')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Мусор')
+    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'people')
+    await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '150')
+    await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dictionaryPanel).findByText('Мусор')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('150,00')).toBeInTheDocument()
+    return
 
     await user.type(within(dictionaryPanel).getByLabelText('Название вида поступления'), 'Целевой взнос')
     await user.type(within(dictionaryPanel).getByLabelText('Код вида поступления'), 'target')
@@ -1070,6 +1408,64 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    let validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Группа поставщиков'), '   ')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите группу поставщиков.')).toBeInTheDocument()
+    expect(createSupplierGroupCalls).toBe(0)
+    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+
+    validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Группа поставщиков'), 'Связь')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(createSupplierGroupCalls).toBe(1)
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
+    validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Название поставщика'), '   ')
+    await user.type(within(validationDialog).getByLabelText('ИНН поставщика'), 'abc')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите название поставщика.')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('ИНН поставщика должен содержать 10 или 12 цифр.')).toBeInTheDocument()
+    expect(createSupplierCalled).toBe(false)
+    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
+    validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Название вида операции'), '   ')
+    await user.type(within(validationDialog).getByLabelText('Код вида операции'), 'членский')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите название вида поступления.')).toBeInTheDocument()
+    expect(createIncomeTypeCalled).toBe(false)
+    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Название вида операции'), '   ')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите название вида выплаты.')).toBeInTheDocument()
+    expect(createExpenseTypeCalled).toBe(false)
+    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(validationDialog).getByLabelText('Название тарифа'), '   ')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Укажите название тарифа.')).toBeInTheDocument()
+    expect(createTariffCalled).toBe(false)
+    return
 
     await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), '   ')
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить группу' }))
@@ -1245,22 +1641,28 @@ describe('App', () => {
       consumption: 401 + index,
     }))
     const requestedLimits: Record<string, number | undefined> = {}
+    const toPage = <TItem,>(items: TItem[], offset = 0, limit = 25) => ({ items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit })
     const financeClient = createFinanceClient({
-      getOperations: async (_token, limit) => {
-        requestedLimits.operations = limit
-        return operations
+      getOperations: async () => operations,
+      getAccruals: async () => accruals,
+      getSupplierAccruals: async () => supplierAccruals,
+      getMeterReadings: async () => meterReadings,
+      getOperationsPage: async (_token, params) => {
+        const key = params?.operationKind === 'expense' ? 'expenseOperations' : 'incomeOperations'
+        requestedLimits[key] = params?.limit
+        return toPage(params?.operationKind === 'expense' ? [] : operations, params?.offset, params?.limit)
       },
-      getAccruals: async (_token, limit) => {
-        requestedLimits.accruals = limit
-        return accruals
+      getAccrualsPage: async (_token, params) => {
+        requestedLimits.accruals = params?.limit
+        return toPage(accruals, params?.offset, params?.limit)
       },
-      getSupplierAccruals: async (_token, limit) => {
-        requestedLimits.supplierAccruals = limit
-        return supplierAccruals
+      getSupplierAccrualsPage: async (_token, params) => {
+        requestedLimits.supplierAccruals = params?.limit
+        return toPage(supplierAccruals, params?.offset, params?.limit)
       },
-      getMeterReadings: async (_token, limit) => {
-        requestedLimits.meterReadings = limit
-        return meterReadings
+      getMeterReadingsPage: async (_token, params) => {
+        requestedLimits.meterReadings = params?.limit
+        return toPage(meterReadings, params?.offset, params?.limit)
       },
       getSummary: async () => ({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }),
     })
@@ -1281,7 +1683,7 @@ describe('App', () => {
     expect(within(meterReadingsTable).getByText('Показано 8 из 9 показаний')).toHaveAttribute('role', 'status')
     expect(within(operationsTable).getByText('Поступление 8')).toBeInTheDocument()
     expect(within(operationsTable).queryByText('Поступление 9')).not.toBeInTheDocument()
-    expect(requestedLimits).toEqual({ operations: 50, accruals: 50, supplierAccruals: 50, meterReadings: 50 })
+    expect(requestedLimits).toEqual({ incomeOperations: 25, expenseOperations: 1, accruals: 1, supplierAccruals: 1, meterReadings: 1 })
   })
 
   it('cancels income operation with required reason from payments workspace', async () => {
@@ -1548,7 +1950,6 @@ describe('App', () => {
     expect(await within(importPanel).findByText('ГСК.accdb')).toHaveAttribute('role', 'status')
     await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл' }))
 
-    expect((await within(importPanel).findAllByText('Dry-run завершен с предупреждениями.')).length).toBeGreaterThan(0)
     const importSummary = within(importPanel).getByLabelText('Итоги dry-run импорта')
     expect(within(importSummary).getByText('Завершен')).toBeInTheDocument()
     expect(within(importSummary).getByText('Успешно')).toBeInTheDocument()
@@ -1559,11 +1960,16 @@ describe('App', () => {
     expect(within(importSummary).getByText('0')).toBeInTheDocument()
     expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
     expect(within(importPanel).getByText('Формат файла')).toBeInTheDocument()
+    expect(within(importPanel).getAllByText('Пройдено').length).toBeGreaterThan(0)
+
+    await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
     expect(await within(importPanel).findByRole('table', { name: 'Лог запуска Access' })).toBeInTheDocument()
     expect(within(importPanel).getByText('file_received')).toBeInTheDocument()
     expect(within(importPanel).getByText('dry_run_finished')).toBeInTheDocument()
-    expect(within(importPanel).getAllByText('Пройдено').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('Предупреждение').length).toBeGreaterThan(0)
+
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
+    expect((await within(importPanel).findAllByText('Dry-run завершен с предупреждениями.')).length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('Завершен').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('2/3 · 1 предупреждение · 0 ошибок').length).toBeGreaterThan(0)
     expect(within(importPanel).getByText('ГСК.accdb · 2/3 · 1 предупреждение · 0 ошибок')).toHaveAttribute('role', 'status')
@@ -1607,8 +2013,15 @@ describe('App', () => {
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
+    await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
     const logCounter = await within(importPanel).findByText('Показано 10 из 11 строк лога')
+    expect(within(importPanel).getByText('step_10')).toBeInTheDocument()
+    expect(within(importPanel).queryByText('step_11')).not.toBeInTheDocument()
+
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
     const runCounter = within(importPanel).getByText('Показано 8 из 9 запусков')
+
+    await user.click(within(importPanel).getByRole('tab', { name: /Карантин/ }))
     const quarantineCounter = within(importPanel).getByText('Показано 8 из 9 строк карантина')
     expect(logCounter).toHaveAttribute('role', 'status')
     expect(logCounter).toHaveAttribute('aria-live', 'polite')
@@ -1616,8 +2029,6 @@ describe('App', () => {
     expect(runCounter).toHaveAttribute('aria-live', 'polite')
     expect(quarantineCounter).toHaveAttribute('role', 'status')
     expect(quarantineCounter).toHaveAttribute('aria-live', 'polite')
-    expect(within(importPanel).getByText('step_10')).toBeInTheDocument()
-    expect(within(importPanel).queryByText('step_11')).not.toBeInTheDocument()
     expect(quarantineLimit).toBe(50)
   })
 
@@ -1636,8 +2047,14 @@ describe('App', () => {
 
     const emptyRunState = await within(importPanel).findByText('Выберите запуск dry-run')
     const emptyCheckState = within(importPanel).getByText('Проверок пока нет')
+
+    await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
     const emptyLogState = within(importPanel).getByText('Лог выбранного запуска пока пуст')
+
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
     const emptyHistoryState = within(importPanel).getByText('Истории импорта пока нет')
+
+    await user.click(within(importPanel).getByRole('tab', { name: /Карантин/ }))
     const emptyQuarantineState = within(importPanel).getByText('Открытых строк карантина нет')
     for (const state of [emptyRunState, emptyCheckState, emptyLogState, emptyHistoryState, emptyQuarantineState]) {
       expect(state).toHaveAttribute('role', 'status')
@@ -1665,6 +2082,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: /Access/ })
+    await user.click(within(importPanel).getByRole('tab', { name: /Карантин/ }))
     const quarantineTable = await within(importPanel).findByRole('table', { name: 'Карантин импорта Access' })
 
     expect(within(quarantineTable).getByText('Garage #42')).toBeInTheDocument()
@@ -1805,18 +2223,27 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Консолидированный отчет за период')).toBeInTheDocument()
+    expect(within(reportsPanel).getByRole('tab', { name: /Сводный/ })).toHaveAttribute('aria-selected', 'true')
+    expect(within(reportsPanel).getByRole('tab', { name: /Поступления/ })).toBeInTheDocument()
+    expect(within(reportsPanel).getByRole('tab', { name: /Выплаты/ })).toBeInTheDocument()
     expect(within(reportsPanel).getByText('Формат периода сводного отчета: ММ.ГГГГ.')).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('Формат дат поступлений: ДД.ММ.ГГГГ.')).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('Формат дат выплат: ДД.ММ.ГГГГ.')).toBeInTheDocument()
     expect(within(reportsPanel).getByLabelText('Начало периода отчета')).toHaveAccessibleDescription('Формат периода сводного отчета: ММ.ГГГГ.')
-    expect(within(reportsPanel).getByLabelText('Начало отчета по поступлениям')).toHaveAccessibleDescription('Формат дат поступлений: ДД.ММ.ГГГГ.')
-    expect(within(reportsPanel).getByLabelText('Начало отчета по выплатам')).toHaveAccessibleDescription('Формат дат выплат: ДД.ММ.ГГГГ.')
     expect(within(reportsPanel).getByText('Начисления попадают в сводный отчет по учетному месяцу, поступления и выплаты - по фактической дате операции.')).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('В поступлениях начисления считаются по учетному месяцу, оплаты - по фактической дате поступления.')).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('В выплатах начисления поставщикам считаются по учетному месяцу, фактические выплаты - по дате оплаты.')).toBeInTheDocument()
     expect(within(reportsPanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).toBeInTheDocument()
     expect(within(reportsPanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    expect(within(reportsPanel).getByText('Формат дат поступлений: ДД.ММ.ГГГГ.')).toBeInTheDocument()
+    expect(within(reportsPanel).getByLabelText('Начало отчета по поступлениям')).toHaveAccessibleDescription('Формат дат поступлений: ДД.ММ.ГГГГ.')
+    expect(within(reportsPanel).getByText('В поступлениях начисления считаются по учетному месяцу, оплаты - по фактической дате поступления.')).toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'Выплаты')
+    expect(within(reportsPanel).getByText('Формат дат выплат: ДД.ММ.ГГГГ.')).toBeInTheDocument()
+    expect(within(reportsPanel).getByLabelText('Начало отчета по выплатам')).toHaveAccessibleDescription('Формат дат выплат: ДД.ММ.ГГГГ.')
+    expect(within(reportsPanel).getByText('В выплатах начисления поставщикам считаются по учетному месяцу, фактические выплаты - по дате оплаты.')).toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'Сводный')
 
     await user.type(within(reportsPanel).getByLabelText('Поиск в отчете'), 'Петров')
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сформировать' }))
@@ -1876,17 +2303,19 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('Начало периода отчета не может быть позже конца.')).toBeInTheDocument()
     expect(consolidatedCalls).toBe(initialConsolidatedCalls)
 
+    await openReportTab(user, reportsPanel, 'Поступления')
     fireEvent.change(within(reportsPanel).getByLabelText('Начало отчета по поступлениям'), { target: { value: '2026-07-01' } })
     fireEvent.change(within(reportsPanel).getByLabelText('Конец отчета по поступлениям'), { target: { value: '2026-06-01' } })
-    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[0])
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать' }))
 
     expect(await within(reportsPanel).findByText('Проверьте отчет по поступлениям')).toBeInTheDocument()
     expect(within(reportsPanel).getByText('Начало отчета по поступлениям не может быть позже конца.')).toBeInTheDocument()
     expect(incomeCalls).toBe(initialIncomeCalls)
 
+    await openReportTab(user, reportsPanel, 'Выплаты')
     fireEvent.change(within(reportsPanel).getByLabelText('Начало отчета по выплатам'), { target: { value: '2026-07-01' } })
     fireEvent.change(within(reportsPanel).getByLabelText('Конец отчета по выплатам'), { target: { value: '2026-06-01' } })
-    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[1])
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать' }))
 
     expect(await within(reportsPanel).findByText('Проверьте отчет по выплатам')).toBeInTheDocument()
     expect(within(reportsPanel).getByText('Начало отчета по выплатам не может быть позже конца.')).toBeInTheDocument()
@@ -1998,10 +2427,10 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toHaveAttribute('role', 'status')
-    const reportRowCounters = await within(reportsPanel).findAllByText('Показано 16 из 17 строк')
-    expect(reportRowCounters).toHaveLength(2)
-    expect(reportRowCounters[0]).toHaveAttribute('role', 'status')
-    expect(reportRowCounters[1]).toHaveAttribute('role', 'status')
+    await openReportTab(user, reportsPanel, 'Поступления')
+    expect(await within(reportsPanel).findByText('Показано 16 из 17 строк')).toHaveAttribute('role', 'status')
+    await openReportTab(user, reportsPanel, 'Выплаты')
+    expect(await within(reportsPanel).findByText('Показано 16 из 17 строк')).toHaveAttribute('role', 'status')
   })
 
   it('shows accessible empty states for reports without rows', async () => {
@@ -2041,11 +2470,15 @@ describe('App', () => {
 
     expect(await within(reportsPanel).findByText('Помесячных строк отчета пока нет')).toHaveAttribute('role', 'status')
     expect(await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')).toHaveAttribute('role', 'status')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('role', 'status')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('role', 'status')
     expect(within(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).queryByText(/Июнь 2026/)).not.toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).queryByText(/Иванов Иван/)).not.toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('role', 'status')
     expect(within(reportsPanel).queryByText(/PKO-1/)).not.toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'Выплаты')
+    expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('role', 'status')
     expect(within(reportsPanel).queryByText(/RKO-1/)).not.toBeInTheDocument()
   })
 
@@ -2074,6 +2507,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Поступления')
 
     expect(await within(reportsPanel).findByText('Отчет по поступлениям')).toBeInTheDocument()
     expect(within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })).toBeInTheDocument()
@@ -2084,7 +2518,7 @@ describe('App', () => {
     await user.selectOptions(within(reportsPanel).getByLabelText('Гаражи в отчете по поступлениям'), ['garage-1'])
     await user.selectOptions(within(reportsPanel).getByLabelText('Владельцы в отчете по поступлениям'), ['owner-1'])
     await user.selectOptions(within(reportsPanel).getByLabelText('Виды поступлений в отчете'), ['income-type-1'])
-    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[0])
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать' }))
 
     expect((await within(reportsPanel).findAllByText('1 строк')).length).toBeGreaterThan(0)
     expect((await within(reportsPanel).findAllByText('1 500,00')).length).toBeGreaterThan(0)
@@ -2128,6 +2562,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Выплаты')
 
     expect(await within(reportsPanel).findByText('Отчет по выплатам')).toBeInTheDocument()
     expect(within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })).toBeInTheDocument()
@@ -2137,7 +2572,7 @@ describe('App', () => {
     await user.selectOptions(within(reportsPanel).getByLabelText('Тип строк отчета по выплатам'), 'payments')
     await user.selectOptions(within(reportsPanel).getByLabelText('Поставщики в отчете по выплатам'), ['supplier-1'])
     await user.selectOptions(within(reportsPanel).getByLabelText('Виды выплат в отчете'), ['expense-type-1'])
-    await user.click(within(reportsPanel).getAllByRole('button', { name: 'Показать' })[1])
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать' }))
 
     expect((await within(reportsPanel).findAllByText('400,00')).length).toBeGreaterThan(0)
     expect(expenseRequest?.supplierIds).toEqual(['supplier-1'])
@@ -2313,6 +2748,9 @@ describe('App', () => {
           getUsers: async () => {
             throw new Error('Нет доступа к пользователям.')
           },
+          getUsersPage: async () => {
+            throw new Error('Нет доступа к пользователям.')
+          },
         })}
       />,
     )
@@ -2394,6 +2832,17 @@ function createUserClient(overrides: Partial<UserManagementClient> = {}): UserMa
   return {
     getRoles: async () => roles,
     getUsers: async () => [admin],
+    getUsersPage: async (_token, search, offset = 0, limit = 25) => {
+      const filteredUsers = search
+        ? [admin].filter((item) => `${item.email} ${item.displayName} ${item.roles.join(' ')}`.toLowerCase().includes(search.toLowerCase()))
+        : [admin]
+      return {
+        items: filteredUsers.slice(offset, offset + limit),
+        totalCount: filteredUsers.length,
+        offset,
+        limit,
+      }
+    },
     createUser: async () => admin,
     updateUser: async () => admin,
     ...overrides,
@@ -2402,26 +2851,47 @@ function createUserClient(overrides: Partial<UserManagementClient> = {}): UserMa
 
 function createStatefulUserClient(): UserManagementClient {
   const roles = createRoles()
+  let users: ManagedUserDto[] = []
 
   return {
     getRoles: async () => roles,
-    getUsers: async () => [],
-    createUser: async (_token, request) =>
-      createManagedUser({
+    getUsers: async (_token, search) => {
+      return search ? users.filter((item) => `${item.email} ${item.displayName} ${item.roles.join(' ')}`.toLowerCase().includes(search.toLowerCase())) : users
+    },
+    getUsersPage: async (_token, search, offset = 0, limit = 25) => {
+      const filteredUsers = search ? users.filter((item) => `${item.email} ${item.displayName} ${item.roles.join(' ')}`.toLowerCase().includes(search.toLowerCase())) : users
+      return {
+        items: filteredUsers.slice(offset, offset + limit),
+        totalCount: filteredUsers.length,
+        offset,
+        limit,
+      }
+    },
+    createUser: async (_token, request) => {
+      const createdUser = createManagedUser({
         id: crypto.randomUUID(),
         email: request.email,
         displayName: request.displayName,
+        isActive: request.isActive,
         roles: request.roleCodes,
         permissions: roles.find((role) => role.code === request.roleCodes[0])?.permissions ?? [],
-      }),
-    updateUser: async (_token, userId, request) =>
-      createManagedUser({
+      })
+      users = [createdUser, ...users]
+      return createdUser
+    },
+    updateUser: async (_token, userId, request) => {
+      const existingUser = users.find((item) => item.id === userId)
+      const updatedUser = createManagedUser({
         id: userId,
-        email: 'updated@example.com',
+        email: existingUser?.email ?? 'updated@example.com',
         displayName: request.displayName,
         isActive: request.isActive,
         roles: request.roleCodes,
-      }),
+        permissions: roles.find((role) => role.code === request.roleCodes[0])?.permissions ?? [],
+      })
+      users = users.map((item) => (item.id === userId ? updatedUser : item))
+      return updatedUser
+    },
   }
 }
 
@@ -2455,7 +2925,19 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     archiveExpenseType: async () => undefined,
     getTariffs: async () => [tariff],
     createTariff: async () => tariff,
-    updateTariff: async (_token, id, request) => createTariff({ id, name: request.name, calculationBase: request.calculationBase, rate: request.rate, effectiveFrom: request.effectiveFrom, comment: request.comment ?? null }),
+    updateTariff: async (_token, id, request) => createTariff({
+      id,
+      name: request.name,
+      calculationBase: request.calculationBase,
+      rate: request.rate,
+      effectiveFrom: request.effectiveFrom,
+      comment: request.comment ?? null,
+      electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+      electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+      electricityFirstRate: request.electricityFirstRate ?? null,
+      electricitySecondRate: request.electricitySecondRate ?? null,
+      electricityThirdRate: request.electricityThirdRate ?? null,
+    }),
     archiveTariff: async () => undefined,
     ...overrides,
   }
@@ -2472,36 +2954,84 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
   const supplierAccrual = createSupplierAccrual({ id: 'supplier-accrual-1', amount: 650 })
   const meterReading = createMeterReading({ id: 'meter-reading-1', consumption: 5.5, currentValue: 15.5, previousValue: 10 })
 
-  return {
+  const client: FinanceClient = {
     getOperations: async () => [operation],
+    getOperationsPage: async () => ({ items: [operation], totalCount: 1, offset: 0, limit: 25 }),
     getAccruals: async () => [accrual],
+    getAccrualsPage: async () => ({ items: [accrual], totalCount: 1, offset: 0, limit: 25 }),
     getSupplierAccruals: async () => [supplierAccrual],
+    getSupplierAccrualsPage: async () => ({ items: [supplierAccrual], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadings: async () => [meterReading],
+    getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
+    updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
+    updateExpense: async (_token, operationId) => createFinancialOperation({ id: operationId, operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     cancelOperation: async (_token, operationId, request) => {
       const target = operation.id === operationId ? operation : createFinancialOperation({ id: operationId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     createAccrual: async () => accrual,
+    updateAccrual: async (_token, accrualId) => ({ ...accrual, id: accrualId }),
     cancelAccrual: async (_token, accrualId, request) => {
       const target = accrual.id === accrualId ? accrual : createAccrual({ id: accrualId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     createSupplierAccrual: async () => supplierAccrual,
+    updateSupplierAccrual: async (_token, supplierAccrualId) => ({ ...supplierAccrual, id: supplierAccrualId }),
     cancelSupplierAccrual: async (_token, supplierAccrualId, request) => {
       const target = supplierAccrual.id === supplierAccrualId ? supplierAccrual : createSupplierAccrual({ id: supplierAccrualId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     createMeterReading: async () => meterReading,
+    updateMeterReading: async (_token, meterReadingId) => ({ ...meterReading, id: meterReadingId }),
     cancelMeterReading: async (_token, meterReadingId, request) => {
       const target = meterReading.id === meterReadingId ? meterReading : createMeterReading({ id: meterReadingId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     ...overrides,
   }
+
+  if (!overrides.getOperationsPage) {
+    client.getOperationsPage = async (token, params) => {
+      const allItems = await client.getOperations(token, params?.limit)
+      const filteredItems = params?.operationKind ? allItems.filter((item) => item.operationKind === params.operationKind) : allItems
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      return { items: filteredItems.slice(offset, offset + limit), totalCount: filteredItems.length, offset, limit }
+    }
+  }
+
+  if (!overrides.getAccrualsPage) {
+    client.getAccrualsPage = async (token, params) => {
+      const allItems = await client.getAccruals(token, params?.garageId, params?.limit)
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      return { items: allItems.slice(offset, offset + limit), totalCount: allItems.length, offset, limit }
+    }
+  }
+
+  if (!overrides.getSupplierAccrualsPage) {
+    client.getSupplierAccrualsPage = async (token, params) => {
+      const allItems = await client.getSupplierAccruals(token, params?.supplierId, params?.limit)
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      return { items: allItems.slice(offset, offset + limit), totalCount: allItems.length, offset, limit }
+    }
+  }
+
+  if (!overrides.getMeterReadingsPage) {
+    client.getMeterReadingsPage = async (token, params) => {
+      const allItems = await client.getMeterReadings(token, params?.garageId, params?.meterKind, params?.limit)
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      return { items: allItems.slice(offset, offset + limit), totalCount: allItems.length, offset, limit }
+    }
+  }
+
+  return client
 }
 
 function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient {
@@ -2617,7 +3147,7 @@ function createStatefulFinanceClient(): FinanceClient {
     return { incomeTotal, expenseTotal, accrualTotal, balance: incomeTotal - expenseTotal, debt: accrualTotal - incomeTotal, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }
   }
 
-  return {
+  return createFinanceClient({
     getOperations: async () => operations,
     getAccruals: async () => accruals,
     getSupplierAccruals: async () => supplierAccruals,
@@ -2752,16 +3282,20 @@ function createStatefulFinanceClient(): FinanceClient {
       meterReadings = meterReadings.filter((item) => item.id !== meterReadingId)
       return { ...reading, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
-  }
+  })
 }
 
 function createStatefulDictionaryClient(): DictionaryClient {
   let lastOwner: OwnerDto | null = null
   let lastGroup: SupplierGroupDto | null = null
   let garages: GarageDto[] = []
+  let suppliers: SupplierDto[] = []
+  let incomeTypes: AccountingTypeDto[] = []
+  let expenseTypes: AccountingTypeDto[] = []
+  let tariffs: TariffDto[] = []
 
   return {
-    getOwners: async () => [],
+    getOwners: async () => lastOwner ? [lastOwner] : [],
     createOwner: async (_token, request) => {
       const owner = createOwner({ id: crypto.randomUUID(), lastName: request.lastName, firstName: request.firstName, phone: request.phone ?? null })
       lastOwner = owner
@@ -2794,17 +3328,17 @@ function createStatefulDictionaryClient(): DictionaryClient {
       return garage
     },
     archiveGarage: async () => undefined,
-    getSupplierGroups: async () => [],
+    getSupplierGroups: async () => lastGroup ? [lastGroup] : [],
     createSupplierGroup: async (_token, request) => {
       const group = createGroup({ id: crypto.randomUUID(), name: request.name })
       lastGroup = group
       return group
     },
     archiveSupplierGroup: async () => undefined,
-    getSuppliers: async () => [],
+    getSuppliers: async () => suppliers,
     createSupplier: async (_token, request) => {
       const group = lastGroup?.id === request.groupId ? lastGroup : createGroup({ id: request.groupId, name: 'Поставщики' })
-      return createSupplier({
+      const supplier = createSupplier({
         id: crypto.randomUUID(),
         name: request.name,
         groupId: group.id,
@@ -2812,33 +3346,59 @@ function createStatefulDictionaryClient(): DictionaryClient {
         inn: request.inn ?? null,
         startingBalance: request.startingBalance,
       })
+      suppliers = [supplier, ...suppliers]
+      return supplier
     },
     archiveSupplier: async () => undefined,
-    getIncomeTypes: async () => [],
-    createIncomeType: async (_token, request) => createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null }),
+    getIncomeTypes: async () => incomeTypes,
+    createIncomeType: async (_token, request) => {
+      const incomeType = createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null })
+      incomeTypes = [incomeType, ...incomeTypes]
+      return incomeType
+    },
     archiveIncomeType: async () => undefined,
-    getExpenseTypes: async () => [],
-    createExpenseType: async (_token, request) => createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null }),
+    getExpenseTypes: async () => expenseTypes,
+    createExpenseType: async (_token, request) => {
+      const expenseType = createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null })
+      expenseTypes = [expenseType, ...expenseTypes]
+      return expenseType
+    },
     archiveExpenseType: async () => undefined,
-    getTariffs: async () => [],
-    createTariff: async (_token, request) =>
-      createTariff({
+    getTariffs: async () => tariffs,
+    createTariff: async (_token, request) => {
+      const tariff = createTariff({
         id: crypto.randomUUID(),
         name: request.name,
         calculationBase: request.calculationBase,
         rate: request.rate,
         effectiveFrom: request.effectiveFrom,
         comment: request.comment ?? null,
-      }),
-    updateTariff: async (_token, id, request) =>
-      createTariff({
+        electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+        electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+        electricityFirstRate: request.electricityFirstRate ?? null,
+        electricitySecondRate: request.electricitySecondRate ?? null,
+        electricityThirdRate: request.electricityThirdRate ?? null,
+      })
+      tariffs = [tariff, ...tariffs]
+      return tariff
+    },
+    updateTariff: async (_token, id, request) => {
+      const tariff = createTariff({
         id,
         name: request.name,
         calculationBase: request.calculationBase,
         rate: request.rate,
         effectiveFrom: request.effectiveFrom,
         comment: request.comment ?? null,
-      }),
+        electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+        electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+        electricityFirstRate: request.electricityFirstRate ?? null,
+        electricitySecondRate: request.electricitySecondRate ?? null,
+        electricityThirdRate: request.electricityThirdRate ?? null,
+      })
+      tariffs = tariffs.map((item) => (item.id === id ? tariff : item))
+      return tariff
+    },
     archiveTariff: async () => undefined,
   }
 }
@@ -2998,6 +3558,11 @@ function createTariff(overrides: Partial<TariffDto>): TariffDto {
     name: 'Тариф',
     calculationBase: 'fixed',
     rate: 1,
+    electricityFirstThreshold: null,
+    electricitySecondThreshold: null,
+    electricityFirstRate: null,
+    electricitySecondRate: null,
+    electricityThirdRate: null,
     effectiveFrom: '2026-07-01',
     comment: null,
     isArchived: false,

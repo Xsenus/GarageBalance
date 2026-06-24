@@ -25,6 +25,13 @@ public sealed class UsersController(IUserManagementService userManagementService
         return Ok(await userManagementService.GetUsersAsync(search, cancellationToken, limit));
     }
 
+    [HttpGet("page")]
+    [ProducesResponseType<ManagedUsersPageDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ManagedUsersPageDto>> GetUsersPage([FromQuery] string? search, [FromQuery] int offset, [FromQuery] int limit, CancellationToken cancellationToken)
+    {
+        return Ok(await userManagementService.GetUsersPageAsync(search, offset, limit, cancellationToken));
+    }
+
     [HttpPost]
     [ProducesResponseType<ManagedUserDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

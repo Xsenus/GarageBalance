@@ -18,6 +18,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetOwnersAsync(search, cancellationToken, limit));
     }
 
+    [HttpGet("owners/page")]
+    [ProducesResponseType<PagedResult<OwnerDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<OwnerDto>>> GetOwnersPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetOwnersPageAsync(search, offset, limit, cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPost("owners")]
     [ProducesResponseType<OwnerDto>(StatusCodes.Status201Created)]
@@ -58,6 +65,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     public async Task<ActionResult<IReadOnlyList<GarageDto>>> GetGarages([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         return Ok(await dictionaryService.GetGaragesAsync(search, cancellationToken, limit));
+    }
+
+    [HttpGet("garages/page")]
+    [ProducesResponseType<PagedResult<GarageDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<GarageDto>>> GetGaragesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetGaragesPageAsync(search, offset, limit, cancellationToken));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -104,6 +118,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetSupplierGroupsAsync(cancellationToken, limit));
     }
 
+    [HttpGet("supplier-groups/page")]
+    [ProducesResponseType<PagedResult<SupplierGroupDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SupplierGroupDto>>> GetSupplierGroupsPage([FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetSupplierGroupsPageAsync(offset, limit, cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPost("supplier-groups")]
     [ProducesResponseType<SupplierGroupDto>(StatusCodes.Status201Created)]
@@ -117,6 +138,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         }
 
         return CreatedAtAction(nameof(GetSupplierGroups), result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("supplier-groups/{id:guid}")]
+    [ProducesResponseType<SupplierGroupDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SupplierGroupDto>> UpdateSupplierGroup(Guid id, UpsertSupplierGroupRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateSupplierGroupAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -135,6 +167,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     public async Task<ActionResult<IReadOnlyList<SupplierDto>>> GetSuppliers([FromQuery] Guid? groupId, [FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         return Ok(await dictionaryService.GetSuppliersAsync(groupId, search, cancellationToken, limit));
+    }
+
+    [HttpGet("suppliers/page")]
+    [ProducesResponseType<PagedResult<SupplierDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SupplierDto>>> GetSuppliersPage([FromQuery] Guid? groupId, [FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetSuppliersPageAsync(groupId, search, offset, limit, cancellationToken));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -179,6 +218,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetIncomeTypesAsync(cancellationToken, limit));
     }
 
+    [HttpGet("income-types/page")]
+    [ProducesResponseType<PagedResult<AccountingTypeDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<AccountingTypeDto>>> GetIncomeTypesPage([FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetIncomeTypesPageAsync(offset, limit, cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPost("income-types")]
     [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status201Created)]
@@ -192,6 +238,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         }
 
         return CreatedAtAction(nameof(GetIncomeTypes), result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("income-types/{id:guid}")]
+    [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountingTypeDto>> UpdateIncomeType(Guid id, UpsertAccountingTypeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateIncomeTypeAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -212,6 +269,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetExpenseTypesAsync(cancellationToken, limit));
     }
 
+    [HttpGet("expense-types/page")]
+    [ProducesResponseType<PagedResult<AccountingTypeDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<AccountingTypeDto>>> GetExpenseTypesPage([FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetExpenseTypesPageAsync(offset, limit, cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPost("expense-types")]
     [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status201Created)]
@@ -225,6 +289,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         }
 
         return CreatedAtAction(nameof(GetExpenseTypes), result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("expense-types/{id:guid}")]
+    [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountingTypeDto>> UpdateExpenseType(Guid id, UpsertAccountingTypeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateExpenseTypeAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -243,6 +318,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         return Ok(await dictionaryService.GetTariffsAsync(search, cancellationToken, limit));
+    }
+
+    [HttpGet("tariffs/page")]
+    [ProducesResponseType<PagedResult<TariffDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<TariffDto>>> GetTariffsPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetTariffsPageAsync(search, offset, limit, cancellationToken));
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]

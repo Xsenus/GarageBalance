@@ -21,6 +21,17 @@ public sealed class UsersControllerTests
     }
 
     [Fact]
+    public async Task GetUsersPage_PassesPagingToService()
+    {
+        var service = new FakeUserManagementService();
+        var controller = CreateController(service);
+
+        await controller.GetUsersPage("operator", 25, 10, CancellationToken.None);
+
+        Assert.Equal(("operator", 25, 10), service.LastUserPageRequest);
+    }
+
+    [Fact]
     public async Task CreateUser_ReturnsConflictForDuplicateEmail()
     {
         var controller = CreateController(new FakeUserManagementService
@@ -94,6 +105,7 @@ public sealed class UsersControllerTests
     {
         public Guid? LastActorUserId { get; private set; }
         public (string? Search, int? Limit) LastUserListRequest { get; private set; }
+        public (string? Search, int Offset, int Limit) LastUserPageRequest { get; private set; }
         public UserManagementResult<ManagedUserDto> CreateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
         public UserManagementResult<ManagedUserDto> UpdateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
 
@@ -106,6 +118,12 @@ public sealed class UsersControllerTests
         {
             LastUserListRequest = (search, limit);
             return Task.FromResult<IReadOnlyList<ManagedUserDto>>([]);
+        }
+
+        public Task<ManagedUsersPageDto> GetUsersPageAsync(string? search, int offset, int limit, CancellationToken cancellationToken)
+        {
+            LastUserPageRequest = (search, offset, limit);
+            return Task.FromResult(new ManagedUsersPageDto([], 0, offset, limit));
         }
 
         public Task<UserManagementResult<ManagedUserDto>> CreateUserAsync(CreateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken)

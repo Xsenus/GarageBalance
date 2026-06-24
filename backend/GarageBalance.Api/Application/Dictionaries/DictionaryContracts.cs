@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GarageBalance.Api.Application.Dictionaries;
 
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Offset, int Limit);
+
 public sealed record OwnerDto(
     Guid Id,
     string LastName,
@@ -11,7 +13,10 @@ public sealed record OwnerDto(
     string? Phone,
     string? Address,
     string? MeterNotes,
-    bool IsArchived);
+    bool IsArchived)
+{
+    public IReadOnlyList<string> GarageNumbers { get; init; } = [];
+}
 
 public sealed record UpsertOwnerRequest(
     [Required, MaxLength(120)] string LastName,
@@ -86,11 +91,21 @@ public sealed record TariffDto(
     decimal Rate,
     DateOnly EffectiveFrom,
     string? Comment,
-    bool IsArchived);
+    bool IsArchived,
+    decimal? ElectricityFirstThreshold = null,
+    decimal? ElectricitySecondThreshold = null,
+    decimal? ElectricityFirstRate = null,
+    decimal? ElectricitySecondRate = null,
+    decimal? ElectricityThirdRate = null);
 
 public sealed record UpsertTariffRequest(
     [Required, MaxLength(200)] string Name,
     [Required, MaxLength(80)] string CalculationBase,
     [Range(0.0001, 999999999)] decimal Rate,
     DateOnly EffectiveFrom,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    [Range(0.0001, 999999999)] decimal? ElectricityFirstThreshold = null,
+    [Range(0.0001, 999999999)] decimal? ElectricitySecondThreshold = null,
+    [Range(0.0001, 999999999)] decimal? ElectricityFirstRate = null,
+    [Range(0.0001, 999999999)] decimal? ElectricitySecondRate = null,
+    [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null);

@@ -193,6 +193,29 @@ public sealed class UserManagementServiceTests
         Assert.Equal(2, users.Count);
     }
 
+    [Fact]
+    public async Task GetUsersPageAsync_ReturnsTotalCountAndRequestedSlice()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        for (var index = 0; index < 3; index++)
+        {
+            var result = await service.CreateUserAsync(
+                new CreateManagedUserRequest($"user{index}@example.com", $"РЎРѕС‚СЂСѓРґРЅРёРє {index}", "StrongPass123", [SystemRoles.Operator]),
+                null,
+                CancellationToken.None);
+            Assert.True(result.Succeeded);
+        }
+
+        var page = await service.GetUsersPageAsync(null, 1, 1, CancellationToken.None);
+
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal(1, page.Offset);
+        Assert.Equal(1, page.Limit);
+        var user = Assert.Single(page.Items);
+        Assert.Equal("user1@example.com", user.Email);
+    }
+
     private static UserManagementService CreateService(GarageBalanceDbContext context)
     {
         return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator());

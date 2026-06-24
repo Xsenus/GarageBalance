@@ -24,6 +24,21 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return await ToOperationDtosAsync(operations, cancellationToken);
     }
 
+    public async Task<FinancePagedResult<FinancialOperationDto>> GetOperationsPageAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
+    {
+        var normalizedOffset = NormalizeListOffset(request.Offset);
+        var normalizedLimit = NormalizeListLimit(request.Limit);
+        var query = ApplyFilters(QueryOperations(), request);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var operations = await query
+            .OrderByDescending(operation => operation.OperationDate)
+            .ThenBy(operation => operation.DocumentNumber)
+            .Skip(normalizedOffset)
+            .Take(normalizedLimit)
+            .ToListAsync(cancellationToken);
+        return new FinancePagedResult<FinancialOperationDto>(await ToOperationDtosAsync(operations, cancellationToken), totalCount, normalizedOffset, normalizedLimit);
+    }
+
     public async Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
     {
         return await ApplyAccrualFilters(QueryAccruals(), request)
@@ -34,6 +49,22 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<FinancePagedResult<AccrualDto>> GetAccrualsPageAsync(AccrualListRequest request, CancellationToken cancellationToken)
+    {
+        var normalizedOffset = NormalizeListOffset(request.Offset);
+        var normalizedLimit = NormalizeListLimit(request.Limit);
+        var query = ApplyAccrualFilters(QueryAccruals(), request);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.Garage.Number)
+            .Skip(normalizedOffset)
+            .Take(normalizedLimit)
+            .Select(accrual => ToDto(accrual))
+            .ToListAsync(cancellationToken);
+        return new FinancePagedResult<AccrualDto>(items, totalCount, normalizedOffset, normalizedLimit);
+    }
+
     public async Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
     {
         return await ApplySupplierAccrualFilters(QuerySupplierAccruals(), request)
@@ -42,6 +73,22 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .Take(NormalizeListLimit(request.Limit))
             .Select(accrual => ToDto(accrual))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<FinancePagedResult<SupplierAccrualDto>> GetSupplierAccrualsPageAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
+    {
+        var normalizedOffset = NormalizeListOffset(request.Offset);
+        var normalizedLimit = NormalizeListLimit(request.Limit);
+        var query = ApplySupplierAccrualFilters(QuerySupplierAccruals(), request);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.Supplier.Name)
+            .Skip(normalizedOffset)
+            .Take(normalizedLimit)
+            .Select(accrual => ToDto(accrual))
+            .ToListAsync(cancellationToken);
+        return new FinancePagedResult<SupplierAccrualDto>(items, totalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
@@ -55,6 +102,23 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<FinancePagedResult<MeterReadingDto>> GetMeterReadingsPageAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
+    {
+        var normalizedOffset = NormalizeListOffset(request.Offset);
+        var normalizedLimit = NormalizeListLimit(request.Limit);
+        var query = ApplyMeterReadingFilters(QueryMeterReadings(), request);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(reading => reading.AccountingMonth)
+            .ThenBy(reading => reading.Garage.Number)
+            .ThenBy(reading => reading.MeterKind)
+            .Skip(normalizedOffset)
+            .Take(normalizedLimit)
+            .Select(reading => ToDto(reading))
+            .ToListAsync(cancellationToken);
+        return new FinancePagedResult<MeterReadingDto>(items, totalCount, normalizedOffset, normalizedLimit);
+    }
+
     private static int NormalizeListLimit(int? limit)
     {
         if (limit is null or <= 0)
@@ -63,6 +127,11 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         }
 
         return Math.Min(limit.Value, MaxListLimit);
+    }
+
+    private static int NormalizeListOffset(int? offset)
+    {
+        return offset is null or < 0 ? 0 : offset.Value;
     }
 
     public async Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -160,6 +229,113 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         dbContext.FinancialOperations.Add(operation);
         AddAudit(actorUserId, "finance.expense_created", operation.Id, FormatExpenseCreatedAuditSummary(operation));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
+    public async Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var operation = await dbContext.FinancialOperations
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage!.Owner)
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        if (operation is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
+        }
+
+        if (operation.OperationKind != FinancialOperationKinds.Income)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_kind_mismatch", "Эта операция не является поступлением.");
+        }
+
+        if (operation.IsCanceled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
+        }
+
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
+        }
+
+        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("income_type_not_found", "Вид поступления не найден.");
+        }
+
+        if (await HasDocumentDuplicateAsync(FinancialOperationKinds.Income, request.DocumentNumber, request.OperationDate, operation.Id, cancellationToken))
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
+        }
+
+        operation.OperationDate = request.OperationDate;
+        operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        operation.Amount = MoneyMath.RoundMoney(request.Amount);
+        operation.DocumentNumber = NormalizeOptional(request.DocumentNumber);
+        operation.Comment = NormalizeOptional(request.Comment);
+        operation.GarageId = garage.Id;
+        operation.Garage = garage;
+        operation.IncomeTypeId = incomeType.Id;
+        operation.IncomeType = incomeType;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.income_updated", operation.Id, FormatIncomeUpdatedAuditSummary(operation));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
+    public async Task<FinanceResult<FinancialOperationDto>> UpdateExpenseAsync(Guid operationId, CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var operation = await dbContext.FinancialOperations
+            .Include(item => item.Supplier)
+            .Include(item => item.ExpenseType)
+            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        if (operation is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
+        }
+
+        if (operation.OperationKind != FinancialOperationKinds.Expense)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_kind_mismatch", "Эта операция не является выплатой.");
+        }
+
+        if (operation.IsCanceled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
+        }
+
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        if (supplier is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
+        }
+
+        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        if (expenseType is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
+        }
+
+        if (await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, operation.Id, cancellationToken))
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
+        }
+
+        operation.OperationDate = request.OperationDate;
+        operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        operation.Amount = MoneyMath.RoundMoney(request.Amount);
+        operation.DocumentNumber = NormalizeOptional(request.DocumentNumber);
+        operation.Comment = NormalizeOptional(request.Comment);
+        operation.SupplierId = supplier.Id;
+        operation.Supplier = supplier;
+        operation.ExpenseTypeId = expenseType.Id;
+        operation.ExpenseType = expenseType;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.expense_updated", operation.Id, FormatExpenseUpdatedAuditSummary(operation));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -283,6 +459,78 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
+    public async Task<FinanceResult<AccrualDto>> UpdateAccrualAsync(Guid accrualId, CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var source = request.Source.Trim();
+        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_comment_required", "Для ручного начисления нужен комментарий.");
+        }
+
+        if (source == AccrualSources.Regular && string.IsNullOrWhiteSpace(request.Comment))
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_regular_edit_comment_required", "Для изменения автоматического начисления нужен комментарий.");
+        }
+
+        if (source is not AccrualSources.Manual and not AccrualSources.Regular)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_source_invalid", "Источник начисления должен быть manual или regular.");
+        }
+
+        var accrual = await dbContext.Accruals
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == accrualId, cancellationToken);
+        if (accrual is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
+        }
+
+        if (accrual.IsCanceled)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_already_canceled", "Отмененное начисление нельзя изменить.");
+        }
+
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
+        }
+
+        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
+        }
+
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        if (await dbContext.Accruals.AnyAsync(item =>
+            !item.IsCanceled &&
+            item.Id != accrual.Id &&
+            item.GarageId == garage.Id &&
+            item.IncomeTypeId == incomeType.Id &&
+            item.AccountingMonth == month &&
+            item.Source == source,
+            cancellationToken))
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
+        }
+
+        accrual.GarageId = garage.Id;
+        accrual.Garage = garage;
+        accrual.IncomeTypeId = incomeType.Id;
+        accrual.IncomeType = incomeType;
+        accrual.AccountingMonth = month;
+        accrual.Amount = MoneyMath.RoundMoney(request.Amount);
+        accrual.Source = source;
+        accrual.Comment = NormalizeOptional(request.Comment);
+        accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.accrual_updated", "accrual", accrual.Id, FormatAccrualUpdatedAuditSummary(accrual));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+    }
+
     public async Task<FinanceResult<SupplierAccrualDto>> CreateSupplierAccrualAsync(CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
@@ -338,6 +586,80 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         dbContext.SupplierAccruals.Add(accrual);
         AddAudit(actorUserId, "finance.supplier_accrual_created", "supplier_accrual", accrual.Id, FormatSupplierAccrualCreatedAuditSummary(accrual));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
+    }
+
+    public async Task<FinanceResult<SupplierAccrualDto>> UpdateSupplierAccrualAsync(Guid supplierAccrualId, CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var source = request.Source.Trim();
+        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_comment_required", "Для ручного начисления поставщику нужен комментарий.");
+        }
+
+        if (source == AccrualSources.Regular && string.IsNullOrWhiteSpace(request.Comment))
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_regular_edit_comment_required", "Для изменения автоматического начисления поставщику нужен комментарий.");
+        }
+
+        if (source is not AccrualSources.Manual and not AccrualSources.Regular)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_source_invalid", "Источник начисления поставщику должен быть manual или regular.");
+        }
+
+        var accrual = await dbContext.SupplierAccruals
+            .Include(item => item.Supplier)
+            .Include(item => item.ExpenseType)
+            .SingleOrDefaultAsync(item => item.Id == supplierAccrualId, cancellationToken);
+        if (accrual is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_found", "Начисление поставщику не найдено.");
+        }
+
+        if (accrual.IsCanceled)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_already_canceled", "Отмененное начисление поставщику нельзя изменить.");
+        }
+
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        if (supplier is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_not_found", "Поставщик для начисления не найден.");
+        }
+
+        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        if (expenseType is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
+        }
+
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var documentNumber = NormalizeOptional(request.DocumentNumber);
+        if (await dbContext.SupplierAccruals.AnyAsync(item =>
+            !item.IsCanceled &&
+            item.Id != accrual.Id &&
+            item.SupplierId == supplier.Id &&
+            item.ExpenseTypeId == expenseType.Id &&
+            item.AccountingMonth == month &&
+            item.Source == source &&
+            item.DocumentNumber == documentNumber,
+            cancellationToken))
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
+        }
+
+        accrual.SupplierId = supplier.Id;
+        accrual.Supplier = supplier;
+        accrual.ExpenseTypeId = expenseType.Id;
+        accrual.ExpenseType = expenseType;
+        accrual.AccountingMonth = month;
+        accrual.Amount = MoneyMath.RoundMoney(request.Amount);
+        accrual.Source = source;
+        accrual.DocumentNumber = documentNumber;
+        accrual.Comment = NormalizeOptional(request.Comment);
+        accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.supplier_accrual_updated", "supplier_accrual", accrual.Id, FormatSupplierAccrualUpdatedAuditSummary(accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -522,6 +844,83 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
+    public async Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(Guid meterReadingId, CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var meterKind = request.MeterKind.Trim();
+        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+        }
+
+        var reading = await dbContext.MeterReadings
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .SingleOrDefaultAsync(item => item.Id == meterReadingId, cancellationToken);
+        if (reading is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
+        }
+
+        if (reading.IsCanceled)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Отмененное показание нельзя изменить.");
+        }
+
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
+        }
+
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        if (await dbContext.MeterReadings.AnyAsync(item =>
+            !item.IsCanceled &&
+            item.Id != reading.Id &&
+            item.GarageId == garage.Id &&
+            item.MeterKind == meterKind &&
+            item.AccountingMonth == month,
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
+        }
+
+        var previousReading = await dbContext.MeterReadings.AsNoTracking()
+            .Where(item => !item.IsCanceled && item.Id != reading.Id && item.GarageId == garage.Id && item.MeterKind == meterKind && item.AccountingMonth < month)
+            .OrderByDescending(item => item.AccountingMonth)
+            .FirstOrDefaultAsync(cancellationToken);
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue);
+        var previousValue = MoneyMath.RoundMeterValue(previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m);
+        var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
+        if (consumption < 0)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
+        }
+
+        var nextReading = await dbContext.MeterReadings.AsNoTracking()
+            .Where(item => !item.IsCanceled && item.Id != reading.Id && item.GarageId == garage.Id && item.MeterKind == meterKind && item.AccountingMonth > month)
+            .OrderBy(item => item.AccountingMonth)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (nextReading is not null && currentValue > nextReading.CurrentValue)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_sequence_invalid", "Показание не может быть больше следующего внесенного месяца.");
+        }
+
+        reading.GarageId = garage.Id;
+        reading.Garage = garage;
+        reading.MeterKind = meterKind;
+        reading.AccountingMonth = month;
+        reading.ReadingDate = request.ReadingDate;
+        reading.CurrentValue = currentValue;
+        reading.PreviousValue = previousValue;
+        reading.Consumption = consumption;
+        reading.HasGapWarning = HasGapWarning(meterKind, month, previousReading);
+        reading.Comment = NormalizeOptional(request.Comment);
+        reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.meter_reading_updated", "meter_reading", reading.Id, FormatMeterReadingUpdatedAuditSummary(reading));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+    }
+
     public async Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var reason = NormalizeOptional(request.Reason);
@@ -558,15 +957,14 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             TariffCalculationBases.Fixed => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate)),
             TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount)),
             TariffCalculationBases.MeterWater => await CalculateMeterAmountAsync(garage.Id, MeterKinds.Water, tariff.Rate, month, cancellationToken),
-            TariffCalculationBases.MeterElectricity => await CalculateMeterAmountAsync(garage.Id, MeterKinds.Electricity, tariff.Rate, month, cancellationToken),
+            TariffCalculationBases.MeterElectricity => await CalculateElectricityMeterAmountAsync(garage.Id, tariff, month, cancellationToken),
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
         };
     }
 
     private static string BuildRegularAccrualComment(Tariff tariff, string? comment)
     {
-        var tariffRate = tariff.Rate.ToString("0.####", RussianCulture);
-        var snapshot = $"тариф {tariff.Name}: ставка {tariffRate}, действует с {tariff.EffectiveFrom:dd.MM.yyyy}";
+        var snapshot = $"тариф {tariff.Name}: {FormatTariffRateSnapshot(tariff)}, действует с {tariff.EffectiveFrom:dd.MM.yyyy}";
         var userComment = NormalizeOptional(comment);
         return userComment is null
             ? $"Автоначисление; {snapshot}."
@@ -582,12 +980,30 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
+    private static string FormatIncomeUpdatedAuditSummary(FinancialOperation operation)
+    {
+        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Изменено поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
     private static string FormatExpenseCreatedAuditSummary(FinancialOperation operation)
     {
         var amount = operation.Amount.ToString("0.00", RussianCulture);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         var comment = NormalizeOptional(operation.Comment);
         var summary = $"Создана выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatExpenseUpdatedAuditSummary(FinancialOperation operation)
+    {
+        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Изменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
@@ -608,6 +1024,14 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
+    private static string FormatAccrualUpdatedAuditSummary(Accrual accrual)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var comment = NormalizeOptional(accrual.Comment);
+        var summary = $"Изменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
     private static string FormatAccrualCanceledAuditSummary(Accrual accrual, string reason)
     {
         var amount = accrual.Amount.ToString("0.00", RussianCulture);
@@ -620,6 +1044,15 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
         var comment = NormalizeOptional(accrual.Comment);
         var summary = $"Создано начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatSupplierAccrualUpdatedAuditSummary(SupplierAccrual accrual)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(accrual.Comment);
+        var summary = $"Изменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
@@ -643,11 +1076,18 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
+    private static string FormatMeterReadingUpdatedAuditSummary(MeterReading reading)
+    {
+        var warning = reading.HasGapWarning ? "есть предупреждение по разрыву истории" : "без предупреждения";
+        var comment = NormalizeOptional(reading.Comment);
+        var summary = $"Изменено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}; {warning}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
     private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
     {
         var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
-        var tariffRate = tariff.Rate.ToString("0.####", RussianCulture);
-        return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, ставка {tariffRate}; пропущено {skipped.Count}.";
+        return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff)}; пропущено {skipped.Count}.";
     }
 
     private async Task<AmountCalculationResult> CalculateMeterAmountAsync(Guid garageId, string meterKind, decimal rate, DateOnly month, CancellationToken cancellationToken)
@@ -658,6 +1098,53 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return reading is null
             ? AmountCalculationResult.Failure("нет показания счетчика за месяц.")
             : AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * rate));
+    }
+
+    private async Task<AmountCalculationResult> CalculateElectricityMeterAmountAsync(Guid garageId, Tariff tariff, DateOnly month, CancellationToken cancellationToken)
+    {
+        var reading = await dbContext.MeterReadings.AsNoTracking().SingleOrDefaultAsync(
+            item => !item.IsCanceled && item.GarageId == garageId && item.MeterKind == MeterKinds.Electricity && item.AccountingMonth == month,
+            cancellationToken);
+        if (reading is null)
+        {
+            return AmountCalculationResult.Failure("нет показания счетчика за месяц.");
+        }
+
+        if (!HasElectricityTiers(tariff))
+        {
+            return AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * tariff.Rate));
+        }
+
+        var firstThreshold = tariff.ElectricityFirstThreshold!.Value;
+        var secondThreshold = tariff.ElectricitySecondThreshold!.Value;
+        var firstVolume = Math.Min(reading.Consumption, firstThreshold);
+        var secondVolume = Math.Min(Math.Max(reading.Consumption - firstThreshold, 0m), secondThreshold - firstThreshold);
+        var thirdVolume = Math.Max(reading.Consumption - secondThreshold, 0m);
+        var amount =
+            firstVolume * tariff.ElectricityFirstRate!.Value +
+            secondVolume * tariff.ElectricitySecondRate!.Value +
+            thirdVolume * tariff.ElectricityThirdRate!.Value;
+
+        return AmountCalculationResult.Success(MoneyMath.RoundMoney(amount));
+    }
+
+    private static string FormatTariffRateSnapshot(Tariff tariff)
+    {
+        if (!HasElectricityTiers(tariff))
+        {
+            return $"ставка {tariff.Rate.ToString("0.####", RussianCulture)}";
+        }
+
+        return $"пороги электроэнергии до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {tariff.ElectricityFirstRate!.Value.ToString("0.####", RussianCulture)}, до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {tariff.ElectricitySecondRate!.Value.ToString("0.####", RussianCulture)}, свыше по {tariff.ElectricityThirdRate!.Value.ToString("0.####", RussianCulture)}";
+    }
+
+    private static bool HasElectricityTiers(Tariff tariff)
+    {
+        return tariff.ElectricityFirstThreshold.HasValue
+            && tariff.ElectricitySecondThreshold.HasValue
+            && tariff.ElectricityFirstRate.HasValue
+            && tariff.ElectricitySecondRate.HasValue
+            && tariff.ElectricityThirdRate.HasValue;
     }
 
     private IQueryable<FinancialOperation> QueryOperations()
@@ -807,10 +1294,16 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
     private async Task<bool> HasDocumentDuplicateAsync(string operationKind, string? documentNumber, DateOnly operationDate, CancellationToken cancellationToken)
     {
+        return await HasDocumentDuplicateAsync(operationKind, documentNumber, operationDate, null, cancellationToken);
+    }
+
+    private async Task<bool> HasDocumentDuplicateAsync(string operationKind, string? documentNumber, DateOnly operationDate, Guid? excludeOperationId, CancellationToken cancellationToken)
+    {
         var normalized = NormalizeOptional(documentNumber);
         return normalized is not null && await dbContext.FinancialOperations.AnyAsync(
             operation =>
                 !operation.IsCanceled &&
+                operation.Id != excludeOperationId &&
                 operation.OperationKind == operationKind &&
                 operation.OperationDate == operationDate &&
                 operation.DocumentNumber == normalized,
