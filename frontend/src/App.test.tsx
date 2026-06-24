@@ -1546,7 +1546,7 @@ describe('App', () => {
 
     await user.click(within(quarantineTable).getByRole('button', { name: 'Закрыть' }))
 
-    expect(await within(importPanel).findByText('Строка карантина закрыта.')).toBeInTheDocument()
+    expect(await within(importPanel).findByText('Строка карантина закрыта.')).toHaveAttribute('role', 'status')
     expect(within(quarantineTable).queryByText('Garage #42')).not.toBeInTheDocument()
     expect(within(quarantineTable).getByText('Открытых строк карантина нет')).toHaveAttribute('aria-live', 'polite')
   })

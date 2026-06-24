@@ -2189,7 +2189,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
-      {exportMessage ? <div className="form-note" aria-live="polite">{exportMessage}</div> : null}
+      {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
       <div className="finance-grid">
         <form className="dictionary-form" onSubmit={runDryRun}>
