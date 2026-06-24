@@ -238,6 +238,36 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var owner = await service.CreateOwnerAsync(
+            new UpsertOwnerRequest("Семенов", "Андрей", "Петрович", "+7 900 100", null, null),
+            null,
+            CancellationToken.None);
+
+        var firstGarage = await service.CreateGarageAsync(
+            new UpsertGarageRequest("44", 1, 1, owner.Value!.Id, 0, null, null, "основной гараж"),
+            null,
+            CancellationToken.None);
+        var secondGarage = await service.CreateGarageAsync(
+            new UpsertGarageRequest("45", 2, 1, owner.Value.Id, 0, null, null, "семейный гараж"),
+            null,
+            CancellationToken.None);
+
+        var garagesByOwner = await service.GetGaragesAsync("семенов", CancellationToken.None);
+
+        Assert.True(firstGarage.Succeeded);
+        Assert.True(secondGarage.Succeeded);
+        Assert.Equal(owner.Value.Id, firstGarage.Value!.OwnerId);
+        Assert.Equal(owner.Value.Id, secondGarage.Value!.OwnerId);
+        Assert.Equal(2, garagesByOwner.Count);
+        Assert.Equal(["44", "45"], garagesByOwner.Select(garage => garage.Number).Order(StringComparer.Ordinal));
+        Assert.All(garagesByOwner, garage => Assert.Equal("Семенов Андрей Петрович", garage.OwnerName));
+    }
+
+    [Fact]
     public async Task CreateSupplierGroupAsync_RejectsDuplicateName()
     {
         await using var database = await TestDatabase.CreateAsync();
