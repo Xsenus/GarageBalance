@@ -33,4 +33,17 @@ describe('accessible dynamic messages', () => {
     expect(dialogLines.filter(({ line }) => !line.includes('aria-labelledby='))).toEqual([])
     expect(dialogLines.filter(({ line }) => !line.includes('aria-describedby='))).toEqual([])
   })
+
+  it('keeps dictionary disclosure controls linked to their list', () => {
+    expect(appSource).toContain('<ul className="dictionary-list" id={listId}>')
+
+    const disclosureControlLines = appSource
+      .split(/\r?\n/)
+      .map((line, index) => ({ index: index + 1, line: line.trim() }))
+      .filter(({ line }) => line.includes('setShowAllItems((value) => !value)'))
+
+    expect(disclosureControlLines.length).toBeGreaterThan(0)
+    expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-controls={listId}'))).toEqual([])
+    expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-expanded={showAllItems}'))).toEqual([])
+  })
 })
