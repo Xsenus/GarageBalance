@@ -194,7 +194,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(operation => operation.OperationDate);
             entity.HasIndex(operation => operation.AccountingMonth);
             entity.HasIndex(operation => operation.OperationKind);
-            entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.DocumentNumber });
+            entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.DocumentNumber })
+                .IsUnique()
+                .HasFilter("\"IsCanceled\" = false AND \"DocumentNumber\" IS NOT NULL");
             entity.HasIndex(operation => operation.GarageId);
             entity.HasIndex(operation => operation.SupplierId);
             entity.HasOne(operation => operation.Garage)

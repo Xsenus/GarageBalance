@@ -165,6 +165,39 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateIncomeAsync_AllowsReplacementAfterCancel()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null),
+            null,
+            CancellationToken.None);
+        var request = new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-replace", "Ошибочный платеж");
+        var firstPayment = await service.CreateIncomeAsync(request, null, CancellationToken.None);
+        Assert.True(firstPayment.Succeeded);
+        var canceled = await service.CancelOperationAsync(
+            firstPayment.Value!.Id,
+            new CancelFinanceEntryRequest("Платеж заменен"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+
+        var replacement = await service.CreateIncomeAsync(request with { Amount = 600m, Comment = "Корректный платеж" }, null, CancellationToken.None);
+
+        Assert.True(replacement.Succeeded);
+        Assert.Equal(600m, replacement.Value!.Amount);
+        Assert.Equal(1000m, replacement.Value.GarageDebtBefore);
+        Assert.Equal(400m, replacement.Value.GarageDebtAfter);
+        Assert.Equal(2, await database.Context.FinancialOperations.CountAsync());
+        Assert.Equal(1, await database.Context.FinancialOperations.CountAsync(operation => operation.IsCanceled));
+        var activeOperation = Assert.Single(await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None));
+        Assert.Equal(600m, activeOperation.Amount);
+        Assert.Equal(600m, (await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None)).IncomeTotal);
+    }
+
+    [Fact]
     public async Task CancelOperationAsync_CancelsOperationAndRemovesItFromSummary()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -284,6 +317,40 @@ public sealed class FinanceServiceTests
         Assert.Contains("вид Вода", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ RKO-20", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Оплата воды", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_AllowsReplacementAfterCancel()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        fixtures.Supplier.StartingBalance = 300m;
+        await database.Context.SaveChangesAsync();
+        await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 800m, "manual", "INV-replace", "Счет за месяц"),
+            null,
+            CancellationToken.None);
+        var request = new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 250m, "RKO-replace", "Ошибочная выплата");
+        var firstPayment = await service.CreateExpenseAsync(request, null, CancellationToken.None);
+        Assert.True(firstPayment.Succeeded);
+        var canceled = await service.CancelOperationAsync(
+            firstPayment.Value!.Id,
+            new CancelFinanceEntryRequest("Выплата заменена"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+
+        var replacement = await service.CreateExpenseAsync(request with { Amount = 350m, Comment = "Корректная выплата" }, null, CancellationToken.None);
+
+        Assert.True(replacement.Succeeded);
+        Assert.Equal(350m, replacement.Value!.Amount);
+        Assert.Equal(1100m, replacement.Value.SupplierDebtBefore);
+        Assert.Equal(750m, replacement.Value.SupplierDebtAfter);
+        Assert.Equal(2, await database.Context.FinancialOperations.CountAsync());
+        Assert.Equal(1, await database.Context.FinancialOperations.CountAsync(operation => operation.IsCanceled));
+        var activeOperation = Assert.Single(await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None));
+        Assert.Equal(350m, activeOperation.Amount);
     }
 
     [Fact]
