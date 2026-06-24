@@ -1665,8 +1665,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
-    expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toBeInTheDocument()
-    expect((await within(reportsPanel).findAllByText('Показано 16 из 17 строк')).length).toBe(2)
+    expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toHaveAttribute('aria-live', 'polite')
+    const reportRowCounters = await within(reportsPanel).findAllByText('Показано 16 из 17 строк')
+    expect(reportRowCounters).toHaveLength(2)
+    expect(reportRowCounters[0]).toHaveAttribute('aria-live', 'polite')
+    expect(reportRowCounters[1]).toHaveAttribute('aria-live', 'polite')
   })
 
   it('shows income report and applies income filters', async () => {

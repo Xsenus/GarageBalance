@@ -2909,7 +2909,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               </span>
             </div>
           ))}
-          {report && report.garageRows.length > garageReportScreenRowLimit ? <p className="empty-state">Показано {garageReportScreenRowLimit} из {report.garageRows.length} строк</p> : null}
+          {report && report.garageRows.length > garageReportScreenRowLimit ? <p className="empty-state" aria-live="polite">Показано {garageReportScreenRowLimit} из {report.garageRows.length} строк</p> : null}
         </div>
       </div>
 
@@ -3009,7 +3009,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
-        {incomeReport && incomeReport.rowCount > incomeReport.rows.length ? <p className="empty-state">Показано {incomeReport.rows.length} из {incomeReport.rowCount} строк</p> : null}
+        {incomeReport && incomeReport.rowCount > incomeReport.rows.length ? <p className="empty-state" aria-live="polite">Показано {incomeReport.rows.length} из {incomeReport.rowCount} строк</p> : null}
       </div>
 
       <div className="subsection-heading">
@@ -3101,7 +3101,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
-        {expenseReport && expenseReport.rowCount > expenseReport.rows.length ? <p className="empty-state">Показано {expenseReport.rows.length} из {expenseReport.rowCount} строк</p> : null}
+        {expenseReport && expenseReport.rowCount > expenseReport.rows.length ? <p className="empty-state" aria-live="polite">Показано {expenseReport.rows.length} из {expenseReport.rowCount} строк</p> : null}
       </div>
     </section>
   )
