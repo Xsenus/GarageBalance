@@ -1788,6 +1788,36 @@ describe('App', () => {
     expect(reportRowCounters[1]).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('shows accessible empty states for reports without rows', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient({
+      getIncomeReport: async () => createIncomeReport({
+        accrualTotal: 0,
+        incomeTotal: 0,
+        debt: 0,
+        rowCount: 0,
+        rows: [],
+      }),
+      getExpenseReport: async () => createExpenseReport({
+        accrualTotal: 0,
+        expenseTotal: 0,
+        difference: 0,
+        rowCount: 0,
+        rows: [],
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('aria-live', 'polite')
+    expect(within(reportsPanel).queryByText(/PKO-1/)).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText(/RKO-1/)).not.toBeInTheDocument()
+  })
+
   it('shows income report and applies income filters', async () => {
     const user = userEvent.setup()
     let incomeRequest: Parameters<ReportClient['getIncomeReport']>[1] = undefined

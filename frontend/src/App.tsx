@@ -3004,7 +3004,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <span role="columnheader">Гараж и вид</span>
           <span role="columnheader">Сумма</span>
         </div>
-        {incomeReport?.rows.length === 0 ? <p className="empty-state">По выбранному фильтру поступлений нет</p> : null}
+        {incomeReport?.rows.length === 0 ? <p className="empty-state" aria-live="polite">По выбранному фильтру поступлений нет</p> : null}
         {incomeReport?.rows.map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
             <span role="cell">
@@ -3096,7 +3096,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <span role="columnheader">Поставщик и вид</span>
           <span role="columnheader">Сумма</span>
         </div>
-        {expenseReport?.rows.length === 0 ? <p className="empty-state">По выбранному фильтру выплат нет</p> : null}
+        {expenseReport?.rows.length === 0 ? <p className="empty-state" aria-live="polite">По выбранному фильтру выплат нет</p> : null}
         {expenseReport?.rows.map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
             <span role="cell">
