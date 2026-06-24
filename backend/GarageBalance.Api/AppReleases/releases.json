@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-additional-report-slots",
+    "version": "0.110.0",
+    "publishedAt": "2026-06-24T14:45:00+07:00",
+    "title": "Заложены дополнительные отчеты",
+    "summary": "Для следующих этапов зарезервированы три дополнительных отчета с понятными источниками данных, фильтрами, экспортом и приемкой.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен docs/additional-report-slots.md с отчетами \"Задолженность и переплаты\", \"Счетчики и расход\", \"Поставщики и обязательства\"."
+      },
+      {
+        "type": "added",
+        "text": "Для каждого слота описаны бизнес-вопрос, фильтры, данные, итоги, экспорт XLSX/PDF или XLSX и acceptance-критерии."
+      },
+      {
+        "type": "added",
+        "text": "Технический контракт новых отчетов закрепляет ReportsController, ReportService, reports.read, PostgreSQL aggregation, rowCount и server pagination."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-report-accounting-basis-hints",
     "version": "0.109.0",
     "publishedAt": "2026-06-24T14:15:00+07:00",
