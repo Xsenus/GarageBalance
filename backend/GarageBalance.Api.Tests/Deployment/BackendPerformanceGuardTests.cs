@@ -54,9 +54,10 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains("GetIncomeReportWithoutSearchAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetExpenseReportWithoutSearchAsync", source, StringComparison.Ordinal);
+        Assert.Contains("BuildGarageRowsWithoutSearchAsync", source, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(source, "ApplyReportRowLimit(") >= 6,
-            "Screen report visible rows must be bounded before materialization for income, expense, accrual and starting-balance segments.");
+            CountOccurrences(source, "ApplyReportRowLimit(") >= 7,
+            "Screen report visible rows must be bounded before materialization for consolidated garage, income, expense, accrual and starting-balance segments.");
         Assert.True(
             CountOccurrences(source, ".Take(NormalizeReportLimit(limit.Value))") >= 1,
             "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
