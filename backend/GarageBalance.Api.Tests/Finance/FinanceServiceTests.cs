@@ -209,6 +209,76 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Июнь"), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 700m, "manual", "Июль"), null, CancellationToken.None);
+
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 20), new DateOnly(2026, 7, 1), 800m, "PKO-alloc", null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(payment.Succeeded);
+        Assert.Collection(
+            payment.Value!.PaymentAllocations,
+            first =>
+            {
+                Assert.Equal("month", first.AllocationKind);
+                Assert.Equal(new DateOnly(2026, 6, 1), first.AccountingMonth);
+                Assert.Equal(500m, first.DebtBefore);
+                Assert.Equal(500m, first.PaidAmount);
+                Assert.Equal(0m, first.DebtAfter);
+            },
+            second =>
+            {
+                Assert.Equal("month", second.AllocationKind);
+                Assert.Equal(new DateOnly(2026, 7, 1), second.AccountingMonth);
+                Assert.Equal(700m, second.DebtBefore);
+                Assert.Equal(300m, second.PaidAmount);
+                Assert.Equal(400m, second.DebtAfter);
+            });
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 400m, "manual", "INV-6", "Июнь"), null, CancellationToken.None);
+        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), 600m, "manual", "INV-7", "Июль"), null, CancellationToken.None);
+
+        var payment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 21), new DateOnly(2026, 7, 1), 650m, "RKO-alloc", null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(payment.Succeeded);
+        Assert.Collection(
+            payment.Value!.PaymentAllocations,
+            first =>
+            {
+                Assert.Equal("month", first.AllocationKind);
+                Assert.Equal(new DateOnly(2026, 6, 1), first.AccountingMonth);
+                Assert.Equal(400m, first.DebtBefore);
+                Assert.Equal(400m, first.PaidAmount);
+                Assert.Equal(0m, first.DebtAfter);
+            },
+            second =>
+            {
+                Assert.Equal("month", second.AllocationKind);
+                Assert.Equal(new DateOnly(2026, 7, 1), second.AccountingMonth);
+                Assert.Equal(600m, second.DebtBefore);
+                Assert.Equal(250m, second.PaidAmount);
+                Assert.Equal(350m, second.DebtAfter);
+            });
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_RejectsDuplicateDocumentForSameDate()
     {
         await using var database = await TestDatabase.CreateAsync();

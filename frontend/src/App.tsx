@@ -26,7 +26,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, PaymentAllocationDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -2875,6 +2875,9 @@ function FinancePanel({
                 ) : null}
                 {operation.operationKind === 'expense' && operation.supplierDebtBefore !== null && operation.supplierDebtAfter !== null ? (
                   <small className="balance-history">Обязательство: {formatMoney(operation.supplierDebtBefore)} → {formatMoney(operation.supplierDebtAfter)}</small>
+                ) : null}
+                {operation.paymentAllocations.length > 0 ? (
+                  <small className="balance-history">Разбивка: {formatPaymentAllocations(operation.paymentAllocations)}</small>
                 ) : null}
               </span>
               <span role="cell" className={`operation-amount ${operation.operationKind === 'income' ? 'money-income' : 'money-expense'}`}>
@@ -6530,6 +6533,15 @@ function formatDebtAmount(value: number): string {
 
 function getDebtClassName(value: number): string {
   return value < 0 ? 'money-overpayment' : 'money-accrual'
+}
+
+function formatPaymentAllocations(allocations: PaymentAllocationDto[]): string {
+  const visible = allocations.slice(0, 3).map((allocation) => {
+    const label = allocation.accountingMonth ? formatMonth(allocation.accountingMonth) : allocation.label
+    return `${label} ${formatMoney(allocation.paidAmount)}`
+  })
+  const hiddenCount = allocations.length - visible.length
+  return hiddenCount > 0 ? `${visible.join(', ')} и еще ${hiddenCount}` : visible.join(', ')
 }
 
 function createDefaultConsolidatedReportFilters(month: string): ConsolidatedReportFilters {

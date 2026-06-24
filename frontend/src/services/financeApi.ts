@@ -1,3 +1,12 @@
+export type PaymentAllocationDto = {
+  allocationKind: 'starting_balance' | 'month' | 'overpayment'
+  accountingMonth: string | null
+  label: string
+  debtBefore: number
+  paidAmount: number
+  debtAfter: number
+}
+
 export type FinancialOperationDto = {
   id: string
   operationKind: 'income' | 'expense'
@@ -19,6 +28,7 @@ export type FinancialOperationDto = {
   garageDebtAfter: number | null
   supplierDebtBefore: number | null
   supplierDebtAfter: number | null
+  paymentAllocations: PaymentAllocationDto[]
   isCanceled: boolean
 }
 

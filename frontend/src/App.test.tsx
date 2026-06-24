@@ -1843,6 +1843,7 @@ describe('App', () => {
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
 
     expect(await within(financePanel).findByText('Долг: 900,00 → 600,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Разбивка: 06.2026 300,00')).toBeInTheDocument()
   })
 
   it('creates supplier accrual from payments workspace', async () => {
@@ -1924,6 +1925,7 @@ describe('App', () => {
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
 
     expect(await within(financePanel).findByText('Обязательство: 650,00 → 400,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Разбивка: 06.2026 250,00')).toBeInTheDocument()
   })
 
   it('generates regular accruals from tariff in payments workspace', async () => {
@@ -3283,6 +3285,14 @@ function createStatefulFinanceClient(): FinanceClient {
         documentNumber: request.documentNumber ?? null,
         garageDebtBefore: debtBefore,
         garageDebtAfter: debtBefore - request.amount,
+        paymentAllocations: [{
+          allocationKind: debtBefore > 0 ? 'month' : 'overpayment',
+          accountingMonth: debtBefore > 0 ? request.accountingMonth : null,
+          label: debtBefore > 0 ? request.accountingMonth.slice(0, 7) : 'Переплата',
+          debtBefore: Math.max(debtBefore, 0),
+          paidAmount: request.amount,
+          debtAfter: debtBefore - request.amount,
+        }],
       })
       operations = [operation, ...operations]
       return operation
@@ -3300,6 +3310,14 @@ function createStatefulFinanceClient(): FinanceClient {
         expenseTypeName: 'Вода',
         supplierDebtBefore,
         supplierDebtAfter: supplierDebtBefore - request.amount,
+        paymentAllocations: [{
+          allocationKind: supplierDebtBefore > 0 ? 'month' : 'overpayment',
+          accountingMonth: supplierDebtBefore > 0 ? request.accountingMonth : null,
+          label: supplierDebtBefore > 0 ? request.accountingMonth.slice(0, 7) : 'Переплата',
+          debtBefore: Math.max(supplierDebtBefore, 0),
+          paidAmount: request.amount,
+          debtAfter: supplierDebtBefore - request.amount,
+        }],
       })
       operations = [operation, ...operations]
       return operation
@@ -3736,6 +3754,7 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     garageDebtAfter: null,
     supplierDebtBefore: null,
     supplierDebtAfter: null,
+    paymentAllocations: [],
     isCanceled: false,
     ...overrides,
   }

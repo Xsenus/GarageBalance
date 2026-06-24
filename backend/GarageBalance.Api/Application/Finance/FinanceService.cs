@@ -1552,18 +1552,21 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         decimal? garageDebtAfter = null;
         decimal? supplierDebtBefore = null;
         decimal? supplierDebtAfter = null;
+        IReadOnlyList<PaymentAllocationDto> paymentAllocations = [];
         if (operation.OperationKind == FinancialOperationKinds.Income && operation.GarageId is not null)
         {
             garageDebtBefore = await CalculateGarageDebtBeforeIncomeAsync(operation, cancellationToken);
             garageDebtAfter = garageDebtBefore - operation.Amount;
+            paymentAllocations = await CalculateGaragePaymentAllocationsAsync(operation, cancellationToken);
         }
         else if (operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId is not null)
         {
             supplierDebtBefore = await CalculateSupplierDebtBeforeExpenseAsync(operation, cancellationToken);
             supplierDebtAfter = supplierDebtBefore - operation.Amount;
+            paymentAllocations = await CalculateSupplierPaymentAllocationsAsync(operation, cancellationToken);
         }
 
-        return ToDto(operation, garageDebtBefore, garageDebtAfter, supplierDebtBefore, supplierDebtAfter);
+        return ToDto(operation, garageDebtBefore, garageDebtAfter, supplierDebtBefore, supplierDebtAfter, paymentAllocations);
     }
 
     private async Task<decimal> CalculateGarageDebtBeforeIncomeAsync(FinancialOperation operation, CancellationToken cancellationToken)
@@ -1588,6 +1591,40 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return MoneyMath.RoundMoney(startingBalance + accrualTotal - previousIncomeTotal);
     }
 
+    private async Task<IReadOnlyList<PaymentAllocationDto>> CalculateGaragePaymentAllocationsAsync(FinancialOperation operation, CancellationToken cancellationToken)
+    {
+        var garageId = operation.GarageId!.Value;
+        var startingBalance = operation.Garage?.StartingBalance ?? await dbContext.Garages
+            .Where(garage => garage.Id == garageId)
+            .Select(garage => garage.StartingBalance)
+            .SingleAsync(cancellationToken);
+        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(previous =>
+                !previous.IsCanceled &&
+                previous.Id != operation.Id &&
+                previous.OperationKind == FinancialOperationKinds.Income &&
+                previous.GarageId == garageId &&
+                previous.OperationDate < operation.OperationDate)
+            .SumAsync(previous => previous.Amount, cancellationToken);
+        var accrualBucketRows = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= operation.AccountingMonth)
+            .GroupBy(accrual => accrual.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .OrderBy(bucket => bucket.AccountingMonth)
+            .ToListAsync(cancellationToken);
+        var accrualBuckets = accrualBucketRows
+            .Select(bucket => new AllocationDebtBucket("month", bucket.AccountingMonth, $"{bucket.AccountingMonth:MM.yyyy}", bucket.Amount))
+            .ToList();
+        var buckets = new List<AllocationDebtBucket>(accrualBuckets.Count + 1);
+        if (startingBalance > 0)
+        {
+            buckets.Add(new AllocationDebtBucket("starting_balance", null, "Стартовый баланс", startingBalance));
+        }
+
+        buckets.AddRange(accrualBuckets);
+        return BuildPaymentAllocations(buckets, previousIncomeTotal + Math.Max(-startingBalance, 0), operation.Amount);
+    }
+
     private async Task<decimal> CalculateSupplierDebtBeforeExpenseAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var supplierId = operation.SupplierId!.Value;
@@ -1610,12 +1647,93 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return MoneyMath.RoundMoney(startingBalance + accrualTotal - previousExpenseTotal);
     }
 
+    private async Task<IReadOnlyList<PaymentAllocationDto>> CalculateSupplierPaymentAllocationsAsync(FinancialOperation operation, CancellationToken cancellationToken)
+    {
+        var supplierId = operation.SupplierId!.Value;
+        var startingBalance = operation.Supplier?.StartingBalance ?? await dbContext.Suppliers
+            .Where(supplier => supplier.Id == supplierId)
+            .Select(supplier => supplier.StartingBalance)
+            .SingleAsync(cancellationToken);
+        var previousExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(previous =>
+                !previous.IsCanceled &&
+                previous.Id != operation.Id &&
+                previous.OperationKind == FinancialOperationKinds.Expense &&
+                previous.SupplierId == supplierId &&
+                previous.OperationDate < operation.OperationDate)
+            .SumAsync(previous => previous.Amount, cancellationToken);
+        var accrualBucketRows = await dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= operation.AccountingMonth)
+            .GroupBy(accrual => accrual.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .OrderBy(bucket => bucket.AccountingMonth)
+            .ToListAsync(cancellationToken);
+        var accrualBuckets = accrualBucketRows
+            .Select(bucket => new AllocationDebtBucket("month", bucket.AccountingMonth, $"{bucket.AccountingMonth:MM.yyyy}", bucket.Amount))
+            .ToList();
+        var buckets = new List<AllocationDebtBucket>(accrualBuckets.Count + 1);
+        if (startingBalance > 0)
+        {
+            buckets.Add(new AllocationDebtBucket("starting_balance", null, "Стартовый баланс", startingBalance));
+        }
+
+        buckets.AddRange(accrualBuckets);
+        return BuildPaymentAllocations(buckets, previousExpenseTotal + Math.Max(-startingBalance, 0), operation.Amount);
+    }
+
+    private static IReadOnlyList<PaymentAllocationDto> BuildPaymentAllocations(IReadOnlyList<AllocationDebtBucket> buckets, decimal previousPaymentTotal, decimal paymentAmount)
+    {
+        var remainingPreviousPayment = MoneyMath.RoundMoney(previousPaymentTotal);
+        var remainingPayment = MoneyMath.RoundMoney(paymentAmount);
+        var allocations = new List<PaymentAllocationDto>();
+
+        foreach (var bucket in buckets)
+        {
+            var debtBeforeCurrentPayment = MoneyMath.RoundMoney(bucket.Amount);
+            if (remainingPreviousPayment > 0)
+            {
+                var previousPaid = Math.Min(debtBeforeCurrentPayment, remainingPreviousPayment);
+                debtBeforeCurrentPayment = MoneyMath.RoundMoney(debtBeforeCurrentPayment - previousPaid);
+                remainingPreviousPayment = MoneyMath.RoundMoney(remainingPreviousPayment - previousPaid);
+            }
+
+            if (debtBeforeCurrentPayment <= 0 || remainingPayment <= 0)
+            {
+                continue;
+            }
+
+            var paidAmount = Math.Min(debtBeforeCurrentPayment, remainingPayment);
+            allocations.Add(new PaymentAllocationDto(
+                bucket.Kind,
+                bucket.AccountingMonth,
+                bucket.Label,
+                debtBeforeCurrentPayment,
+                paidAmount,
+                MoneyMath.RoundMoney(debtBeforeCurrentPayment - paidAmount)));
+            remainingPayment = MoneyMath.RoundMoney(remainingPayment - paidAmount);
+        }
+
+        if (remainingPayment > 0)
+        {
+            allocations.Add(new PaymentAllocationDto(
+                "overpayment",
+                null,
+                "Переплата",
+                0,
+                remainingPayment,
+                MoneyMath.RoundMoney(-remainingPayment)));
+        }
+
+        return allocations;
+    }
+
     private static FinancialOperationDto ToDto(
         FinancialOperation operation,
         decimal? garageDebtBefore = null,
         decimal? garageDebtAfter = null,
         decimal? supplierDebtBefore = null,
-        decimal? supplierDebtAfter = null)
+        decimal? supplierDebtAfter = null,
+        IReadOnlyList<PaymentAllocationDto>? paymentAllocations = null)
     {
         return new FinancialOperationDto(
             operation.Id,
@@ -1638,8 +1756,11 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             garageDebtAfter,
             supplierDebtBefore,
             supplierDebtAfter,
+            paymentAllocations ?? [],
             operation.IsCanceled);
     }
+
+    private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
 
     private static AccrualDto ToDto(Accrual accrual)
     {

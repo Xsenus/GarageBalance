@@ -4,6 +4,14 @@ namespace GarageBalance.Api.Application.Finance;
 
 public sealed record FinancePagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Offset, int Limit);
 
+public sealed record PaymentAllocationDto(
+    string AllocationKind,
+    DateOnly? AccountingMonth,
+    string Label,
+    decimal DebtBefore,
+    decimal PaidAmount,
+    decimal DebtAfter);
+
 public sealed record FinancialOperationDto(
     Guid Id,
     string OperationKind,
@@ -25,6 +33,7 @@ public sealed record FinancialOperationDto(
     decimal? GarageDebtAfter,
     decimal? SupplierDebtBefore,
     decimal? SupplierDebtAfter,
+    IReadOnlyList<PaymentAllocationDto> PaymentAllocations,
     bool IsCanceled);
 
 public sealed record CreateIncomeOperationRequest(
