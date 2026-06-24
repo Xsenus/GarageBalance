@@ -225,7 +225,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.GarageId);
             entity.HasIndex(accrual => accrual.IncomeTypeId);
-            entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source }).IsUnique();
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source })
+                .IsUnique()
+                .HasFilter("\"IsCanceled\" = false");
             entity.HasOne(accrual => accrual.Garage)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.GarageId)
@@ -247,7 +249,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.SupplierId);
             entity.HasIndex(accrual => accrual.ExpenseTypeId);
-            entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber }).IsUnique();
+            entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber })
+                .IsUnique()
+                .HasFilter("\"IsCanceled\" = false");
             entity.HasOne(accrual => accrual.Supplier)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.SupplierId)

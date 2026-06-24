@@ -418,6 +418,34 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateAccrualAsync_AllowsReplacementAfterCancel()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var request = new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null);
+        var firstAccrual = await service.CreateAccrualAsync(request, null, CancellationToken.None);
+        Assert.True(firstAccrual.Succeeded);
+        var canceled = await service.CancelAccrualAsync(
+            firstAccrual.Value!.Id,
+            new CancelFinanceEntryRequest("Начисление заменено"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+
+        var replacement = await service.CreateAccrualAsync(request with { Amount = 800m }, null, CancellationToken.None);
+
+        Assert.True(replacement.Succeeded);
+        Assert.Equal(800m, replacement.Value!.Amount);
+        Assert.Equal(2, await database.Context.Accruals.CountAsync());
+        Assert.Equal(1, await database.Context.Accruals.CountAsync(accrual => accrual.IsCanceled));
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Equal(800m, summary.AccrualTotal);
+        Assert.Equal(800m, summary.Debt);
+        Assert.Equal(1, summary.AccrualCount);
+    }
+
+    [Fact]
     public async Task CancelAccrualAsync_CancelsAccrualAndRemovesItFromSummary()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -491,6 +519,32 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_accrual_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAccrualAsync_AllowsReplacementAfterCancel()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var request = new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-1", null);
+        var firstAccrual = await service.CreateSupplierAccrualAsync(request, null, CancellationToken.None);
+        Assert.True(firstAccrual.Succeeded);
+        var canceled = await service.CancelSupplierAccrualAsync(
+            firstAccrual.Value!.Id,
+            new CancelFinanceEntryRequest("Счет заменен"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+
+        var replacement = await service.CreateSupplierAccrualAsync(request with { Amount = 1300m }, null, CancellationToken.None);
+
+        Assert.True(replacement.Succeeded);
+        Assert.Equal(1300m, replacement.Value!.Amount);
+        Assert.Equal(2, await database.Context.SupplierAccruals.CountAsync());
+        Assert.Equal(1, await database.Context.SupplierAccruals.CountAsync(accrual => accrual.IsCanceled));
+        var activeAccrual = Assert.Single(await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, null), CancellationToken.None));
+        Assert.Equal(1300m, activeAccrual.Amount);
     }
 
     [Fact]
