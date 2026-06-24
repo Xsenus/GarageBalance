@@ -690,8 +690,17 @@ const roadmap = [
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(null)
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
+
+  if (!auth) {
+    return (
+      <main className="auth-entry">
+        <AuthGate authClient={authClient} onAuthenticated={setAuth} />
+      </main>
+    )
+  }
+
   const activeNavigationItem = navigation.find((entry) => entry.section === activeSection)
-  const effectiveActiveSection = auth && activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
+  const effectiveActiveSection = activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
 
   return (
     <main className="app-shell">
@@ -704,11 +713,11 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
           </div>
         </div>
 
-        <nav className="nav-list" aria-label="Основные разделы" aria-disabled={!auth}>
+        <nav className="nav-list" aria-label="Основные разделы">
           {navigation.map((item) => {
             const Icon = item.icon
-            const canOpen = Boolean(auth && hasAnyPermission(auth, item.requiredAny))
-            const isActive = auth && effectiveActiveSection === item.section
+            const canOpen = hasAnyPermission(auth, item.requiredAny)
+            const isActive = effectiveActiveSection === item.section
             return (
               <button
                 className={isActive ? 'nav-item active' : 'nav-item'}
@@ -735,14 +744,10 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       </aside>
 
       <section className="workspace">
-        {auth ? (
-          <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onUserChanged={(user) => setAuth((current) => current ? { ...current, user } : current)} onLogout={() => {
-            setAuth(null)
-            setActiveSection('dashboard')
-          }} />
-        ) : (
-          <AuthGate authClient={authClient} onAuthenticated={setAuth} />
-        )}
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onUserChanged={(user) => setAuth((current) => current ? { ...current, user } : current)} onLogout={() => {
+          setAuth(null)
+          setActiveSection('dashboard')
+        }} />
       </section>
     </main>
   )

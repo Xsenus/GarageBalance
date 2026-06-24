@@ -26,11 +26,12 @@ describe('App', () => {
   it('shows auth gate before workspace is available', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
-    expect(screen.getByText('GarageBalance')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /сначала вход и права/i })).toBeInTheDocument()
+    expect(screen.queryByText('GarageBalance')).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Панель' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Панель' })).not.toBeInTheDocument()
   })
 
   it('does not call protected workspace clients before authentication', () => {

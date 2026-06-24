@@ -101,6 +101,11 @@
   padding: 18px;
 }
 
+.auth-entry {
+  min-height: 100vh;
+  padding: 18px;
+}
+
 .topbar {
   display: flex;
   align-items: center;
