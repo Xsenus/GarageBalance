@@ -1006,7 +1006,7 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
         <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
         <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
         {error ? <FormError>{error}</FormError> : null}
-        {message ? <div className="form-success" aria-live="polite">{message}</div> : null}
+        {message ? <div className="form-success" role="status" aria-live="polite">{message}</div> : null}
         <button className="secondary-button" type="submit" disabled={saving}>
           <ShieldCheck size={16} />
           <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
