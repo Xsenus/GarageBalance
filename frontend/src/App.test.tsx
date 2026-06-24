@@ -800,7 +800,7 @@ describe('App', () => {
     })
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Гараж 12')).not.toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toHaveAttribute('aria-live', 'polite')
+    expect(within(dictionaryPanel).getByText('Найдено гаражей: 1')).toHaveAttribute('role', 'status')
 
     await user.clear(within(dictionaryPanel).getByLabelText('Поиск гаража или владельца'))
 
@@ -809,7 +809,7 @@ describe('App', () => {
     })
     expect(await within(dictionaryPanel).findByText('Гараж 12')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Гараж 21')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Показаны все гаражи')).toHaveAttribute('aria-live', 'polite')
+    expect(within(dictionaryPanel).getByText('Показаны все гаражи')).toHaveAttribute('role', 'status')
   })
 
   it('searches suppliers by name or inn from dictionaries workspace', async () => {
@@ -839,7 +839,7 @@ describe('App', () => {
     })
     expect(await within(dictionaryPanel).findByText('Альфа-Банк')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Водоканал')).not.toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Найдено поставщиков: 1')).toHaveAttribute('aria-live', 'polite')
+    expect(within(dictionaryPanel).getByText('Найдено поставщиков: 1')).toHaveAttribute('role', 'status')
 
     await user.clear(within(dictionaryPanel).getByLabelText('Поиск поставщика'))
 
@@ -848,7 +848,7 @@ describe('App', () => {
     })
     expect(await within(dictionaryPanel).findByText('Водоканал')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Альфа-Банк')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Показаны все поставщики')).toHaveAttribute('aria-live', 'polite')
+    expect(within(dictionaryPanel).getByText('Показаны все поставщики')).toHaveAttribute('role', 'status')
   })
 
   it('archives owner from dictionaries workspace', async () => {
