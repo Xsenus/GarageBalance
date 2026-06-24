@@ -24,9 +24,10 @@ public sealed class ImportController(IImportService importService, IImportQuaran
     [ProducesResponseType<IReadOnlyList<AccessImportQuarantineItemDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccessImportQuarantineItemDto>>> GetOpenQuarantineItems(
         [FromQuery] Guid? accessImportRunId,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        return Ok(await importQuarantineService.GetOpenItemsAsync(accessImportRunId, cancellationToken));
+        return Ok(await importQuarantineService.GetOpenItemsAsync(accessImportRunId, cancellationToken, limit));
     }
 
     [HttpGet("runs/{id:guid}/report")]

@@ -1442,10 +1442,14 @@ describe('App', () => {
       id: `quarantine-${index}`,
       externalId: `${index + 1}`,
     }))
+    let quarantineLimit: number | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => runs,
       getAccessRunLog: async () => logEntries,
-      getOpenQuarantineItems: async () => quarantineItems,
+      getOpenQuarantineItems: async (_token, _accessImportRunId, limit) => {
+        quarantineLimit = limit
+        return quarantineItems
+      },
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -1458,6 +1462,7 @@ describe('App', () => {
     expect(within(importPanel).getByText('Показано 8 из 9 строк карантина')).toHaveAttribute('aria-live', 'polite')
     expect(within(importPanel).getByText('step_10')).toBeInTheDocument()
     expect(within(importPanel).queryByText('step_11')).not.toBeInTheDocument()
+    expect(quarantineLimit).toBe(50)
   })
 
   it('shows and resolves Access import quarantine rows', async () => {

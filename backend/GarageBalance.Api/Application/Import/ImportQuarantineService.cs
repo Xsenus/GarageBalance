@@ -8,14 +8,18 @@ namespace GarageBalance.Api.Application.Import;
 
 public sealed class ImportQuarantineService(GarageBalanceDbContext dbContext) : IImportQuarantineService
 {
+    private const int DefaultListLimit = 50;
+    private const int MaxListLimit = 200;
+
     private static readonly HashSet<string> AllowedSeverities = new(StringComparer.OrdinalIgnoreCase)
     {
         "error",
         "warning"
     };
 
-    public async Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken, int? limit = null)
     {
+        var normalizedLimit = NormalizeListLimit(limit);
         var query = dbContext.AccessImportQuarantineItems
             .AsNoTracking()
             .Where(item => item.Status == "open");
@@ -31,6 +35,7 @@ public sealed class ImportQuarantineService(GarageBalanceDbContext dbContext) : 
             items = (await query.ToListAsync(cancellationToken))
                 .OrderByDescending(item => item.CreatedAtUtc)
                 .ThenByDescending(item => item.Id)
+                .Take(normalizedLimit)
                 .ToList();
         }
         else
@@ -38,10 +43,21 @@ public sealed class ImportQuarantineService(GarageBalanceDbContext dbContext) : 
             items = await query
                 .OrderByDescending(item => item.CreatedAtUtc)
                 .ThenByDescending(item => item.Id)
+                .Take(normalizedLimit)
                 .ToListAsync(cancellationToken);
         }
 
         return items.Select(ToDto).ToList();
+    }
+
+    private static int NormalizeListLimit(int? limit)
+    {
+        if (!limit.HasValue || limit.Value <= 0)
+        {
+            return DefaultListLimit;
+        }
+
+        return Math.Min(limit.Value, MaxListLimit);
     }
 
     public async Task<ImportResult<AccessImportQuarantineItemDto>> RegisterAsync(

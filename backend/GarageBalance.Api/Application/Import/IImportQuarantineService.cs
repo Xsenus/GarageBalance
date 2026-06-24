@@ -2,7 +2,7 @@ namespace GarageBalance.Api.Application.Import;
 
 public interface IImportQuarantineService
 {
-    Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken, int? limit = null);
 
     Task<ImportResult<AccessImportQuarantineItemDto>> RegisterAsync(
         RegisterImportQuarantineItemRequest request,

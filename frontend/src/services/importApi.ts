@@ -53,7 +53,7 @@ export type AccessImportRunLogEntryDto = {
 export type ImportClient = {
   getAccessRuns(accessToken: string, limit?: number): Promise<AccessImportRunDto[]>
   getAccessRunLog(accessToken: string, runId: string, limit?: number): Promise<AccessImportRunLogEntryDto[]>
-  getOpenQuarantineItems(accessToken: string, accessImportRunId?: string): Promise<AccessImportQuarantineItemDto[]>
+  getOpenQuarantineItems(accessToken: string, accessImportRunId?: string, limit?: number): Promise<AccessImportQuarantineItemDto[]>
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
   resolveQuarantineItem(accessToken: string, itemId: string, resolutionComment?: string): Promise<AccessImportQuarantineItemDto>
@@ -100,9 +100,13 @@ export const importApi: ImportClient = {
   getAccessRunLog(accessToken, runId, limit = 100) {
     return requestJson(accessToken, `/api/import/access/runs/${runId}/log?limit=${encodeURIComponent(limit)}`)
   },
-  getOpenQuarantineItems(accessToken, accessImportRunId) {
-    const query = accessImportRunId ? `?accessImportRunId=${encodeURIComponent(accessImportRunId)}` : ''
-    return requestJson(accessToken, `/api/import/access/quarantine${query}`)
+  getOpenQuarantineItems(accessToken, accessImportRunId, limit = 50) {
+    const params = new URLSearchParams()
+    if (accessImportRunId) {
+      params.set('accessImportRunId', accessImportRunId)
+    }
+    params.set('limit', String(limit))
+    return requestJson(accessToken, `/api/import/access/quarantine?${params.toString()}`)
   },
   dryRunAccess(accessToken, file) {
     const formData = new FormData()

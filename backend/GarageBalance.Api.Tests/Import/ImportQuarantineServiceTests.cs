@@ -100,6 +100,25 @@ public sealed class ImportQuarantineServiceTests
     }
 
     [Fact]
+    public async Task GetOpenItemsAsync_AppliesExplicitLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportQuarantineService(database.Context);
+
+        await service.RegisterAsync(CreateRequest(RowHash, null, "garage-1"), null, CancellationToken.None);
+        await Task.Delay(5);
+        await service.RegisterAsync(CreateRequest(AnotherRowHash, null, "garage-2"), null, CancellationToken.None);
+        await Task.Delay(5);
+        await service.RegisterAsync(CreateRequest("1111111111111111111111111111111111111111111111111111111111111111", null, "garage-3"), null, CancellationToken.None);
+
+        var openItems = await service.GetOpenItemsAsync(null, CancellationToken.None, 2);
+
+        Assert.Equal(2, openItems.Count);
+        Assert.Equal("garage-3", openItems[0].ExternalId);
+        Assert.Equal("garage-2", openItems[1].ExternalId);
+    }
+
+    [Fact]
     public async Task ResolveAsync_MarksItemResolvedAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

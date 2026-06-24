@@ -162,12 +162,13 @@ public sealed class ImportControllerTests
         var controller = CreateController(new FakeImportService(), quarantineService);
         var runId = Guid.NewGuid();
 
-        var result = await controller.GetOpenQuarantineItems(runId, CancellationToken.None);
+        var result = await controller.GetOpenQuarantineItems(runId, 50, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var items = Assert.IsAssignableFrom<IReadOnlyList<AccessImportQuarantineItemDto>>(ok.Value);
         Assert.Equal(quarantineItem.Id, Assert.Single(items).Id);
         Assert.Equal(runId, quarantineService.LastAccessImportRunId);
+        Assert.Equal(50, quarantineService.LastLimit);
     }
 
     [Fact]
@@ -327,15 +328,17 @@ public sealed class ImportControllerTests
     private sealed class FakeImportQuarantineService : IImportQuarantineService
     {
         public Guid? LastAccessImportRunId { get; private set; }
+        public int? LastLimit { get; private set; }
         public Guid? LastResolveId { get; private set; }
         public Guid? LastActorUserId { get; private set; }
         public IReadOnlyList<AccessImportQuarantineItemDto> OpenItems { get; init; } = [];
         public ImportResult<AccessImportQuarantineItemDto> ResolveResult { get; init; } =
             ImportResult<AccessImportQuarantineItemDto>.Failure("not_configured", "Not configured.");
 
-        public Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken, int? limit = null)
         {
             LastAccessImportRunId = accessImportRunId;
+            LastLimit = limit;
             return Task.FromResult(OpenItems);
         }
 

@@ -617,6 +617,7 @@ const auditScreenRequestLimit = 50
 const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
 const userScreenRequestLimit = 50
+const importQuarantineScreenRequestLimit = 50
 
 type NavigationItem = {
   label: string
@@ -2061,7 +2062,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       try {
         const [loadedRuns, loadedQuarantineItems] = await Promise.all([
           importClient.getAccessRuns(auth.accessToken),
-          importClient.getOpenQuarantineItems(auth.accessToken),
+          importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit),
         ])
         if (!ignore) {
           setRuns(loadedRuns)
@@ -2132,7 +2133,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       const run = await importClient.dryRunAccess(auth.accessToken, selectedFile)
       setCurrentRun(run)
       setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)])
-      setQuarantineItems(await importClient.getOpenQuarantineItems(auth.accessToken))
+      setQuarantineItems(await importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit))
       setSelectedFile(null)
       setExportMessage(null)
       form.reset()
