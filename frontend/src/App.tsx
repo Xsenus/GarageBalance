@@ -798,9 +798,9 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
         <label>
           Пароль
-          <input aria-label="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
+          <input aria-label="Пароль" aria-describedby="auth-password-policy-hint" value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
         </label>
-        <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+        <p className="form-hint" id="auth-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
         <FormValidationSummary title="Проверьте форму входа" items={validationErrors} />
         {error ? <FormError>{error}</FormError> : null}
@@ -996,14 +996,14 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
         <div className="inline-fields">
           <label>
             Новый пароль
-            <input aria-label="Новый пароль" type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} minLength={8} required />
+            <input aria-label="Новый пароль" aria-describedby="own-password-policy-hint" type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} minLength={8} required />
           </label>
           <label>
             Повтор нового пароля
-            <input aria-label="Повтор нового пароля" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
+            <input aria-label="Повтор нового пароля" aria-describedby="own-password-policy-hint" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
           </label>
         </div>
-        <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+        <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
         <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
         {error ? <FormError>{error}</FormError> : null}
         {message ? <div className="form-success" role="status" aria-live="polite">{message}</div> : null}
@@ -3207,8 +3207,8 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
           <h3>Новый сотрудник</h3>
           <input aria-label="Email пользователя" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
           <input aria-label="Имя пользователя" placeholder="Имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
-          <input aria-label="Пароль пользователя" placeholder="Пароль" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" minLength={8} required />
-          <p className="form-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+          <input aria-label="Пароль пользователя" aria-describedby="new-user-password-policy-hint" placeholder="Пароль" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" minLength={8} required />
+          <p className="form-hint" id="new-user-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
           <select aria-label="Роль пользователя" value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })} required>
             {roles.map((role) => (
               <option value={role.code} key={role.code}>

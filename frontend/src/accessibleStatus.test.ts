@@ -130,4 +130,36 @@ describe('accessible dynamic messages', () => {
       expect(openingTagSource).toMatch(/\saria-label=|\saria-labelledby=/)
     }
   })
+
+  it('keeps password policy hints linked to password fields', () => {
+    const passwordPolicyHints = [
+      {
+        id: 'auth-password-policy-hint',
+        fields: ['aria-label="Пароль"'],
+      },
+      {
+        id: 'own-password-policy-hint',
+        fields: ['aria-label="Новый пароль"', 'aria-label="Повтор нового пароля"'],
+      },
+      {
+        id: 'new-user-password-policy-hint',
+        fields: ['aria-label="Пароль пользователя"'],
+      },
+    ]
+
+    for (const hint of passwordPolicyHints) {
+      expect(appSource).toContain(`id="${hint.id}">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>`)
+
+      for (const fieldLabel of hint.fields) {
+        const fieldIndex = appSource.indexOf(fieldLabel)
+        expect(fieldIndex).toBeGreaterThan(-1)
+
+        const fieldEnd = appSource.indexOf('>', fieldIndex)
+        expect(fieldEnd).toBeGreaterThan(fieldIndex)
+
+        const fieldSource = appSource.slice(fieldIndex, fieldEnd + 1)
+        expect(fieldSource).toContain(`aria-describedby="${hint.id}"`)
+      }
+    }
+  })
 })
