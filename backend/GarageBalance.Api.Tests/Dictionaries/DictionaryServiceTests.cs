@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -595,6 +596,76 @@ public sealed class DictionaryServiceTests
         Assert.Equal("meter_water", tariff.CalculationBase);
         Assert.Equal("Вода", tariff.Name);
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
+        var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
+        var accrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 300m,
+            Source = "regular"
+        };
+        database.Context.AddRange(tariff, accrual);
+        await database.Context.SaveChangesAsync();
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateTariffAsync(
+            tariff.Id,
+            new UpsertTariffRequest("Членский тариф", "fixed", 350m, new DateOnly(2026, 7, 1), "Позже начисления"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_effective_from_after_accrual", result.ErrorCode);
+        var storedTariff = await database.Context.Tariffs.FindAsync(tariff.Id);
+        Assert.NotNull(storedTariff);
+        Assert.Equal(new DateOnly(2026, 1, 1), storedTariff.EffectiveFrom);
+        Assert.Equal(300m, storedTariff.Rate);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateTariffAsync_AllowsEffectiveDateOnExistingRegularAccrualMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
+        var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
+        var accrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 300m,
+            Source = "regular"
+        };
+        database.Context.AddRange(tariff, accrual);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateTariffAsync(
+            tariff.Id,
+            new UpsertTariffRequest("Членский тариф", "fixed", 350m, new DateOnly(2026, 6, 1), "С месяца начисления"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.EffectiveFrom);
+        Assert.Equal(350m, result.Value.Rate);
     }
 
     [Fact]

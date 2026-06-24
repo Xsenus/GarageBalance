@@ -808,6 +808,33 @@ describe('App', () => {
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
   })
 
+  it('shows backend error when tariff effective date moves after existing accruals', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      updateTariff: async () => {
+        throw new Error('Дата начала тарифа не может быть позже уже созданного начисления за 06.2026.')
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+
+    fireEvent.contextMenu(within(dictionaryPanel).getByText('Тариф воды').closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Тарифы' })
+    await user.clear(within(dialog).getByLabelText('Дата начала тарифа'))
+    await user.type(within(dialog).getByLabelText('Дата начала тарифа'), '2026-07-01')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts.some((alert) => alert.textContent?.includes('Дата начала тарифа не может быть позже уже созданного начисления за 06.2026.'))).toBe(true)
+    expect(screen.getByRole('dialog', { name: 'Тарифы' })).toBeInTheDocument()
+  })
+
   it('creates electricity tariff with editable thresholds and three rates', async () => {
     const user = userEvent.setup()
     let createdRequest: unknown = null

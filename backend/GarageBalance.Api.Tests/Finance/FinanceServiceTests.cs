@@ -761,6 +761,7 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal("regular", accrual.Source);
         Assert.Equal(300m, accrual.Amount);
+        Assert.Equal(tariff.Id, accrual.TariffId);
         Assert.Equal("Июнь; тариф Членский тариф: ставка 300, действует с 01.01.2026.", accrual.Comment);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
         Assert.Equal(actorUserId, audit.ActorUserId);

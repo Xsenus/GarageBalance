@@ -2,6 +2,7 @@ using System.Globalization;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -822,6 +823,19 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
+        }
+
+        if (request.EffectiveFrom > tariff.EffectiveFrom)
+        {
+            var earliestAccrualMonth = await dbContext.Accruals.AsNoTracking()
+                .Where(accrual => !accrual.IsCanceled && accrual.Source == AccrualSources.Regular && accrual.TariffId == tariff.Id)
+                .MinAsync(accrual => (DateOnly?)accrual.AccountingMonth, cancellationToken);
+            if (earliestAccrualMonth is not null && request.EffectiveFrom > earliestAccrualMonth.Value)
+            {
+                return DictionaryResult<TariffDto>.Failure(
+                    "tariff_effective_from_after_accrual",
+                    $"Дата начала тарифа не может быть позже уже созданного начисления за {earliestAccrualMonth.Value:MM.yyyy}.");
+            }
         }
 
         tariff.Name = name;

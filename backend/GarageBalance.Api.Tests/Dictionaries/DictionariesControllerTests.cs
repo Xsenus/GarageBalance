@@ -150,6 +150,24 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task UpdateTariff_ReturnsConflictWhenEffectiveDateMovesAfterAccruals()
+    {
+        var controller = CreateController(new FakeDictionaryService
+        {
+            UpdateTariffResult = DictionaryResult<TariffDto>.Failure("tariff_effective_from_after_accrual", "Дата начала тарифа не может быть позже уже созданного начисления за 06.2026.")
+        });
+
+        var result = await controller.UpdateTariff(
+            Guid.NewGuid(),
+            new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 7, 1), null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("tariff_effective_from_after_accrual", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateTariff_ReturnsBadRequestForUnsupportedCalculationBase()
     {
         var controller = CreateController(new FakeDictionaryService

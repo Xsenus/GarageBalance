@@ -9,6 +9,8 @@ public sealed class Accrual
     public Garage Garage { get; set; } = null!;
     public Guid IncomeTypeId { get; set; }
     public IncomeType IncomeType { get; set; } = null!;
+    public Guid? TariffId { get; set; }
+    public Tariff? Tariff { get; set; }
     public DateOnly AccountingMonth { get; set; }
     public decimal Amount { get; set; }
     public required string Source { get; set; }

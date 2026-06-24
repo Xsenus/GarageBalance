@@ -764,6 +764,8 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,
                 IncomeType = incomeType,
+                TariffId = tariff.Id,
+                Tariff = tariff,
                 AccountingMonth = month,
                 Amount = amount,
                 Source = AccrualSources.Regular,
