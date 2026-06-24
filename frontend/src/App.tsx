@@ -2189,7 +2189,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
-      {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
+      {exportMessage ? <div className="form-note" aria-live="polite">{exportMessage}</div> : null}
 
       <div className="finance-grid">
         <form className="dictionary-form" onSubmit={runDryRun}>
@@ -2403,7 +2403,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
-      {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
+      {exportMessage ? <div className="form-note" aria-live="polite">{exportMessage}</div> : null}
 
       <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
         <input aria-label="Поиск в audit-журнале" placeholder="Действие, сущность или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -2826,7 +2826,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
       {error ? <FormError>{error}</FormError> : null}
       {exportError ? <FormError>{exportError}</FormError> : null}
-      {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
+      {exportMessage ? <div className="form-note" aria-live="polite">{exportMessage}</div> : null}
 
       <form className="compact-form report-filter" onSubmit={applyFilters}>
         <input aria-label="Начало периода отчета" aria-describedby="consolidated-report-date-format" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
