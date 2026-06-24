@@ -1743,6 +1743,24 @@ describe('App', () => {
     expect(within(financePanel).queryByText('PKO-edit')).not.toBeInTheDocument()
   })
 
+  it('opens new income dialog from payment context menu', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(within(dialog).getByText('Платежи')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Изменение')).not.toBeInTheDocument()
+  })
+
   it('does not call finance APIs when payment forms fail client validation', async () => {
     const user = userEvent.setup()
     const financeCalls = {
