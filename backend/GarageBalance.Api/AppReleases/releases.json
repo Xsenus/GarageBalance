@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-controller-thinness-guard",
+    "version": "0.147.0",
+    "publishedAt": "2026-06-24T17:25:00+07:00",
+    "title": "Закреплены тонкие контроллеры API",
+    "summary": "Контроллеры API теперь дополнительно защищены проверкой архитектуры: они должны оставаться HTTP-слоем и не обходить application-сервисы прямой работой с базой.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Новые API-методы должны работать через application-сервисы и DTO, без прямого обращения контроллеров к EF Core или DbContext."
+      },
+      {
+        "type": "improved",
+        "text": "Backend-проверка блокирует случайное попадание Infrastructure/Data, raw SQL/DDL и Domain-сущностей в HTTP-контроллеры."
+      },
+      {
+        "type": "improved",
+        "text": "Правила разработки и README уточняют границу между контроллерами, сервисами, доменом и инфраструктурой."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-database-migration-policy",
     "version": "0.146.0",
     "publishedAt": "2026-06-24T17:05:00+07:00",

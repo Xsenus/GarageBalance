@@ -263,6 +263,8 @@ Checklist передачи проекта в Git описан в `docs/git-hando
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.
 
+Контроллеры остаются тонким HTTP-слоем: принимают DTO, проверяют авторизацию, вызывают application-сервисы и возвращают HTTP-ответ. Прямые зависимости контроллеров от EF Core, `GarageBalanceDbContext`, репозиториев, `Infrastructure.Data`, raw SQL/DDL и возврат Domain-сущностей через action result запрещены и закреплены backend-тестом `ControllerThinnessTests`.
+
 Приватные данные кооператива нельзя добавлять в Git: реальные `.env`, `appsettings.Local.json`, `.accdb`/`.mdb`, дампы, backup-файлы и папки `private-imports/`, `imports/private/`, `imports/raw/` должны оставаться только локально. Это правило закреплено в корневом `.gitignore` и backend-тесте `SensitiveFileGitIgnoreTests`.
 
 Перед будущей публикацией в Git или упаковкой архива поставки запускайте `infrastructure/scripts/verify-package-privacy.ps1`: скрипт проверяет tracked/untracked Git-кандидаты и падает, если `.env`, `appsettings.Local.json`, Access-БД, дампы, backup или приватные import-папки видны Git.

@@ -98,6 +98,7 @@ Keep business calculations testable outside controllers. Add unit tests for tari
 Every controller action must have tests for the successful path, validation errors, permission denial, and important edge cases. Do not leave generated sample controllers, unused endpoints, or untested public methods in the project. If a method is not worth testing, it is probably not worth keeping as public surface.
 
 Controller code must stay thin: validate the request, call application/business services, map DTOs, and return clear HTTP results. Business rules belong in services that are easy to test directly.
+Controllers must not depend on `Infrastructure`, `GarageBalanceDbContext`, repositories, EF Core APIs, or raw SQL/DDL directly, and controller actions must not expose `Domain` entities as API responses. Keep this enforced by controller architecture tests when new HTTP endpoints are added.
 
 Backend tests must include:
 
