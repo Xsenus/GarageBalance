@@ -1861,11 +1861,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
-    expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('Показано 12 из 13 строк')).toHaveAttribute('role', 'status')
     const reportRowCounters = await within(reportsPanel).findAllByText('Показано 16 из 17 строк')
     expect(reportRowCounters).toHaveLength(2)
-    expect(reportRowCounters[0]).toHaveAttribute('aria-live', 'polite')
-    expect(reportRowCounters[1]).toHaveAttribute('aria-live', 'polite')
+    expect(reportRowCounters[0]).toHaveAttribute('role', 'status')
+    expect(reportRowCounters[1]).toHaveAttribute('role', 'status')
   })
 
   it('shows accessible empty states for reports without rows', async () => {
@@ -1902,10 +1902,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
-    expect(await within(reportsPanel).findByText('Помесячных строк отчета пока нет')).toHaveAttribute('aria-live', 'polite')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')).toHaveAttribute('aria-live', 'polite')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('aria-live', 'polite')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('Помесячных строк отчета пока нет')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('role', 'status')
     expect(within(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).queryByText(/Июнь 2026/)).not.toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).queryByText(/Иванов Иван/)).not.toBeInTheDocument()
     expect(within(reportsPanel).queryByText(/PKO-1/)).not.toBeInTheDocument()

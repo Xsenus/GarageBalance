@@ -2881,7 +2881,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <span role="columnheader">Итоги</span>
             <span role="columnheader">Долг</span>
           </div>
-          {report?.monthlyRows.length === 0 ? <p className="empty-state" aria-live="polite">Помесячных строк отчета пока нет</p> : null}
+          {report?.monthlyRows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Помесячных строк отчета пока нет</p> : null}
           {report?.monthlyRows.map((row) => (
             <div className="operation-row" role="row" key={row.accountingMonth}>
               <span role="cell">{formatMonth(row.accountingMonth)}</span>
@@ -2904,7 +2904,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <span role="columnheader">Начисления</span>
             <span role="columnheader">Долг</span>
           </div>
-          {report?.garageRowCount === 0 ? <p className="empty-state" aria-live="polite">По выбранному фильтру гаражей нет</p> : null}
+          {report?.garageRowCount === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному фильтру гаражей нет</p> : null}
           {report?.garageRows.slice(0, garageReportScreenRowLimit).map((row) => (
             <div className="operation-row" role="row" key={row.garageId}>
               <span role="cell">
@@ -2920,7 +2920,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               </span>
             </div>
           ))}
-          {report && report.garageRowCount > report.garageRows.length ? <p className="empty-state" aria-live="polite">Показано {report.garageRows.length} из {report.garageRowCount} строк</p> : null}
+          {report && report.garageRowCount > report.garageRows.length ? <p className="empty-state" role="status" aria-live="polite">Показано {report.garageRows.length} из {report.garageRowCount} строк</p> : null}
         </div>
       </div>
 
@@ -3004,7 +3004,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <span role="columnheader">Гараж и вид</span>
           <span role="columnheader">Сумма</span>
         </div>
-        {incomeReport?.rows.length === 0 ? <p className="empty-state" aria-live="polite">По выбранному фильтру поступлений нет</p> : null}
+        {incomeReport?.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному фильтру поступлений нет</p> : null}
         {incomeReport?.rows.map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
             <span role="cell">
@@ -3020,7 +3020,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
-        {incomeReport && incomeReport.rowCount > incomeReport.rows.length ? <p className="empty-state" aria-live="polite">Показано {incomeReport.rows.length} из {incomeReport.rowCount} строк</p> : null}
+        {incomeReport && incomeReport.rowCount > incomeReport.rows.length ? <p className="empty-state" role="status" aria-live="polite">Показано {incomeReport.rows.length} из {incomeReport.rowCount} строк</p> : null}
       </div>
 
       <div className="subsection-heading">
@@ -3096,7 +3096,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <span role="columnheader">Поставщик и вид</span>
           <span role="columnheader">Сумма</span>
         </div>
-        {expenseReport?.rows.length === 0 ? <p className="empty-state" aria-live="polite">По выбранному фильтру выплат нет</p> : null}
+        {expenseReport?.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному фильтру выплат нет</p> : null}
         {expenseReport?.rows.map((row) => (
           <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
             <span role="cell">
@@ -3112,7 +3112,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </span>
           </div>
         ))}
-        {expenseReport && expenseReport.rowCount > expenseReport.rows.length ? <p className="empty-state" aria-live="polite">Показано {expenseReport.rows.length} из {expenseReport.rowCount} строк</p> : null}
+        {expenseReport && expenseReport.rowCount > expenseReport.rows.length ? <p className="empty-state" role="status" aria-live="polite">Показано {expenseReport.rows.length} из {expenseReport.rowCount} строк</p> : null}
       </div>
     </section>
   )
