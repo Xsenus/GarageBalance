@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-git-handoff-checklist",
+    "version": "0.106.0",
+    "publishedAt": "2026-06-24T12:45:00+07:00",
+    "title": "Добавлен checklist передачи проекта в Git",
+    "summary": "Подготовка к будущей публикации проекта теперь описана отдельным безопасным порядком без случайного push и утечки приватных файлов.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен docs/git-handoff-checklist.md с проверками git status, staged files, .gitignore, roadmap history и release notes."
+      },
+      {
+        "type": "added",
+        "text": "Checklist запрещает публиковать Access-БД, дампы PostgreSQL, backup, .env, appsettings.Local.json, платежные документы, договоры и секреты VPS/1C Fresh."
+      },
+      {
+        "type": "added",
+        "text": "Отдельно закреплено правило: git push и pull request выполняются только после прямой команды пользователя."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-monthly-cycle-checklist",
     "version": "0.105.0",
     "publishedAt": "2026-06-24T12:15:00+07:00",

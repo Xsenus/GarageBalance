@@ -193,6 +193,8 @@ Troubleshooting по типовым сбоям описан в `docs/troubleshoo
 
 Регламент ежемесячного цикла описан в `docs/monthly-cycle-checklist.md`: backup, проверка справочников и тарифов, внесение показаний, регулярные начисления, сверка платежей, отчеты, audit-журнал и закрытие месяца.
 
+Checklist передачи проекта в Git описан в `docs/git-handoff-checklist.md`: проверка приватных файлов, `.gitignore`, release notes, roadmap history, полный test run, UTF-8/no BOM и запрет `git push` без отдельной команды пользователя.
+
 ## Правила проекта
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.
