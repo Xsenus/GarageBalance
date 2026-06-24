@@ -2379,6 +2379,8 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     }
   }
 
+  const visibleEvents = events.slice(0, 12)
+
   return (
     <section className="dictionary-panel" aria-label="Audit-журнал">
       <div className="section-heading">
@@ -2409,7 +2411,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Сущность</span>
         </div>
         {!loading && events.length === 0 ? <p className="empty-state">Событий пока нет</p> : null}
-        {events.map((auditEvent) => (
+        {visibleEvents.map((auditEvent) => (
           <div className="operation-row" role="row" key={auditEvent.id}>
             <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
             <span role="cell">
@@ -2422,6 +2424,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
             </span>
           </div>
         ))}
+        {events.length > visibleEvents.length ? <p className="empty-state" aria-live="polite">Показано {visibleEvents.length} из {events.length} событий</p> : null}
       </div>
     </section>
   )

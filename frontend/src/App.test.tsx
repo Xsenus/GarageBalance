@@ -1470,6 +1470,41 @@ describe('App', () => {
     expect(await within(auditPanel).findByText('Audit-журнал CSV готов.')).toBeInTheDocument()
   })
 
+  it('shows visible audit event counter when audit log is compacted', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditEvents = Array.from({ length: 13 }, (_item, index) =>
+      createAuditEvent({
+        id: `audit-event-${index + 1}`,
+        action: `audit.event_${index + 1}`,
+        entityType: 'audit_event',
+        summary: `Событие ${index + 1}.`,
+      }),
+    )
+    const auditClient = createAuditClient({
+      getEvents: async () => auditEvents,
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
+
+    expect(await within(auditTable).findByText('Показано 12 из 13 событий')).toHaveAttribute('aria-live', 'polite')
+    expect(within(auditTable).getByText('audit.event_12')).toBeInTheDocument()
+    expect(within(auditTable).queryByText('audit.event_13')).not.toBeInTheDocument()
+  })
+
   it('shows consolidated report and applies garage search', async () => {
     const user = userEvent.setup()
     const reportClient = createReportClient()
