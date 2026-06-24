@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-tariff-base-validation",
+    "version": "0.136.0",
+    "publishedAt": "2026-06-24T14:15:00+07:00",
+    "title": "Усилена проверка базы тарифа",
+    "summary": "Backend теперь отклоняет тарифы с неподдерживаемой базой расчета до сохранения и до запуска начислений.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "Нельзя сохранить тариф с произвольной строкой вместо fixed, people, meter_water или meter_electricity."
+      },
+      {
+        "type": "changed",
+        "text": "Расчет регулярных начислений использует тот же доменный список баз тарифа, что и проверка справочника."
+      },
+      {
+        "type": "fixed",
+        "text": "При ошибке база тарифа возвращает понятный ProblemDetails-код tariff_calculation_base_invalid."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-tariff-audit-details",
     "version": "0.135.0",
     "publishedAt": "2026-06-24T14:00:00+07:00",

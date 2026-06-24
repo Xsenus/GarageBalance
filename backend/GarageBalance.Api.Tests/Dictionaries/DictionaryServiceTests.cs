@@ -388,6 +388,23 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateTariffAsync_RejectsUnsupportedCalculationBase()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+
+        var result = await service.CreateTariffAsync(
+            new UpsertTariffRequest("Непонятный тариф", "unknown_base", 50m, new DateOnly(2026, 7, 1), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_calculation_base_invalid", result.ErrorCode);
+        Assert.Empty(database.Context.Tariffs);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateTariffAsync_WritesAuditWithBaseAndRate()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -432,6 +449,30 @@ public sealed class DictionaryServiceTests
         Assert.Contains("Вода новая", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("база people", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("ставка 20.5556", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateTariffAsync_RejectsUnsupportedCalculationBaseAndKeepsExistingValue()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var created = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateTariffAsync(
+            created.Value!.Id,
+            new UpsertTariffRequest("Вода новая", "unknown_base", 20.55555m, new DateOnly(2026, 8, 1), "После собрания"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_calculation_base_invalid", result.ErrorCode);
+        var tariff = await database.Context.Tariffs.FindAsync(created.Value.Id);
+        Assert.NotNull(tariff);
+        Assert.Equal("meter_water", tariff.CalculationBase);
+        Assert.Equal("Вода", tariff.Name);
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]

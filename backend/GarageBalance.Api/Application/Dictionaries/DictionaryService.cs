@@ -500,6 +500,11 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     {
         var name = request.Name.Trim();
         var calculationBase = request.CalculationBase.Trim();
+        if (!TariffCalculationBases.IsSupported(calculationBase))
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_calculation_base_invalid", "База расчета тарифа должна быть fixed, people, meter_water или meter_electricity.");
+        }
+
         if (await dbContext.Tariffs.AnyAsync(item => item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
@@ -530,6 +535,11 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
 
         var name = request.Name.Trim();
         var calculationBase = request.CalculationBase.Trim();
+        if (!TariffCalculationBases.IsSupported(calculationBase))
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_calculation_base_invalid", "База расчета тарифа должна быть fixed, people, meter_water или meter_electricity.");
+        }
+
         if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");

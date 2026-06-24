@@ -149,6 +149,23 @@ public sealed class DictionariesControllerTests
         Assert.Equal("tariff_duplicate", problem.Title);
     }
 
+    [Fact]
+    public async Task CreateTariff_ReturnsBadRequestForUnsupportedCalculationBase()
+    {
+        var controller = CreateController(new FakeDictionaryService
+        {
+            CreateTariffResult = DictionaryResult<TariffDto>.Failure("tariff_calculation_base_invalid", "База расчета тарифа должна быть fixed, people, meter_water или meter_electricity.")
+        });
+
+        var result = await controller.CreateTariff(
+            new UpsertTariffRequest("Непонятный тариф", "unknown_base", 50m, new DateOnly(2026, 7, 1), null),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("tariff_calculation_base_invalid", problem.Title);
+    }
+
     private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
     {
         var controller = new DictionariesController(service);
