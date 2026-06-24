@@ -1466,6 +1466,25 @@ describe('App', () => {
     expect(quarantineLimit).toBe(50)
   })
 
+  it('shows accessible empty states for Access import lists', async () => {
+    const user = userEvent.setup()
+    const importClient = createImportClient({
+      getAccessRuns: async () => [],
+      getOpenQuarantineItems: async () => [],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    expect(await within(importPanel).findByText('Выберите запуск dry-run')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('Проверок пока нет')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('Лог выбранного запуска пока пуст')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('Истории импорта пока нет')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('Открытых строк карантина нет')).toHaveAttribute('aria-live', 'polite')
+  })
+
   it('shows and resolves Access import quarantine rows', async () => {
     const user = userEvent.setup()
     let quarantineItems = [createAccessImportQuarantineItem()]
@@ -1494,7 +1513,7 @@ describe('App', () => {
 
     expect(await within(importPanel).findByText('Строка карантина закрыта.')).toBeInTheDocument()
     expect(within(quarantineTable).queryByText('Garage #42')).not.toBeInTheDocument()
-    expect(within(quarantineTable).getByText('Открытых строк карантина нет')).toBeInTheDocument()
+    expect(within(quarantineTable).getByText('Открытых строк карантина нет')).toHaveAttribute('aria-live', 'polite')
   })
 
   it('shows audit journal for users with audit permission', async () => {
