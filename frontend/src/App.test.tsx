@@ -2860,11 +2860,20 @@ describe('App', () => {
       exportConsolidatedReportXlsx: async () => {
         throw 'consolidated export failed'
       },
+      exportConsolidatedReportPdf: async () => {
+        throw 'consolidated pdf export failed'
+      },
       exportIncomeReportXlsx: async () => {
         throw 'income export failed'
       },
+      exportIncomeReportPdf: async () => {
+        throw 'income pdf export failed'
+      },
       exportExpenseReportXlsx: async () => {
         throw 'expense export failed'
+      },
+      exportExpenseReportPdf: async () => {
+        throw 'expense pdf export failed'
       },
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -2877,16 +2886,25 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный XLSX' }))
     expect(await within(reportsPanel).findByText('Не удалось выгрузить XLSX по сводному отчету.')).toHaveAttribute('role', 'alert')
     expect(within(reportsPanel).queryByText('XLSX по сводному отчету готов.')).not.toBeInTheDocument()
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный PDF' }))
+    expect(await within(reportsPanel).findByText('Не удалось выгрузить PDF по сводному отчету.')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('PDF по сводному отчету готов.')).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Поступления')
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления XLSX' }))
     expect(await within(reportsPanel).findByText('Не удалось выгрузить XLSX по поступлениям.')).toHaveAttribute('role', 'alert')
     expect(within(reportsPanel).queryByText('XLSX по поступлениям готов.')).not.toBeInTheDocument()
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления PDF' }))
+    expect(await within(reportsPanel).findByText('Не удалось выгрузить PDF по поступлениям.')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('PDF по поступлениям готов.')).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Выплаты')
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты XLSX' }))
     expect(await within(reportsPanel).findByText('Не удалось выгрузить XLSX по выплатам.')).toHaveAttribute('role', 'alert')
     expect(within(reportsPanel).queryByText('XLSX по выплатам готов.')).not.toBeInTheDocument()
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты PDF' }))
+    expect(await within(reportsPanel).findByText('Не удалось выгрузить PDF по выплатам.')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('PDF по выплатам готов.')).not.toBeInTheDocument()
   })
 
   it('shows income report and applies income filters', async () => {
