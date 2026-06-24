@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-reports-dictionaries-read-guard",
+    "version": "0.227.0",
+    "publishedAt": "2026-06-25T07:00:00+07:00",
+    "title": "Отчеты точнее объясняют недостающие права",
+    "summary": "Если пользователю доступны отчеты, но недоступны справочники для фильтров, интерфейс показывает точное требование `dictionaries.read` и не загружает отчетные API.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "Раздел \"Отчеты\" теперь показывает требование `dictionaries.read`, если `reports.read` уже есть, но фильтры справочников недоступны."
+      },
+      {
+        "type": "fixed",
+        "text": "React-тест закрепляет, что `ReportPanel` не монтируется и report API не вызываются при таком неполном наборе прав."
+      },
+      {
+        "type": "improved",
+        "text": "README, user guide и roadmap уточняют зависимость отчетов от чтения справочников на frontend."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-report-pdf-export-error-alerts",
     "version": "0.226.0",
     "publishedAt": "2026-06-25T06:45:00+07:00",

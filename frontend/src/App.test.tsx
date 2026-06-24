@@ -664,6 +664,49 @@ describe('App', () => {
     expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
   })
 
+  it('keeps reports closed without dictionary read permission for filters', async () => {
+    const user = userEvent.setup()
+    let reportCalls = 0
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () =>
+        createAuthResponse({
+          user: {
+            email: 'reports-only@example.com',
+            displayName: 'Только отчеты',
+            roles: ['reports_partial'],
+            permissions: ['reports.read'],
+          },
+        }),
+    })
+    const reportClient = createReportClient({
+      getConsolidatedReport: async () => {
+        reportCalls += 1
+        throw new Error('Отчеты не должны загружаться без dictionaries.read.')
+      },
+      getIncomeReport: async () => {
+        reportCalls += 1
+        throw new Error('Отчеты не должны загружаться без dictionaries.read.')
+      },
+      getExpenseReport: async () => {
+        reportCalls += 1
+        throw new Error('Отчеты не должны загружаться без dictionaries.read.')
+      },
+    })
+
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
+
+    const reportsNotice = await screen.findByLabelText('Отчеты недоступны')
+    expect(within(reportsNotice).getByText('Для фильтров отчетов нужно право чтения справочников.')).toBeInTheDocument()
+    expect(within(reportsNotice).getByText('Требуется право: dictionaries.read')).toBeInTheDocument()
+    expect(screen.queryByText('Консолидированный отчет за период')).not.toBeInTheDocument()
+    expect(screen.queryByText('Отчеты не должны загружаться без dictionaries.read.')).not.toBeInTheDocument()
+    expect(reportCalls).toBe(0)
+  })
+
   it('allows tariff management without broad dictionary write permission', async () => {
     const user = userEvent.setup()
     let createdTariffs = 0

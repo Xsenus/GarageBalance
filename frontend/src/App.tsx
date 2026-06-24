@@ -1121,7 +1121,12 @@ function Workspace({
         return canReadReports && canReadDictionaries ? (
           <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
         ) : (
-          <AccessNotice label="Отчеты недоступны" title="Отчеты" permission={permissions.reportsRead} description="Для отчетов нужно право просмотра отчетности; справочники используются только для фильтров." />
+          <AccessNotice
+            label="Отчеты недоступны"
+            title="Отчеты"
+            permission={canReadReports ? permissions.dictionariesRead : permissions.reportsRead}
+            description={canReadReports ? 'Для фильтров отчетов нужно право чтения справочников.' : 'Для отчетов нужно право просмотра отчетности; справочники используются только для фильтров.'}
+          />
         )
       case 'import':
         return canRunImport ? (

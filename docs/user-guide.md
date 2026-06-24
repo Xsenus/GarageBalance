@@ -19,7 +19,7 @@
 - `dictionaries.read` открывает "Справочники".
 - `tariffs.manage` открывает "Тарифы".
 - `payments.read` открывает "Платежи".
-- `reports.read` открывает "Отчеты".
+- `reports.read` открывает "Отчеты", но для фильтров отчеты также требуют `dictionaries.read`.
 - `import.run` открывает "Импорт".
 - `audit.read` открывает "Audit".
 - `app_releases.manage` показывает права для "Что нового".
