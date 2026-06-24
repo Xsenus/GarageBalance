@@ -244,7 +244,7 @@ erDiagram
 - `owners` - владельцы гаражей. Индексы: ФИО, телефон. Архивирование мягкое через `IsArchived`.
 - `garages` - гаражи, владелец, стартовый баланс, стартовые счетчики, люди, этажи. Связь `Garage.OwnerId -> owners.Id` с `DeleteBehavior.SetNull`. Активный номер гаража уникален через filtered unique index по `Number` при `IsArchived = false`.
 - `supplier_groups` - группы поставщиков. `Name` уникален, системные группы защищены от удаления.
-- `suppliers` - поставщики с группой, ИНН, контактами и стартовым балансом. Связь `Supplier.GroupId -> supplier_groups.Id` с `DeleteBehavior.Restrict`.
+- `suppliers` - поставщики с группой, ИНН, контактами и стартовым балансом. Связь `Supplier.GroupId -> supplier_groups.Id` с `DeleteBehavior.Restrict`; поиск поддержан индексами по `Name`, `GroupId`, `Inn` и `ContactPerson`.
 - `income_types` и `expense_types` - виды поступлений и выплат. `Name` уникален, `Code` индексируется, системные значения seeded через migration `DefaultAccountingTypes`.
 - `tariffs` - тарифы с базой расчета `fixed`, `people`, `meter_water`, `meter_electricity`, ставкой и датой действия. Уникальность: `Name + EffectiveFrom`.
 

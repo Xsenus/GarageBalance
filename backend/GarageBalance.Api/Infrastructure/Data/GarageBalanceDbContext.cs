@@ -143,6 +143,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(supplier => supplier.StartingBalance).HasPrecision(18, 2);
             entity.Property(supplier => supplier.Comment).HasMaxLength(1000);
             entity.HasIndex(supplier => supplier.Name);
+            entity.HasIndex(supplier => supplier.Inn);
+            entity.HasIndex(supplier => supplier.ContactPerson);
             entity.HasIndex(supplier => supplier.GroupId);
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
