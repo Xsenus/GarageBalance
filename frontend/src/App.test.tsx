@@ -1346,6 +1346,12 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
     expect(await within(reportsPanel).findByText('Консолидированный отчет за период')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Формат периода сводного отчета: ММ.ГГГГ.')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Формат дат поступлений: ДД.ММ.ГГГГ.')).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Формат дат выплат: ДД.ММ.ГГГГ.')).toBeInTheDocument()
+    expect(within(reportsPanel).getByLabelText('Начало периода отчета')).toHaveAccessibleDescription('Формат периода сводного отчета: ММ.ГГГГ.')
+    expect(within(reportsPanel).getByLabelText('Начало отчета по поступлениям')).toHaveAccessibleDescription('Формат дат поступлений: ДД.ММ.ГГГГ.')
+    expect(within(reportsPanel).getByLabelText('Начало отчета по выплатам')).toHaveAccessibleDescription('Формат дат выплат: ДД.ММ.ГГГГ.')
     expect(within(reportsPanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).toBeInTheDocument()
     expect(within(reportsPanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)

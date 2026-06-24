@@ -904,6 +904,10 @@ button.operation-row:hover {
   padding: 7px 10px;
 }
 
+.report-date-format {
+  grid-column: 1 / -1;
+}
+
 .report-filter input:focus,
 .report-filter select:focus {
   border-color: #2e90fa;

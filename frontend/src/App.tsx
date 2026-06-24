@@ -2698,8 +2698,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       {exportMessage ? <div className="form-note">{exportMessage}</div> : null}
 
       <form className="compact-form report-filter" onSubmit={applyFilters}>
-        <input aria-label="Начало периода отчета" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
-        <input aria-label="Конец периода отчета" name="monthTo" type="month" defaultValue={filters.monthTo.slice(0, 7)} required />
+        <input aria-label="Начало периода отчета" aria-describedby="consolidated-report-date-format" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
+        <input aria-label="Конец периода отчета" aria-describedby="consolidated-report-date-format" name="monthTo" type="month" defaultValue={filters.monthTo.slice(0, 7)} required />
+        <p className="form-hint report-date-format" id="consolidated-report-date-format">Формат периода сводного отчета: ММ.ГГГГ.</p>
         <input aria-label="Поиск в отчете" name="search" placeholder="Гараж или владелец" defaultValue={filters.search} />
         <FormValidationSummary title="Проверьте период отчета" items={reportValidationErrors} />
         <button className="secondary-button" type="submit">
@@ -2800,8 +2801,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       {incomeError ? <FormError>{incomeError}</FormError> : null}
 
       <form className="compact-form report-filter" onSubmit={applyIncomeFilters}>
-        <input aria-label="Начало отчета по поступлениям" name="dateFrom" type="date" defaultValue={incomeFilters.dateFrom} required />
-        <input aria-label="Конец отчета по поступлениям" name="dateTo" type="date" defaultValue={incomeFilters.dateTo} required />
+        <input aria-label="Начало отчета по поступлениям" aria-describedby="income-report-date-format" name="dateFrom" type="date" defaultValue={incomeFilters.dateFrom} required />
+        <input aria-label="Конец отчета по поступлениям" aria-describedby="income-report-date-format" name="dateTo" type="date" defaultValue={incomeFilters.dateTo} required />
+        <p className="form-hint report-date-format" id="income-report-date-format">Формат дат поступлений: ДД.ММ.ГГГГ.</p>
         <input aria-label="Поиск в поступлениях" name="search" placeholder="Гараж, владелец, документ" defaultValue={incomeFilters.search} />
         <select aria-label="Гаражи в отчете по поступлениям" name="garageIds" multiple defaultValue={incomeFilters.garageIds} size={Math.min(4, Math.max(2, incomeGarages.length))}>
           {incomeGarages.map((garage) => (
@@ -2895,8 +2897,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       {expenseError ? <FormError>{expenseError}</FormError> : null}
 
       <form className="compact-form report-filter" onSubmit={applyExpenseFilters}>
-        <input aria-label="Начало отчета по выплатам" name="dateFrom" type="date" defaultValue={expenseFilters.dateFrom} required />
-        <input aria-label="Конец отчета по выплатам" name="dateTo" type="date" defaultValue={expenseFilters.dateTo} required />
+        <input aria-label="Начало отчета по выплатам" aria-describedby="expense-report-date-format" name="dateFrom" type="date" defaultValue={expenseFilters.dateFrom} required />
+        <input aria-label="Конец отчета по выплатам" aria-describedby="expense-report-date-format" name="dateTo" type="date" defaultValue={expenseFilters.dateTo} required />
+        <p className="form-hint report-date-format" id="expense-report-date-format">Формат дат выплат: ДД.ММ.ГГГГ.</p>
         <input aria-label="Поиск в выплатах" name="search" placeholder="Поставщик, вид, документ" defaultValue={expenseFilters.search} />
         <select aria-label="Поставщики в отчете по выплатам" name="supplierIds" multiple defaultValue={expenseFilters.supplierIds} size={Math.min(4, Math.max(2, suppliers.length))}>
           {suppliers.map((supplier) => (
