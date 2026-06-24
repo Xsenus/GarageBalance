@@ -165,7 +165,7 @@ describe('App', () => {
       currentPassword: 'StrongPass123',
       newPassword: 'NewStrongPass123',
     })
-    expect(await within(passwordPanel).findByText('Пароль изменен. Используйте новый пароль при следующем входе.')).toBeInTheDocument()
+    expect(await within(passwordPanel).findByText('Пароль изменен. Используйте новый пароль при следующем входе.')).toHaveAttribute('aria-live', 'polite')
     expect(within(passwordPanel).getByLabelText('Текущий пароль')).toHaveValue('')
     expect(within(passwordPanel).getByLabelText('Новый пароль')).toHaveValue('')
     expect(within(passwordPanel).getByLabelText('Повтор нового пароля')).toHaveValue('')
