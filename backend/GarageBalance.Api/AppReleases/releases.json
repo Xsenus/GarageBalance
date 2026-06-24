@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-accessible-error-gate",
+    "version": "0.182.0",
+    "publishedAt": "2026-06-24T19:11:54+07:00",
+    "title": "Доступные ошибки закреплены проверкой",
+    "summary": "Ошибки форм и сводки валидации защищены от отката alert-разметки.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Общие сообщения ошибок `FormError` и сводки `FormValidationSummary` закреплены как role=\"alert\"."
+      },
+      {
+        "type": "fixed",
+        "text": "Frontend structural test теперь проверяет не только live-статусы, но и alert-семантику ошибок."
+      },
+      {
+        "type": "important",
+        "text": "Ошибки входа, форм, отчетов, импорта и рабочих разделов остаются заметными для пользователя и вспомогательных средств интерфейса."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-accessible-status-gate",
     "version": "0.181.0",
     "publishedAt": "2026-06-24T19:06:10+07:00",
