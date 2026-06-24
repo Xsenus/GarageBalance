@@ -84,4 +84,22 @@ describe('accessible dynamic messages', () => {
       expect(buttonSource).toContain('type="button"')
     }
   })
+
+  it('keeps icon-only buttons named and explicitly typed', () => {
+    const iconButtonIndexes = [...appSource.matchAll(/className="icon-button"/g)].map((match) => match.index ?? -1)
+
+    expect(iconButtonIndexes.length).toBeGreaterThan(0)
+
+    for (const classNameIndex of iconButtonIndexes) {
+      const buttonStart = appSource.lastIndexOf('<button', classNameIndex)
+      const buttonEnd = appSource.indexOf('</button>', classNameIndex)
+
+      expect(buttonStart).toBeGreaterThan(-1)
+      expect(buttonEnd).toBeGreaterThan(classNameIndex)
+
+      const buttonSource = appSource.slice(buttonStart, buttonEnd)
+      expect(buttonSource).toMatch(/\stype="(?:button|submit)"/)
+      expect(buttonSource).toContain('aria-label=')
+    }
+  })
 })
