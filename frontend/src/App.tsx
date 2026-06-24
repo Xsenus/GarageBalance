@@ -29,7 +29,7 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, Supplier
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
-import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, ImportClient } from './services/importApi'
+import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -2027,9 +2027,11 @@ function FinancePanel({
 function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient: ImportClient }) {
   const [runs, setRuns] = useState<AccessImportRunDto[]>([])
   const [quarantineItems, setQuarantineItems] = useState<AccessImportQuarantineItemDto[]>([])
+  const [runLogEntries, setRunLogEntries] = useState<AccessImportRunLogEntryDto[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingLog, setLoadingLog] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
@@ -2067,6 +2069,39 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       ignore = true
     }
   }, [auth.accessToken, importClient])
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadRunLog() {
+      if (!currentRun) {
+        setRunLogEntries([])
+        return
+      }
+
+      setLoadingLog(true)
+      try {
+        const entries = await importClient.getAccessRunLog(auth.accessToken, currentRun.id)
+        if (!ignore) {
+          setRunLogEntries(entries)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setRunLogEntries([])
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить лог импорта.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingLog(false)
+        }
+      }
+    }
+
+    void loadRunLog()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, currentRun, importClient])
 
   async function runDryRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -2199,6 +2234,28 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 {formatImportCheckStatus(check.status)}
               </span>
               <span role="cell">{currentRun.originalFileName}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="Лог запуска Access">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Шаг</span>
+            <span role="columnheader">Уровень</span>
+            <span role="columnheader">Сообщение</span>
+          </div>
+          {loadingLog ? <p className="empty-state">Загрузка лога...</p> : null}
+          {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state">Лог выбранного запуска пока пуст</p> : null}
+          {runLogEntries.slice(0, 10).map((entry) => (
+            <div className="operation-row" role="row" key={entry.id}>
+              <span role="cell">
+                <strong>{entry.stepCode}</strong>
+                <small>{formatDateTime(entry.createdAtUtc)}</small>
+              </span>
+              <span role="cell" className={entry.level === 'info' ? 'status-active' : entry.level === 'warning' ? 'warning-text' : 'status-disabled'}>
+                {formatImportLogLevel(entry.level)}
+              </span>
+              <span role="cell">{entry.message}</span>
             </div>
           ))}
         </div>
@@ -4224,6 +4281,18 @@ function formatImportCheckStatus(status: AccessImportCheckDto['status']): string
   }
 
   return 'Ошибка'
+}
+
+function formatImportLogLevel(level: AccessImportRunLogEntryDto['level']): string {
+  if (level === 'warning') {
+    return 'Предупреждение'
+  }
+
+  if (level === 'error') {
+    return 'Ошибка'
+  }
+
+  return 'Инфо'
 }
 
 function formatImportRunCheckSummary(run: AccessImportRunDto): string {

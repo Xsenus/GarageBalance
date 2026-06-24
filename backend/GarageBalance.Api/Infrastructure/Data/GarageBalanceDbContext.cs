@@ -28,6 +28,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
+    public DbSet<AccessImportRunLogEntry> AccessImportRunLogEntries => Set<AccessImportRunLogEntry>();
     public DbSet<AccessImportRowFingerprint> AccessImportRowFingerprints => Set<AccessImportRowFingerprint>();
     public DbSet<AccessImportQuarantineItem> AccessImportQuarantineItems => Set<AccessImportQuarantineItem>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
@@ -291,6 +292,19 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(run => run.StartedAtUtc);
             entity.HasIndex(run => run.Status);
             entity.HasIndex(run => run.ContentSha256);
+        });
+
+        modelBuilder.Entity<AccessImportRunLogEntry>(entity =>
+        {
+            entity.ToTable("access_import_run_log_entries");
+            entity.HasKey(entry => entry.Id);
+            entity.Property(entry => entry.Level).HasMaxLength(20).IsRequired();
+            entity.Property(entry => entry.StepCode).HasMaxLength(120).IsRequired();
+            entity.Property(entry => entry.Message).HasMaxLength(1000).IsRequired();
+            entity.Property(entry => entry.DetailsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(entry => entry.AccessImportRunId);
+            entity.HasIndex(entry => entry.CreatedAtUtc);
+            entity.HasIndex(entry => new { entry.AccessImportRunId, entry.CreatedAtUtc });
         });
 
         modelBuilder.Entity<AccessImportRowFingerprint>(entity =>

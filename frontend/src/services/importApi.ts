@@ -41,8 +41,18 @@ export type AccessImportQuarantineItemDto = {
   resolutionComment: string | null
 }
 
+export type AccessImportRunLogEntryDto = {
+  id: string
+  accessImportRunId: string
+  createdAtUtc: string
+  level: 'info' | 'warning' | 'error'
+  stepCode: string
+  message: string
+}
+
 export type ImportClient = {
   getAccessRuns(accessToken: string): Promise<AccessImportRunDto[]>
+  getAccessRunLog(accessToken: string, runId: string): Promise<AccessImportRunLogEntryDto[]>
   getOpenQuarantineItems(accessToken: string, accessImportRunId?: string): Promise<AccessImportQuarantineItemDto[]>
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
@@ -86,6 +96,9 @@ async function requestBlob(accessToken: string, path: string): Promise<Blob> {
 export const importApi: ImportClient = {
   getAccessRuns(accessToken) {
     return requestJson(accessToken, '/api/import/access/runs')
+  },
+  getAccessRunLog(accessToken, runId) {
+    return requestJson(accessToken, `/api/import/access/runs/${runId}/log`)
   },
   getOpenQuarantineItems(accessToken, accessImportRunId) {
     const query = accessImportRunId ? `?accessImportRunId=${encodeURIComponent(accessImportRunId)}` : ''

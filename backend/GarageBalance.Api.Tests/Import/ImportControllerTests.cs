@@ -95,6 +95,44 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public async Task GetAccessImportRunLog_ReturnsLogEntries()
+    {
+        var runId = Guid.NewGuid();
+        var service = new FakeImportService
+        {
+            LogResult = ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success(
+            [
+                CreateLogEntry(runId, "file_received"),
+                CreateLogEntry(runId, "dry_run_finished")
+            ])
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportRunLog(runId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsAssignableFrom<IReadOnlyList<AccessImportRunLogEntryDto>>(ok.Value);
+        Assert.Equal(2, entries.Count);
+        Assert.Equal(runId, service.LastLogRunId);
+    }
+
+    [Fact]
+    public async Task GetAccessImportRunLog_ReturnsNotFoundForMissingRun()
+    {
+        var service = new FakeImportService
+        {
+            LogResult = ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportRunLog(Guid.NewGuid(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("import_run_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task GetOpenQuarantineItems_ReturnsItemsFromService()
     {
         var quarantineItem = CreateQuarantineItem();
@@ -215,13 +253,27 @@ public sealed class ImportControllerTests
             status == "resolved" ? "Разобрано." : null);
     }
 
+    private static AccessImportRunLogEntryDto CreateLogEntry(Guid runId, string stepCode)
+    {
+        return new AccessImportRunLogEntryDto(
+            Guid.NewGuid(),
+            runId,
+            DateTimeOffset.UtcNow,
+            "info",
+            stepCode,
+            $"Step {stepCode}");
+    }
+
     private sealed class FakeImportService : IImportService
     {
         public Guid? LastActorUserId { get; private set; }
         public string? LastFileName { get; private set; }
         public Guid? LastExportRunId { get; private set; }
+        public Guid? LastLogRunId { get; private set; }
         public ImportResult<AccessImportRunDto> DryRunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
+        public ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>> LogResult { get; init; } =
+            ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success([]);
 
         public Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(CancellationToken cancellationToken)
         {
@@ -232,6 +284,12 @@ public sealed class ImportControllerTests
         {
             LastExportRunId = runId;
             return Task.FromResult(ExportResult);
+        }
+
+        public Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, CancellationToken cancellationToken)
+        {
+            LastLogRunId = runId;
+            return Task.FromResult(LogResult);
         }
 
         public Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)

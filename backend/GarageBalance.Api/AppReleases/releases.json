@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-import-run-log",
+    "version": "0.119.0",
+    "publishedAt": "2026-06-24T10:25:00+07:00",
+    "title": "Добавлен лог запуска импорта Access",
+    "summary": "Dry-run импорта Access теперь сохраняет и показывает пошаговый лог, чтобы администратор видел, на каком этапе находится проверка и чем она завершилась.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлена таблица access_import_run_log_entries с уровнем события, кодом шага, сообщением и служебным DetailsJson."
+      },
+      {
+        "type": "added",
+        "text": "Добавлен endpoint GET /api/import/access/runs/{id}/log под правом import.run; публичный DTO не возвращает служебные details."
+      },
+      {
+        "type": "added",
+        "text": "Панель импорта Access показывает лог выбранного dry-run запуска рядом с проверками, отчетом и историей запусков."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-import-quarantine-bucket",
     "version": "0.118.0",
     "publishedAt": "2026-06-24T09:55:00+07:00",

@@ -24,6 +24,8 @@ public sealed class ImportServiceTests
         Assert.Equal(64, result.Value.ContentSha256.Length);
         Assert.Contains(result.Value.Checks, check => check.Code == "schema_hints" && check.Status == "passed");
         Assert.Single(database.Context.AccessImportRuns);
+        Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.StepCode == "file_received" && item.AccessImportRunId == result.Value.Id);
+        Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.StepCode == "dry_run_finished" && item.AccessImportRunId == result.Value.Id);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "import.access_dry_run" && item.ActorUserId == actorUserId);
     }
 
@@ -74,12 +76,45 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task GetAccessImportRunLogEntriesAsync_ReturnsRunLogInChronologicalOrderWithoutDetails()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.GetAccessImportRunLogEntriesAsync(dryRun.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.Count >= 4);
+        Assert.Equal("file_received", result.Value[0].StepCode);
+        Assert.Contains(result.Value, entry => entry.StepCode == "hash_calculated");
+        Assert.Contains(result.Value, entry => entry.StepCode == "dry_run_finished");
+        Assert.All(result.Value, entry =>
+        {
+            Assert.Equal(dryRun.Value.Id, entry.AccessImportRunId);
+            Assert.False(string.IsNullOrWhiteSpace(entry.Message));
+        });
+    }
+
+    [Fact]
     public async Task ExportAccessImportRunReportAsync_ReturnsNotFoundForMissingRun()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = new ImportService(database.Context);
 
         var result = await service.ExportAccessImportRunReportAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_not_found", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetAccessImportRunLogEntriesAsync_ReturnsNotFoundForMissingRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportService(database.Context);
+
+        var result = await service.GetAccessImportRunLogEntriesAsync(Guid.NewGuid(), CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("import_run_not_found", result.ErrorCode);

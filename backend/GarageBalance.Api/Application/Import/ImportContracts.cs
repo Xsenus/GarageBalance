@@ -29,6 +29,14 @@ public sealed record AccessImportRunDto(
     string Summary,
     IReadOnlyList<AccessImportCheckDto> Checks);
 
+public sealed record AccessImportRunLogEntryDto(
+    Guid Id,
+    Guid AccessImportRunId,
+    DateTimeOffset CreatedAtUtc,
+    string Level,
+    string StepCode,
+    string Message);
+
 public sealed record ImportReportFileDto(
     string FileName,
     string ContentType,

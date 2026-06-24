@@ -5,7 +5,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto } from './services/financeApi'
-import type { AccessImportQuarantineItemDto, AccessImportRunDto, ImportClient } from './services/importApi'
+import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -1264,7 +1264,7 @@ describe('App', () => {
     await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
     await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл' }))
 
-    expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.')).toBeInTheDocument()
+    expect((await within(importPanel).findAllByText('Dry-run завершен с предупреждениями.')).length).toBeGreaterThan(0)
     const importSummary = within(importPanel).getByLabelText('Итоги dry-run импорта')
     expect(within(importSummary).getByText('Завершен')).toBeInTheDocument()
     expect(within(importSummary).getByText('Успешно')).toBeInTheDocument()
@@ -1275,8 +1275,11 @@ describe('App', () => {
     expect(within(importSummary).getByText('0')).toBeInTheDocument()
     expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
     expect(within(importPanel).getByText('Формат файла')).toBeInTheDocument()
+    expect(await within(importPanel).findByRole('table', { name: 'Лог запуска Access' })).toBeInTheDocument()
+    expect(within(importPanel).getByText('file_received')).toBeInTheDocument()
+    expect(within(importPanel).getByText('dry_run_finished')).toBeInTheDocument()
     expect(within(importPanel).getAllByText('Пройдено').length).toBeGreaterThan(0)
-    expect(within(importPanel).getByText('Предупреждение')).toBeInTheDocument()
+    expect(within(importPanel).getAllByText('Предупреждение').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('Завершен').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('2/3 · 1 предупреждение · 0 ошибок').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
@@ -1982,6 +1985,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
 
   return {
     getAccessRuns: async () => [],
+    getAccessRunLog: async () => [],
     getOpenQuarantineItems: async () => [],
     dryRunAccess: async () => run,
     downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
@@ -2049,9 +2053,11 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
 
 function createStatefulImportClient(): ImportClient {
   let runs: AccessImportRunDto[] = []
+  let logsByRunId = new Map<string, AccessImportRunLogEntryDto[]>()
 
   return {
     getAccessRuns: async () => runs,
+    getAccessRunLog: async (_token, runId) => logsByRunId.get(runId) ?? [],
     getOpenQuarantineItems: async () => [],
     dryRunAccess: async (_token, file) => {
       const run = createAccessImportRun({
@@ -2060,6 +2066,10 @@ function createStatefulImportClient(): ImportClient {
         fileSizeBytes: file.size,
       })
       runs = [run, ...runs]
+      logsByRunId = new Map(logsByRunId).set(run.id, [
+        createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'file_received', message: `Файл ${file.name} получен для dry-run проверки.` }),
+        createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'dry_run_finished', level: 'warning', message: run.summary }),
+      ])
       return run
     },
     downloadAccessRunReport: async (_token, runId) => {
@@ -2591,6 +2601,18 @@ function createAccessImportQuarantineItem(overrides: Partial<AccessImportQuarant
     resolvedAtUtc: null,
     resolvedByUserId: null,
     resolutionComment: null,
+    ...overrides,
+  }
+}
+
+function createAccessImportRunLogEntry(overrides: Partial<AccessImportRunLogEntryDto> = {}): AccessImportRunLogEntryDto {
+  return {
+    id: crypto.randomUUID(),
+    accessImportRunId: 'access-run',
+    createdAtUtc: new Date().toISOString(),
+    level: 'info',
+    stepCode: 'file_received',
+    message: 'Файл получен для dry-run проверки.',
     ...overrides,
   }
 }

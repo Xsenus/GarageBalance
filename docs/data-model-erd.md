@@ -28,6 +28,7 @@ erDiagram
     access_import_runs ||--o{ audit_events : audited
     access_import_runs ||--o{ access_import_row_fingerprints : registers
     access_import_runs ||--o{ access_import_quarantine_items : quarantines
+    access_import_runs ||--o{ access_import_run_log_entries : logs
     integration_secret_settings ||--o{ audit_events : audited
 
     owners {
@@ -215,6 +216,16 @@ erDiagram
         timestamp ResolvedAtUtc
     }
 
+    access_import_run_log_entries {
+        uuid Id PK
+        uuid AccessImportRunId
+        timestamp CreatedAtUtc
+        string Level
+        string StepCode
+        string Message
+        jsonb DetailsJson
+    }
+
     integration_secret_settings {
         uuid Id PK
         string Provider
@@ -260,6 +271,7 @@ erDiagram
 - `access_import_runs` - dry-run и будущие запуски импорта Access. Индексы: `StartedAtUtc`, `Status`, `ContentSha256`. Полный отчет хранится в `ReportJson` как `jsonb`.
 - `access_import_row_fingerprints` - реестр идемпотентности будущего переноса Access. `FingerprintKey` уникален и строится из `SourceSystem + EntityType + ExternalId`, а если внешнего id нет - из `SourceSystem + EntityType + RowHash`. Индексы: `FingerprintKey`, `SourceSystem + EntityType`, `AccessImportRunId`.
 - `access_import_quarantine_items` - карантин строк Access, которые нельзя перенести автоматически. Хранит `ReasonCode`, `ReasonMessage`, `Severity`, безопасный статус разбора и `RowSnapshotJson` в `jsonb`; публичные DTO не возвращают raw snapshot. Индексы: `AccessImportRunId`, `Status`, `CreatedAtUtc`, `SourceSystem + EntityType`, `RowHash`.
+- `access_import_run_log_entries` - пошаговый лог dry-run и будущего переноса Access. Хранит безопасные для показа `Level`, `StepCode`, `Message` и служебный `DetailsJson` в `jsonb`; публичные DTO не возвращают details. Индексы: `AccessImportRunId`, `CreatedAtUtc`, `AccessImportRunId + CreatedAtUtc`.
 - `integration_secret_settings` - зашифрованные секреты будущих интеграций 1C Fresh, фискального оборудования и похожих адаптеров. `ProtectedValue` хранится только в формате `gb:protected:v1:...`, `Purpose` разделяет секреты по назначению, уникальность задается через `NormalizedProvider + NormalizedSettingKey`, индексы покрывают `Provider` и `UpdatedAtUtc`.
 
 ## Правила Расширения Схемы

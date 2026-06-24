@@ -27,6 +27,37 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             .ToList();
     }
 
+    public async Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        var runExists = await dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
+        if (!runExists)
+        {
+            return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
+        }
+
+        var query = dbContext.AccessImportRunLogEntries
+            .AsNoTracking()
+            .Where(entry => entry.AccessImportRunId == runId);
+
+        List<AccessImportRunLogEntry> entries;
+        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
+        {
+            entries = (await query.ToListAsync(cancellationToken))
+                .OrderBy(entry => entry.CreatedAtUtc)
+                .ThenBy(entry => entry.Id)
+                .ToList();
+        }
+        else
+        {
+            entries = await query
+                .OrderBy(entry => entry.CreatedAtUtc)
+                .ThenBy(entry => entry.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success(entries.Select(ToLogEntryDto).ToList());
+    }
+
     public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, CancellationToken cancellationToken)
     {
         var run = await dbContext.AccessImportRuns.AsNoTracking().SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
@@ -123,6 +154,32 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
         };
 
         dbContext.AccessImportRuns.Add(run);
+        AddRunLog(run, "info", "file_received", $"Файл {fileName} получен для dry-run проверки.", new
+        {
+            fileName,
+            extension,
+            fileSizeBytes = buffer.Length
+        });
+        AddRunLog(run, "info", "hash_calculated", "SHA-256 файла рассчитан для сверки и повторяемости dry-run.", new
+        {
+            contentSha256 = run.ContentSha256
+        });
+        foreach (var check in checks)
+        {
+            AddRunLog(run, check.Status == "error" ? "error" : check.Status == "warning" ? "warning" : "info", $"check_{check.Code}", check.Message, new
+            {
+                check.Code,
+                check.Status
+            });
+        }
+        AddRunLog(run, status == "blocked" ? "error" : warnings > 0 ? "warning" : "info", "dry_run_finished", summary, new
+        {
+            status,
+            totalChecks = checks.Count,
+            passed,
+            warnings,
+            errors
+        });
         dbContext.AuditEvents.Add(new AuditEvent
         {
             ActorUserId = actorUserId,
@@ -133,6 +190,18 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
         });
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
+    private void AddRunLog(AccessImportRun run, string level, string stepCode, string message, object details)
+    {
+        dbContext.AccessImportRunLogEntries.Add(new AccessImportRunLogEntry
+        {
+            AccessImportRunId = run.Id,
+            Level = level,
+            StepCode = stepCode,
+            Message = message,
+            DetailsJson = JsonSerializer.Serialize(details, JsonOptions)
+        });
     }
 
     private static List<AccessImportCheckDto> BuildChecks(string extension, byte[] bytes)
@@ -190,5 +259,16 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             run.ErrorCount,
             run.Summary,
             checks);
+    }
+
+    private static AccessImportRunLogEntryDto ToLogEntryDto(AccessImportRunLogEntry entry)
+    {
+        return new AccessImportRunLogEntryDto(
+            entry.Id,
+            entry.AccessImportRunId,
+            entry.CreatedAtUtc,
+            entry.Level,
+            entry.StepCode,
+            entry.Message);
     }
 }
