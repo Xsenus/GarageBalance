@@ -173,6 +173,8 @@ copy .env.example .env
 docker compose up --build
 ```
 
+API Dockerfile собирает `net10.0` через `mcr.microsoft.com/dotnet/sdk:10.0`, публикует Release-сборку и запускает runtime-образ `mcr.microsoft.com/dotnet/aspnet:10.0` на `http://+:8080`. Этот контракт закреплен backend-тестом, чтобы Docker-упаковка не расходилась с целевой версией приложения.
+
 ## Правила проекта
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.

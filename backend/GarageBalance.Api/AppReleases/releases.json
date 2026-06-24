@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-api-dockerfile-contract",
+    "version": "0.96.0",
+    "publishedAt": "2026-06-24T07:45:00+07:00",
+    "title": "API Dockerfile получил проверяемый контракт",
+    "summary": "Backend-образ теперь явно фиксирует runtime-порт и проверяется автоматическим тестом.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Runtime-слой API Dockerfile задает ASPNETCORE_URLS=http://+:8080, поэтому контейнер слушает тот же порт и вне docker-compose."
+      },
+      {
+        "type": "improved",
+        "text": "Backend-тест проверяет .NET 10 SDK/runtime images, Release publish, порт 8080 и entrypoint API."
+      },
+      {
+        "type": "improved",
+        "text": "README описывает Docker-контракт API, чтобы упаковка оставалась согласованной с целевой версией приложения."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-frontend-nginx-cache-policy",
     "version": "0.95.0",
     "publishedAt": "2026-06-24T07:15:00+07:00",
