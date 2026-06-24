@@ -371,6 +371,8 @@
 
 ## История выполнения
 
+- `[x]` 25.06.2026: закреплено обновление итоговых карточек платежей при смене периода. React-тест `refreshes payment summary totals from server when period filter changes` меняет фильтры "Период с/по", проверяет параметры `getSummary` и значения карточек "Поступления", "Начислено", "Задолженность", "Выплаты", "Баланс" и "Счетчики" из серверного ответа. CSS итоговой ленты усилен явным центрированием и стабильной минимальной высотой карточек. README и release `0.228.0` обновлены; профильный frontend-прогон `App.test.tsx` прошел.
+
 - `[x]` 25.06.2026: уточнен frontend guard отчетов при неполном наборе прав. Если у пользователя есть `reports.read`, но нет `dictionaries.read`, раздел "Отчеты" открывает понятное состояние "Отчеты недоступны" с требованием `dictionaries.read`, не монтирует `ReportPanel` и не вызывает report API. Добавлен React-тест `keeps reports closed without dictionary read permission for filters`; README, user guide, roadmap и release `0.227.0` обновлены.
 
 - `[x]` 25.06.2026: negative-сценарий ошибок выгрузки отчетов расширен на PDF. React-тест `shows report export errors without ready status` теперь проверяет все шесть кнопок: XLSX и PDF для сводного отчета, поступлений и выплат. При сбое показывается `role="alert"`, а статус `... готов.` не появляется. Обновлены README, roadmap и release `0.226.0`; профильный frontend-прогон `App.test.tsx` прошел.

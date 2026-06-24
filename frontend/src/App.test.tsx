@@ -1876,6 +1876,39 @@ describe('App', () => {
     expect(requestedLimits).toEqual({ incomeOperations: 25, expenseOperations: 1, accruals: 1, supplierAccruals: 1, meterReadings: 1 })
   })
 
+  it('refreshes payment summary totals from server when period filter changes', async () => {
+    const user = userEvent.setup()
+    const summaryRequests: Array<{ monthFrom?: string; monthTo?: string; search?: string } | undefined> = []
+    const financeClient = createFinanceClient({
+      getSummary: async (_token, params) => {
+        summaryRequests.push(params)
+        if (params?.monthFrom === '2026-01' && params.monthTo === '2026-02') {
+          return { incomeTotal: 1200, expenseTotal: 300, accrualTotal: 1700, balance: 900, debt: 500, operationCount: 7, accrualCount: 4, meterReadingCount: 11 }
+        }
+
+        return { incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.type(within(financePanel).getByLabelText('Период с'), '2026-01')
+    await user.type(within(financePanel).getByLabelText('Период по'), '2026-02')
+
+    await waitFor(() => expect(summaryRequests).toContainEqual({ monthFrom: '2026-01', monthTo: '2026-02', search: '' }))
+    const summaryStrip = within(financePanel).getByLabelText('Итоги платежей')
+    expect(within(summaryStrip).getByText('1 200,00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('1 700,00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('300,00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('900,00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('11')).toBeInTheDocument()
+    expect(within(financePanel).getByText('7 операций')).toBeInTheDocument()
+  })
+
   it('cancels income operation with required reason from payments workspace', async () => {
     const user = userEvent.setup()
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный документ')
