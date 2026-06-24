@@ -371,6 +371,8 @@
 
 ## История выполнения
 
+- `[x]` 25.06.2026: закреплена доступная пагинация платежных таблиц. Блок пагинации раздела "Платежи" получил `role="navigation"` и имя "Пагинация платежей", а счетчик `Показано X-Y из N` теперь объявляется как `role="status"` с `aria-live="polite"`. React-тест `shows visible counters for long payment workspace lists` проверяет доступную разметку счетчика вместе с серверными лимитами таблиц. README и release `0.229.0` обновлены; профильный frontend-прогон `App.test.tsx` прошел.
+
 - `[x]` 25.06.2026: закреплено обновление итоговых карточек платежей при смене периода. React-тест `refreshes payment summary totals from server when period filter changes` меняет фильтры "Период с/по", проверяет параметры `getSummary` и значения карточек "Поступления", "Начислено", "Задолженность", "Выплаты", "Баланс" и "Счетчики" из серверного ответа. CSS итоговой ленты усилен явным центрированием и стабильной минимальной высотой карточек. README и release `0.228.0` обновлены; профильный frontend-прогон `App.test.tsx` прошел.
 
 - `[x]` 25.06.2026: уточнен frontend guard отчетов при неполном наборе прав. Если у пользователя есть `reports.read`, но нет `dictionaries.read`, раздел "Отчеты" открывает понятное состояние "Отчеты недоступны" с требованием `dictionaries.read`, не монтирует `ReportPanel` и не вызывает report API. Добавлен React-тест `keeps reports closed without dictionary read permission for filters`; README, user guide, roadmap и release `0.227.0` обновлены.

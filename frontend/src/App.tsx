@@ -2690,8 +2690,8 @@ function FinancePanel({
             {renderFinanceTable()}
             {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранным условиям записей нет</p> : null}
           </div>
-          <div className="dictionary-pagination">
-            <span>Показано {financePage.totalCount === 0 ? 0 : financePage.offset + 1}-{Math.min(financePage.offset + financePage.items.length, financePage.totalCount)} из {financePage.totalCount}</span>
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация платежей">
+            <span role="status" aria-live="polite">Показано {financePage.totalCount === 0 ? 0 : financePage.offset + 1}-{Math.min(financePage.offset + financePage.items.length, financePage.totalCount)} из {financePage.totalCount}</span>
             <label>
               Строк
               <select aria-label="Количество строк платежей" value={financePage.limit} onChange={(event) => void loadFinanceWorkbench(activeFinanceSection, 0, Number(event.target.value))}>
