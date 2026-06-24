@@ -3781,7 +3781,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               <Search size={17} />
             </button>
           </div>
-          {garageSearchStatus ? <p className="form-hint">{garageSearchStatus}</p> : null}
+          {garageSearchStatus ? <p className="form-hint" aria-live="polite">{garageSearchStatus}</p> : null}
           <input aria-label="Номер гаража" placeholder="Номер" value={garageForm.number} onChange={(event) => setGarageForm({ ...garageForm, number: event.target.value })} required />
           <div className="inline-fields">
             <input aria-label="Количество людей" type="number" min="0" value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />
@@ -3842,7 +3842,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
               <Search size={17} />
             </button>
           </div>
-          {supplierSearchStatus ? <p className="form-hint">{supplierSearchStatus}</p> : null}
+          {supplierSearchStatus ? <p className="form-hint" aria-live="polite">{supplierSearchStatus}</p> : null}
           <form className="compact-form" onSubmit={saveSupplierGroup}>
             <input aria-label="Группа поставщиков" placeholder="Группа" value={supplierGroupName} onChange={(event) => setSupplierGroupName(event.target.value)} required />
             <button className="icon-button" type="submit" aria-label="Добавить группу" disabled={!canWriteDictionaries || saving === 'group'}>
