@@ -637,6 +637,47 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_UsesReplacementMeterReadingAfterCancel()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var firstReading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Первичный замер"),
+            null,
+            CancellationToken.None);
+        Assert.True(firstReading.Succeeded);
+        var canceled = await service.CancelMeterReadingAsync(
+            firstReading.Value!.Id,
+            new CancelFinanceEntryRequest("Замер внесен ошибочно"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+        var replacement = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 18m, "Повторный замер"),
+            null,
+            CancellationToken.None);
+        Assert.True(replacement.Succeeded);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(400m, result.Value!.TotalAmount);
+        Assert.Equal(400m, result.Value.CreatedAccruals[0].Amount);
+        Assert.Equal(1, result.Value.CreatedCount);
+        Assert.Equal(0, result.Value.SkippedCount);
+        Assert.Equal("meter_water", result.Value.CalculationBase);
+        Assert.Equal(2, await database.Context.MeterReadings.CountAsync());
+        Assert.Equal(1, await database.Context.MeterReadings.CountAsync(reading => reading.IsCanceled));
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_RejectsSecondRunForSameMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

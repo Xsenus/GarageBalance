@@ -271,7 +271,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(reading => reading.AccountingMonth);
             entity.HasIndex(reading => reading.ReadingDate);
             entity.HasIndex(reading => reading.GarageId);
-            entity.HasIndex(reading => new { reading.GarageId, reading.MeterKind, reading.AccountingMonth }).IsUnique();
+            entity.HasIndex(reading => new { reading.GarageId, reading.MeterKind, reading.AccountingMonth })
+                .IsUnique()
+                .HasFilter("\"IsCanceled\" = false");
             entity.HasOne(reading => reading.Garage)
                 .WithMany()
                 .HasForeignKey(reading => reading.GarageId)
