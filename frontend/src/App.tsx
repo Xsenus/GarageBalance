@@ -1085,7 +1085,7 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
 
       {loading ? <p className="muted">Загружаем историю обновлений...</p> : null}
       {error ? <FormError>{error}</FormError> : null}
-      {!loading && !error && releases.length === 0 ? <p className="muted">Пока нет опубликованных изменений.</p> : null}
+      {!loading && !error && releases.length === 0 ? <p className="muted" aria-live="polite">Пока нет опубликованных изменений.</p> : null}
 
       {!loading && !error && releases.length > 0 ? (
         <div className="release-list">

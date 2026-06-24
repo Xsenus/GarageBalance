@@ -2105,6 +2105,17 @@ describe('App', () => {
     expect(within(releasePanel).getByText(/v0.11.0/)).toBeInTheDocument()
   })
 
+  it('announces empty release notes for authenticated users', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => [] })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    expect(await within(releasePanel).findByText('Пока нет опубликованных изменений.')).toHaveAttribute('aria-live', 'polite')
+  })
+
   it('shows workspace loading errors inside the related panel', async () => {
     const user = userEvent.setup()
     render(
