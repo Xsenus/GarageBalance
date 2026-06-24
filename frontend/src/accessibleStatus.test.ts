@@ -102,4 +102,18 @@ describe('accessible dynamic messages', () => {
       expect(buttonSource).toContain('aria-label=')
     }
   })
+
+  it('keeps all buttons explicitly typed', () => {
+    const buttonIndexes = [...appSource.matchAll(/<button\b/g)].map((match) => match.index ?? -1)
+
+    expect(buttonIndexes.length).toBeGreaterThan(0)
+
+    for (const buttonStart of buttonIndexes) {
+      const openingTagEnd = appSource.indexOf('>', buttonStart)
+      expect(openingTagEnd).toBeGreaterThan(buttonStart)
+
+      const openingTagSource = appSource.slice(buttonStart, openingTagEnd + 1)
+      expect(openingTagSource).toMatch(/\stype="(?:button|submit)"/)
+    }
+  })
 })

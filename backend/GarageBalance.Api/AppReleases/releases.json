@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-explicit-button-type-gate",
+    "version": "0.188.0",
+    "publishedAt": "2026-06-24T19:47:29+07:00",
+    "title": "Типы кнопок закреплены проверкой",
+    "summary": "Все кнопки React-приложения защищены от неявного submit-поведения браузера.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Каждый `<button>` в `App.tsx` теперь должен явно указывать `type=\"button\"` или `type=\"submit\"`."
+      },
+      {
+        "type": "fixed",
+        "text": "Frontend structural test ловит новые кнопки без явного типа до попадания в рабочий интерфейс."
+      },
+      {
+        "type": "important",
+        "text": "Формы отчетов, платежей, справочников и входа защищены от случайной отправки из-за браузерного значения type по умолчанию."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-icon-button-accessibility-gate",
     "version": "0.187.0",
     "publishedAt": "2026-06-24T19:41:50+07:00",
