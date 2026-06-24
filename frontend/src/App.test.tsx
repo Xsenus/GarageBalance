@@ -1791,6 +1791,16 @@ describe('App', () => {
   it('shows accessible empty states for reports without rows', async () => {
     const user = userEvent.setup()
     const reportClient = createReportClient({
+      getConsolidatedReport: async () => createConsolidatedReport({
+        incomeTotal: 0,
+        expenseTotal: 0,
+        accrualTotal: 0,
+        balance: 0,
+        debt: 0,
+        monthlyRows: [],
+        garageRowCount: 0,
+        garageRows: [],
+      }),
       getIncomeReport: async () => createIncomeReport({
         accrualTotal: 0,
         incomeTotal: 0,
@@ -1812,8 +1822,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
+    expect(await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')).toHaveAttribute('aria-live', 'polite')
     expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('aria-live', 'polite')
     expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('aria-live', 'polite')
+    expect(within(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).queryByText(/Иванов Иван/)).not.toBeInTheDocument()
     expect(within(reportsPanel).queryByText(/PKO-1/)).not.toBeInTheDocument()
     expect(within(reportsPanel).queryByText(/RKO-1/)).not.toBeInTheDocument()
   })

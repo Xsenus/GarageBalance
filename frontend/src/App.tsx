@@ -2904,7 +2904,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <span role="columnheader">Начисления</span>
             <span role="columnheader">Долг</span>
           </div>
-          {report?.garageRowCount === 0 ? <p className="empty-state">По выбранному фильтру строк нет</p> : null}
+          {report?.garageRowCount === 0 ? <p className="empty-state" aria-live="polite">По выбранному фильтру гаражей нет</p> : null}
           {report?.garageRows.slice(0, garageReportScreenRowLimit).map((row) => (
             <div className="operation-row" role="row" key={row.garageId}>
               <span role="cell">
