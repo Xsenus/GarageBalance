@@ -3177,6 +3177,8 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
     }
   }
 
+  const visibleUsers = users.slice(0, 8)
+
   return (
     <section className="dictionary-panel" aria-label="Пользователи">
       <div className="section-heading">
@@ -3217,7 +3219,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <span role="columnheader">Статус</span>
           </div>
           {users.length === 0 ? <p className="empty-state">Пользователей пока нет</p> : null}
-          {users.slice(0, 8).map((user) => (
+          {visibleUsers.map((user) => (
             <div className="user-table-row" role="row" key={user.id}>
               <span role="cell">
                 <strong>{user.displayName}</strong>
@@ -3229,6 +3231,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
               </span>
             </div>
           ))}
+          {users.length > visibleUsers.length ? <p className="empty-state" aria-live="polite">Показано {visibleUsers.length} из {users.length} пользователей</p> : null}
         </div>
       </div>
 
