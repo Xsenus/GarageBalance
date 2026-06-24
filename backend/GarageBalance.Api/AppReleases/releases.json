@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-import-row-fingerprints",
+    "version": "0.117.0",
+    "publishedAt": "2026-06-24T09:35:00+07:00",
+    "title": "Добавлена защита от дублей при будущем импорте Access",
+    "summary": "Backend получил реестр fingerprint-ов строк импорта, чтобы повторный перенос Access не создавал дубли гаражей, владельцев, платежей и счетчиков.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлена таблица access_import_row_fingerprints с уникальным FingerprintKey, source/entity, external id, row hash и связью с запуском импорта."
+      },
+      {
+        "type": "added",
+        "text": "Добавлен ImportFingerprintService: новая строка регистрируется один раз, а повторная регистрация возвращает существующий fingerprint."
+      },
+      {
+        "type": "added",
+        "text": "Добавлены backend-тесты идемпотентности по внешнему id, по row hash без внешнего id, валидации SHA-256 и audit-события без дублей."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-vps-auth-api-origin",
     "version": "0.116.0",
     "publishedAt": "2026-06-24T09:25:00+07:00",

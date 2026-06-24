@@ -28,6 +28,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
+    public DbSet<AccessImportRowFingerprint> AccessImportRowFingerprints => Set<AccessImportRowFingerprint>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -289,6 +290,22 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(run => run.StartedAtUtc);
             entity.HasIndex(run => run.Status);
             entity.HasIndex(run => run.ContentSha256);
+        });
+
+        modelBuilder.Entity<AccessImportRowFingerprint>(entity =>
+        {
+            entity.ToTable("access_import_row_fingerprints");
+            entity.HasKey(fingerprint => fingerprint.Id);
+            entity.Property(fingerprint => fingerprint.FingerprintKey).HasMaxLength(520).IsRequired();
+            entity.Property(fingerprint => fingerprint.SourceSystem).HasMaxLength(80).IsRequired();
+            entity.Property(fingerprint => fingerprint.EntityType).HasMaxLength(120).IsRequired();
+            entity.Property(fingerprint => fingerprint.ExternalId).HasMaxLength(240);
+            entity.Property(fingerprint => fingerprint.RowHash).HasMaxLength(64).IsRequired();
+            entity.Property(fingerprint => fingerprint.TargetEntityType).HasMaxLength(120);
+            entity.Property(fingerprint => fingerprint.TargetEntityId).HasMaxLength(120);
+            entity.HasIndex(fingerprint => fingerprint.FingerprintKey).IsUnique();
+            entity.HasIndex(fingerprint => new { fingerprint.SourceSystem, fingerprint.EntityType });
+            entity.HasIndex(fingerprint => fingerprint.AccessImportRunId);
         });
 
         modelBuilder.Entity<IntegrationSecretSetting>(entity =>
