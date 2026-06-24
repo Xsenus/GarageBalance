@@ -1822,9 +1822,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
+    expect(await within(reportsPanel).findByText('Помесячных строк отчета пока нет')).toHaveAttribute('aria-live', 'polite')
     expect(await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')).toHaveAttribute('aria-live', 'polite')
     expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('aria-live', 'polite')
     expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('aria-live', 'polite')
+    expect(within(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).queryByText(/Июнь 2026/)).not.toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).queryByText(/Иванов Иван/)).not.toBeInTheDocument()
     expect(within(reportsPanel).queryByText(/PKO-1/)).not.toBeInTheDocument()
     expect(within(reportsPanel).queryByText(/RKO-1/)).not.toBeInTheDocument()

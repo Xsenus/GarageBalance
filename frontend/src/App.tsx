@@ -2881,7 +2881,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <span role="columnheader">Итоги</span>
             <span role="columnheader">Долг</span>
           </div>
-          {report?.monthlyRows.length === 0 ? <p className="empty-state">Строк отчета пока нет</p> : null}
+          {report?.monthlyRows.length === 0 ? <p className="empty-state" aria-live="polite">Помесячных строк отчета пока нет</p> : null}
           {report?.monthlyRows.map((row) => (
             <div className="operation-row" role="row" key={row.accountingMonth}>
               <span role="cell">{formatMonth(row.accountingMonth)}</span>
