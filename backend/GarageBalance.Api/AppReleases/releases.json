@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-import-quarantine-bucket",
+    "version": "0.118.0",
+    "publishedAt": "2026-06-24T09:55:00+07:00",
+    "title": "Добавлен карантин строк импорта Access",
+    "summary": "Проблемные строки будущего переноса Access теперь можно сохранять отдельно, видеть в панели импорта и закрывать после ручного разбора.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлена таблица access_import_quarantine_items с причиной, уровнем error/warning, row hash, JSON-снимком строки и статусом разбора."
+      },
+      {
+        "type": "added",
+        "text": "Добавлены endpoints GET /api/import/access/quarantine и PATCH /api/import/access/quarantine/{id}/resolve под правом import.run."
+      },
+      {
+        "type": "added",
+        "text": "Панель импорта Access показывает открытые строки карантина и позволяет закрыть разобранную строку с audit-событием."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-import-row-fingerprints",
     "version": "0.117.0",
     "publishedAt": "2026-06-24T09:35:00+07:00",

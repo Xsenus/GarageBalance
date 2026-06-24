@@ -5,7 +5,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto } from './services/financeApi'
-import type { AccessImportRunDto, ImportClient } from './services/importApi'
+import type { AccessImportQuarantineItemDto, AccessImportRunDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -1286,6 +1286,37 @@ describe('App', () => {
     expect(await within(importPanel).findByText('Отчет dry-run импорта готов.')).toBeInTheDocument()
   })
 
+  it('shows and resolves Access import quarantine rows', async () => {
+    const user = userEvent.setup()
+    let quarantineItems = [createAccessImportQuarantineItem()]
+    const importClient = createImportClient({
+      getOpenQuarantineItems: async () => quarantineItems,
+      resolveQuarantineItem: async (_token, itemId, resolutionComment) => {
+        quarantineItems = quarantineItems.filter((item) => item.id !== itemId)
+        return createAccessImportQuarantineItem({
+          id: itemId,
+          status: 'resolved',
+          resolutionComment: resolutionComment ?? null,
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const importPanel = await screen.findByRole('region', { name: /Access/ })
+    const quarantineTable = await within(importPanel).findByRole('table', { name: 'Карантин импорта Access' })
+
+    expect(within(quarantineTable).getByText('Garage #42')).toBeInTheDocument()
+    expect(within(quarantineTable).getByText('missing-owner')).toBeInTheDocument()
+
+    await user.click(within(quarantineTable).getByRole('button', { name: 'Закрыть' }))
+
+    expect(await within(importPanel).findByText('Строка карантина закрыта.')).toBeInTheDocument()
+    expect(within(quarantineTable).queryByText('Garage #42')).not.toBeInTheDocument()
+    expect(within(quarantineTable).getByText('Открытых строк карантина нет')).toBeInTheDocument()
+  })
+
   it('shows audit journal for users with audit permission', async () => {
     const user = userEvent.setup()
     let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
@@ -1951,8 +1982,10 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
 
   return {
     getAccessRuns: async () => [],
+    getOpenQuarantineItems: async () => [],
     dryRunAccess: async () => run,
     downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
+    resolveQuarantineItem: async (_token, itemId) => createAccessImportQuarantineItem({ id: itemId, status: 'resolved' }),
     ...overrides,
   }
 }
@@ -2019,6 +2052,7 @@ function createStatefulImportClient(): ImportClient {
 
   return {
     getAccessRuns: async () => runs,
+    getOpenQuarantineItems: async () => [],
     dryRunAccess: async (_token, file) => {
       const run = createAccessImportRun({
         id: crypto.randomUUID(),
@@ -2032,6 +2066,7 @@ function createStatefulImportClient(): ImportClient {
       const run = runs.find((item) => item.id === runId)
       return new Blob([JSON.stringify(run ?? {})], { type: 'application/json' })
     },
+    resolveQuarantineItem: async (_token, itemId) => createAccessImportQuarantineItem({ id: itemId, status: 'resolved' }),
   }
 }
 
@@ -2535,6 +2570,27 @@ function createAccessImportRun(overrides: Partial<AccessImportRunDto> = {}): Acc
       { code: 'signature', title: 'Сигнатура Access', status: 'passed', message: 'Файл похож на Access.' },
       { code: 'native_reader', title: 'Драйвер чтения .accdb', status: 'warning', message: 'Нужен ACE-драйвер или конвертация.' },
     ],
+    ...overrides,
+  }
+}
+
+function createAccessImportQuarantineItem(overrides: Partial<AccessImportQuarantineItemDto> = {}): AccessImportQuarantineItemDto {
+  return {
+    id: 'quarantine-1',
+    accessImportRunId: 'access-run',
+    sourceSystem: 'Access',
+    entityType: 'Garage',
+    externalId: '42',
+    rowHash: 'b'.repeat(64),
+    reasonCode: 'missing-owner',
+    reasonMessage: 'Не найден владелец гаража.',
+    severity: 'error',
+    status: 'open',
+    createdAtUtc: new Date().toISOString(),
+    createdByUserId: null,
+    resolvedAtUtc: null,
+    resolvedByUserId: null,
+    resolutionComment: null,
     ...overrides,
   }
 }

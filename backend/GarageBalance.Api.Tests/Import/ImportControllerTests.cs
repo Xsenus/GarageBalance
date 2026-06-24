@@ -94,9 +94,73 @@ public sealed class ImportControllerTests
         Assert.Equal("import_run_not_found", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
     }
 
+    [Fact]
+    public async Task GetOpenQuarantineItems_ReturnsItemsFromService()
+    {
+        var quarantineItem = CreateQuarantineItem();
+        var quarantineService = new FakeImportQuarantineService
+        {
+            OpenItems = [quarantineItem]
+        };
+        var controller = CreateController(new FakeImportService(), quarantineService);
+        var runId = Guid.NewGuid();
+
+        var result = await controller.GetOpenQuarantineItems(runId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsAssignableFrom<IReadOnlyList<AccessImportQuarantineItemDto>>(ok.Value);
+        Assert.Equal(quarantineItem.Id, Assert.Single(items).Id);
+        Assert.Equal(runId, quarantineService.LastAccessImportRunId);
+    }
+
+    [Fact]
+    public async Task ResolveQuarantineItem_ReturnsResolvedItemAndPassesActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var quarantineItem = CreateQuarantineItem("resolved");
+        var quarantineService = new FakeImportQuarantineService
+        {
+            ResolveResult = ImportResult<AccessImportQuarantineItemDto>.Success(quarantineItem)
+        };
+        var controller = CreateController(new FakeImportService(), quarantineService, actorUserId);
+
+        var result = await controller.ResolveQuarantineItem(
+            quarantineItem.Id,
+            new ResolveImportQuarantineItemRequest("Разобрано."),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var item = Assert.IsType<AccessImportQuarantineItemDto>(ok.Value);
+        Assert.Equal("resolved", item.Status);
+        Assert.Equal(quarantineItem.Id, quarantineService.LastResolveId);
+        Assert.Equal(actorUserId, quarantineService.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task ResolveQuarantineItem_ReturnsNotFoundForMissingItem()
+    {
+        var quarantineService = new FakeImportQuarantineService
+        {
+            ResolveResult = ImportResult<AccessImportQuarantineItemDto>.Failure("import_quarantine_item_not_found", "Строка карантина импорта не найдена.")
+        };
+        var controller = CreateController(new FakeImportService(), quarantineService);
+
+        var result = await controller.ResolveQuarantineItem(Guid.NewGuid(), new ResolveImportQuarantineItemRequest(null), CancellationToken.None);
+
+        var notFound = Assert.IsType<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(StatusCodes.Status404NotFound, notFound.StatusCode);
+        Assert.Equal("import_quarantine_item_not_found", problem.Title);
+    }
+
     private static ImportController CreateController(FakeImportService service, Guid? actorUserId = null)
     {
-        var controller = new ImportController(service);
+        return CreateController(service, new FakeImportQuarantineService(), actorUserId);
+    }
+
+    private static ImportController CreateController(FakeImportService service, FakeImportQuarantineService quarantineService, Guid? actorUserId = null)
+    {
+        var controller = new ImportController(service, quarantineService);
         var claims = actorUserId is null ? [] : new[] { new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString()) };
         controller.ControllerContext.HttpContext = new DefaultHttpContext
         {
@@ -131,6 +195,26 @@ public sealed class ImportControllerTests
             [new AccessImportCheckDto("extension", "Формат", "passed", "OK")]);
     }
 
+    private static AccessImportQuarantineItemDto CreateQuarantineItem(string status = "open")
+    {
+        return new AccessImportQuarantineItemDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Access",
+            "Garage",
+            "42",
+            new string('a', 64),
+            "missing-owner",
+            "Не найден владелец гаража.",
+            "error",
+            status,
+            DateTimeOffset.UtcNow,
+            null,
+            status == "resolved" ? DateTimeOffset.UtcNow : null,
+            status == "resolved" ? Guid.NewGuid() : null,
+            status == "resolved" ? "Разобрано." : null);
+    }
+
     private sealed class FakeImportService : IImportService
     {
         public Guid? LastActorUserId { get; private set; }
@@ -155,6 +239,34 @@ public sealed class ImportControllerTests
             LastActorUserId = actorUserId;
             LastFileName = request.FileName;
             return Task.FromResult(DryRunResult);
+        }
+    }
+
+    private sealed class FakeImportQuarantineService : IImportQuarantineService
+    {
+        public Guid? LastAccessImportRunId { get; private set; }
+        public Guid? LastResolveId { get; private set; }
+        public Guid? LastActorUserId { get; private set; }
+        public IReadOnlyList<AccessImportQuarantineItemDto> OpenItems { get; init; } = [];
+        public ImportResult<AccessImportQuarantineItemDto> ResolveResult { get; init; } =
+            ImportResult<AccessImportQuarantineItemDto>.Failure("not_configured", "Not configured.");
+
+        public Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken)
+        {
+            LastAccessImportRunId = accessImportRunId;
+            return Task.FromResult(OpenItems);
+        }
+
+        public Task<ImportResult<AccessImportQuarantineItemDto>> RegisterAsync(RegisterImportQuarantineItemRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ImportResult<AccessImportQuarantineItemDto>.Failure("not_supported", "Not supported."));
+        }
+
+        public Task<ImportResult<AccessImportQuarantineItemDto>> ResolveAsync(Guid id, ResolveImportQuarantineItemRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastResolveId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(ResolveResult);
         }
     }
 }

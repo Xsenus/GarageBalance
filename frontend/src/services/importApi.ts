@@ -23,10 +23,30 @@ export type AccessImportRunDto = {
   checks: AccessImportCheckDto[]
 }
 
+export type AccessImportQuarantineItemDto = {
+  id: string
+  accessImportRunId: string | null
+  sourceSystem: string
+  entityType: string
+  externalId: string | null
+  rowHash: string
+  reasonCode: string
+  reasonMessage: string
+  severity: 'error' | 'warning'
+  status: 'open' | 'resolved'
+  createdAtUtc: string
+  createdByUserId: string | null
+  resolvedAtUtc: string | null
+  resolvedByUserId: string | null
+  resolutionComment: string | null
+}
+
 export type ImportClient = {
   getAccessRuns(accessToken: string): Promise<AccessImportRunDto[]>
+  getOpenQuarantineItems(accessToken: string, accessImportRunId?: string): Promise<AccessImportQuarantineItemDto[]>
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
+  resolveQuarantineItem(accessToken: string, itemId: string, resolutionComment?: string): Promise<AccessImportQuarantineItemDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -67,6 +87,10 @@ export const importApi: ImportClient = {
   getAccessRuns(accessToken) {
     return requestJson(accessToken, '/api/import/access/runs')
   },
+  getOpenQuarantineItems(accessToken, accessImportRunId) {
+    const query = accessImportRunId ? `?accessImportRunId=${encodeURIComponent(accessImportRunId)}` : ''
+    return requestJson(accessToken, `/api/import/access/quarantine${query}`)
+  },
   dryRunAccess(accessToken, file) {
     const formData = new FormData()
     formData.append('file', file)
@@ -74,5 +98,14 @@ export const importApi: ImportClient = {
   },
   downloadAccessRunReport(accessToken, runId) {
     return requestBlob(accessToken, `/api/import/access/runs/${runId}/report`)
+  },
+  resolveQuarantineItem(accessToken, itemId, resolutionComment) {
+    return requestJson(accessToken, `/api/import/access/quarantine/${itemId}/resolve`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ resolutionComment }),
+    })
   },
 }

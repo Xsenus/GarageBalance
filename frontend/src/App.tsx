@@ -29,7 +29,7 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, Supplier
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
-import type { AccessImportCheckDto, AccessImportRunDto, ImportClient } from './services/importApi'
+import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -2026,11 +2026,13 @@ function FinancePanel({
 
 function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient: ImportClient }) {
   const [runs, setRuns] = useState<AccessImportRunDto[]>([])
+  const [quarantineItems, setQuarantineItems] = useState<AccessImportQuarantineItemDto[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
 
@@ -2040,9 +2042,13 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       setLoading(true)
       setError(null)
       try {
-        const loadedRuns = await importClient.getAccessRuns(auth.accessToken)
+        const [loadedRuns, loadedQuarantineItems] = await Promise.all([
+          importClient.getAccessRuns(auth.accessToken),
+          importClient.getOpenQuarantineItems(auth.accessToken),
+        ])
         if (!ignore) {
           setRuns(loadedRuns)
+          setQuarantineItems(loadedQuarantineItems)
           setCurrentRun(loadedRuns[0] ?? null)
         }
       } catch (caught) {
@@ -2076,6 +2082,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       const run = await importClient.dryRunAccess(auth.accessToken, selectedFile)
       setCurrentRun(run)
       setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)])
+      setQuarantineItems(await importClient.getOpenQuarantineItems(auth.accessToken))
       setSelectedFile(null)
       setExportMessage(null)
       form.reset()
@@ -2102,6 +2109,21 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       setError(caught instanceof Error ? caught.message : 'Не удалось скачать отчет dry-run импорта.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function resolveQuarantineItem(item: AccessImportQuarantineItemDto) {
+    setResolvingQuarantineId(item.id)
+    setError(null)
+    setExportMessage(null)
+    try {
+      await importClient.resolveQuarantineItem(auth.accessToken, item.id, 'Разобрано из панели импорта.')
+      setQuarantineItems((items) => items.filter((candidate) => candidate.id !== item.id))
+      setExportMessage('Строка карантина закрыта.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось закрыть строку карантина импорта.')
+    } finally {
+      setResolvingQuarantineId(null)
     }
   }
 
@@ -2201,6 +2223,33 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 {formatImportRunCheckSummary(run)}
               </span>
             </button>
+          ))}
+        </div>
+
+        <div className="operation-list" role="table" aria-label="Карантин импорта Access">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Строка</span>
+            <span role="columnheader">Причина</span>
+            <span role="columnheader">Действие</span>
+          </div>
+          {quarantineItems.length === 0 ? <p className="empty-state">Открытых строк карантина нет</p> : null}
+          {quarantineItems.slice(0, 8).map((item) => (
+            <div className="operation-row" role="row" key={item.id}>
+              <span role="cell">
+                <strong>{item.entityType}{item.externalId ? ` #${item.externalId}` : ''}</strong>
+                <small>{item.sourceSystem} · {item.rowHash.slice(0, 12)}</small>
+              </span>
+              <span role="cell" className={item.severity === 'warning' ? 'warning-text' : 'status-disabled'}>
+                <strong>{item.reasonCode}</strong>
+                <small>{item.reasonMessage}</small>
+              </span>
+              <span role="cell">
+                <button className="secondary-button" type="button" disabled={resolvingQuarantineId === item.id} onClick={() => void resolveQuarantineItem(item)}>
+                  <Save size={16} />
+                  <span>Закрыть</span>
+                </button>
+              </span>
+            </div>
           ))}
         </div>
       </div>

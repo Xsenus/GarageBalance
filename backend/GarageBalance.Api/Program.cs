@@ -42,6 +42,7 @@ builder.Services.AddScoped<IDictionaryService, DictionaryService>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IImportService, ImportService>();
 builder.Services.AddScoped<IImportFingerprintService, ImportFingerprintService>();
+builder.Services.AddScoped<IImportQuarantineService, ImportQuarantineService>();
 builder.Services.AddScoped<IIntegrationSecretSettingsService, IntegrationSecretSettingsService>();
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IReportService, ReportService>();

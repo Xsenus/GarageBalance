@@ -9,13 +9,22 @@ namespace GarageBalance.Api.Controllers;
 [ApiController]
 [Authorize(Policy = SystemPermissions.ImportRun)]
 [Route("api/import/access")]
-public sealed class ImportController(IImportService importService) : ControllerBase
+public sealed class ImportController(IImportService importService, IImportQuarantineService importQuarantineService) : ControllerBase
 {
     [HttpGet("runs")]
     [ProducesResponseType<IReadOnlyList<AccessImportRunDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccessImportRunDto>>> GetAccessImportRuns(CancellationToken cancellationToken)
     {
         return Ok(await importService.GetAccessImportRunsAsync(cancellationToken));
+    }
+
+    [HttpGet("quarantine")]
+    [ProducesResponseType<IReadOnlyList<AccessImportQuarantineItemDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AccessImportQuarantineItemDto>>> GetOpenQuarantineItems(
+        [FromQuery] Guid? accessImportRunId,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await importQuarantineService.GetOpenItemsAsync(accessImportRunId, cancellationToken));
     }
 
     [HttpGet("runs/{id:guid}/report")]
@@ -45,6 +54,28 @@ public sealed class ImportController(IImportService importService) : ControllerB
         return result.Succeeded
             ? CreatedAtAction(nameof(GetAccessImportRuns), new { id = result.Value!.Id }, result.Value)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPatch("quarantine/{id:guid}/resolve")]
+    [ProducesResponseType<AccessImportQuarantineItemDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AccessImportQuarantineItemDto>> ResolveQuarantineItem(
+        Guid id,
+        ResolveImportQuarantineItemRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await importQuarantineService.ResolveAsync(id, request, GetActorUserId(), cancellationToken);
+        if (result.Succeeded)
+        {
+            return Ok(result.Value);
+        }
+
+        var statusCode = result.ErrorCode == "import_quarantine_item_not_found"
+            ? StatusCodes.Status404NotFound
+            : StatusCodes.Status400BadRequest;
+
+        return StatusCode(statusCode, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, statusCode));
     }
 
     private Guid? GetActorUserId()

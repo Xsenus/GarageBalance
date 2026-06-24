@@ -19,6 +19,7 @@ public sealed class DataModelErdTests
         Assert.Contains("audit_events", document, StringComparison.Ordinal);
         Assert.Contains("access_import_runs", document, StringComparison.Ordinal);
         Assert.Contains("access_import_row_fingerprints", document, StringComparison.Ordinal);
+        Assert.Contains("access_import_quarantine_items", document, StringComparison.Ordinal);
         Assert.Contains("integration_secret_settings", document, StringComparison.Ordinal);
         Assert.Contains("income_types", document, StringComparison.Ordinal);
         Assert.Contains("expense_types", document, StringComparison.Ordinal);
@@ -28,6 +29,8 @@ public sealed class DataModelErdTests
         Assert.Contains("SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber", document, StringComparison.Ordinal);
         Assert.Contains("GarageId + MeterKind + AccountingMonth", document, StringComparison.Ordinal);
         Assert.Contains("SourceSystem + EntityType + ExternalId", document, StringComparison.Ordinal);
+        Assert.Contains("RowSnapshotJson", document, StringComparison.Ordinal);
+        Assert.Contains("ReasonCode", document, StringComparison.Ordinal);
         Assert.Contains("NormalizedProvider + NormalizedSettingKey", document, StringComparison.Ordinal);
         Assert.Contains("DeleteBehavior.SetNull", document, StringComparison.Ordinal);
         Assert.Contains("DeleteBehavior.Restrict", document, StringComparison.Ordinal);

@@ -29,6 +29,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
     public DbSet<AccessImportRowFingerprint> AccessImportRowFingerprints => Set<AccessImportRowFingerprint>();
+    public DbSet<AccessImportQuarantineItem> AccessImportQuarantineItems => Set<AccessImportQuarantineItem>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -306,6 +307,27 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(fingerprint => fingerprint.FingerprintKey).IsUnique();
             entity.HasIndex(fingerprint => new { fingerprint.SourceSystem, fingerprint.EntityType });
             entity.HasIndex(fingerprint => fingerprint.AccessImportRunId);
+        });
+
+        modelBuilder.Entity<AccessImportQuarantineItem>(entity =>
+        {
+            entity.ToTable("access_import_quarantine_items");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.SourceSystem).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.EntityType).HasMaxLength(120).IsRequired();
+            entity.Property(item => item.ExternalId).HasMaxLength(240);
+            entity.Property(item => item.RowHash).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.ReasonCode).HasMaxLength(120).IsRequired();
+            entity.Property(item => item.ReasonMessage).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.Severity).HasMaxLength(20).IsRequired();
+            entity.Property(item => item.RowSnapshotJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(item => item.Status).HasMaxLength(20).IsRequired();
+            entity.Property(item => item.ResolutionComment).HasMaxLength(1000);
+            entity.HasIndex(item => item.AccessImportRunId);
+            entity.HasIndex(item => item.Status);
+            entity.HasIndex(item => item.CreatedAtUtc);
+            entity.HasIndex(item => new { item.SourceSystem, item.EntityType });
+            entity.HasIndex(item => item.RowHash);
         });
 
         modelBuilder.Entity<IntegrationSecretSetting>(entity =>
