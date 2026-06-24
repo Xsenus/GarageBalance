@@ -615,6 +615,7 @@ const garageReportScreenRowLimit = 12
 const reportScreenRowLimit = 16
 const auditScreenRequestLimit = 50
 const financeScreenRequestLimit = 50
+const dictionaryScreenRequestLimit = 100
 
 type NavigationItem = {
   label: string
@@ -1168,11 +1169,11 @@ function FinancePanel({
       setError(null)
       try {
         const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
-          dictionaryClient.getGarages(auth.accessToken),
-          dictionaryClient.getSuppliers(auth.accessToken),
-          dictionaryClient.getIncomeTypes(auth.accessToken),
-          dictionaryClient.getExpenseTypes(auth.accessToken),
-          dictionaryClient.getTariffs(auth.accessToken),
+          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
           financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
           financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
@@ -2495,9 +2496,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       setIncomeError(null)
       try {
         const [loadedGarages, loadedOwners, loadedIncomeTypes, loadedIncomeReport] = await Promise.all([
-          dictionaryClient.getGarages(auth.accessToken),
-          dictionaryClient.getOwners(auth.accessToken),
-          dictionaryClient.getIncomeTypes(auth.accessToken),
+          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
           reportClient.getIncomeReport(auth.accessToken, {
             dateFrom: incomeFilters.dateFrom,
             dateTo: incomeFilters.dateTo,
@@ -2539,8 +2540,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       setExpenseError(null)
       try {
         const [loadedSuppliers, loadedExpenseTypes, loadedExpenseReport] = await Promise.all([
-          dictionaryClient.getSuppliers(auth.accessToken),
-          dictionaryClient.getExpenseTypes(auth.accessToken),
+          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
           reportClient.getExpenseReport(auth.accessToken, {
             dateFrom: expenseFilters.dateFrom,
             dateTo: expenseFilters.dateTo,
@@ -3336,13 +3337,13 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
       setError(null)
       try {
         const [loadedOwners, loadedGarages, loadedGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
-          dictionaryClient.getOwners(auth.accessToken),
-          dictionaryClient.getGarages(auth.accessToken),
-          dictionaryClient.getSupplierGroups(auth.accessToken),
-          dictionaryClient.getSuppliers(auth.accessToken),
-          dictionaryClient.getIncomeTypes(auth.accessToken),
-          dictionaryClient.getExpenseTypes(auth.accessToken),
-          dictionaryClient.getTariffs(auth.accessToken),
+          dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getSupplierGroups(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
         if (!ignore) {
           setOwners(loadedOwners)
@@ -3381,7 +3382,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     const timeoutId = window.setTimeout(() => {
       setError(null)
       dictionaryClient
-        .getGarages(auth.accessToken, query || undefined)
+        .getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit)
         .then((result) => {
           if (!ignore) {
             setGarages(result)
@@ -3412,7 +3413,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     const timeoutId = window.setTimeout(() => {
       setError(null)
       dictionaryClient
-        .getSuppliers(auth.accessToken, undefined, query || undefined)
+        .getSuppliers(auth.accessToken, undefined, query || undefined, dictionaryScreenRequestLimit)
         .then((result) => {
           if (!ignore) {
             setSuppliers(result)
@@ -3491,7 +3492,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     setError(null)
     setGarageSearchStatus(null)
     try {
-      const result = await dictionaryClient.getGarages(auth.accessToken, garageSearch)
+      const result = await dictionaryClient.getGarages(auth.accessToken, garageSearch, dictionaryScreenRequestLimit)
       setGarages(result)
       const query = garageSearch.trim()
       setGarageSearchStatus(query ? `Найдено гаражей: ${result.length}` : 'Показаны все гаражи')
@@ -3558,7 +3559,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
     setError(null)
     setSupplierSearchStatus(null)
     try {
-      const result = await dictionaryClient.getSuppliers(auth.accessToken, undefined, supplierSearch)
+      const result = await dictionaryClient.getSuppliers(auth.accessToken, undefined, supplierSearch, dictionaryScreenRequestLimit)
       setSuppliers(result)
       const query = supplierSearch.trim()
       setSupplierSearchStatus(query ? `Найдено поставщиков: ${result.length}` : 'Показаны все поставщики')

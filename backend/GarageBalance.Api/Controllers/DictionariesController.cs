@@ -13,9 +13,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 {
     [HttpGet("owners")]
     [ProducesResponseType<IReadOnlyList<OwnerDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<OwnerDto>>> GetOwners([FromQuery] string? search, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<OwnerDto>>> GetOwners([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetOwnersAsync(search, cancellationToken));
+        return Ok(await dictionaryService.GetOwnersAsync(search, cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -55,9 +55,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("garages")]
     [ProducesResponseType<IReadOnlyList<GarageDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<GarageDto>>> GetGarages([FromQuery] string? search, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<GarageDto>>> GetGarages([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetGaragesAsync(search, cancellationToken));
+        return Ok(await dictionaryService.GetGaragesAsync(search, cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -99,9 +99,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("supplier-groups")]
     [ProducesResponseType<IReadOnlyList<SupplierGroupDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups([FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetSupplierGroupsAsync(cancellationToken));
+        return Ok(await dictionaryService.GetSupplierGroupsAsync(cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -132,9 +132,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("suppliers")]
     [ProducesResponseType<IReadOnlyList<SupplierDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SupplierDto>>> GetSuppliers([FromQuery] Guid? groupId, [FromQuery] string? search, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<SupplierDto>>> GetSuppliers([FromQuery] Guid? groupId, [FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetSuppliersAsync(groupId, search, cancellationToken));
+        return Ok(await dictionaryService.GetSuppliersAsync(groupId, search, cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -174,9 +174,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("income-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes([FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetIncomeTypesAsync(cancellationToken));
+        return Ok(await dictionaryService.GetIncomeTypesAsync(cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -207,9 +207,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("expense-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetExpenseTypes(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetExpenseTypes([FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetExpenseTypesAsync(cancellationToken));
+        return Ok(await dictionaryService.GetExpenseTypesAsync(cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -240,9 +240,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("tariffs")]
     [ProducesResponseType<IReadOnlyList<TariffDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetTariffsAsync(search, cancellationToken));
+        return Ok(await dictionaryService.GetTariffsAsync(search, cancellationToken, limit));
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]

@@ -642,6 +642,56 @@ describe('App', () => {
     expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
   })
 
+  it('requests bounded dictionary lists from dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    const requestedLimits: Record<string, number | undefined> = {}
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async (_token, _search, limit) => {
+        requestedLimits.owners = limit
+        return [createOwner()]
+      },
+      getGarages: async (_token, _search, limit) => {
+        requestedLimits.garages = limit
+        return [createGarage()]
+      },
+      getSupplierGroups: async (_token, limit) => {
+        requestedLimits.supplierGroups = limit
+        return [createGroup()]
+      },
+      getSuppliers: async (_token, _groupId, _search, limit) => {
+        requestedLimits.suppliers = limit
+        return [createSupplier()]
+      },
+      getIncomeTypes: async (_token, limit) => {
+        requestedLimits.incomeTypes = limit
+        return [createAccountingType({ name: 'Членский взнос' })]
+      },
+      getExpenseTypes: async (_token, limit) => {
+        requestedLimits.expenseTypes = limit
+        return [createAccountingType({ name: 'Электроэнергия' })]
+      },
+      getTariffs: async (_token, _search, limit) => {
+        requestedLimits.tariffs = limit
+        return [createTariff()]
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await screen.findByRole('region', { name: 'Справочники' })
+
+    await waitFor(() => expect(requestedLimits).toMatchObject({
+      owners: 100,
+      garages: 100,
+      supplierGroups: 100,
+      suppliers: 100,
+      incomeTypes: 100,
+      expenseTypes: 100,
+      tariffs: 100,
+    }))
+  })
+
   it('does not call dictionary APIs when owner and garage forms fail client validation', async () => {
     const user = userEvent.setup()
     let createOwnerCalled = false

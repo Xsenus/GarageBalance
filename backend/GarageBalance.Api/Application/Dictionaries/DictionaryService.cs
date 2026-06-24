@@ -8,9 +8,10 @@ namespace GarageBalance.Api.Application.Dictionaries;
 
 public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDictionaryService
 {
-    private const int ListLimit = 100;
+    private const int DefaultListLimit = 100;
+    private const int MaxListLimit = 500;
 
-    public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null)
     {
         var query = dbContext.Owners.AsNoTracking().Where(owner => !owner.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
@@ -26,7 +27,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return await query
             .OrderBy(owner => owner.LastName)
             .ThenBy(owner => owner.FirstName)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(limit))
             .Select(owner => ToOwnerDto(owner))
             .ToListAsync(cancellationToken);
     }
@@ -86,23 +87,50 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
-    public async Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null)
     {
         var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => !garage.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        var garages = await query
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
-        if (normalizedSearch is not null)
+        var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
         {
-            garages = garages
-                .Where(garage =>
-                    garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+            var sqliteGarages = await query
+                .OrderBy(garage => garage.Number)
+                .ToListAsync(cancellationToken);
+            return sqliteGarages
+                .Where(garage => GarageMatchesSearch(garage, searchValue))
+                .Take(normalizedLimit)
+                .Select(garage => ToGarageDto(garage))
                 .ToList();
         }
 
-        return garages.Take(ListLimit).Select(garage => ToGarageDto(garage)).ToList();
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(garage =>
+                garage.Number.ToLower().Contains(normalizedSearch) ||
+                (garage.Owner != null && (
+                    garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
+                    garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
+                    (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
+                    (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch))));
+        }
+
+        var garages = await query
+            .OrderBy(garage => garage.Number)
+            .Take(normalizedLimit)
+            .ToListAsync(cancellationToken);
+        return garages.Select(garage => ToGarageDto(garage)).ToList();
+    }
+
+    private static bool GarageMatchesSearch(Garage garage, string normalizedSearch)
+    {
+        return garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+            (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private bool IsSqliteProvider()
+    {
+        return dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     public async Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -190,11 +218,12 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
     }
 
-    public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null)
     {
         return await dbContext.SupplierGroups.AsNoTracking()
             .Where(group => !group.IsArchived)
             .OrderBy(group => group.Name)
+            .Take(NormalizeListLimit(limit))
             .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
             .ToListAsync(cancellationToken);
     }
@@ -235,7 +264,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
-    public async Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null)
     {
         var query = dbContext.Suppliers.AsNoTracking().Include(supplier => supplier.Group).Where(supplier => !supplier.IsArchived);
         if (groupId is not null)
@@ -255,7 +284,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return await query
             .OrderBy(supplier => supplier.Group.Name)
             .ThenBy(supplier => supplier.Name)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(limit))
             .Select(supplier => ToSupplierDto(supplier))
             .ToListAsync(cancellationToken);
     }
@@ -335,11 +364,12 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
-    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null)
     {
         return await dbContext.IncomeTypes.AsNoTracking()
             .Where(item => !item.IsArchived)
             .OrderBy(item => item.Name)
+            .Take(NormalizeListLimit(limit))
             .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
             .ToListAsync(cancellationToken);
     }
@@ -385,11 +415,12 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
-    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null)
     {
         return await dbContext.ExpenseTypes.AsNoTracking()
             .Where(item => !item.IsArchived)
             .OrderBy(item => item.Name)
+            .Take(NormalizeListLimit(limit))
             .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
             .ToListAsync(cancellationToken);
     }
@@ -435,7 +466,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
-    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null)
     {
         var query = dbContext.Tariffs.AsNoTracking().Where(item => !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
@@ -449,9 +480,19 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return await query
             .OrderByDescending(item => item.EffectiveFrom)
             .ThenBy(item => item.Name)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(limit))
             .Select(item => ToTariffDto(item))
             .ToListAsync(cancellationToken);
+    }
+
+    private static int NormalizeListLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return DefaultListLimit;
+        }
+
+        return Math.Min(limit.Value, MaxListLimit);
     }
 
     public async Task<DictionaryResult<TariffDto>> CreateTariffAsync(UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)

@@ -48,13 +48,13 @@ npm run dev
 - `GET /api/users/roles` - доступные системные роли.
 - `GET/POST /api/users` - список и создание пользователей.
 - `PUT /api/users/{id}` - изменение пользователя, ролей, активности и пароля.
-- `GET/POST /api/dictionaries/owners`, `DELETE /api/dictionaries/owners/{id}` - владельцы и архивирование владельца.
-- `GET/POST /api/dictionaries/garages`, `DELETE /api/dictionaries/garages/{id}` - гаражи и архивирование гаража.
-- `GET/POST /api/dictionaries/supplier-groups`, `DELETE /api/dictionaries/supplier-groups/{id}` - группы поставщиков и архивирование группы.
-- `GET/POST /api/dictionaries/suppliers`, `DELETE /api/dictionaries/suppliers/{id}` - поставщики и архивирование поставщика.
-- `GET/POST /api/dictionaries/income-types`, `DELETE /api/dictionaries/income-types/{id}` - виды поступлений и архивирование вида.
-- `GET/POST /api/dictionaries/expense-types`, `DELETE /api/dictionaries/expense-types/{id}` - виды выплат и архивирование вида.
-- `GET/POST /api/dictionaries/tariffs`, `PUT/DELETE /api/dictionaries/tariffs/{id}` - тарифы с датой действия, изменение и архивирование тарифа.
+- `GET /api/dictionaries/owners?limit=100`, `POST /api/dictionaries/owners`, `DELETE /api/dictionaries/owners/{id}` - владельцы, архивирование владельца и серверный лимит списка до 500 записей.
+- `GET /api/dictionaries/garages?limit=100`, `POST /api/dictionaries/garages`, `DELETE /api/dictionaries/garages/{id}` - гаражи, архивирование гаража и серверный лимит списка до 500 записей.
+- `GET /api/dictionaries/supplier-groups?limit=100`, `POST /api/dictionaries/supplier-groups`, `DELETE /api/dictionaries/supplier-groups/{id}` - группы поставщиков, архивирование группы и серверный лимит списка до 500 записей.
+- `GET /api/dictionaries/suppliers?limit=100`, `POST /api/dictionaries/suppliers`, `DELETE /api/dictionaries/suppliers/{id}` - поставщики, архивирование поставщика и серверный лимит списка до 500 записей.
+- `GET /api/dictionaries/income-types?limit=100`, `POST /api/dictionaries/income-types`, `DELETE /api/dictionaries/income-types/{id}` - виды поступлений, архивирование вида и серверный лимит списка до 500 записей.
+- `GET /api/dictionaries/expense-types?limit=100`, `POST /api/dictionaries/expense-types`, `DELETE /api/dictionaries/expense-types/{id}` - виды выплат, архивирование вида и серверный лимит списка до 500 записей.
+- `GET /api/dictionaries/tariffs?limit=100`, `POST /api/dictionaries/tariffs`, `PUT/DELETE /api/dictionaries/tariffs/{id}` - тарифы с датой действия, изменение, архивирование тарифа и серверный лимит списка до 500 записей.
 - `GET /api/finance/operations?limit=50` - последние финансовые операции с фильтрами и серверным лимитом до 500 записей.
 - `GET /api/finance/accruals?limit=50`, `POST /api/finance/accruals` - начисления по гаражам с серверным лимитом списка до 500 записей.
 - `GET /api/finance/supplier-accruals?limit=50`, `POST /api/finance/supplier-accruals` - начисления поставщикам для сверки обязательств и выплат с серверным лимитом списка до 500 записей.
@@ -131,7 +131,7 @@ npm run dev
 
 Клик по затемненному фону закрывает карточки и подтверждения так же безопасно, как `Escape`: опасные действия не выполняются, фокус возвращается на opener, а во время выполнения архивирования фон не закрывает confirmation dialog.
 
-Списки справочников показывают первые 5 записей и выводят счетчик вида `Показано 5 из N записей`, если в разделе есть дополнительные элементы. Так оператор видит, что список обрезан для компактности, а не считает данные потерянными. Кнопка `Показать все записи` раскрывает полный список внутри текущего справочника, а `Свернуть список` возвращает компактный режим; кнопка связана со списком через `aria-controls`, показывает состояние через `aria-expanded`, а счетчик обновляется в `aria-live="polite"` области.
+Списки справочников запрашиваются с явным серверным `limit=100`, показывают первые 5 записей и выводят счетчик вида `Показано 5 из N записей`, если в разделе есть дополнительные элементы. Так оператор видит, что список обрезан для компактности, а не считает данные потерянными. Кнопка `Показать все записи` раскрывает загруженный список внутри текущего справочника, а `Свернуть список` возвращает компактный режим; кнопка связана со списком через `aria-controls`, показывает состояние через `aria-expanded`, а счетчик обновляется в `aria-live="polite"` области.
 
 При редактировании тарифа интерфейс предупреждает о несохраненных изменениях: если поля изменены и пользователь нажимает "Отменить" или пытается открыть другой тариф, система просит подтвердить сброс. Без подтверждения черновик остается в форме, после подтверждения форма возвращается в режим добавления или переключается на выбранный тариф. Тариф, который сейчас открыт в форме, помечается в списке как "Редактируется", а повторная кнопка открытия отключается, чтобы не сбросить поля случайным кликом.
 

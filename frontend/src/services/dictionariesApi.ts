@@ -114,31 +114,32 @@ export type UpsertTariffRequest = {
 }
 
 export type DictionaryClient = {
-  getOwners(accessToken: string, search?: string): Promise<OwnerDto[]>
+  getOwners(accessToken: string, search?: string, limit?: number): Promise<OwnerDto[]>
   createOwner(accessToken: string, request: UpsertOwnerRequest): Promise<OwnerDto>
   archiveOwner(accessToken: string, id: string): Promise<void>
-  getGarages(accessToken: string, search?: string): Promise<GarageDto[]>
+  getGarages(accessToken: string, search?: string, limit?: number): Promise<GarageDto[]>
   createGarage(accessToken: string, request: UpsertGarageRequest): Promise<GarageDto>
   archiveGarage(accessToken: string, id: string): Promise<void>
-  getSupplierGroups(accessToken: string): Promise<SupplierGroupDto[]>
+  getSupplierGroups(accessToken: string, limit?: number): Promise<SupplierGroupDto[]>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   archiveSupplierGroup(accessToken: string, id: string): Promise<void>
-  getSuppliers(accessToken: string, groupId?: string, search?: string): Promise<SupplierDto[]>
+  getSuppliers(accessToken: string, groupId?: string, search?: string, limit?: number): Promise<SupplierDto[]>
   createSupplier(accessToken: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   archiveSupplier(accessToken: string, id: string): Promise<void>
-  getIncomeTypes(accessToken: string): Promise<AccountingTypeDto[]>
+  getIncomeTypes(accessToken: string, limit?: number): Promise<AccountingTypeDto[]>
   createIncomeType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveIncomeType(accessToken: string, id: string): Promise<void>
-  getExpenseTypes(accessToken: string): Promise<AccountingTypeDto[]>
+  getExpenseTypes(accessToken: string, limit?: number): Promise<AccountingTypeDto[]>
   createExpenseType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveExpenseType(accessToken: string, id: string): Promise<void>
-  getTariffs(accessToken: string, search?: string): Promise<TariffDto[]>
+  getTariffs(accessToken: string, search?: string, limit?: number): Promise<TariffDto[]>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff(accessToken: string, id: string): Promise<void>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+const defaultDictionaryListLimit = 100
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -162,11 +163,11 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
-function withQuery(path: string, params: Record<string, string | undefined>): string {
+function withQuery(path: string, params: Record<string, string | number | undefined>): string {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value) {
-      query.set(key, value)
+    if (value !== undefined && value !== '') {
+      query.set(key, String(value))
     }
   }
 
@@ -175,8 +176,8 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 }
 
 export const dictionariesApi: DictionaryClient = {
-  getOwners(accessToken, search) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/owners', { search }))
+  getOwners(accessToken, search, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/owners', { search, limit }))
   },
   createOwner(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/owners', { method: 'POST', body: JSON.stringify(request) })
@@ -184,8 +185,8 @@ export const dictionariesApi: DictionaryClient = {
   archiveOwner(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/owners/${id}`, { method: 'DELETE' })
   },
-  getGarages(accessToken, search) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/garages', { search }))
+  getGarages(accessToken, search, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/garages', { search, limit }))
   },
   createGarage(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/garages', { method: 'POST', body: JSON.stringify(request) })
@@ -193,8 +194,8 @@ export const dictionariesApi: DictionaryClient = {
   archiveGarage(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'DELETE' })
   },
-  getSupplierGroups(accessToken) {
-    return requestJson(accessToken, '/api/dictionaries/supplier-groups')
+  getSupplierGroups(accessToken, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups', { limit }))
   },
   createSupplierGroup(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/supplier-groups', { method: 'POST', body: JSON.stringify(request) })
@@ -202,8 +203,8 @@ export const dictionariesApi: DictionaryClient = {
   archiveSupplierGroup(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/supplier-groups/${id}`, { method: 'DELETE' })
   },
-  getSuppliers(accessToken, groupId, search) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers', { groupId, search }))
+  getSuppliers(accessToken, groupId, search, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers', { groupId, search, limit }))
   },
   createSupplier(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/suppliers', { method: 'POST', body: JSON.stringify(request) })
@@ -211,8 +212,8 @@ export const dictionariesApi: DictionaryClient = {
   archiveSupplier(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/suppliers/${id}`, { method: 'DELETE' })
   },
-  getIncomeTypes(accessToken) {
-    return requestJson(accessToken, '/api/dictionaries/income-types')
+  getIncomeTypes(accessToken, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/income-types', { limit }))
   },
   createIncomeType(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/income-types', { method: 'POST', body: JSON.stringify(request) })
@@ -220,8 +221,8 @@ export const dictionariesApi: DictionaryClient = {
   archiveIncomeType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/income-types/${id}`, { method: 'DELETE' })
   },
-  getExpenseTypes(accessToken) {
-    return requestJson(accessToken, '/api/dictionaries/expense-types')
+  getExpenseTypes(accessToken, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/expense-types', { limit }))
   },
   createExpenseType(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/expense-types', { method: 'POST', body: JSON.stringify(request) })
@@ -229,8 +230,8 @@ export const dictionariesApi: DictionaryClient = {
   archiveExpenseType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/expense-types/${id}`, { method: 'DELETE' })
   },
-  getTariffs(accessToken, search) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search }))
+  getTariffs(accessToken, search, limit = defaultDictionaryListLimit) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit }))
   },
   createTariff(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/tariffs', { method: 'POST', body: JSON.stringify(request) })

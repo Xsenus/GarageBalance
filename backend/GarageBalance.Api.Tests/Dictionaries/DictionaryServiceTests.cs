@@ -41,6 +41,35 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ListMethods_ApplyExplicitLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+
+        var groupResults = new List<DictionaryResult<SupplierGroupDto>>();
+        for (var index = 0; index < 3; index++)
+        {
+            var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest($"Владелец{index}", "Тест", null, null, null, null), null, CancellationToken.None);
+            Assert.True(owner.Succeeded);
+            Assert.True((await service.CreateGarageAsync(new UpsertGarageRequest($"L-{index}", 1, 1, owner.Value!.Id, 0, null, null, null), null, CancellationToken.None)).Succeeded);
+            groupResults.Add(await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest($"Группа {index}"), null, CancellationToken.None));
+            Assert.True(groupResults[index].Succeeded);
+            Assert.True((await service.CreateSupplierAsync(new UpsertSupplierRequest($"Поставщик {index}", groupResults[index].Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest($"Поступление {index}", $"income_limit_{index}"), null, CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest($"Выплата {index}", $"expense_limit_{index}"), null, CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateTariffAsync(new UpsertTariffRequest($"Тариф {index}", "fixed", 10 + index, new DateOnly(2026, 1, 1).AddMonths(index), null), null, CancellationToken.None)).Succeeded);
+        }
+
+        Assert.Equal(2, (await service.GetOwnersAsync(null, CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetGaragesAsync(null, CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetSupplierGroupsAsync(CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetSuppliersAsync(null, null, CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetIncomeTypesAsync(CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetExpenseTypesAsync(CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetTariffsAsync(null, CancellationToken.None, 2)).Count);
+    }
+
+    [Fact]
     public async Task ArchiveOwnerAsync_HidesOwnerFromListAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
