@@ -21,6 +21,25 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("Не коммитить", document, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LocalPcChecklistCoversNoDomainSecretsBackupsDockerAndRollback()
+    {
+        var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "local-pc-install-checklist.md"));
+
+        Assert.Contains("http://127.0.0.1:5173", document, StringComparison.Ordinal);
+        Assert.Contains("http://127.0.0.1:5080/health", document, StringComparison.Ordinal);
+        Assert.Contains("C:\\GarageBalance\\Backups", document, StringComparison.Ordinal);
+        Assert.Contains("C:\\GarageBalance\\Config\\garagebalance.local.env", document, StringComparison.Ordinal);
+        Assert.Contains("ConnectionStrings__DefaultConnection", document, StringComparison.Ordinal);
+        Assert.Contains("JWT_SIGNING_KEY", document, StringComparison.Ordinal);
+        Assert.Contains("docker compose up --build -d", document, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef database update", document, StringComparison.Ordinal);
+        Assert.Contains("VITE_API_BASE_URL=\"http://127.0.0.1:5080\"", document, StringComparison.Ordinal);
+        Assert.Contains("pg_dump --format=custom", document, StringComparison.Ordinal);
+        Assert.Contains("Не открывать порты", document, StringComparison.Ordinal);
+        Assert.Contains("Rollback", document, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

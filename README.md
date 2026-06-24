@@ -179,6 +179,8 @@ API Dockerfile собирает `net10.0` через `mcr.microsoft.com/dotnet/s
 
 Checklist для тестового размещения на VPS с доменом `sgk.blagodaty.ru`, TLS, nginx, systemd, backup, smoke-проверками и rollback описан в `docs/vps-deployment-checklist.md`. Документ проверяется backend-тестом, чтобы обязательные шаги deploy не потерялись при следующих изменениях.
 
+Checklist для локальной установки без домена описан в `docs/local-pc-install-checklist.md`: запуск на `127.0.0.1`, secrets вне Git, backup PostgreSQL перед импортом/обновлением, smoke-проверка рабочих разделов и rollback.
+
 ## Правила проекта
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.

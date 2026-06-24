@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-local-pc-install-checklist",
+    "version": "0.99.0",
+    "publishedAt": "2026-06-24T09:15:00+07:00",
+    "title": "Добавлен checklist локальной установки",
+    "summary": "Проект получил проверяемую инструкцию для запуска на локальном ПК без домена и публичного доступа.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "В docs добавлен checklist установки на локальный ПК с адресами 127.0.0.1 для frontend и API."
+      },
+      {
+        "type": "improved",
+        "text": "Инструкция фиксирует secrets вне Git, локальные папки, Docker Compose вариант, вариант без Docker, backup PostgreSQL, smoke-проверку и rollback."
+      },
+      {
+        "type": "improved",
+        "text": "Backend-тест проверяет, что local PC checklist сохраняет обязательные команды и ограничения безопасности."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-vps-deployment-checklist",
     "version": "0.98.0",
     "publishedAt": "2026-06-24T08:45:00+07:00",
