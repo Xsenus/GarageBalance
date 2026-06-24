@@ -1472,7 +1472,9 @@ describe('App', () => {
 
     await user.click(within(importPanel).getByRole('button', { name: 'Скачать отчет JSON' }))
 
-    expect(await within(importPanel).findByText('Отчет dry-run импорта готов.')).toHaveAttribute('aria-live', 'polite')
+    const exportReadyMessage = await within(importPanel).findByText('Отчет dry-run импорта готов.')
+    expect(exportReadyMessage).toHaveAttribute('role', 'status')
+    expect(exportReadyMessage).toHaveAttribute('aria-live', 'polite')
   })
 
   it('shows visible counters for long Access import lists', async () => {
