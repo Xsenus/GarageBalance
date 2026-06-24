@@ -1693,11 +1693,11 @@ describe('App', () => {
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный XLSX' }))
 
-    expect(await within(reportsPanel).findByText('XLSX по сводному отчету готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('XLSX по сводному отчету готов.')).toHaveAttribute('role', 'status')
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный PDF' }))
 
-    expect(await within(reportsPanel).findByText('PDF по сводному отчету готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('PDF по сводному отчету готов.')).toHaveAttribute('role', 'status')
   })
 
   it('does not call report APIs when report periods fail client validation', async () => {
@@ -1958,11 +1958,11 @@ describe('App', () => {
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления XLSX' }))
 
-    expect(await within(reportsPanel).findByText('XLSX по поступлениям готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('XLSX по поступлениям готов.')).toHaveAttribute('role', 'status')
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления PDF' }))
 
-    expect(await within(reportsPanel).findByText('PDF по поступлениям готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('PDF по поступлениям готов.')).toHaveAttribute('role', 'status')
   })
 
   it('shows expense report and applies expense filters', async () => {
@@ -2007,11 +2007,11 @@ describe('App', () => {
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты XLSX' }))
 
-    expect(await within(reportsPanel).findByText('XLSX по выплатам готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('XLSX по выплатам готов.')).toHaveAttribute('role', 'status')
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты PDF' }))
 
-    expect(await within(reportsPanel).findByText('PDF по выплатам готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(reportsPanel).findByText('PDF по выплатам готов.')).toHaveAttribute('role', 'status')
   })
 
   it('shows login errors without opening protected workspace', async () => {

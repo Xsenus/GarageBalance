@@ -2826,7 +2826,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
       {error ? <FormError>{error}</FormError> : null}
       {exportError ? <FormError>{exportError}</FormError> : null}
-      {exportMessage ? <div className="form-note" aria-live="polite">{exportMessage}</div> : null}
+      {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
       <form className="compact-form report-filter" onSubmit={applyFilters}>
         <input aria-label="Начало периода отчета" aria-describedby="consolidated-report-date-format" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
