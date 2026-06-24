@@ -1797,7 +1797,7 @@ function FinancePanel({
             <span role="columnheader">Операция</span>
             <span role="columnheader">Сумма</span>
           </div>
-          {operations.length === 0 ? <p className="empty-state" aria-live="polite">Операций пока нет</p> : null}
+          {operations.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Операций пока нет</p> : null}
           {visibleOperations.map((operation) => (
             <div className="operation-row" role="row" key={operation.id}>
               <span role="cell">{formatDateOnly(operation.operationDate)}</span>
@@ -1829,7 +1829,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {operations.length > visibleOperations.length ? <p className="empty-state" aria-live="polite">Показано {visibleOperations.length} из {operations.length} операций</p> : null}
+          {operations.length > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleOperations.length} из {operations.length} операций</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Последние начисления">
@@ -1838,7 +1838,7 @@ function FinancePanel({
             <span role="columnheader">Начисление</span>
             <span role="columnheader">Сумма</span>
           </div>
-          {accruals.length === 0 ? <p className="empty-state" aria-live="polite">Начислений пока нет</p> : null}
+          {accruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Начислений пока нет</p> : null}
           {visibleAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
@@ -1875,7 +1875,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {accruals.length > visibleAccruals.length ? <p className="empty-state" aria-live="polite">Показано {visibleAccruals.length} из {accruals.length} начислений</p> : null}
+          {accruals.length > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleAccruals.length} из {accruals.length} начислений</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Последние начисления поставщикам">
@@ -1884,7 +1884,7 @@ function FinancePanel({
             <span role="columnheader">Поставщик</span>
             <span role="columnheader">Сумма</span>
           </div>
-          {supplierAccruals.length === 0 ? <p className="empty-state" aria-live="polite">Начислений поставщикам пока нет</p> : null}
+          {supplierAccruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Начислений поставщикам пока нет</p> : null}
           {visibleSupplierAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
@@ -1921,7 +1921,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {supplierAccruals.length > visibleSupplierAccruals.length ? <p className="empty-state" aria-live="polite">Показано {visibleSupplierAccruals.length} из {supplierAccruals.length} начислений поставщикам</p> : null}
+          {supplierAccruals.length > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleSupplierAccruals.length} из {supplierAccruals.length} начислений поставщикам</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Последние показания">
@@ -1930,7 +1930,7 @@ function FinancePanel({
             <span role="columnheader">Счетчик</span>
             <span role="columnheader">Расход</span>
           </div>
-          {meterReadings.length === 0 ? <p className="empty-state" aria-live="polite">Показаний пока нет</p> : null}
+          {meterReadings.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Показаний пока нет</p> : null}
           {visibleMeterReadings.map((reading) => (
             <div className="operation-row" role="row" key={reading.id}>
               <span role="cell">{formatMonth(reading.accountingMonth)}</span>
@@ -1958,7 +1958,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {meterReadings.length > visibleMeterReadings.length ? <p className="empty-state" aria-live="polite">Показано {visibleMeterReadings.length} из {meterReadings.length} показаний</p> : null}
+          {meterReadings.length > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleMeterReadings.length} из {meterReadings.length} показаний</p> : null}
         </div>
       </div>
       {accrualBreakdown ? (
