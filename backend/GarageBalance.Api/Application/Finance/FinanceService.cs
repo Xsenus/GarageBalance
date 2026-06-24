@@ -449,7 +449,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("regular_accruals_empty", "Не создано ни одного начисления.");
         }
 
-        AddAudit(actorUserId, "finance.regular_accruals_generated", "accrual", Guid.NewGuid(), $"Создано регулярных начислений: {created.Count} за {month:MM.yyyy}.");
+        AddAudit(actorUserId, "finance.regular_accruals_generated", "accrual", Guid.NewGuid(), FormatRegularAccrualGenerationAuditSummary(month, incomeType, tariff, created, skipped));
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var result = new RegularAccrualGenerationResultDto(
@@ -571,6 +571,13 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return userComment is null
             ? $"Автоначисление; {snapshot}."
             : $"{userComment}; {snapshot}.";
+    }
+
+    private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
+    {
+        var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
+        var tariffRate = tariff.Rate.ToString("0.####", RussianCulture);
+        return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, ставка {tariffRate}; пропущено {skipped.Count}.";
     }
 
     private async Task<AmountCalculationResult> CalculateMeterAmountAsync(Guid garageId, string meterKind, decimal rate, DateOnly month, CancellationToken cancellationToken)

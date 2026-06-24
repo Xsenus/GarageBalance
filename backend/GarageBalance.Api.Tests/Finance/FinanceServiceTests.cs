@@ -481,7 +481,14 @@ public sealed class FinanceServiceTests
         Assert.Equal("regular", accrual.Source);
         Assert.Equal(300m, accrual.Amount);
         Assert.Equal("Июнь; тариф Членский тариф: ставка 300, действует с 01.01.2026.", accrual.Comment);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Создано регулярных начислений: 1", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("на сумму 300,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("тариф Членский тариф, база fixed, ставка 300", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("пропущено 0", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
