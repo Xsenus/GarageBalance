@@ -151,10 +151,10 @@ export type CreateMeterReadingRequest = {
 }
 
 export type FinanceClient = {
-  getOperations(accessToken: string): Promise<FinancialOperationDto[]>
-  getAccruals(accessToken: string): Promise<AccrualDto[]>
-  getSupplierAccruals(accessToken: string): Promise<SupplierAccrualDto[]>
-  getMeterReadings(accessToken: string): Promise<MeterReadingDto[]>
+  getOperations(accessToken: string, limit?: number): Promise<FinancialOperationDto[]>
+  getAccruals(accessToken: string, limit?: number): Promise<AccrualDto[]>
+  getSupplierAccruals(accessToken: string, limit?: number): Promise<SupplierAccrualDto[]>
+  getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
   getSummary(accessToken: string): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
@@ -169,6 +169,11 @@ export type FinanceClient = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+const defaultFinanceListLimit = 50
+
+function withLimit(path: string, limit = defaultFinanceListLimit): string {
+  return `${path}?limit=${encodeURIComponent(limit)}`
+}
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -189,17 +194,17 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 }
 
 export const financeApi: FinanceClient = {
-  getOperations(accessToken) {
-    return requestJson(accessToken, '/api/finance/operations')
+  getOperations(accessToken, limit) {
+    return requestJson(accessToken, withLimit('/api/finance/operations', limit))
   },
-  getAccruals(accessToken) {
-    return requestJson(accessToken, '/api/finance/accruals')
+  getAccruals(accessToken, limit) {
+    return requestJson(accessToken, withLimit('/api/finance/accruals', limit))
   },
-  getSupplierAccruals(accessToken) {
-    return requestJson(accessToken, '/api/finance/supplier-accruals')
+  getSupplierAccruals(accessToken, limit) {
+    return requestJson(accessToken, withLimit('/api/finance/supplier-accruals', limit))
   },
-  getMeterReadings(accessToken) {
-    return requestJson(accessToken, '/api/finance/meter-readings')
+  getMeterReadings(accessToken, limit) {
+    return requestJson(accessToken, withLimit('/api/finance/meter-readings', limit))
   },
   getSummary(accessToken) {
     return requestJson(accessToken, '/api/finance/summary')

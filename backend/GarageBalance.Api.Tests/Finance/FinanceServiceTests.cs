@@ -72,6 +72,46 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task ListMethods_ApplyExplicitLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        for (var index = 0; index < 3; index++)
+        {
+            var month = new DateOnly(2026, 6, 1).AddMonths(index);
+            var day = new DateOnly(2026, 6, 19).AddDays(index);
+            Assert.True((await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, day, month, 100m + index, $"PKO-limit-{index}", null),
+                null,
+                CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateAccrualAsync(
+                new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, month, 200m + index, "manual", $"Ручное начисление {index}"),
+                null,
+                CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateSupplierAccrualAsync(
+                new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, month, 300m + index, "manual", $"INV-limit-{index}", $"Ручное начисление поставщику {index}"),
+                null,
+                CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateMeterReadingAsync(
+                new CreateMeterReadingRequest(fixtures.Garage.Id, "water", month, day, 20m + index, null),
+                null,
+                CancellationToken.None)).Succeeded);
+        }
+
+        var operations = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, null, 2), CancellationToken.None);
+        var accruals = await service.GetAccrualsAsync(new AccrualListRequest(null, null, null, 2), CancellationToken.None);
+        var supplierAccruals = await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, null, 2), CancellationToken.None);
+        var meterReadings = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, null, null, 2), CancellationToken.None);
+
+        Assert.Equal(2, operations.Count);
+        Assert.Equal(2, accruals.Count);
+        Assert.Equal(2, supplierAccruals.Count);
+        Assert.Equal(2, meterReadings.Count);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -18,9 +18,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? operationKind,
         [FromQuery] string? search,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetOperationsAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search), cancellationToken));
+        return Ok(await financeService.GetOperationsAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit), cancellationToken));
     }
 
     [HttpGet("accruals")]
@@ -29,9 +30,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] DateOnly? monthFrom,
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetAccrualsAsync(new AccrualListRequest(monthFrom, monthTo, search), cancellationToken));
+        return Ok(await financeService.GetAccrualsAsync(new AccrualListRequest(monthFrom, monthTo, search, limit), cancellationToken));
     }
 
     [HttpGet("supplier-accruals")]
@@ -40,9 +42,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] DateOnly? monthFrom,
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search), cancellationToken));
+        return Ok(await financeService.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit), cancellationToken));
     }
 
     [HttpGet("meter-readings")]
@@ -52,9 +55,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? meterKind,
         [FromQuery] string? search,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetMeterReadingsAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search), cancellationToken));
+        return Ok(await financeService.GetMeterReadingsAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search, limit), cancellationToken));
     }
 
     [HttpGet("summary")]

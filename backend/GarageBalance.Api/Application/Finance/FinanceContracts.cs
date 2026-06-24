@@ -50,7 +50,8 @@ public sealed record FinancialOperationListRequest(
     DateOnly? DateFrom,
     DateOnly? DateTo,
     string? OperationKind,
-    string? Search);
+    string? Search,
+    int? Limit = null);
 
 public sealed record AccrualDto(
     Guid Id,
@@ -117,12 +118,14 @@ public sealed record RegularAccrualGenerationResultDto(
 public sealed record AccrualListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
-    string? Search);
+    string? Search,
+    int? Limit = null);
 
 public sealed record SupplierAccrualListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
-    string? Search);
+    string? Search,
+    int? Limit = null);
 
 public sealed record MeterReadingDto(
     Guid Id,
@@ -151,7 +154,8 @@ public sealed record MeterReadingListRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
     string? MeterKind,
-    string? Search);
+    string? Search,
+    int? Limit = null);
 
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,

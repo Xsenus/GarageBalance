@@ -10,7 +10,8 @@ namespace GarageBalance.Api.Application.Finance;
 
 public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceService
 {
-    private const int ListLimit = 100;
+    private const int DefaultListLimit = 100;
+    private const int MaxListLimit = 500;
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -18,7 +19,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         var operations = await ApplyFilters(QueryOperations(), request)
             .OrderByDescending(operation => operation.OperationDate)
             .ThenBy(operation => operation.DocumentNumber)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(request.Limit))
             .ToListAsync(cancellationToken);
         return await ToOperationDtosAsync(operations, cancellationToken);
     }
@@ -28,7 +29,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return await ApplyAccrualFilters(QueryAccruals(), request)
             .OrderByDescending(accrual => accrual.AccountingMonth)
             .ThenBy(accrual => accrual.Garage.Number)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(request.Limit))
             .Select(accrual => ToDto(accrual))
             .ToListAsync(cancellationToken);
     }
@@ -38,7 +39,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return await ApplySupplierAccrualFilters(QuerySupplierAccruals(), request)
             .OrderByDescending(accrual => accrual.AccountingMonth)
             .ThenBy(accrual => accrual.Supplier.Name)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(request.Limit))
             .Select(accrual => ToDto(accrual))
             .ToListAsync(cancellationToken);
     }
@@ -49,9 +50,19 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             .OrderByDescending(reading => reading.AccountingMonth)
             .ThenBy(reading => reading.Garage.Number)
             .ThenBy(reading => reading.MeterKind)
-            .Take(ListLimit)
+            .Take(NormalizeListLimit(request.Limit))
             .Select(reading => ToDto(reading))
             .ToListAsync(cancellationToken);
+    }
+
+    private static int NormalizeListLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return DefaultListLimit;
+        }
+
+        return Math.Min(limit.Value, MaxListLimit);
     }
 
     public async Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)

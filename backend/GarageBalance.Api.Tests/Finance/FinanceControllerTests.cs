@@ -9,6 +9,23 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class FinanceControllerTests
 {
     [Fact]
+    public async Task ListEndpoints_PassLimitToService()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        await controller.GetOperations(null, null, "income", "12", 50, CancellationToken.None);
+        await controller.GetAccruals(null, null, "12", 51, CancellationToken.None);
+        await controller.GetSupplierAccruals(null, null, "water", 52, CancellationToken.None);
+        await controller.GetMeterReadings(null, null, "electricity", "12", 53, CancellationToken.None);
+
+        Assert.Equal(50, service.LastFinancialOperationListRequest?.Limit);
+        Assert.Equal(51, service.LastAccrualListRequest?.Limit);
+        Assert.Equal(52, service.LastSupplierAccrualListRequest?.Limit);
+        Assert.Equal(53, service.LastMeterReadingListRequest?.Limit);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -432,6 +449,10 @@ public sealed class FinanceControllerTests
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
+        public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
+        public AccrualListRequest? LastAccrualListRequest { get; private set; }
+        public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
+        public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CancelOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -445,21 +466,25 @@ public sealed class FinanceControllerTests
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
+            LastFinancialOperationListRequest = request;
             return Task.FromResult<IReadOnlyList<FinancialOperationDto>>([]);
         }
 
         public Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
         {
+            LastAccrualListRequest = request;
             return Task.FromResult<IReadOnlyList<AccrualDto>>([]);
         }
 
         public Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
         {
+            LastSupplierAccrualListRequest = request;
             return Task.FromResult<IReadOnlyList<SupplierAccrualDto>>([]);
         }
 
         public Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
         {
+            LastMeterReadingListRequest = request;
             return Task.FromResult<IReadOnlyList<MeterReadingDto>>([]);
         }
 

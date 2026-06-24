@@ -614,6 +614,7 @@ const reportFilterStorageKeys = {
 const garageReportScreenRowLimit = 12
 const reportScreenRowLimit = 16
 const auditScreenRequestLimit = 50
+const financeScreenRequestLimit = 50
 
 type NavigationItem = {
   label: string
@@ -1172,10 +1173,10 @@ function FinancePanel({
           dictionaryClient.getIncomeTypes(auth.accessToken),
           dictionaryClient.getExpenseTypes(auth.accessToken),
           dictionaryClient.getTariffs(auth.accessToken),
-          financeClient.getOperations(auth.accessToken),
-          financeClient.getAccruals(auth.accessToken),
-          financeClient.getSupplierAccruals(auth.accessToken),
-          financeClient.getMeterReadings(auth.accessToken),
+          financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
+          financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
+          financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
+          financeClient.getMeterReadings(auth.accessToken, financeScreenRequestLimit),
           financeClient.getSummary(auth.accessToken),
         ])
         if (!ignore) {

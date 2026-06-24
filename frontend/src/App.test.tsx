@@ -1054,11 +1054,24 @@ describe('App', () => {
       id: `meter-reading-${index}`,
       consumption: 401 + index,
     }))
+    const requestedLimits: Record<string, number | undefined> = {}
     const financeClient = createFinanceClient({
-      getOperations: async () => operations,
-      getAccruals: async () => accruals,
-      getSupplierAccruals: async () => supplierAccruals,
-      getMeterReadings: async () => meterReadings,
+      getOperations: async (_token, limit) => {
+        requestedLimits.operations = limit
+        return operations
+      },
+      getAccruals: async (_token, limit) => {
+        requestedLimits.accruals = limit
+        return accruals
+      },
+      getSupplierAccruals: async (_token, limit) => {
+        requestedLimits.supplierAccruals = limit
+        return supplierAccruals
+      },
+      getMeterReadings: async (_token, limit) => {
+        requestedLimits.meterReadings = limit
+        return meterReadings
+      },
       getSummary: async () => ({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }),
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -1077,6 +1090,7 @@ describe('App', () => {
     expect(within(meterReadingsTable).getByText('Показано 8 из 9 показаний')).toHaveAttribute('aria-live', 'polite')
     expect(within(operationsTable).getByText('Поступление 8')).toBeInTheDocument()
     expect(within(operationsTable).queryByText('Поступление 9')).not.toBeInTheDocument()
+    expect(requestedLimits).toEqual({ operations: 50, accruals: 50, supplierAccruals: 50, meterReadings: 50 })
   })
 
   it('cancels income operation with required reason from payments workspace', async () => {
