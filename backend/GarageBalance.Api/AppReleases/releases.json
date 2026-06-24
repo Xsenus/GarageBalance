@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-audit-export-status-role",
+    "version": "0.167.0",
+    "publishedAt": "2026-06-24T17:34:11+07:00",
+    "title": "CSV-выгрузка audit стала статусом",
+    "summary": "Подтверждение готовности CSV audit-журнала теперь размечается как статус операции.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Сообщение `Audit-журнал CSV готов.` получило role=\"status\" вместе с aria-live=\"polite\"."
+      },
+      {
+        "type": "fixed",
+        "text": "React-тест экспорта audit-журнала проверяет семантику статуса у сообщения готовности CSV."
+      },
+      {
+        "type": "important",
+        "text": "Администратор получает более понятное доступное подтверждение после скачивания audit-журнала."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-import-status-role",
     "version": "0.166.0",
     "publishedAt": "2026-06-24T17:27:21+07:00",

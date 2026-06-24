@@ -1600,7 +1600,7 @@ describe('App', () => {
 
     expect(auditExportRequest?.search).toBe('import')
     expect(auditExportRequest?.limit).toBeUndefined()
-    expect(await within(auditPanel).findByText('Audit-журнал CSV готов.')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(auditPanel).findByText('Audit-журнал CSV готов.')).toHaveAttribute('role', 'status')
   })
 
   it('shows visible audit event counter when audit log is compacted', async () => {

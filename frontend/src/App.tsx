@@ -2403,7 +2403,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
-      {exportMessage ? <div className="form-note" aria-live="polite">{exportMessage}</div> : null}
+      {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
       <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
         <input aria-label="Поиск в audit-журнале" placeholder="Действие, сущность или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
