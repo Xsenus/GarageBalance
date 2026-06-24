@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-vps-auth-api-origin",
+    "version": "0.116.0",
+    "publishedAt": "2026-06-24T09:25:00+07:00",
+    "title": "Исправлено подключение авторизации на VPS",
+    "summary": "Frontend больше не обращается к локальному 127.0.0.1:5080 в production-сборке, поэтому авторизация на sgk.blagodaty.ru работает через текущий домен.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "API-клиенты frontend используют same-origin fallback через /api, если VITE_API_BASE_URL не задан."
+      },
+      {
+        "type": "fixed",
+        "text": "На VPS телефон и браузер больше не пытаются подключиться к 127.0.0.1:5080 на устройстве пользователя."
+      },
+      {
+        "type": "added",
+        "text": "Добавлен frontend-тест, который запрещает вернуть localhost/127.0.0.1 как production fallback для API."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-integration-secret-settings",
     "version": "0.115.0",
     "publishedAt": "2026-06-24T09:15:00+07:00",

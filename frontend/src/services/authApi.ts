@@ -34,7 +34,7 @@ export type AuthClient = {
   changeOwnPassword(accessToken: string, request: ChangeOwnPasswordRequest): Promise<CurrentUserDto>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function postAuth<TRequest>(path: string, request: TRequest): Promise<AuthResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {

@@ -29,7 +29,7 @@ export type ImportClient = {
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:5080'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
