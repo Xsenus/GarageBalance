@@ -1172,6 +1172,7 @@ describe('App', () => {
     expect(promptSpy).toHaveBeenCalledWith('Укажите причину отмены операции')
     await waitFor(() => expect(within(financePanel).queryByText('+700,00')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
+    expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('aria-live', 'polite')
     promptSpy.mockRestore()
   })
 
@@ -1193,7 +1194,7 @@ describe('App', () => {
     expect(await within(accrualTable).findByText('900,00')).toBeInTheDocument()
     await user.click(within(accrualTable).getByRole('button', { name: 'Отменить начисление Членский взнос гараж 12' }))
     await waitFor(() => expect(within(accrualTable).queryByText('900,00')).not.toBeInTheDocument())
-    expect(within(accrualTable).getByText('Начислений пока нет')).toBeInTheDocument()
+    expect(within(accrualTable).getByText('Начислений пока нет')).toHaveAttribute('aria-live', 'polite')
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
     await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
@@ -1203,7 +1204,7 @@ describe('App', () => {
     expect(await within(supplierAccrualTable).findByText('650,00')).toBeInTheDocument()
     await user.click(within(supplierAccrualTable).getByRole('button', { name: 'Отменить начисление поставщику Водоканал' }))
     await waitFor(() => expect(within(supplierAccrualTable).queryByText('650,00')).not.toBeInTheDocument())
-    expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toBeInTheDocument()
+    expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toHaveAttribute('aria-live', 'polite')
 
     await user.clear(within(financePanel).getByLabelText('Новое показание'))
     await user.type(within(financePanel).getByLabelText('Новое показание'), '15.5')
@@ -1212,7 +1213,7 @@ describe('App', () => {
     expect(await within(meterReadingTable).findByText('5.5')).toBeInTheDocument()
     await user.click(within(meterReadingTable).getByRole('button', { name: 'Отменить показание Вода гараж 12' }))
     await waitFor(() => expect(within(meterReadingTable).queryByText('5.5')).not.toBeInTheDocument())
-    expect(within(meterReadingTable).getByText('Показаний пока нет')).toBeInTheDocument()
+    expect(within(meterReadingTable).getByText('Показаний пока нет')).toHaveAttribute('aria-live', 'polite')
     expect(promptSpy).toHaveBeenCalledTimes(3)
     promptSpy.mockRestore()
   })

@@ -1797,7 +1797,7 @@ function FinancePanel({
             <span role="columnheader">Операция</span>
             <span role="columnheader">Сумма</span>
           </div>
-          {operations.length === 0 ? <p className="empty-state">Операций пока нет</p> : null}
+          {operations.length === 0 ? <p className="empty-state" aria-live="polite">Операций пока нет</p> : null}
           {visibleOperations.map((operation) => (
             <div className="operation-row" role="row" key={operation.id}>
               <span role="cell">{formatDateOnly(operation.operationDate)}</span>
@@ -1838,7 +1838,7 @@ function FinancePanel({
             <span role="columnheader">Начисление</span>
             <span role="columnheader">Сумма</span>
           </div>
-          {accruals.length === 0 ? <p className="empty-state">Начислений пока нет</p> : null}
+          {accruals.length === 0 ? <p className="empty-state" aria-live="polite">Начислений пока нет</p> : null}
           {visibleAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
@@ -1884,7 +1884,7 @@ function FinancePanel({
             <span role="columnheader">Поставщик</span>
             <span role="columnheader">Сумма</span>
           </div>
-          {supplierAccruals.length === 0 ? <p className="empty-state">Начислений поставщикам пока нет</p> : null}
+          {supplierAccruals.length === 0 ? <p className="empty-state" aria-live="polite">Начислений поставщикам пока нет</p> : null}
           {visibleSupplierAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
@@ -1930,7 +1930,7 @@ function FinancePanel({
             <span role="columnheader">Счетчик</span>
             <span role="columnheader">Расход</span>
           </div>
-          {meterReadings.length === 0 ? <p className="empty-state">Показаний пока нет</p> : null}
+          {meterReadings.length === 0 ? <p className="empty-state" aria-live="polite">Показаний пока нет</p> : null}
           {visibleMeterReadings.map((reading) => (
             <div className="operation-row" role="row" key={reading.id}>
               <span role="cell">{formatMonth(reading.accountingMonth)}</span>
