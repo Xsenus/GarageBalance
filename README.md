@@ -177,6 +177,8 @@ API Dockerfile собирает `net10.0` через `mcr.microsoft.com/dotnet/s
 
 `docker-compose.yml` поднимает сервисы в проверяемом порядке: PostgreSQL проходит `pg_isready`, API ждет здоровую БД и проверяет `/health` через `curl`, а frontend ждет здоровый API и проверяет nginx через `wget`. Это снижает риск, что локальный стенд покажет интерфейс раньше, чем backend реально готов принимать запросы.
 
+Checklist для тестового размещения на VPS с доменом `sgk.blagodaty.ru`, TLS, nginx, systemd, backup, smoke-проверками и rollback описан в `docs/vps-deployment-checklist.md`. Документ проверяется backend-тестом, чтобы обязательные шаги deploy не потерялись при следующих изменениях.
+
 ## Правила проекта
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.

@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-vps-deployment-checklist",
+    "version": "0.98.0",
+    "publishedAt": "2026-06-24T08:45:00+07:00",
+    "title": "Добавлен checklist размещения на VPS",
+    "summary": "Проект получил проверяемую инструкцию для тестового стенда с доменом, TLS, nginx, systemd, backup и rollback.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "В docs добавлен checklist VPS + domain + TLS для sgk.blagodaty.ru без публикации секретов и приватных данных."
+      },
+      {
+        "type": "improved",
+        "text": "Инструкция фиксирует preflight VPS, environment secrets, idempotent EF migration script, pg_dump backup, nginx, certbot, smoke-проверки и rollback."
+      },
+      {
+        "type": "improved",
+        "text": "Backend-тест проверяет, что deployment checklist сохраняет ключевые команды и контрольные точки."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-compose-healthchecks",
     "version": "0.97.0",
     "publishedAt": "2026-06-24T08:15:00+07:00",
