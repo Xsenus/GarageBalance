@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-new-report-checklist",
+    "version": "0.107.0",
+    "publishedAt": "2026-06-24T13:15:00+07:00",
+    "title": "Добавлен порядок добавления новых отчетов",
+    "summary": "Новые отчеты после первых базовых теперь должны проходить единый путь от бизнес-вопроса до API, UI, экспорта, тестов и приемки.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен docs/new-report-checklist.md с правилами описания заявки, источников данных, дат, backend contract и права reports.read."
+      },
+      {
+        "type": "added",
+        "text": "Checklist закрепляет требования к производительности: PostgreSQL aggregation, limit, rowCount, server pagination или virtualization."
+      },
+      {
+        "type": "added",
+        "text": "Отдельно описаны XLSX/PDF экспорт, frontend states, backend/React tests, документация, запись в \"Что нового\" и roadmap history."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-git-handoff-checklist",
     "version": "0.106.0",
     "publishedAt": "2026-06-24T12:45:00+07:00",

@@ -195,6 +195,8 @@ Troubleshooting по типовым сбоям описан в `docs/troubleshoo
 
 Checklist передачи проекта в Git описан в `docs/git-handoff-checklist.md`: проверка приватных файлов, `.gitignore`, release notes, roadmap history, полный test run, UTF-8/no BOM и запрет `git push` без отдельной команды пользователя.
 
+Порядок добавления новых отчетов описан в `docs/new-report-checklist.md`: заявка, источники данных, backend contract, производительность, XLSX/PDF, frontend states, тесты, документация и приемка.
+
 ## Правила проекта
 
 Перед разработкой читать `AGENTS.md` и актуальный roadmap в `docs/`. Все пользовательские изменения должны отражаться в `backend/GarageBalance.Api/AppReleases/releases.json`, если они видны пользователю или меняют правила работы.
