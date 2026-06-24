@@ -574,6 +574,42 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateSupplierAccrualAsync_RequiresCommentForManualAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-no-comment", "   "),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_accrual_comment_required", result.ErrorCode);
+        Assert.Empty(database.Context.SupplierAccruals);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAccrualAsync_RejectsUnsupportedSource()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "imported", "INV-source", "Счет поставщика"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_accrual_source_invalid", result.ErrorCode);
+        Assert.Empty(database.Context.SupplierAccruals);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateSupplierAccrualAsync_RejectsDuplicateSupplierTypeMonthSourceAndDocument()
     {
         await using var database = await TestDatabase.CreateAsync();
