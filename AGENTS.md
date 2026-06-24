@@ -80,7 +80,7 @@ Prefer established ASP.NET Core patterns:
 
 - controllers as the default API surface; do not add minimal API endpoints for business functionality unless the user explicitly approves an exception;
 - DTOs at API boundaries;
-- EF Core migrations for PostgreSQL schema changes;
+- EF Core migrations for PostgreSQL schema changes; production backend code must not call `EnsureCreated` / `EnsureDeleted` or run raw schema DDL outside `Infrastructure/Data/Migrations`;
 - decimal money values, explicit rounding rules, and date/time handling with clear local business dates;
 - cancellation tokens for I/O;
 - structured logs without sensitive values.

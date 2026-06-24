@@ -30,6 +30,8 @@ dotnet tool run dotnet-ef database update --project .\backend\GarageBalance.Api\
 dotnet run --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj
 ```
 
+Схема PostgreSQL меняется только через EF Core migrations в `backend/GarageBalance.Api/Infrastructure/Data/Migrations`. Production backend-код не должен вызывать `EnsureCreated` / `EnsureDeleted` или выполнять raw DDL вне папки миграций; это закреплено backend-тестом `DatabaseMigrationPolicyTests`, чтобы обновления чистой базы, импортной базы и VPS-стенда шли одним проверяемым путем.
+
 Frontend:
 
 ```powershell
