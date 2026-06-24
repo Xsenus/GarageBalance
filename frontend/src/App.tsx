@@ -3949,7 +3949,7 @@ function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dicti
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
           </div>
           <textarea aria-label="Комментарий тарифа" placeholder="Комментарий" value={tariffForm.comment} onChange={(event) => setTariffForm({ ...tariffForm, comment: event.target.value })} />
-          {editingTariffId && hasUnsavedTariffChanges() ? <p className="form-hint" aria-live="polite">Есть несохраненные изменения тарифа.</p> : null}
+          {editingTariffId && hasUnsavedTariffChanges() ? <p className="form-hint" role="status" aria-live="polite">Есть несохраненные изменения тарифа.</p> : null}
           <FormValidationSummary title="Проверьте тариф" items={tariffValidationErrors} />
           <div className="inline-actions">
             <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>

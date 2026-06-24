@@ -515,7 +515,7 @@ describe('App', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     await user.clear(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'))
     await user.type(within(tariffForm as HTMLElement).getByLabelText('Название тарифа'), 'Вода черновик')
-    expect(within(tariffForm as HTMLElement).getByText('Есть несохраненные изменения тарифа.')).toHaveAttribute('aria-live', 'polite')
+    expect(within(tariffForm as HTMLElement).getByText('Есть несохраненные изменения тарифа.')).toHaveAttribute('role', 'status')
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Изменить тариф Тариф обслуживания' }))
     expect(confirmSpy).toHaveBeenCalledWith('Перейти к другому тарифу без сохранения изменений?')
     expect(within(tariffForm as HTMLElement).getByLabelText('Название тарифа')).toHaveValue('Вода черновик')
