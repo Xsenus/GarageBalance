@@ -116,10 +116,17 @@ dotnet .\backend\GarageBalance.Api\bin\Release\net10.0\GarageBalance.Api.dll
 - [ ] Перед импортом Access создать backup PostgreSQL:
 
 ```powershell
-pg_dump --format=custom --file=C:\GarageBalance\Backups\garagebalance_local_%DATE%.pgdump garagebalance_local
+.\infrastructure\scripts\backup-postgres.ps1 `
+  -Database garagebalance_local `
+  -HostName 127.0.0.1 `
+  -Port 5432 `
+  -Username garagebalance_local `
+  -BackupDirectory C:\GarageBalance\Backups
 ```
 
 - [ ] Проверить, что backup-файл появился в `C:\GarageBalance\Backups`.
+- [ ] Проверить восстановление в отдельную базу `garagebalance_restore_check` через `.\infrastructure\scripts\restore-postgres.ps1`.
+- [ ] Для ежедневного backup зарегистрировать задачу `GarageBalance Local PostgreSQL Backup` через `.\infrastructure\scripts\register-local-backup-task.ps1`.
 - [ ] Записать имя backup-файла в историю работ.
 - [ ] Не удалять предыдущий backup до приемки новой версии или импорта.
 

@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-postgres-backup-restore-scripts",
+    "version": "0.100.0",
+    "publishedAt": "2026-06-24T09:45:00+07:00",
+    "title": "Добавлены скрипты backup и restore PostgreSQL",
+    "summary": "Локальная установка получила проверяемые PowerShell-скрипты для резервного копирования, восстановления в test-базу и ежедневной задачи.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен backup-postgres.ps1: он создает custom-format .pgdump через pg_dump и проверяет, что файл не пустой."
+      },
+      {
+        "type": "added",
+        "text": "Добавлен restore-postgres.ps1: по умолчанию он восстанавливает backup в garagebalance_restore_check и защищает рабочие базы от случайной перезаписи."
+      },
+      {
+        "type": "added",
+        "text": "Добавлен register-local-backup-task.ps1 для ежедневного backup через Windows Task Scheduler, а документация описывает ежемесячную restore-check проверку."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-local-pc-install-checklist",
     "version": "0.99.0",
     "publishedAt": "2026-06-24T09:15:00+07:00",

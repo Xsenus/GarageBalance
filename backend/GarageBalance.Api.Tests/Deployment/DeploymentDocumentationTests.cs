@@ -35,7 +35,9 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("docker compose up --build -d", document, StringComparison.Ordinal);
         Assert.Contains("dotnet tool run dotnet-ef database update", document, StringComparison.Ordinal);
         Assert.Contains("VITE_API_BASE_URL=\"http://127.0.0.1:5080\"", document, StringComparison.Ordinal);
-        Assert.Contains("pg_dump --format=custom", document, StringComparison.Ordinal);
+        Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);
+        Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);
         Assert.Contains("Не открывать порты", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
     }
