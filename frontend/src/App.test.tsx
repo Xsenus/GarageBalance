@@ -1289,6 +1289,39 @@ describe('App', () => {
     expect(await within(importPanel).findByText('Отчет dry-run импорта готов.')).toBeInTheDocument()
   })
 
+  it('shows visible counters for long Access import lists', async () => {
+    const user = userEvent.setup()
+    const runs = Array.from({ length: 9 }, (_, index) => createAccessImportRun({
+      id: `access-run-${index}`,
+      originalFileName: `ГСК-${index + 1}.accdb`,
+    }))
+    const logEntries = Array.from({ length: 11 }, (_, index) => createAccessImportRunLogEntry({
+      id: `log-${index}`,
+      accessImportRunId: runs[0].id,
+      stepCode: `step_${index + 1}`,
+    }))
+    const quarantineItems = Array.from({ length: 9 }, (_, index) => createAccessImportQuarantineItem({
+      id: `quarantine-${index}`,
+      externalId: `${index + 1}`,
+    }))
+    const importClient = createImportClient({
+      getAccessRuns: async () => runs,
+      getAccessRunLog: async () => logEntries,
+      getOpenQuarantineItems: async () => quarantineItems,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    expect(await within(importPanel).findByText('Показано 10 из 11 строк лога')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('Показано 8 из 9 запусков')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('Показано 8 из 9 строк карантина')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('step_10')).toBeInTheDocument()
+    expect(within(importPanel).queryByText('step_11')).not.toBeInTheDocument()
+  })
+
   it('shows and resolves Access import quarantine rows', async () => {
     const user = userEvent.setup()
     let quarantineItems = [createAccessImportQuarantineItem()]

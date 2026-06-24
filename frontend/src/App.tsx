@@ -2037,6 +2037,9 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const visibleRunLogEntries = runLogEntries.slice(0, 10)
+  const visibleRuns = runs.slice(0, 8)
+  const visibleQuarantineItems = quarantineItems.slice(0, 8)
 
   useEffect(() => {
     let ignore = false
@@ -2246,7 +2249,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
           </div>
           {loadingLog ? <p className="empty-state">Загрузка лога...</p> : null}
           {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state">Лог выбранного запуска пока пуст</p> : null}
-          {runLogEntries.slice(0, 10).map((entry) => (
+          {visibleRunLogEntries.map((entry) => (
             <div className="operation-row" role="row" key={entry.id}>
               <span role="cell">
                 <strong>{entry.stepCode}</strong>
@@ -2258,6 +2261,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               <span role="cell">{entry.message}</span>
             </div>
           ))}
+          {runLogEntries.length > visibleRunLogEntries.length ? <p className="empty-state" aria-live="polite">Показано {visibleRunLogEntries.length} из {runLogEntries.length} строк лога</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="История импорта Access">
@@ -2267,7 +2271,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span role="columnheader">Проверки</span>
           </div>
           {runs.length === 0 ? <p className="empty-state">Истории импорта пока нет</p> : null}
-          {runs.slice(0, 8).map((run) => (
+          {visibleRuns.map((run) => (
             <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
               <span role="cell">
                 <strong>{run.originalFileName}</strong>
@@ -2281,6 +2285,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               </span>
             </button>
           ))}
+          {runs.length > visibleRuns.length ? <p className="empty-state" aria-live="polite">Показано {visibleRuns.length} из {runs.length} запусков</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Карантин импорта Access">
@@ -2290,7 +2295,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span role="columnheader">Действие</span>
           </div>
           {quarantineItems.length === 0 ? <p className="empty-state">Открытых строк карантина нет</p> : null}
-          {quarantineItems.slice(0, 8).map((item) => (
+          {visibleQuarantineItems.map((item) => (
             <div className="operation-row" role="row" key={item.id}>
               <span role="cell">
                 <strong>{item.entityType}{item.externalId ? ` #${item.externalId}` : ''}</strong>
@@ -2308,6 +2313,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
               </span>
             </div>
           ))}
+          {quarantineItems.length > visibleQuarantineItems.length ? <p className="empty-state" aria-live="polite">Показано {visibleQuarantineItems.length} из {quarantineItems.length} строк карантина</p> : null}
         </div>
       </div>
     </section>
