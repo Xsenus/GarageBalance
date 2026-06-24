@@ -188,7 +188,15 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, summary.IncomeTotal);
         Assert.Equal(1000m, summary.Debt);
         Assert.Equal(0, summary.OperationCount);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled" && item.ActorUserId == actorUserId && item.Summary.Contains("Дублирующий документ"));
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Отменено поступление 400,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("от 19.06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ PKO-cancel", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Причина: Дублирующий документ", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -431,7 +439,14 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, summary.AccrualTotal);
         Assert.Equal(0m, summary.Debt);
         Assert.Equal(0, summary.AccrualCount);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.accrual_canceled" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_canceled");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Отменено начисление 700,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Причина: Начислено не тому гаражу", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -496,7 +511,15 @@ public sealed class FinanceServiceTests
         Assert.True(result.Value!.IsCanceled);
         Assert.Contains("Отменено: Счет заменен", result.Value.Comment);
         Assert.Empty(await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, null), CancellationToken.None));
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_canceled" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_canceled");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Отменено начисление 1200,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.ExpenseType.Name}", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ INV-cancel", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Причина: Счет заменен", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -708,7 +731,14 @@ public sealed class FinanceServiceTests
         Assert.Empty(await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, null, null), CancellationToken.None));
         var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
         Assert.Equal(0, summary.MeterReadingCount);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_canceled" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_canceled");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Отменено показание water", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("дата 20.06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("расход 5,5", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Причина: Ошибочное показание", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

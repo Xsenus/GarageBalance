@@ -192,7 +192,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         operation.IsCanceled = true;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         operation.Comment = AppendCancelReason(operation.Comment, reason);
-        AddAudit(actorUserId, "finance.operation_canceled", operation.Id, $"Отменена операция {operation.DocumentNumber ?? operation.Id.ToString()} на сумму {operation.Amount:N2}. Причина: {reason}");
+        AddAudit(actorUserId, "finance.operation_canceled", operation.Id, FormatOperationCanceledAuditSummary(operation, reason));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -222,7 +222,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
-        AddAudit(actorUserId, "finance.accrual_canceled", "accrual", accrual.Id, $"Отменено начисление {accrual.Amount:N2} по гаражу {accrual.Garage.Number}. Причина: {reason}");
+        AddAudit(actorUserId, "finance.accrual_canceled", "accrual", accrual.Id, FormatAccrualCanceledAuditSummary(accrual, reason));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -366,7 +366,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
-        AddAudit(actorUserId, "finance.supplier_accrual_canceled", "supplier_accrual", accrual.Id, $"Отменено начисление {accrual.Amount:N2} поставщику {accrual.Supplier.Name}. Причина: {reason}");
+        AddAudit(actorUserId, "finance.supplier_accrual_canceled", "supplier_accrual", accrual.Id, FormatSupplierAccrualCanceledAuditSummary(accrual, reason));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -546,7 +546,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
         reading.IsCanceled = true;
         reading.Comment = AppendCancelReason(reading.Comment, reason);
-        AddAudit(actorUserId, "finance.meter_reading_canceled", "meter_reading", reading.Id, $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number}. Причина: {reason}");
+        AddAudit(actorUserId, "finance.meter_reading_canceled", "meter_reading", reading.Id, FormatMeterReadingCanceledAuditSummary(reading, reason));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
@@ -591,12 +591,27 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
+    private static string FormatOperationCanceledAuditSummary(FinancialOperation operation, string reason)
+    {
+        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
+        return operation.OperationKind == FinancialOperationKinds.Income
+            ? $"Отменено поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}. Причина: {reason}"
+            : $"Отменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}";
+    }
+
     private static string FormatAccrualCreatedAuditSummary(Accrual accrual)
     {
         var amount = accrual.Amount.ToString("0.00", RussianCulture);
         var comment = NormalizeOptional(accrual.Comment);
         var summary = $"Создано начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatAccrualCanceledAuditSummary(Accrual accrual, string reason)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}. Причина: {reason}";
     }
 
     private static string FormatSupplierAccrualCreatedAuditSummary(SupplierAccrual accrual)
@@ -606,6 +621,18 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         var comment = NormalizeOptional(accrual.Comment);
         var summary = $"Создано начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatSupplierAccrualCanceledAuditSummary(SupplierAccrual accrual, string reason)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
+        return $"Отменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}. Причина: {reason}";
+    }
+
+    private static string FormatMeterReadingCanceledAuditSummary(MeterReading reading, string reason)
+    {
+        return $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; расход {reading.Consumption.ToString("0.####", RussianCulture)}. Причина: {reason}";
     }
 
     private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
