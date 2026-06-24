@@ -671,21 +671,24 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetOperationsAsync_SearchesByGarageSupplierAndDocument()
+    public async Task GetOperationsAsync_SearchesByGarageSupplierDocumentAndComment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var service = new FinanceService(database.Context);
-        await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "DOC-12", null), null, CancellationToken.None);
-        await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "DOC-20", null), null, CancellationToken.None);
+        await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "DOC-12", "Оплата по квитанции"), null, CancellationToken.None);
+        await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "DOC-20", "Компенсация поставщику"), null, CancellationToken.None);
 
         var garageResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "12"), CancellationToken.None);
         var supplierResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "vodokanal"), CancellationToken.None);
+        var commentResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "квитанции"), CancellationToken.None);
 
         Assert.Single(garageResult);
         Assert.Equal("income", garageResult[0].OperationKind);
         Assert.Single(supplierResult);
         Assert.Equal("expense", supplierResult[0].OperationKind);
+        Assert.Single(commentResult);
+        Assert.Equal("Оплата по квитанции", commentResult[0].Comment);
     }
 
     [Fact]

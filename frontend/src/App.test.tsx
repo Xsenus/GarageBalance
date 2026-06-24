@@ -1595,19 +1595,24 @@ describe('App', () => {
     await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
     await user.type(within(financePanel).getByLabelText('Сумма поступления'), '2000')
     await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-1')
+    await user.type(within(financePanel).getByLabelText('Комментарий поступления'), 'Оплата за июнь')
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
 
     expect(await within(financePanel).findByText('+2 000,00')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getByText('Оплата за июнь')).toBeInTheDocument()
 
     await user.clear(within(financePanel).getByLabelText('Сумма выплаты'))
     await user.type(within(financePanel).getByLabelText('Сумма выплаты'), '500')
     await user.type(within(financePanel).getByLabelText('Документ выплаты'), 'RKO-1')
+    await user.type(within(financePanel).getByLabelText('Комментарий выплаты'), 'Оплата счета поставщика')
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
 
     expect(await within(financePanel).findByText('-500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('Переплата')).toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
+    expect(within(financePanel).getByText('Оплата счета поставщика')).toBeInTheDocument()
   })
 
   it('edits income operation from payments table', async () => {
@@ -1634,10 +1639,12 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Сумма поступления'), '2400')
     await user.clear(within(dialog).getByLabelText('Документ поступления'))
     await user.type(within(dialog).getByLabelText('Документ поступления'), 'PKO-fixed')
+    await user.type(within(dialog).getByLabelText('Комментарий поступления'), 'После сверки')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument())
     expect(await within(financePanel).findByText('PKO-fixed')).toBeInTheDocument()
+    expect(within(financePanel).getByText('После сверки')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('2 400,00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('PKO-edit')).not.toBeInTheDocument()
   })
@@ -3359,6 +3366,7 @@ function createStatefulFinanceClient(): FinanceClient {
         accountingMonth: request.accountingMonth,
         amount: request.amount,
         documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
         garageDebtBefore: debtBefore,
         garageDebtAfter: debtBefore - request.amount,
         paymentAllocations: [{
@@ -3382,6 +3390,7 @@ function createStatefulFinanceClient(): FinanceClient {
         accountingMonth: request.accountingMonth,
         amount: request.amount,
         documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
         supplierName: 'Водоканал',
         expenseTypeName: 'Вода',
         supplierDebtBefore,
@@ -3421,6 +3430,7 @@ function createStatefulFinanceClient(): FinanceClient {
         accountingMonth: request.accountingMonth,
         amount: request.amount,
         documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
         garageDebtAfter: operation.garageDebtBefore !== null ? operation.garageDebtBefore - request.amount : operation.garageDebtAfter,
       }
       operations = operations.map((item) => (item.id === operationId ? updated : item))
@@ -3440,6 +3450,7 @@ function createStatefulFinanceClient(): FinanceClient {
         accountingMonth: request.accountingMonth,
         amount: request.amount,
         documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
         supplierDebtAfter: operation.supplierDebtBefore !== null ? operation.supplierDebtBefore - request.amount : operation.supplierDebtAfter,
       }
       operations = operations.map((item) => (item.id === operationId ? updated : item))

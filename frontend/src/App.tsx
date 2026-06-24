@@ -1371,8 +1371,8 @@ function FinancePanel({
   const [meterReadings, setMeterReadings] = useState<MeterReadingDto[]>([])
   const [missingMeterReadings, setMissingMeterReadings] = useState<MissingMeterReadingDto[]>([])
   const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0, meterReadingCount: 0 })
-  const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
-  const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
+  const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
+  const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', comment: '' })
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
   const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
@@ -1558,6 +1558,7 @@ function FinancePanel({
       accountingMonth: incomeForm.accountingMonth,
       amount: incomeForm.amount,
       documentNumber: incomeForm.documentNumber,
+      comment: incomeForm.comment,
     }
     const errors = getIncomeValidationErrors(request)
     if (errors.length > 0) {
@@ -1574,7 +1575,7 @@ function FinancePanel({
         await financeClient.createIncome(auth.accessToken, request)
       }
       await loadFinanceWorkbench('income', financePage.offset, financePage.limit)
-      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '' }))
+      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
     if (saved) {
       setFinanceEditor(null)
@@ -1595,6 +1596,7 @@ function FinancePanel({
       accountingMonth: expenseForm.accountingMonth,
       amount: expenseForm.amount,
       documentNumber: expenseForm.documentNumber,
+      comment: expenseForm.comment,
     }
     const errors = getExpenseValidationErrors(request)
     if (errors.length > 0) {
@@ -1611,7 +1613,7 @@ function FinancePanel({
         await financeClient.createExpense(auth.accessToken, request)
       }
       await loadFinanceWorkbench('expense', financePage.offset, financePage.limit)
-      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '' }))
+      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
     if (saved) {
       setFinanceEditor(null)
@@ -1920,7 +1922,10 @@ function FinancePanel({
         accountingMonth: record.accountingMonth,
         amount: record.amount,
         documentNumber: record.documentNumber ?? '',
+        comment: record.comment ?? '',
       })
+    } else if (!record && section === 'income') {
+      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     } else if (record && section === 'expense' && 'operationKind' in record) {
       setExpenseForm({
         supplierId: record.supplierId ?? '',
@@ -1929,7 +1934,10 @@ function FinancePanel({
         accountingMonth: record.accountingMonth,
         amount: record.amount,
         documentNumber: record.documentNumber ?? '',
+        comment: record.comment ?? '',
       })
+    } else if (!record && section === 'expense') {
+      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     } else if (record && section === 'accruals' && 'incomeTypeId' in record && !('operationKind' in record)) {
       setAccrualForm({
         garageId: record.garageId,
@@ -2048,6 +2056,7 @@ function FinancePanel({
               <th>Документ</th>
               <th>Оплачено</th>
               <th>Долг после</th>
+              <th>Комментарий</th>
             </tr>
           </thead>
           <tbody>
@@ -2061,6 +2070,7 @@ function FinancePanel({
                 <td>{operation.documentNumber ?? 'Не указан'}</td>
                 <td className="money-income">{formatMoney(operation.amount)}</td>
                 <td className={operation.garageDebtAfter !== null ? getDebtClassName(operation.garageDebtAfter) : undefined}>{operation.garageDebtAfter !== null ? formatDebtAmount(operation.garageDebtAfter) : 'Нет данных'}</td>
+                <td>{operation.comment ?? 'Нет комментария'}</td>
               </tr>
             ))}
           </tbody>
@@ -2080,6 +2090,7 @@ function FinancePanel({
               <th>Документ</th>
               <th>Выплачено</th>
               <th>Обязательство после</th>
+              <th>Комментарий</th>
             </tr>
           </thead>
           <tbody>
@@ -2092,6 +2103,7 @@ function FinancePanel({
                 <td>{operation.documentNumber ?? 'Не указан'}</td>
                 <td className="money-expense">{formatMoney(operation.amount)}</td>
                 <td>{operation.supplierDebtAfter !== null ? formatMoney(operation.supplierDebtAfter) : 'Нет данных'}</td>
+                <td>{operation.comment ?? 'Нет комментария'}</td>
               </tr>
             ))}
           </tbody>
@@ -2328,6 +2340,7 @@ function FinancePanel({
             <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
+          <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте поступление" items={incomeValidationErrors} />
         </>
       )
@@ -2364,6 +2377,7 @@ function FinancePanel({
             <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
+          <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте выплату" items={expenseValidationErrors} />
         </>
       )
@@ -2671,6 +2685,7 @@ function FinancePanel({
             <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
+          <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте поступление" items={incomeValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
             <Plus size={16} />
@@ -2708,6 +2723,7 @@ function FinancePanel({
             <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
+          <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте выплату" items={expenseValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
             <Plus size={16} />
