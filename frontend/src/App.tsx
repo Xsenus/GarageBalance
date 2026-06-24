@@ -2061,7 +2061,7 @@ function FinancePanel({
   }
 
   function handleFinanceRowKeyDown(event: KeyboardEvent<HTMLElement>, section: FinanceSectionKey, record: FinanceRecord) {
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       editFinanceRecord(section, record)
     }

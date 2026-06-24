@@ -1722,7 +1722,10 @@ describe('App', () => {
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
 
     const paymentCell = await within(financePanel).findByText('PKO-edit')
-    await user.click(paymentCell.closest('tr')!)
+    const paymentRow = paymentCell.closest('tr')!
+    paymentRow.focus()
+    expect(paymentRow).toHaveFocus()
+    await user.keyboard(' ')
     const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
 
