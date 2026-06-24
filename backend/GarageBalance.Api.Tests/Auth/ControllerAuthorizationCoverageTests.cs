@@ -69,6 +69,25 @@ public sealed class ControllerAuthorizationCoverageTests
         Assert.NotNull(policy);
     }
 
+    [Fact]
+    public void ReportActionsRequireReportsReadPermission()
+    {
+        var controllerPolicy = typeof(ReportsController)
+            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.ReportsRead);
+        Assert.NotNull(controllerPolicy);
+
+        var anonymousReportActions = typeof(ReportsController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true).Any())
+            .Where(method => HasAnonymousMetadata(method))
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Empty(anonymousReportActions);
+    }
+
     private static IEnumerable<MethodInfo> GetControllerActionMethods()
     {
         return typeof(AuthController).Assembly
