@@ -146,6 +146,40 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportConsolidatedReportXlsxAsync_AppliesGarageSearchFilter()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+
+        var result = await service.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), "21"), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        AssertWorkbookContains(result.Value!.Content, "21");
+        AssertWorkbookDoesNotContain(result.Value.Content, "12");
+    }
+
+    [Fact]
+    public async Task ExportConsolidatedReportPdfAsync_AppliesGarageSearchFilter()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+
+        var result = await service.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), "21"), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        AssertPdfContains(result.Value!.Content, "21 |");
+        AssertPdfDoesNotContain(result.Value.Content, "12 |");
+    }
+
+    [Fact]
     public async Task GetIncomeReportAsync_ReturnsAccrualAndPaymentRows()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -537,12 +571,26 @@ public sealed class ReportServiceTests
         Assert.Contains(expected, text);
     }
 
+    private static void AssertWorkbookDoesNotContain(byte[] content, string unexpected)
+    {
+        using var stream = new MemoryStream(content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var text = string.Join('\n', archive.Entries.Select(ReadEntry));
+        Assert.DoesNotContain(unexpected, text);
+    }
+
     private static void AssertPdfContains(byte[] content, string expected)
     {
         var text = Encoding.ASCII.GetString(content);
         Assert.StartsWith("%PDF-1.4", text);
         Assert.Contains(expected, text);
         Assert.Contains("%%EOF", text);
+    }
+
+    private static void AssertPdfDoesNotContain(byte[] content, string unexpected)
+    {
+        var text = Encoding.ASCII.GetString(content);
+        Assert.DoesNotContain(unexpected, text);
     }
 
     private static string ReadEntry(ZipArchiveEntry entry)
