@@ -95,6 +95,24 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public async Task GetAccessImportRuns_ReturnsRunsAndPassesLimit()
+    {
+        var run = CreateRun();
+        var service = new FakeImportService
+        {
+            Runs = [run]
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportRuns(new AccessImportRunListRequest { Limit = 12 }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var runs = Assert.IsAssignableFrom<IReadOnlyList<AccessImportRunDto>>(ok.Value);
+        Assert.Equal(run.Id, Assert.Single(runs).Id);
+        Assert.Equal(12, service.LastRunRequest?.Limit);
+    }
+
+    [Fact]
     public async Task GetAccessImportRunLog_ReturnsLogEntries()
     {
         var runId = Guid.NewGuid();
@@ -108,12 +126,13 @@ public sealed class ImportControllerTests
         };
         var controller = CreateController(service);
 
-        var result = await controller.GetAccessImportRunLog(runId, CancellationToken.None);
+        var result = await controller.GetAccessImportRunLog(runId, new AccessImportRunLogListRequest { Limit = 25 }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var entries = Assert.IsAssignableFrom<IReadOnlyList<AccessImportRunLogEntryDto>>(ok.Value);
         Assert.Equal(2, entries.Count);
         Assert.Equal(runId, service.LastLogRunId);
+        Assert.Equal(25, service.LastLogRequest?.Limit);
     }
 
     [Fact]
@@ -125,7 +144,7 @@ public sealed class ImportControllerTests
         };
         var controller = CreateController(service);
 
-        var result = await controller.GetAccessImportRunLog(Guid.NewGuid(), CancellationToken.None);
+        var result = await controller.GetAccessImportRunLog(Guid.NewGuid(), new AccessImportRunLogListRequest(), CancellationToken.None);
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
@@ -270,14 +289,18 @@ public sealed class ImportControllerTests
         public string? LastFileName { get; private set; }
         public Guid? LastExportRunId { get; private set; }
         public Guid? LastLogRunId { get; private set; }
+        public AccessImportRunListRequest? LastRunRequest { get; private set; }
+        public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
+        public IReadOnlyList<AccessImportRunDto> Runs { get; init; } = [];
         public ImportResult<AccessImportRunDto> DryRunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
         public ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>> LogResult { get; init; } =
             ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success([]);
 
-        public Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(CancellationToken cancellationToken)
+        public Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
         {
-            return Task.FromResult<IReadOnlyList<AccessImportRunDto>>([]);
+            LastRunRequest = request;
+            return Task.FromResult(Runs);
         }
 
         public Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, CancellationToken cancellationToken)
@@ -286,9 +309,10 @@ public sealed class ImportControllerTests
             return Task.FromResult(ExportResult);
         }
 
-        public Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, CancellationToken cancellationToken)
+        public Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)
         {
             LastLogRunId = runId;
+            LastLogRequest = request;
             return Task.FromResult(LogResult);
         }
 

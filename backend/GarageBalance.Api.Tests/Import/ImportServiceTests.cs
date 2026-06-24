@@ -51,10 +51,25 @@ public sealed class ImportServiceTests
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("first.accdb", CreateAccessLikeStream("garage")), null, CancellationToken.None);
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("second.accdb", CreateAccessLikeStream("owner")), null, CancellationToken.None);
 
-        var result = await service.GetAccessImportRunsAsync(CancellationToken.None);
+        var result = await service.GetAccessImportRunsAsync(new AccessImportRunListRequest(), CancellationToken.None);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("second.accdb", result[0].OriginalFileName);
+    }
+
+    [Fact]
+    public async Task GetAccessImportRunsAsync_AppliesLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportService(database.Context);
+        await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("first.accdb", CreateAccessLikeStream("garage")), null, CancellationToken.None);
+        await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("second.accdb", CreateAccessLikeStream("owner")), null, CancellationToken.None);
+        await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("third.accdb", CreateAccessLikeStream("payment")), null, CancellationToken.None);
+
+        var result = await service.GetAccessImportRunsAsync(new AccessImportRunListRequest { Limit = 2 }, CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.DoesNotContain(result, run => run.OriginalFileName == "first.accdb");
     }
 
     [Fact]
@@ -82,7 +97,7 @@ public sealed class ImportServiceTests
         var service = new ImportService(database.Context);
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
 
-        var result = await service.GetAccessImportRunLogEntriesAsync(dryRun.Value!.Id, CancellationToken.None);
+        var result = await service.GetAccessImportRunLogEntriesAsync(dryRun.Value!.Id, new AccessImportRunLogListRequest(), CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.True(result.Value!.Count >= 4);
@@ -94,6 +109,19 @@ public sealed class ImportServiceTests
             Assert.Equal(dryRun.Value.Id, entry.AccessImportRunId);
             Assert.False(string.IsNullOrWhiteSpace(entry.Message));
         });
+    }
+
+    [Fact]
+    public async Task GetAccessImportRunLogEntriesAsync_AppliesLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ImportService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.GetAccessImportRunLogEntriesAsync(dryRun.Value!.Id, new AccessImportRunLogListRequest { Limit = 2 }, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.Count);
     }
 
     [Fact]
@@ -114,7 +142,7 @@ public sealed class ImportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new ImportService(database.Context);
 
-        var result = await service.GetAccessImportRunLogEntriesAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await service.GetAccessImportRunLogEntriesAsync(Guid.NewGuid(), new AccessImportRunLogListRequest(), CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("import_run_not_found", result.ErrorCode);

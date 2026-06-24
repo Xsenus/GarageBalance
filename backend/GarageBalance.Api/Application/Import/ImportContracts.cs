@@ -6,6 +6,18 @@ public sealed record AccessImportDryRunRequest(
     [Required] string FileName,
     [Required] Stream Content);
 
+public sealed record AccessImportRunListRequest
+{
+    [Range(1, 200)]
+    public int Limit { get; init; } = 50;
+}
+
+public sealed record AccessImportRunLogListRequest
+{
+    [Range(1, 500)]
+    public int Limit { get; init; } = 100;
+}
+
 public sealed record AccessImportCheckDto(
     string Code,
     string Title,

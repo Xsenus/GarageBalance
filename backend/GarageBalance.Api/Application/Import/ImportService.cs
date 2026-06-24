@@ -17,17 +17,33 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
         WriteIndented = true
     };
 
-    public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
     {
-        var runs = await dbContext.AccessImportRuns.AsNoTracking().ToListAsync(cancellationToken);
-        return runs
-            .OrderByDescending(run => run.StartedAtUtc)
-            .Take(50)
-            .Select(ToDto)
-            .ToList();
+        var limit = NormalizeLimit(request.Limit, 50, 200);
+        var query = dbContext.AccessImportRuns.AsNoTracking();
+
+        List<AccessImportRun> runs;
+        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
+        {
+            runs = (await query.ToListAsync(cancellationToken))
+                .OrderByDescending(run => run.StartedAtUtc)
+                .ThenByDescending(run => run.Id)
+                .Take(limit)
+                .ToList();
+        }
+        else
+        {
+            runs = await query
+                .OrderByDescending(run => run.StartedAtUtc)
+                .ThenByDescending(run => run.Id)
+                .Take(limit)
+                .ToListAsync(cancellationToken);
+        }
+
+        return runs.Select(ToDto).ToList();
     }
 
-    public async Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, CancellationToken cancellationToken)
+    public async Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)
     {
         var runExists = await dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
         if (!runExists)
@@ -35,6 +51,7 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
         }
 
+        var limit = NormalizeLimit(request.Limit, 100, 500);
         var query = dbContext.AccessImportRunLogEntries
             .AsNoTracking()
             .Where(entry => entry.AccessImportRunId == runId);
@@ -45,6 +62,7 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             entries = (await query.ToListAsync(cancellationToken))
                 .OrderBy(entry => entry.CreatedAtUtc)
                 .ThenBy(entry => entry.Id)
+                .Take(limit)
                 .ToList();
         }
         else
@@ -52,6 +70,7 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             entries = await query
                 .OrderBy(entry => entry.CreatedAtUtc)
                 .ThenBy(entry => entry.Id)
+                .Take(limit)
                 .ToListAsync(cancellationToken);
         }
 
@@ -202,6 +221,16 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             Message = message,
             DetailsJson = JsonSerializer.Serialize(details, JsonOptions)
         });
+    }
+
+    private static int NormalizeLimit(int limit, int defaultLimit, int maxLimit)
+    {
+        if (limit <= 0)
+        {
+            return defaultLimit;
+        }
+
+        return Math.Min(limit, maxLimit);
     }
 
     private static List<AccessImportCheckDto> BuildChecks(string extension, byte[] bytes)
