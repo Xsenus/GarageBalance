@@ -8,9 +8,10 @@
 2. Выполнить `git status --short` и разобрать все изменения.
 3. Проверить, что в индекс попадают только файлы текущей задачи.
 4. Проверить, что `.gitignore` защищает реальные базы, дампы, backup, локальные настройки и приватные импорты.
-5. Выполнить `git ls-files --others --exclude-standard` и убедиться, что приватные файлы не стали untracked-кандидатами для публикации.
-6. Проверить, что история roadmap заполнена: что сделано, зачем, какие проверки пройдены и почему live-проверки могли быть невозможны.
-7. Проверить, что видимое пользователю изменение добавлено в `backend/GarageBalance.Api/AppReleases/releases.json`.
+5. Выполнить `infrastructure/scripts/verify-package-privacy.ps1`, чтобы проверить tracked/untracked Git-кандидаты перед публикацией или архивом поставки.
+6. Выполнить `git ls-files --others --exclude-standard` и убедиться, что приватные файлы не стали untracked-кандидатами для публикации.
+7. Проверить, что история roadmap заполнена: что сделано, зачем, какие проверки пройдены и почему live-проверки могли быть невозможны.
+8. Проверить, что видимое пользователю изменение добавлено в `backend/GarageBalance.Api/AppReleases/releases.json`.
 
 ## 2. Что Нельзя Публиковать
 
@@ -41,6 +42,7 @@
 8. `git diff --check`.
 9. JSON-проверку `backend/GarageBalance.Api/AppReleases/releases.json`.
 10. Строгую проверку UTF-8/no BOM для измененных `.md`, `.json`, `.cs`, `.ts`, `.tsx`, `.css`, `.html`, `.yml`, `.yaml`, `.conf`, `.ps1` и Dockerfile.
+11. `infrastructure/scripts/verify-package-privacy.ps1`.
 
 Если локальный PostgreSQL, `psql` или Docker недоступны, это нужно явно записать в roadmap и финальный ответ. Нельзя писать, что live DB/Docker smoke выполнен, если `postgresTcp=False`, `psql=False` или `docker=False`.
 

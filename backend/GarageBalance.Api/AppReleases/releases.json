@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-package-privacy-check",
+    "version": "0.111.0",
+    "publishedAt": "2026-06-24T15:15:00+07:00",
+    "title": "Добавлена проверка приватных файлов перед передачей",
+    "summary": "Перед будущей публикацией в Git или архивом поставки теперь есть отдельная команда, которая блокирует приватные базы, дампы, backup и секреты.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен infrastructure/scripts/verify-package-privacy.ps1 для проверки tracked и untracked Git-кандидатов."
+      },
+      {
+        "type": "added",
+        "text": "Скрипт блокирует .env, appsettings.Local.json, Access-БД, дампы PostgreSQL, backup-файлы и private/raw import-папки."
+      },
+      {
+        "type": "added",
+        "text": "README и checklist передачи проекта в Git дополнены обязательным запуском privacy-проверки."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-additional-report-slots",
     "version": "0.110.0",
     "publishedAt": "2026-06-24T14:45:00+07:00",
