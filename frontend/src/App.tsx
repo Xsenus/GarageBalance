@@ -2199,7 +2199,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <DatabaseZap size={16} />
             <span>Проверить файл</span>
           </button>
-          {selectedFile ? <p className="empty-state" aria-live="polite">{selectedFile.name}</p> : null}
+          {selectedFile ? <p className="empty-state" role="status" aria-live="polite">{selectedFile.name}</p> : null}
         </form>
 
         <div className="dictionary-form">
@@ -2210,7 +2210,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
           </button>
           {currentRun ? (
             <>
-              <p className="empty-state" aria-live="polite">{currentRun.originalFileName} · {formatImportRunCheckSummary(currentRun)}</p>
+              <p className="empty-state" role="status" aria-live="polite">{currentRun.originalFileName} · {formatImportRunCheckSummary(currentRun)}</p>
               <div className="summary-strip" aria-label="Итоги dry-run импорта">
                 <div>
                   <span>Статус</span>

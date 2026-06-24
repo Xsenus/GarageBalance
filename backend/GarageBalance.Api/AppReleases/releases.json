@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-access-import-selection-status-role",
+    "version": "0.174.0",
+    "publishedAt": "2026-06-24T18:18:01+07:00",
+    "title": "Выбор импорта Access стал статусом",
+    "summary": "Выбранный Access-файл и текущий dry-run теперь размечаются как статусы панели импорта.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Имя выбранного .accdb/.mdb файла и строка текущего dry-run получили role=\"status\" вместе с aria-live=\"polite\"."
+      },
+      {
+        "type": "fixed",
+        "text": "React-тест импорта Access проверяет семантику статуса у выбранного файла и активного dry-run."
+      },
+      {
+        "type": "important",
+        "text": "Администратор понятнее видит, какой файл и какой результат проверки сейчас активны."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-tariff-draft-status-role",
     "version": "0.173.0",
     "publishedAt": "2026-06-24T18:11:59+07:00",

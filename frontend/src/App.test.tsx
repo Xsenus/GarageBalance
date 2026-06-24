@@ -1434,7 +1434,7 @@ describe('App', () => {
     const file = new File(['garage owner payment'], 'ГСК.accdb', { type: 'application/octet-stream' })
 
     await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
-    expect(await within(importPanel).findByText('ГСК.accdb')).toHaveAttribute('aria-live', 'polite')
+    expect(await within(importPanel).findByText('ГСК.accdb')).toHaveAttribute('role', 'status')
     await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл' }))
 
     expect((await within(importPanel).findAllByText('Dry-run завершен с предупреждениями.')).length).toBeGreaterThan(0)
@@ -1455,7 +1455,7 @@ describe('App', () => {
     expect(within(importPanel).getAllByText('Предупреждение').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('Завершен').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('2/3 · 1 предупреждение · 0 ошибок').length).toBeGreaterThan(0)
-    expect(within(importPanel).getByText('ГСК.accdb · 2/3 · 1 предупреждение · 0 ошибок')).toHaveAttribute('aria-live', 'polite')
+    expect(within(importPanel).getByText('ГСК.accdb · 2/3 · 1 предупреждение · 0 ошибок')).toHaveAttribute('role', 'status')
     expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
 
     await user.click(within(importPanel).getByRole('button', { name: 'Скачать отчет JSON' }))
