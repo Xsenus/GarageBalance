@@ -3935,7 +3935,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo, 'xlsx'))
       setExportMessage('XLSX по поступлениям готов.')
     } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет по поступлениям.')
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить XLSX по поступлениям.')
     } finally {
       setIncomeExporting(false)
     }
@@ -3996,7 +3996,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo, 'xlsx'))
       setExportMessage('XLSX по выплатам готов.')
     } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет по выплатам.')
+      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить XLSX по выплатам.')
     } finally {
       setExpenseExporting(false)
     }

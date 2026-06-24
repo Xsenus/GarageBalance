@@ -2854,6 +2854,41 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText('Показано 1 из 20 строк')).toHaveAttribute('role', 'status')
   })
 
+  it('shows report export errors without ready status', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient({
+      exportConsolidatedReportXlsx: async () => {
+        throw 'consolidated export failed'
+      },
+      exportIncomeReportXlsx: async () => {
+        throw 'income export failed'
+      },
+      exportExpenseReportXlsx: async () => {
+        throw 'expense export failed'
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный XLSX' }))
+    expect(await within(reportsPanel).findByText('Не удалось выгрузить XLSX по сводному отчету.')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('XLSX по сводному отчету готов.')).not.toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать поступления XLSX' }))
+    expect(await within(reportsPanel).findByText('Не удалось выгрузить XLSX по поступлениям.')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('XLSX по поступлениям готов.')).not.toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'Выплаты')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать выплаты XLSX' }))
+    expect(await within(reportsPanel).findByText('Не удалось выгрузить XLSX по выплатам.')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('XLSX по выплатам готов.')).not.toBeInTheDocument()
+  })
+
   it('shows income report and applies income filters', async () => {
     const user = userEvent.setup()
     let incomeRequest: Parameters<ReportClient['getIncomeReport']>[1] = undefined
