@@ -1568,6 +1568,38 @@ describe('App', () => {
     expect(within(financePanel).getByText('Переплата')).toBeInTheDocument()
   })
 
+  it('edits income operation from payments table', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
+    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '2000')
+    await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-edit')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+
+    const paymentCell = await within(financePanel).findByText('PKO-edit')
+    await user.click(paymentCell.closest('tr')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+
+    await user.clear(within(dialog).getByLabelText('Сумма поступления'))
+    await user.type(within(dialog).getByLabelText('Сумма поступления'), '2400')
+    await user.clear(within(dialog).getByLabelText('Документ поступления'))
+    await user.type(within(dialog).getByLabelText('Документ поступления'), 'PKO-fixed')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument())
+    expect(await within(financePanel).findByText('PKO-fixed')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('2 400,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).queryByText('PKO-edit')).not.toBeInTheDocument()
+  })
+
   it('does not call finance APIs when payment forms fail client validation', async () => {
     const user = userEvent.setup()
     const financeCalls = {
@@ -3330,6 +3362,44 @@ function createStatefulFinanceClient(): FinanceClient {
 
       operations = operations.filter((item) => item.id !== operationId)
       return { ...operation, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
+    updateIncome: async (_token, operationId, request) => {
+      const operation = operations.find((item) => item.id === operationId && item.operationKind === 'income')
+      if (!operation) {
+        throw new Error('Поступление не найдено.')
+      }
+
+      const updated = {
+        ...operation,
+        garageId: request.garageId,
+        incomeTypeId: request.incomeTypeId,
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        documentNumber: request.documentNumber ?? null,
+        garageDebtAfter: operation.garageDebtBefore !== null ? operation.garageDebtBefore - request.amount : operation.garageDebtAfter,
+      }
+      operations = operations.map((item) => (item.id === operationId ? updated : item))
+      return updated
+    },
+    updateExpense: async (_token, operationId, request) => {
+      const operation = operations.find((item) => item.id === operationId && item.operationKind === 'expense')
+      if (!operation) {
+        throw new Error('Выплата не найдена.')
+      }
+
+      const updated = {
+        ...operation,
+        supplierId: request.supplierId,
+        expenseTypeId: request.expenseTypeId,
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        documentNumber: request.documentNumber ?? null,
+        supplierDebtAfter: operation.supplierDebtBefore !== null ? operation.supplierDebtBefore - request.amount : operation.supplierDebtAfter,
+      }
+      operations = operations.map((item) => (item.id === operationId ? updated : item))
+      return updated
     },
     createAccrual: async (_token, request) => {
       const accrual = createAccrual({

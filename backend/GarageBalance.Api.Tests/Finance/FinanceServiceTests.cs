@@ -327,6 +327,42 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateIncomeAsync_UpdatesOperationAndWritesBeforeAfterAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "manual", "Начисление месяца"),
+            null,
+            CancellationToken.None);
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 300m, "PKO-old", null),
+            null,
+            CancellationToken.None);
+        var actorUserId = Guid.NewGuid();
+
+        var updated = await service.UpdateIncomeAsync(
+            created.Value!.Id,
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 450m, "PKO-new", "Исправлена сумма"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Equal(450m, updated.Value!.Amount);
+        Assert.Equal("PKO-new", updated.Value.DocumentNumber);
+        Assert.Equal(1000m, updated.Value.GarageDebtBefore);
+        Assert.Equal(550m, updated.Value.GarageDebtAfter);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("было 300,00 по гаражу 12 от 19.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ PKO-old", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 450,00 по гаражу 12 от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ PKO-new", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Исправлена сумма", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CancelOperationAsync_CancelsOperationAndRemovesItFromSummary()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -480,6 +516,44 @@ public sealed class FinanceServiceTests
         Assert.Equal(1, await database.Context.FinancialOperations.CountAsync(operation => operation.IsCanceled));
         var activeOperation = Assert.Single(await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None));
         Assert.Equal(350m, activeOperation.Amount);
+    }
+
+    [Fact]
+    public async Task UpdateExpenseAsync_UpdatesOperationAndWritesBeforeAfterAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        fixtures.Supplier.StartingBalance = 300m;
+        await database.Context.SaveChangesAsync();
+        await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 900m, "manual", "INV-update", "Счет месяца"),
+            null,
+            CancellationToken.None);
+        var created = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 250m, "RKO-old", null),
+            null,
+            CancellationToken.None);
+        var actorUserId = Guid.NewGuid();
+
+        var updated = await service.UpdateExpenseAsync(
+            created.Value!.Id,
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 400m, "RKO-new", "Исправлена выплата"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Equal(400m, updated.Value!.Amount);
+        Assert.Equal("RKO-new", updated.Value.DocumentNumber);
+        Assert.Equal(1200m, updated.Value.SupplierDebtBefore);
+        Assert.Equal(800m, updated.Value.SupplierDebtAfter);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("было 250,00 поставщику Vodokanal от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ RKO-old", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 400,00 поставщику Vodokanal от 21.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ RKO-new", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Исправлена выплата", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

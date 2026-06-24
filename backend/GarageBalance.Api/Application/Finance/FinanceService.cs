@@ -317,6 +317,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        var previousSnapshot = FormatIncomeOperationSnapshot(operation);
         operation.OperationDate = request.OperationDate;
         operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
         operation.Amount = MoneyMath.RoundMoney(request.Amount);
@@ -327,7 +328,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         operation.IncomeTypeId = incomeType.Id;
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.income_updated", operation.Id, FormatIncomeUpdatedAuditSummary(operation));
+        AddAudit(actorUserId, "finance.income_updated", operation.Id, FormatIncomeUpdatedAuditSummary(previousSnapshot, operation));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -370,6 +371,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        var previousSnapshot = FormatExpenseOperationSnapshot(operation);
         operation.OperationDate = request.OperationDate;
         operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
         operation.Amount = MoneyMath.RoundMoney(request.Amount);
@@ -380,7 +382,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         operation.ExpenseTypeId = expenseType.Id;
         operation.ExpenseType = expenseType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.expense_updated", operation.Id, FormatExpenseUpdatedAuditSummary(operation));
+        AddAudit(actorUserId, "finance.expense_updated", operation.Id, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -1126,38 +1128,44 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 
     private static string FormatIncomeCreatedAuditSummary(FinancialOperation operation)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
-        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         var comment = NormalizeOptional(operation.Comment);
-        var summary = $"Создано поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}.";
+        var summary = $"Создано поступление {FormatIncomeOperationSnapshot(operation)}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
-    private static string FormatIncomeUpdatedAuditSummary(FinancialOperation operation)
+    private static string FormatIncomeUpdatedAuditSummary(string previousSnapshot, FinancialOperation operation)
+    {
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Изменено поступление: было {previousSnapshot}; стало {FormatIncomeOperationSnapshot(operation)}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatIncomeOperationSnapshot(FinancialOperation operation)
     {
         var amount = operation.Amount.ToString("0.00", RussianCulture);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
-        var comment = NormalizeOptional(operation.Comment);
-        var summary = $"Изменено поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}.";
-        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+        return $"{amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}";
     }
 
     private static string FormatExpenseCreatedAuditSummary(FinancialOperation operation)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
-        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         var comment = NormalizeOptional(operation.Comment);
-        var summary = $"Создана выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
+        var summary = $"Создана выплата {FormatExpenseOperationSnapshot(operation)}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
-    private static string FormatExpenseUpdatedAuditSummary(FinancialOperation operation)
+    private static string FormatExpenseUpdatedAuditSummary(string previousSnapshot, FinancialOperation operation)
+    {
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Изменена выплата: было {previousSnapshot}; стало {FormatExpenseOperationSnapshot(operation)}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatExpenseOperationSnapshot(FinancialOperation operation)
     {
         var amount = operation.Amount.ToString("0.00", RussianCulture);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
-        var comment = NormalizeOptional(operation.Comment);
-        var summary = $"Изменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
-        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+        return $"{amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}";
     }
 
     private static string FormatOperationCanceledAuditSummary(FinancialOperation operation, string reason)
