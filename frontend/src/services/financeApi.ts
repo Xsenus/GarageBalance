@@ -110,6 +110,27 @@ export type MissingMeterReadingDto = {
   accountingMonth: string
 }
 
+export type GarageBalanceHistoryRowDto = {
+  accountingMonth: string
+  openingDebt: number
+  accrualAmount: number
+  incomeAmount: number
+  closingDebt: number
+}
+
+export type GarageBalanceHistoryDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  monthFrom: string
+  monthTo: string
+  startingBalance: number
+  accrualTotal: number
+  incomeTotal: number
+  debt: number
+  rows: GarageBalanceHistoryRowDto[]
+}
+
 export type CreateIncomeOperationRequest = {
   garageId: string
   incomeTypeId: string
@@ -214,6 +235,7 @@ export type FinanceClient = {
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }): Promise<MissingMeterReadingDto[]>
+  getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
   getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -339,6 +361,12 @@ export const financeApi: FinanceClient = {
       meterKind: params.meterKind,
       search: params.search,
       limit: params.limit,
+    }))
+  },
+  getGarageBalanceHistory(accessToken, garageId, params = {}) {
+    return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/balance-history`, {
+      monthFrom: toMonthStart(params.monthFrom),
+      monthTo: toMonthStart(params.monthTo),
     }))
   },
   getSummary(accessToken, params = {}) {

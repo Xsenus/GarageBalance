@@ -12,6 +12,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private const int MaxBalanceHistoryMonths = 60;
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -162,6 +163,85 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
                     month)))
             .Take(limit)
             .ToList();
+    }
+
+    public async Task<FinanceResult<GarageBalanceHistoryDto>> GetGarageBalanceHistoryAsync(Guid garageId, GarageBalanceHistoryRequest request, CancellationToken cancellationToken)
+    {
+        var defaultMonthTo = MonthPeriod.CurrentLocalMonth();
+        var monthTo = MonthPeriod.Normalize(request.MonthTo ?? defaultMonthTo);
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? monthTo.AddMonths(-5));
+        if (monthFrom > monthTo)
+        {
+            return FinanceResult<GarageBalanceHistoryDto>.Failure("balance_history_period_invalid", "Дата начала истории баланса не может быть позже даты окончания.");
+        }
+
+        var monthCount = ((monthTo.Year - monthFrom.Year) * 12) + monthTo.Month - monthFrom.Month + 1;
+        if (monthCount > MaxBalanceHistoryMonths)
+        {
+            return FinanceResult<GarageBalanceHistoryDto>.Failure("balance_history_period_too_large", $"Историю баланса можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
+        }
+
+        var garage = await dbContext.Garages.AsNoTracking()
+            .Include(item => item.Owner)
+            .SingleOrDefaultAsync(item => item.Id == garageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<GarageBalanceHistoryDto>.Failure("garage_not_found", "Гараж для истории баланса не найден.");
+        }
+
+        var previousAccrualTotal = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < monthFrom)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.AccountingMonth < monthFrom)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+        var accrualBuckets = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth >= monthFrom && accrual.AccountingMonth <= monthTo)
+            .GroupBy(accrual => accrual.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .ToDictionaryAsync(item => item.AccountingMonth, item => item.Amount, cancellationToken);
+        var incomeBuckets = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.AccountingMonth >= monthFrom &&
+                operation.AccountingMonth <= monthTo)
+            .GroupBy(operation => operation.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(operation => operation.Amount) })
+            .ToDictionaryAsync(item => item.AccountingMonth, item => item.Amount, cancellationToken);
+
+        var rows = new List<GarageBalanceHistoryRowDto>(monthCount);
+        var openingDebt = MoneyMath.RoundMoney(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal);
+        var accrualTotal = 0m;
+        var incomeTotal = 0m;
+        for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
+        {
+            var accrualAmount = MoneyMath.RoundMoney(accrualBuckets.GetValueOrDefault(month));
+            var incomeAmount = MoneyMath.RoundMoney(incomeBuckets.GetValueOrDefault(month));
+            var closingDebt = MoneyMath.RoundMoney(openingDebt + accrualAmount - incomeAmount);
+            rows.Add(new GarageBalanceHistoryRowDto(month, openingDebt, accrualAmount, incomeAmount, closingDebt));
+            accrualTotal = MoneyMath.RoundMoney(accrualTotal + accrualAmount);
+            incomeTotal = MoneyMath.RoundMoney(incomeTotal + incomeAmount);
+            openingDebt = closingDebt;
+        }
+
+        var dto = new GarageBalanceHistoryDto(
+            garage.Id,
+            garage.Number,
+            garage.Owner?.FullName,
+            monthFrom,
+            monthTo,
+            garage.StartingBalance,
+            accrualTotal,
+            incomeTotal,
+            rows.Count == 0 ? openingDebt : rows[^1].ClosingDebt,
+            rows);
+        return FinanceResult<GarageBalanceHistoryDto>.Success(dto);
     }
 
     private static int NormalizeListLimit(int? limit)

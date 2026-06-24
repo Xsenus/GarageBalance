@@ -244,6 +244,65 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetGarageBalanceHistoryAsync_ReturnsMonthlyRunningDebt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 100m;
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        Assert.True((await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "regular", null), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200m, "PKO-history-1", null), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 700m, "regular", null), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 20), new DateOnly(2026, 7, 1), 300m, "PKO-history-2", null), null, CancellationToken.None)).Succeeded);
+
+        var result = await service.GetGarageBalanceHistoryAsync(
+            fixtures.Garage.Id,
+            new GarageBalanceHistoryRequest(new DateOnly(2026, 6, 15), new DateOnly(2026, 7, 31)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("12", result.Value!.GarageNumber);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value.MonthFrom);
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value.MonthTo);
+        Assert.Equal(100m, result.Value.StartingBalance);
+        Assert.Equal(1200m, result.Value.AccrualTotal);
+        Assert.Equal(500m, result.Value.IncomeTotal);
+        Assert.Equal(800m, result.Value.Debt);
+        Assert.Collection(
+            result.Value.Rows,
+            first =>
+            {
+                Assert.Equal(new DateOnly(2026, 6, 1), first.AccountingMonth);
+                Assert.Equal(100m, first.OpeningDebt);
+                Assert.Equal(500m, first.AccrualAmount);
+                Assert.Equal(200m, first.IncomeAmount);
+                Assert.Equal(400m, first.ClosingDebt);
+            },
+            second =>
+            {
+                Assert.Equal(new DateOnly(2026, 7, 1), second.AccountingMonth);
+                Assert.Equal(400m, second.OpeningDebt);
+                Assert.Equal(700m, second.AccrualAmount);
+                Assert.Equal(300m, second.IncomeAmount);
+                Assert.Equal(800m, second.ClosingDebt);
+            });
+    }
+
+    [Fact]
+    public async Task GetGarageBalanceHistoryAsync_ReturnsFailureForMissingGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.GetGarageBalanceHistoryAsync(Guid.NewGuid(), new GarageBalanceHistoryRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("garage_not_found", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -1641,6 +1641,55 @@ button.operation-row:hover {
   padding: 18px;
 }
 
+.garage-balance-dialog {
+  width: min(920px, 100%);
+}
+
+.balance-history-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.balance-history-filters label {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.balance-history-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.balance-history-summary div {
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.balance-history-summary span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.balance-history-summary strong {
+  color: #101828;
+  font-size: 16px;
+}
+
+.garage-balance-table-scroll {
+  max-height: 360px;
+}
+
 .detail-dialog-header {
   display: flex;
   align-items: flex-start;

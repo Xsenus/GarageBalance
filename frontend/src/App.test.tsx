@@ -4,7 +4,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -1234,6 +1234,48 @@ describe('App', () => {
     })
     expect(await within(dictionaryPanel).findByText('12')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('21')).toBeInTheDocument()
+  })
+
+  it('opens garage balance history from dictionaries context menu', async () => {
+    const user = userEvent.setup()
+    let requestedGarageId: string | null = null
+    let requestedPeriod: { monthFrom?: string; monthTo?: string } | null = null
+    const history = createGarageBalanceHistory({
+      garageId: 'garage-1',
+      rows: [
+        { accountingMonth: '2026-06-01', openingDebt: 100, accrualAmount: 500, incomeAmount: 200, closingDebt: 400 },
+        { accountingMonth: '2026-07-01', openingDebt: 400, accrualAmount: 700, incomeAmount: 300, closingDebt: 800 },
+      ],
+    })
+    const financeClient = createFinanceClient({
+      getGarageBalanceHistory: async (_token, garageId, params) => {
+        requestedGarageId = garageId
+        requestedPeriod = params ?? null
+        return history
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+
+    fireEvent.contextMenu(within(dictionaryPanel).getByText('12').closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'История баланса' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
+    expect(within(dialog).getByText('История баланса')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Начислено').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(/1\s200,00/)).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Поступило').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('500,00').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText('07.2026')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('800,00').length).toBeGreaterThan(0)
+    expect(requestedGarageId).toBe('garage-1')
+    expect(requestedPeriod?.monthFrom).toMatch(/^\d{4}-\d{2}$/)
+    expect(requestedPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
   })
 
   it('searches suppliers by name or inn from dictionaries workspace', async () => {
@@ -3105,6 +3147,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
   const supplierAccrual = createSupplierAccrual({ id: 'supplier-accrual-1', amount: 650 })
   const meterReading = createMeterReading({ id: 'meter-reading-1', consumption: 5.5, currentValue: 15.5, previousValue: 10 })
   const missingMeterReading = createMissingMeterReading({})
+  const garageBalanceHistory = createGarageBalanceHistory({})
 
   const client: FinanceClient = {
     getOperations: async () => [operation],
@@ -3116,6 +3159,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getMeterReadings: async () => [meterReading],
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getMissingMeterReadings: async () => [missingMeterReading],
+    getGarageBalanceHistory: async () => garageBalanceHistory,
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
@@ -3826,6 +3870,25 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     supplierDebtAfter: null,
     paymentAllocations: [],
     isCanceled: false,
+    ...overrides,
+  }
+}
+
+function createGarageBalanceHistory(overrides: Partial<GarageBalanceHistoryDto>): GarageBalanceHistoryDto {
+  return {
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    monthFrom: '2026-06-01',
+    monthTo: '2026-07-01',
+    startingBalance: 100,
+    accrualTotal: 1200,
+    incomeTotal: 500,
+    debt: 800,
+    rows: [
+      { accountingMonth: '2026-06-01', openingDebt: 100, accrualAmount: 500, incomeAmount: 200, closingDebt: 400 },
+      { accountingMonth: '2026-07-01', openingDebt: 400, accrualAmount: 700, incomeAmount: 300, closingDebt: 800 },
+    ],
     ...overrides,
   }
 }

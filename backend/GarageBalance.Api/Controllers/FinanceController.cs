@@ -127,6 +127,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetMissingMeterReadingsAsync(new MissingMeterReadingListRequest(accountingMonth, meterKind, search, limit), cancellationToken));
     }
 
+    [HttpGet("garages/{garageId:guid}/balance-history")]
+    [ProducesResponseType<GarageBalanceHistoryDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GarageBalanceHistoryDto>> GetGarageBalanceHistory(
+        Guid garageId,
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetGarageBalanceHistoryAsync(garageId, new GarageBalanceHistoryRequest(monthFrom, monthTo), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType<FinanceSummaryDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinanceSummaryDto>> GetSummary(

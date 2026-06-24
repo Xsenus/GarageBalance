@@ -26,7 +26,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, PaymentAllocationDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, PaymentAllocationDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -1107,7 +1107,7 @@ function Workspace({
         )
       case 'dictionaries':
         return canReadDictionaries ? (
-          <DictionaryPanelV2 auth={auth} dictionaryClient={dictionaryClient} initialSection="owners" />
+          <DictionaryPanelV2 auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} initialSection="owners" />
         ) : (
           <AccessNotice label="Справочники недоступны" title="Справочники" permission={permissions.dictionariesRead} description="Для просмотра гаражей, владельцев и поставщиков нужно право на чтение справочников." />
         )
@@ -4825,7 +4825,7 @@ function createFallbackPage<TItem>(items: TItem[], offset: number, limit: number
   return { items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit }
 }
 
-function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; initialSection: DictionarySectionKey }) {
+function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; initialSection: DictionarySectionKey }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
@@ -4854,6 +4854,11 @@ function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: A
   const [contextMenu, setContextMenu] = useState<{ section: DictionarySectionKey; item: DictionaryRecord; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<{ section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord } | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
+  const [balanceHistoryGarage, setBalanceHistoryGarage] = useState<GarageDto | null>(null)
+  const [balanceHistory, setBalanceHistory] = useState<GarageBalanceHistoryDto | null>(null)
+  const [balanceHistoryFilters, setBalanceHistoryFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
+  const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false)
+  const [balanceHistoryError, setBalanceHistoryError] = useState<string | null>(null)
   const [ownerForm, setOwnerForm] = useState<UpsertOwnerRequest>({ lastName: '', firstName: '', middleName: '', phone: '', address: '', meterNotes: '' })
   const [ownerGarageLinkForm, setOwnerGarageLinkForm] = useState<OwnerGarageLinkForm>(createEmptyOwnerGarageLinkForm())
   const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
@@ -4866,6 +4871,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: A
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
   const archiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(archiveTarget))
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(archiveTarget))
+  const balanceHistoryCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(balanceHistoryGarage))
+  const balanceHistoryDialogRef = useFocusTrap<HTMLElement>(Boolean(balanceHistoryGarage))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
   const activePage = pages[activeSection]
@@ -4896,6 +4903,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: A
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor), () => closeEditor())
   useEscapeKey(Boolean(archiveTarget), () => setArchiveTarget(null))
+  useEscapeKey(Boolean(balanceHistoryGarage), () => closeBalanceHistory())
 
   useEffect(() => {
     if (!toast) {
@@ -5025,6 +5033,40 @@ function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: A
   function openContextMenu(event: MouseEvent, section: DictionarySectionKey, item: DictionaryRecord) {
     event.preventDefault()
     setContextMenu({ section, item, x: event.clientX, y: event.clientY })
+  }
+
+  async function openBalanceHistory(garage: GarageDto) {
+    const filters = createDefaultGarageBalanceHistoryFilters()
+    setContextMenu(null)
+    setBalanceHistoryGarage(garage)
+    setBalanceHistoryFilters(filters)
+    await loadBalanceHistory(garage.id, filters)
+  }
+
+  function closeBalanceHistory() {
+    setBalanceHistoryGarage(null)
+    setBalanceHistory(null)
+    setBalanceHistoryError(null)
+  }
+
+  async function loadBalanceHistory(garageId = balanceHistoryGarage?.id, filters = balanceHistoryFilters) {
+    if (!garageId) {
+      return
+    }
+
+    setBalanceHistoryLoading(true)
+    setBalanceHistoryError(null)
+    try {
+      const history = await financeClient.getGarageBalanceHistory(auth.accessToken, garageId, filters)
+      setBalanceHistory(history)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось загрузить историю баланса гаража.'
+      setBalanceHistory(null)
+      setBalanceHistoryError(message)
+      showToast(message, 'error')
+    } finally {
+      setBalanceHistoryLoading(false)
+    }
   }
 
   function openEditor(section: DictionarySectionKey, mode: 'create' | 'edit', item?: DictionaryRecord) {
@@ -5570,6 +5612,12 @@ function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: A
             <Plus size={15} />
             <span>Добавить</span>
           </button>
+          {contextMenu.section === 'garages' ? (
+            <button type="button" role="menuitem" onClick={() => void openBalanceHistory(contextMenu.item as GarageDto)}>
+              <FileText size={15} />
+              <span>История баланса</span>
+            </button>
+          ) : null}
           <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => openEditor(contextMenu.section, 'edit', contextMenu.item)}>
             <Save size={15} />
             <span>Изменить</span>
@@ -5581,6 +5629,88 @@ function DictionaryPanelV2({ auth, dictionaryClient, initialSection }: { auth: A
             <Trash2 size={15} />
             <span>Удалить</span>
           </button>
+        </div>
+      ) : null}
+
+      {balanceHistoryGarage ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeBalanceHistory}>
+          <section ref={balanceHistoryDialogRef} className="detail-dialog garage-balance-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-balance-title" aria-describedby="garage-balance-owner" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">История баланса</p>
+                <h3 id="garage-balance-title">Гараж {balanceHistoryGarage.number}</h3>
+                <p id="garage-balance-owner">{balanceHistoryGarage.ownerName ?? 'Владелец не указан'}</p>
+              </div>
+              <button ref={balanceHistoryCloseRef} className="icon-button" type="button" aria-label="Закрыть историю баланса" onClick={closeBalanceHistory}>
+                <X size={18} />
+              </button>
+            </div>
+            <form className="balance-history-filters" onSubmit={(event) => {
+              event.preventDefault()
+              void loadBalanceHistory()
+            }}>
+              <label>
+                Период с
+                <input aria-label="Начало периода истории баланса" type="month" value={balanceHistoryFilters.monthFrom} onChange={(event) => setBalanceHistoryFilters((value) => ({ ...value, monthFrom: event.target.value }))} required />
+              </label>
+              <label>
+                Период по
+                <input aria-label="Конец периода истории баланса" type="month" value={balanceHistoryFilters.monthTo} onChange={(event) => setBalanceHistoryFilters((value) => ({ ...value, monthTo: event.target.value }))} required />
+              </label>
+              <button className="secondary-button" type="submit" disabled={balanceHistoryLoading}>
+                <Search size={16} />
+                <span>{balanceHistoryLoading ? 'Загружаем...' : 'Показать'}</span>
+              </button>
+            </form>
+            {balanceHistoryError ? <FormError>{balanceHistoryError}</FormError> : null}
+            {balanceHistory ? (
+              <>
+                <div className="balance-history-summary" aria-label="Итоги истории баланса">
+                  <div>
+                    <span>Старт</span>
+                    <strong>{formatMoney(balanceHistory.startingBalance)}</strong>
+                  </div>
+                  <div>
+                    <span>Начислено</span>
+                    <strong>{formatMoney(balanceHistory.accrualTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Поступило</span>
+                    <strong>{formatMoney(balanceHistory.incomeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>{formatDebtLabel(balanceHistory.debt)}</span>
+                    <strong className={getDebtClassName(balanceHistory.debt)}>{formatDebtAmount(balanceHistory.debt)}</strong>
+                  </div>
+                </div>
+                <div className="dictionary-table-scroll garage-balance-table-scroll">
+                  <table className="dictionary-data-table" aria-label="История баланса гаража">
+                    <thead>
+                      <tr>
+                        <th>Месяц</th>
+                        <th>Долг на начало</th>
+                        <th>Начислено</th>
+                        <th>Поступило</th>
+                        <th>Долг на конец</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {balanceHistory.rows.map((row) => (
+                        <tr key={row.accountingMonth}>
+                          <td>{formatMonth(row.accountingMonth)}</td>
+                          <td className={getDebtClassName(row.openingDebt)}>{formatDebtAmount(row.openingDebt)}</td>
+                          <td className="money-accrual">{formatMoney(row.accrualAmount)}</td>
+                          <td className="money-income">{formatMoney(row.incomeAmount)}</td>
+                          <td className={getDebtClassName(row.closingDebt)}>{formatDebtAmount(row.closingDebt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {balanceHistory.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
+                </div>
+              </>
+            ) : null}
+          </section>
         </div>
       ) : null}
 
@@ -6542,6 +6672,18 @@ function formatPaymentAllocations(allocations: PaymentAllocationDto[]): string {
   })
   const hiddenCount = allocations.length - visible.length
   return hiddenCount > 0 ? `${visible.join(', ')} и еще ${hiddenCount}` : visible.join(', ')
+}
+
+function createDefaultGarageBalanceHistoryFilters(date = new Date()) {
+  const to = new Date(date.getFullYear(), date.getMonth(), 1)
+  const from = new Date(date.getFullYear(), date.getMonth() - 5, 1)
+  return { monthFrom: formatMonthInputValue(from), monthTo: formatMonthInputValue(to) }
+}
+
+function formatMonthInputValue(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
 }
 
 function createDefaultConsolidatedReportFilters(month: string): ConsolidatedReportFilters {

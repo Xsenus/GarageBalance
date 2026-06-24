@@ -204,6 +204,29 @@ public sealed record MissingMeterReadingListRequest(
     string? Search,
     int? Limit = null);
 
+public sealed record GarageBalanceHistoryRequest(
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo);
+
+public sealed record GarageBalanceHistoryRowDto(
+    DateOnly AccountingMonth,
+    decimal OpeningDebt,
+    decimal AccrualAmount,
+    decimal IncomeAmount,
+    decimal ClosingDebt);
+
+public sealed record GarageBalanceHistoryDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    DateOnly MonthFrom,
+    DateOnly MonthTo,
+    decimal StartingBalance,
+    decimal AccrualTotal,
+    decimal IncomeTotal,
+    decimal Debt,
+    IReadOnlyList<GarageBalanceHistoryRowDto> Rows);
+
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,
     decimal ExpenseTotal,

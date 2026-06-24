@@ -30,6 +30,41 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetGarageBalanceHistory_PassesGarageAndPeriodToService()
+    {
+        var garageId = Guid.NewGuid();
+        var history = CreateGarageBalanceHistory(garageId);
+        var service = new FakeFinanceService
+        {
+            GarageBalanceHistoryResult = FinanceResult<GarageBalanceHistoryDto>.Success(history)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetGarageBalanceHistory(garageId, new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(history, ok.Value);
+        Assert.Equal(garageId, service.LastGarageBalanceHistoryGarageId);
+        Assert.Equal(new DateOnly(2026, 6, 1), service.LastGarageBalanceHistoryRequest?.MonthFrom);
+        Assert.Equal(new DateOnly(2026, 7, 1), service.LastGarageBalanceHistoryRequest?.MonthTo);
+    }
+
+    [Fact]
+    public async Task GetGarageBalanceHistory_ReturnsNotFoundForMissingGarage()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            GarageBalanceHistoryResult = FinanceResult<GarageBalanceHistoryDto>.Failure("garage_not_found", "Гараж не найден.")
+        });
+
+        var result = await controller.GetGarageBalanceHistory(Guid.NewGuid(), new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("garage_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -498,6 +533,24 @@ public sealed class FinanceControllerTests
             []);
     }
 
+    private static GarageBalanceHistoryDto CreateGarageBalanceHistory(Guid garageId)
+    {
+        return new GarageBalanceHistoryDto(
+            garageId,
+            "12",
+            "Иванов Иван",
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 7, 1),
+            100m,
+            1200m,
+            500m,
+            800m,
+            [
+                new GarageBalanceHistoryRowDto(new DateOnly(2026, 6, 1), 100m, 500m, 200m, 400m),
+                new GarageBalanceHistoryRowDto(new DateOnly(2026, 7, 1), 400m, 700m, 300m, 800m)
+            ]);
+    }
+
     private sealed class FakeFinanceService : IFinanceService
     {
         public Guid? LastActorUserId { get; private set; }
@@ -505,12 +558,15 @@ public sealed class FinanceControllerTests
         public Guid? LastCanceledAccrualId { get; private set; }
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
+        public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
         public AccrualListRequest? LastAccrualListRequest { get; private set; }
         public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
         public MissingMeterReadingListRequest? LastMissingMeterReadingListRequest { get; private set; }
+        public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
+        public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -580,6 +636,13 @@ public sealed class FinanceControllerTests
         {
             LastMissingMeterReadingListRequest = request;
             return Task.FromResult<IReadOnlyList<MissingMeterReadingDto>>([]);
+        }
+
+        public Task<FinanceResult<GarageBalanceHistoryDto>> GetGarageBalanceHistoryAsync(Guid garageId, GarageBalanceHistoryRequest request, CancellationToken cancellationToken)
+        {
+            LastGarageBalanceHistoryGarageId = garageId;
+            LastGarageBalanceHistoryRequest = request;
+            return Task.FromResult(GarageBalanceHistoryResult);
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
