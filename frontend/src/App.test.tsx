@@ -2751,17 +2751,25 @@ describe('App', () => {
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
-    expect(await within(reportsPanel).findByText('Помесячных строк отчета пока нет')).toHaveAttribute('role', 'status')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')).toHaveAttribute('role', 'status')
+    const emptyMonthlyRowsState = await within(reportsPanel).findByText('Помесячных строк отчета пока нет')
+    const emptyGarageRowsState = await within(reportsPanel).findByText('По выбранному фильтру гаражей нет')
+    for (const state of [emptyMonthlyRowsState, emptyGarageRowsState]) {
+      expect(state).toHaveAttribute('role', 'status')
+      expect(state).toHaveAttribute('aria-live', 'polite')
+    }
     expect(within(within(reportsPanel).getByRole('table', { name: 'Помесячный отчет' })).queryByText(/Июнь 2026/)).not.toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).queryByText(/Иванов Иван/)).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Поступления')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')).toHaveAttribute('role', 'status')
+    const emptyIncomeRowsState = await within(reportsPanel).findByText('По выбранному фильтру поступлений нет')
+    expect(emptyIncomeRowsState).toHaveAttribute('role', 'status')
+    expect(emptyIncomeRowsState).toHaveAttribute('aria-live', 'polite')
     expect(within(reportsPanel).queryByText(/PKO-1/)).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Выплаты')
-    expect(await within(reportsPanel).findByText('По выбранному фильтру выплат нет')).toHaveAttribute('role', 'status')
+    const emptyExpenseRowsState = await within(reportsPanel).findByText('По выбранному фильтру выплат нет')
+    expect(emptyExpenseRowsState).toHaveAttribute('role', 'status')
+    expect(emptyExpenseRowsState).toHaveAttribute('aria-live', 'polite')
     expect(within(reportsPanel).queryByText(/RKO-1/)).not.toBeInTheDocument()
   })
 
