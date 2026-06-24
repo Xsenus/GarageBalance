@@ -654,7 +654,9 @@ describe('App', () => {
     const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
     expect(await within(ownerForm as HTMLElement).findByText('Владелец1 Тест')).toBeInTheDocument()
-    expect(within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')).toHaveAttribute('aria-live', 'polite')
+    const compactCounter = within(ownerForm as HTMLElement).getByText('Показано 5 из 6 записей')
+    expect(compactCounter).toHaveAttribute('role', 'status')
+    expect(compactCounter).toHaveAttribute('aria-live', 'polite')
     expect(within(ownerForm as HTMLElement).queryByText('Владелец6 Тест')).not.toBeInTheDocument()
     const compactList = within(ownerForm as HTMLElement).getByRole('list')
     const expandButton = within(ownerForm as HTMLElement).getByRole('button', { name: 'Показать все записи' })
@@ -662,7 +664,9 @@ describe('App', () => {
     expect(expandButton).toHaveAttribute('aria-controls', compactList.id)
 
     await user.click(expandButton)
-    expect(within(ownerForm as HTMLElement).getByText('Показано 6 из 6 записей')).toHaveAttribute('aria-live', 'polite')
+    const expandedCounter = within(ownerForm as HTMLElement).getByText('Показано 6 из 6 записей')
+    expect(expandedCounter).toHaveAttribute('role', 'status')
+    expect(expandedCounter).toHaveAttribute('aria-live', 'polite')
     expect(within(ownerForm as HTMLElement).getByText('Владелец6 Тест')).toBeInTheDocument()
     const collapseButton = within(ownerForm as HTMLElement).getByRole('button', { name: 'Свернуть список' })
     expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
@@ -685,7 +689,9 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     const ownerForm = within(dictionaryPanel).getByLabelText('Фамилия владельца').closest('form')!
 
-    expect(await within(ownerForm as HTMLElement).findByText('Владельцев пока нет')).toHaveAttribute('aria-live', 'polite')
+    const emptyDictionaryState = await within(ownerForm as HTMLElement).findByText('Владельцев пока нет')
+    expect(emptyDictionaryState).toHaveAttribute('role', 'status')
+    expect(emptyDictionaryState).toHaveAttribute('aria-live', 'polite')
   })
 
   it('requests bounded dictionary lists from dictionaries workspace', async () => {
