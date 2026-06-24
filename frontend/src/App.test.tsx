@@ -2625,6 +2625,50 @@ describe('App', () => {
     })
   })
 
+  it('passes consolidated report search filter to XLSX and PDF exports', async () => {
+    const user = userEvent.setup()
+    let consolidatedRequest: Parameters<ReportClient['getConsolidatedReport']>[1] = undefined
+    let consolidatedXlsxRequest: Parameters<ReportClient['exportConsolidatedReportXlsx']>[1] = undefined
+    let consolidatedPdfRequest: Parameters<ReportClient['exportConsolidatedReportPdf']>[1] = undefined
+    const reportClient = createReportClient({
+      getConsolidatedReport: async (_token, params) => {
+        consolidatedRequest = params
+        return createConsolidatedReport()
+      },
+      exportConsolidatedReportXlsx: async (_token, params) => {
+        consolidatedXlsxRequest = params
+        return new Blob(['consolidated xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      },
+      exportConsolidatedReportPdf: async (_token, params) => {
+        consolidatedPdfRequest = params
+        return new Blob(['consolidated pdf'], { type: 'application/pdf' })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    await user.clear(within(reportsPanel).getByLabelText('Поиск в отчете'))
+    await user.type(within(reportsPanel).getByLabelText('Поиск в отчете'), '21')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Сформировать' }))
+
+    await waitFor(() => {
+      expect(consolidatedRequest?.search).toBe('21')
+    })
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный XLSX' }))
+    expect(await within(reportsPanel).findByText('XLSX по сводному отчету готов.')).toHaveAttribute('role', 'status')
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать сводный PDF' }))
+    expect(await within(reportsPanel).findByText('PDF по сводному отчету готов.')).toHaveAttribute('role', 'status')
+
+    expect(consolidatedXlsxRequest?.search).toBe('21')
+    expect(consolidatedPdfRequest?.search).toBe('21')
+  })
+
   it('shows visible row counters for truncated report tables', async () => {
     const user = userEvent.setup()
     const garageRows = Array.from({ length: 13 }, (_, index) => ({

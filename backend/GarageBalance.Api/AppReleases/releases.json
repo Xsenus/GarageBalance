@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-consolidated-export-ui-filter-test",
+    "version": "0.222.0",
+    "publishedAt": "2026-06-25T05:55:00+07:00",
+    "title": "Сводная выгрузка берет текущий поиск",
+    "summary": "Интерфейс отчетов теперь тестом закрепляет передачу текущего поиска сводного отчета в XLSX/PDF-экспорт.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "React-тест вводит поиск в сводном отчете, формирует отчет и проверяет, что XLSX-экспорт получает этот же `search`."
+      },
+      {
+        "type": "fixed",
+        "text": "Тот же сценарий закреплен для PDF-экспорта сводного отчета."
+      },
+      {
+        "type": "improved",
+        "text": "README и roadmap уточняют, что связка экранного фильтра и выгрузки покрыта backend- и frontend-тестами."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-consolidated-export-search-filter-tests",
     "version": "0.221.0",
     "publishedAt": "2026-06-25T05:45:00+07:00",
