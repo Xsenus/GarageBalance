@@ -34,7 +34,15 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value.AccountingMonth);
         Assert.Equal("12", result.Value.GarageNumber);
         Assert.Equal("Членский взнос", result.Value.IncomeTypeName);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.income_created" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Создано поступление 1500,50", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("от 19.06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("вид Членский взнос", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ PKO-19", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Авансовый платеж", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -232,6 +240,42 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_not_found", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_CreatesOperationAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 15),
+                400.75m,
+                "RKO-20",
+                "Оплата воды"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("expense", result.Value!.OperationKind);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value.AccountingMonth);
+        Assert.Equal("Vodokanal", result.Value.SupplierName);
+        Assert.Equal("Вода", result.Value.ExpenseTypeName);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Создана выплата 400,75", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("от 20.06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("вид Вода", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ RKO-20", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Оплата воды", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

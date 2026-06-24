@@ -119,7 +119,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         };
 
         dbContext.FinancialOperations.Add(operation);
-        AddAudit(actorUserId, "finance.income_created", operation.Id, $"Создано поступление {operation.Amount:N2} по гаражу {garage.Number}.");
+        AddAudit(actorUserId, "finance.income_created", operation.Id, FormatIncomeCreatedAuditSummary(operation));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -159,7 +159,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         };
 
         dbContext.FinancialOperations.Add(operation);
-        AddAudit(actorUserId, "finance.expense_created", operation.Id, $"Создана выплата {operation.Amount:N2} поставщику {supplier.Name}.");
+        AddAudit(actorUserId, "finance.expense_created", operation.Id, FormatExpenseCreatedAuditSummary(operation));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -571,6 +571,24 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return userComment is null
             ? $"Автоначисление; {snapshot}."
             : $"{userComment}; {snapshot}.";
+    }
+
+    private static string FormatIncomeCreatedAuditSummary(FinancialOperation operation)
+    {
+        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Создано поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
+    }
+
+    private static string FormatExpenseCreatedAuditSummary(FinancialOperation operation)
+    {
+        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Создана выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
     private static string FormatAccrualCreatedAuditSummary(Accrual accrual)
