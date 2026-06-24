@@ -2116,6 +2116,24 @@ describe('App', () => {
     expect(await within(releasePanel).findByText('Пока нет опубликованных изменений.')).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('announces release notes loading status for authenticated users', async () => {
+    const user = userEvent.setup()
+    let resolveReleases: (releases: AppReleaseDto[]) => void = () => {}
+    const releasePromise = new Promise<AppReleaseDto[]>((resolve) => {
+      resolveReleases = resolve
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => releasePromise })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    expect(await within(releasePanel).findByText('Загружаем историю обновлений...')).toHaveAttribute('aria-live', 'polite')
+
+    resolveReleases([createAppRelease()])
+    expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
+  })
+
   it('shows workspace loading errors inside the related panel', async () => {
     const user = userEvent.setup()
     render(

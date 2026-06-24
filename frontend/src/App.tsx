@@ -1083,7 +1083,7 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
         <span>{releases.length} версий</span>
       </div>
 
-      {loading ? <p className="muted">Загружаем историю обновлений...</p> : null}
+      {loading ? <p className="muted" aria-live="polite">Загружаем историю обновлений...</p> : null}
       {error ? <FormError>{error}</FormError> : null}
       {!loading && !error && releases.length === 0 ? <p className="muted" aria-live="polite">Пока нет опубликованных изменений.</p> : null}
 
