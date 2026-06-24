@@ -77,6 +77,32 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_AppliesLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        for (var index = 0; index < 4; index++)
+        {
+            database.Context.AuditEvents.Add(new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 20 + index, 10, 0, 0, TimeSpan.Zero),
+                Action = $"audit.event_{index + 1}",
+                EntityType = "audit_event",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = $"Событие {index + 1}."
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null, 2), CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("audit.event_4", result[0].Action);
+        Assert.Equal("audit.event_3", result[1].Action);
+    }
+
+    [Fact]
     public async Task GetEventsAsync_MasksSensitiveValuesInSummaryAndEntityId()
     {
         await using var database = await TestDatabase.CreateAsync();

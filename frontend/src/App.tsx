@@ -613,6 +613,7 @@ const reportFilterStorageKeys = {
 } as const
 const garageReportScreenRowLimit = 12
 const reportScreenRowLimit = 16
+const auditScreenRequestLimit = 50
 
 type NavigationItem = {
   label: string
@@ -2343,7 +2344,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       setLoading(true)
       setError(null)
       try {
-        const loadedEvents = await auditClient.getEvents(auth.accessToken, { search })
+        const loadedEvents = await auditClient.getEvents(auth.accessToken, { search, limit: auditScreenRequestLimit })
         if (!ignore) {
           setEvents(loadedEvents)
         }

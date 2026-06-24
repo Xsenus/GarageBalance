@@ -17,9 +17,10 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         [FromQuery] DateTimeOffset? dateTo,
         [FromQuery] string? action,
         [FromQuery] string? search,
+        [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search), cancellationToken));
+        return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit), cancellationToken));
     }
 
     [HttpGet("events/export")]

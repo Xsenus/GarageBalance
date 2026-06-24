@@ -8,15 +8,17 @@ namespace GarageBalance.Api.Application.Audit;
 
 public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditService
 {
-    private const int ListLimit = 100;
+    private const int DefaultListLimit = 100;
+    private const int MaxListLimit = 500;
 
     public async Task<IReadOnlyList<AuditEventDto>> GetEventsAsync(AuditEventListRequest request, CancellationToken cancellationToken)
     {
+        var limit = NormalizeLimit(request.Limit);
         var query = dbContext.AuditEvents.AsNoTracking();
 
         if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
         {
-            return await GetEventsForSqliteAsync(query, request, cancellationToken);
+            return await GetEventsForSqliteAsync(query, request, limit, cancellationToken);
         }
 
         if (request.DateFrom is not null)
@@ -47,7 +49,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
         return await query
             .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Take(ListLimit)
+            .Take(limit)
             .Select(auditEvent => ToDto(auditEvent))
             .ToListAsync(cancellationToken);
     }
@@ -67,6 +69,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
         IQueryable<AuditEvent> query,
         AuditEventListRequest request,
+        int limit,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(request.Action))
@@ -99,7 +102,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
         return events
             .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Take(ListLimit)
+            .Take(limit)
             .Select(ToDto)
             .ToList();
     }
@@ -146,5 +149,15 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         }
 
         return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    }
+
+    private static int NormalizeLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return DefaultListLimit;
+        }
+
+        return Math.Min(limit.Value, MaxListLimit);
     }
 }

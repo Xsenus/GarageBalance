@@ -1463,10 +1463,12 @@ describe('App', () => {
 
     expect(await within(auditPanel).findByText('import.access_dry_run')).toBeInTheDocument()
     expect(auditRequest?.search).toBe('import')
+    expect(auditRequest?.limit).toBe(50)
 
     await user.click(within(auditPanel).getByRole('button', { name: /CSV/ }))
 
     expect(auditExportRequest?.search).toBe('import')
+    expect(auditExportRequest?.limit).toBeUndefined()
     expect(await within(auditPanel).findByText('Audit-журнал CSV готов.')).toBeInTheDocument()
   })
 

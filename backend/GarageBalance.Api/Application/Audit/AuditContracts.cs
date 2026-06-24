@@ -13,7 +13,8 @@ public sealed record AuditEventListRequest(
     DateTimeOffset? DateFrom,
     DateTimeOffset? DateTo,
     string? Action,
-    string? Search);
+    string? Search,
+    int? Limit = null);
 
 public sealed record AuditEventExportDto(
     string FileName,
