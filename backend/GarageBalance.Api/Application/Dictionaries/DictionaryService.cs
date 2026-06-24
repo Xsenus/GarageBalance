@@ -1,3 +1,4 @@
+using System.Globalization;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -514,7 +515,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         };
 
         dbContext.Tariffs.Add(tariff);
-        AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}.");
+        AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {FormatTariffAuditDetails(tariff)}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
@@ -541,7 +542,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         tariff.Comment = NormalizeOptional(request.Comment);
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}.");
+        AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {FormatTariffAuditDetails(tariff)}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
@@ -557,7 +558,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         tariff.IsArchived = true;
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.tariff_archived", "tariff", tariff.Id, $"Архивирован тариф {tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}.");
+        AddAudit(actorUserId, "dictionary.tariff_archived", "tariff", tariff.Id, $"Архивирован тариф {FormatTariffAuditDetails(tariff)}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
@@ -579,6 +580,11 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             EntityId = entityId.ToString(),
             Summary = summary
         });
+    }
+
+    private static string FormatTariffAuditDetails(Tariff tariff)
+    {
+        return $"{tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}, база {tariff.CalculationBase}, ставка {tariff.Rate.ToString("0.####", CultureInfo.InvariantCulture)}";
     }
 
     private static string? NormalizeOptional(string? value)

@@ -388,6 +388,26 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateTariffAsync_WritesAuditWithBaseAndRate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateTariffAsync(
+            new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Вода", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("база meter_water", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("ставка 12.3456", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UpdateTariffAsync_UpdatesTariffAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -407,7 +427,29 @@ public sealed class DictionaryServiceTests
         Assert.Equal(20.5556m, result.Value.Rate);
         Assert.Equal(new DateOnly(2026, 8, 1), result.Value.EffectiveFrom);
         Assert.Equal("После собрания", result.Value.Comment);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_updated" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Вода новая", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("база people", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("ставка 20.5556", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArchiveTariffAsync_WritesAuditWithBaseAndRate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100.5m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
+
+        var result = await service.ArchiveTariffAsync(created.Value!.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_archived");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Мусор", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("база people", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("ставка 100.5", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
