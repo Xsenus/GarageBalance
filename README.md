@@ -49,6 +49,8 @@ npm run check:bundle
 
 `npm run check:bundle` проверяет gzip-бюджет собранных JS/CSS assets: основной JS до 180 KiB, основной CSS до 40 KiB и общий JS/CSS budget до 260 KiB. Если добавляется тяжелая библиотека, превышение должно быть осознанным решением и фиксироваться в roadmap history.
 
+Backend-списки и рабочие журналы должны ограничивать выборку до materialization: production-запросы к пользователям, справочникам, финансам, audit и import используют server-side `Take(...)` перед `ToListAsync(...)`. Это правило закреплено тестом `BackendPerformanceGuardTests`, а provider-specific fallback для SQLite остается явно ограниченным и не должен попадать в PostgreSQL-путь.
+
 Первые рабочие API:
 
 - Публичные endpoints: `GET /health`, `POST /api/auth/bootstrap-admin`, `POST /api/auth/login`; остальные рабочие endpoints требуют JWT и проверку прав через policies.

@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-backend-performance-query-guards",
+    "version": "0.148.0",
+    "publishedAt": "2026-06-24T17:45:00+07:00",
+    "title": "Добавлена проверка быстрых backend-списков",
+    "summary": "Основные рабочие списки API теперь защищены performance-проверкой: сервер должен ограничивать выборку до загрузки данных в память приложения.",
+    "items": [
+      {
+        "type": "important",
+        "text": "Списки пользователей, справочников, финансовых записей, audit и import должны сохранять server-side limit перед загрузкой данных."
+      },
+      {
+        "type": "improved",
+        "text": "Backend-тест контролирует, что production-запросы используют Take перед ToListAsync, а тестовые SQLite-fallback-и остаются явно ограниченными."
+      },
+      {
+        "type": "improved",
+        "text": "Правила разработки и README дополнены performance-гейтом для будущих списков и журналов."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-controller-thinness-guard",
     "version": "0.147.0",
     "publishedAt": "2026-06-24T17:25:00+07:00",

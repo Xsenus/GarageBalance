@@ -140,6 +140,7 @@ Backend performance rules:
 - push filtering, sorting, pagination, and aggregation to PostgreSQL where practical;
 - add indexes for lookup fields such as garage number, owner name, supplier, month, date, payment type, and import identifiers;
 - avoid loading entire tables into memory for reports, search, or balances;
+- keep production list/query endpoints bounded before materialization; if a provider-specific fallback must materialize first for tests, keep the fallback explicitly scoped and keep the production branch server-limited;
 - keep import jobs resumable and observable instead of blocking the UI;
 - add performance-oriented tests or diagnostics for heavy calculations and report queries once real data volume is known.
 
