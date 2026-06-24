@@ -1,0 +1,142 @@
+# Administrator operations guide
+
+Инструкция для администратора GarageBalance: пользователи, роли, безопасность, backup/restore, обновления, health-check и логи. Документ не содержит секретов, паролей, персональных данных и приватных файлов импорта.
+
+## 1. Первый вход
+
+- [ ] Открыть локальный адрес `http://127.0.0.1:5173` или стенд `https://sgk.blagodaty.ru`.
+- [ ] Если база пустая, создать первого администратора через стартовую форму.
+- [ ] Использовать пароль по политике: минимум 8 символов, заглавная буква, строчная буква и цифра.
+- [ ] После входа открыть раздел "Пользователи" и проверить матрицу ролей.
+- [ ] Не создавать общую учетную запись для нескольких сотрудников.
+
+## 2. Роли и права
+
+Системные роли создаются автоматически:
+
+- `administrator` / Администратор: `users.manage`, `dictionaries.read`, `dictionaries.write`, `tariffs.manage`, `payments.read`, `payments.write`, `reports.read`, `import.run`, `app_releases.manage`, `audit.read`.
+- `accountant` / Бухгалтер: `dictionaries.read`, `dictionaries.write`, `tariffs.manage`, `payments.read`, `payments.write`, `reports.read`, `import.run`.
+- `operator` / Оператор: `dictionaries.read`, `payments.read`, `payments.write`.
+- `reports_viewer` / Просмотр отчетов: `dictionaries.read`, `reports.read`.
+
+Правила:
+
+- [ ] Администраторов должно быть минимум двое после первичной настройки.
+- [ ] Последнего активного администратора нельзя отключать или понижать.
+- [ ] Для бухгалтера использовать `accountant`, если сотруднику нужны платежи, тарифы, отчеты и импорт.
+- [ ] Для ежедневного ввода платежей без отчетов использовать `operator`.
+- [ ] Для просмотра отчетов без платежей использовать `reports_viewer`.
+
+## 3. Пользователи
+
+- [ ] Создавать сотрудника только через раздел "Пользователи".
+- [ ] Проверять email, имя, роль и пароль до сохранения.
+- [ ] При увольнении или смене ответственного отключать пользователя, а не удалять историю.
+- [ ] При компрометации доступа выполнить администраторский сброс пароля.
+- [ ] Пользователь может сменить свой пароль в панели "Безопасность аккаунта".
+- [ ] Не отправлять пароли в мессенджерах без отдельного безопасного канала.
+
+## 4. Audit-журнал
+
+- [ ] Открывать audit можно пользователям с `audit.read`.
+- [ ] Проверять события входа, неуспешного входа, смены пароля, создания пользователей, справочников, платежей, импорта и обновлений.
+- [ ] Использовать `GET /api/audit/events` или интерфейс "Audit-журнал".
+- [ ] Для выгрузки использовать `GET /api/audit/events/export`.
+- [ ] Внешнему разработчику передавать только замаскированные события без персональных, финансовых и секретных данных.
+
+## 5. Backup и restore
+
+Перед импортом Access, миграциями и обновлением версии:
+
+```powershell
+.\infrastructure\scripts\backup-postgres.ps1 `
+  -Database garagebalance_local `
+  -HostName 127.0.0.1 `
+  -Port 5432 `
+  -Username garagebalance_local `
+  -BackupDirectory C:\GarageBalance\Backups
+```
+
+- [ ] Проверить, что `.pgdump` создан и больше 0 байт.
+- [ ] Записать имя backup-файла в roadmap history или журнал работ.
+- [ ] Выполнить restore-check в `garagebalance_restore_check`:
+
+```powershell
+.\infrastructure\scripts\restore-postgres.ps1 `
+  -BackupFile C:\GarageBalance\Backups\garagebalance_local-20260624_091500.pgdump `
+  -TargetDatabase garagebalance_restore_check `
+  -DropAndCreate
+```
+
+- [ ] Не восстанавливать backup поверх рабочей базы без отдельного решения.
+- [ ] Для ежедневного backup использовать `register-local-backup-task.ps1`.
+- [ ] Раз в месяц выполнять проверочное восстановление.
+
+## 6. Обновление версии
+
+Перед обновлением открыть `docs/version-update-checklist.md` и выполнить его полностью:
+
+- [ ] `git status --short`.
+- [ ] `dotnet test`.
+- [ ] `npm run test -- --runInBand`.
+- [ ] `npm run build`.
+- [ ] `npm run lint`.
+- [ ] `dotnet format --verify-no-changes`.
+- [ ] Сгенерировать `dotnet tool run dotnet-ef migrations script --idempotent`.
+- [ ] Проверить JSON `backend/GarageBalance.Api/AppReleases/releases.json`.
+- [ ] Проверить UTF-8 no-BOM для измененных файлов.
+- [ ] Убедиться, что "Что нового" содержит запись версии.
+- [ ] Не выполнять `git push` без отдельного разрешения пользователя.
+
+## 7. Health-check
+
+Локальная установка:
+
+```powershell
+curl -fsS http://127.0.0.1:5080/health
+```
+
+VPS:
+
+```bash
+curl -fsS https://sgk.blagodaty.ru/health
+```
+
+- [ ] После перезапуска проверить health endpoint.
+- [ ] Открыть frontend и войти под администратором.
+- [ ] Проверить разделы: пользователи, справочники, платежи, отчеты, импорт, audit, "Что нового".
+- [ ] Проверить, что защищенные разделы без входа недоступны.
+
+## 8. Логи
+
+Локальный Docker:
+
+```powershell
+docker compose logs --tail=200 api
+docker compose logs --tail=200 frontend
+docker compose logs --tail=200 postgres
+```
+
+VPS/systemd:
+
+```bash
+journalctl -u garagebalance-staging.service -n 200 --no-pager
+nginx -t
+tail -n 200 /var/log/nginx/error.log
+```
+
+Правила передачи логов:
+
+- [ ] Не отправлять `.env`, connection string, JWT secret, backup, `.accdb`, `.mdb`.
+- [ ] Перед отправкой логов проверить отсутствие email, токенов, паролей, реквизитов и финансовых деталей.
+- [ ] Если нужна диагностика ошибки пользователя, приложить время, действие, роль пользователя и безопасный фрагмент audit-журнала.
+
+## 9. Если сайт не открывается
+
+- [ ] Проверить health endpoint.
+- [ ] Проверить, запущен ли backend/API.
+- [ ] Проверить доступность PostgreSQL.
+- [ ] Проверить, не заняты ли порты `5080`, `5173`, `5432`.
+- [ ] Проверить `docker compose ps` или `systemctl status garagebalance-staging.service`.
+- [ ] Проверить nginx только через `nginx -t` перед reload.
+- [ ] Если обновление сломало работу, выполнять rollback из `docs/version-update-checklist.md`.

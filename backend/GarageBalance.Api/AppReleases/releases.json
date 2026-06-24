@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-24-admin-operations-guide",
+    "version": "0.102.0",
+    "publishedAt": "2026-06-24T10:45:00+07:00",
+    "title": "Добавлена администраторская инструкция",
+    "summary": "Администратор получил единый проверяемый документ по пользователям, ролям, backup/restore, обновлению, health-check и логам.",
+    "items": [
+      {
+        "type": "added",
+        "text": "Добавлен docs/admin-operations-guide.md с ролями administrator, accountant, operator и reports_viewer."
+      },
+      {
+        "type": "added",
+        "text": "Инструкция описывает управление пользователями, парольную политику, audit-журнал, backup/restore и обновление версии."
+      },
+      {
+        "type": "added",
+        "text": "Отдельно зафиксированы health-check, команды просмотра логов и правила безопасной передачи логов без секретов."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-24-version-update-checklist",
     "version": "0.101.0",
     "publishedAt": "2026-06-24T10:15:00+07:00",
