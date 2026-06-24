@@ -112,6 +112,24 @@ describe('App', () => {
     expect(requestedLimit).toBe(50)
   })
 
+  it('announces empty user and role lists for administrators', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({
+      getUsers: async () => [],
+      getRoles: async () => [],
+    })} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
+    const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
+    const roleTable = within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })
+
+    expect(await within(usersTable).findByText('Пользователей пока нет')).toHaveAttribute('aria-live', 'polite')
+    expect(within(roleTable).getByText('Роли пока не загружены')).toHaveAttribute('aria-live', 'polite')
+  })
+
   it('changes current user password from the workspace', async () => {
     const user = userEvent.setup()
     let passwordRequest: { token: string; currentPassword: string; newPassword: string } | null = null
@@ -1601,6 +1619,31 @@ describe('App', () => {
     expect(await within(auditTable).findByText('Показано 12 из 13 событий')).toHaveAttribute('aria-live', 'polite')
     expect(within(auditTable).getByText('audit.event_12')).toBeInTheDocument()
     expect(within(auditTable).queryByText('audit.event_13')).not.toBeInTheDocument()
+  })
+
+  it('announces empty audit journal for users with audit permission', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      bootstrapAdmin: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [],
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
+
+    expect(await within(auditTable).findByText('Событий пока нет')).toHaveAttribute('aria-live', 'polite')
   })
 
   it('shows consolidated report and applies garage search', async () => {

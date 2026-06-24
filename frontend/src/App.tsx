@@ -2415,7 +2415,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Событие</span>
           <span role="columnheader">Сущность</span>
         </div>
-        {!loading && events.length === 0 ? <p className="empty-state">Событий пока нет</p> : null}
+        {!loading && events.length === 0 ? <p className="empty-state" aria-live="polite">Событий пока нет</p> : null}
         {visibleEvents.map((auditEvent) => (
           <div className="operation-row" role="row" key={auditEvent.id}>
             <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
@@ -3229,7 +3229,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <span role="columnheader">Роли</span>
             <span role="columnheader">Статус</span>
           </div>
-          {users.length === 0 ? <p className="empty-state">Пользователей пока нет</p> : null}
+          {users.length === 0 ? <p className="empty-state" aria-live="polite">Пользователей пока нет</p> : null}
           {visibleUsers.map((user) => (
             <div className="user-table-row" role="row" key={user.id}>
               <span role="cell">
@@ -3269,7 +3269,7 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
             <span role="columnheader" key={group.permission}>{group.label}</span>
           ))}
         </div>
-        {roles.length === 0 ? <p className="empty-state">Роли пока не загружены</p> : null}
+        {roles.length === 0 ? <p className="empty-state" aria-live="polite">Роли пока не загружены</p> : null}
         {roles.map((role) => (
           <div className="role-matrix-row" role="row" key={role.code}>
             <span role="cell">
