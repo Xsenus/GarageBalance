@@ -67,6 +67,7 @@
 .nav-item {
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 10px;
   border-radius: 8px;
@@ -832,6 +833,7 @@ h1 {
 .operation-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.4fr) minmax(160px, 1fr) 110px;
+  min-width: 0;
   gap: 10px;
   align-items: center;
   border-top: 1px solid #e4e7ec;
@@ -850,6 +852,11 @@ h1 {
 
 .operation-row {
   grid-template-columns: 110px minmax(170px, 1fr) 130px;
+}
+
+.user-table-row > *,
+.operation-row > * {
+  min-width: 0;
 }
 
 .operation-row--interactive {
@@ -1153,7 +1160,17 @@ button.operation-row:hover {
     padding: 12px;
   }
 
-  .nav-list,
+  .nav-list {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .nav-item {
+    min-width: 160px;
+  }
+
   .roadmap-grid {
     grid-template-columns: 1fr;
   }
@@ -1166,6 +1183,10 @@ button.operation-row:hover {
   .user-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .operation-list {
+    overflow-x: hidden;
   }
 
   .user-panel strong,
