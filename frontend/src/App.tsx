@@ -604,6 +604,55 @@ function getRegularAccrualValidationErrors(form: GenerateRegularAccrualsRequest)
   return errors
 }
 
+function getRegularAccrualValidationErrorsForCatalog(
+  form: GenerateRegularAccrualsRequest,
+  incomeTypes: AccountingTypeDto[],
+  tariffs: TariffDto[],
+) {
+  const errors = getRegularAccrualValidationErrors(form)
+  const incomeType = incomeTypes.find((item) => item.id === form.incomeTypeId)
+  const tariff = tariffs.find((item) => item.id === form.tariffId)
+
+  if (incomeType && tariff && !isTariffCompatibleWithRegularIncomeType(incomeType, tariff)) {
+    errors.push('Выбранный тариф не подходит для этого вида регулярного начисления.')
+  }
+
+  return errors
+}
+
+function getRegularIncomeTypeCalculationBase(incomeType?: AccountingTypeDto | null) {
+  switch (incomeType?.code?.trim().toLowerCase()) {
+    case 'water':
+      return 'meter_water'
+    case 'trash':
+      return 'people'
+    case 'electricity':
+      return 'meter_electricity'
+    case 'membership':
+    case 'target':
+    case 'entry':
+    case 'connection':
+      return 'fixed'
+    default:
+      return null
+  }
+}
+
+function isTariffCompatibleWithRegularIncomeType(incomeType: AccountingTypeDto, tariff: TariffDto) {
+  const calculationBase = getRegularIncomeTypeCalculationBase(incomeType)
+  return calculationBase === null || tariff.calculationBase === calculationBase
+}
+
+function getCompatibleRegularTariffs(incomeTypeId: string, incomeTypes: AccountingTypeDto[], tariffs: TariffDto[]) {
+  const incomeType = incomeTypes.find((item) => item.id === incomeTypeId)
+  return incomeType ? tariffs.filter((tariff) => isTariffCompatibleWithRegularIncomeType(incomeType, tariff)) : tariffs
+}
+
+function chooseRegularTariffId(incomeTypeId: string, currentTariffId: string, incomeTypes: AccountingTypeDto[], tariffs: TariffDto[]) {
+  const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
+  return compatibleTariffs.some((tariff) => tariff.id === currentTariffId) ? currentTariffId : compatibleTariffs[0]?.id ?? ''
+}
+
 function getMeterReadingValidationErrors(form: CreateMeterReadingRequest) {
   const errors: string[] = []
 
@@ -1342,6 +1391,7 @@ function FinancePanel({
   const visibleAccruals = accruals.slice(0, 8)
   const visibleSupplierAccruals = supplierAccruals.slice(0, 8)
   const visibleMeterReadings = meterReadings.slice(0, 8)
+  const compatibleRegularTariffs = getCompatibleRegularTariffs(regularForm.incomeTypeId, incomeTypes, tariffs)
 
   useEffect(() => {
     let ignore = false
@@ -1376,7 +1426,14 @@ function FinancePanel({
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
-          setRegularForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '', tariffId: value.tariffId || loadedTariffs[0]?.id || '' }))
+          setRegularForm((value) => {
+            const incomeTypeId = value.incomeTypeId || loadedIncomeTypes[0]?.id || ''
+            return {
+              ...value,
+              incomeTypeId,
+              tariffId: chooseRegularTariffId(incomeTypeId, value.tariffId, loadedIncomeTypes, loadedTariffs),
+            }
+          })
           setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
         }
       } catch (caught) {
@@ -1582,7 +1639,7 @@ function FinancePanel({
       accountingMonth: regularForm.accountingMonth,
       comment: regularForm.comment,
     }
-    const errors = getRegularAccrualValidationErrors(request)
+    const errors = getRegularAccrualValidationErrorsForCatalog(request, incomeTypes, tariffs)
     if (errors.length > 0) {
       setError(null)
       setRegularValidationErrors(errors)
@@ -2261,7 +2318,15 @@ function FinancePanel({
     if (section === 'regularAccruals') {
       return (
         <>
-          <select aria-label="Вид регулярного начисления" value={regularForm.incomeTypeId} onChange={(event) => setRegularForm({ ...regularForm, incomeTypeId: event.target.value })} required>
+          <select
+            aria-label="Вид регулярного начисления"
+            value={regularForm.incomeTypeId}
+            onChange={(event) => {
+              const incomeTypeId = event.target.value
+              setRegularForm({ ...regularForm, incomeTypeId, tariffId: chooseRegularTariffId(incomeTypeId, regularForm.tariffId, incomeTypes, tariffs) })
+            }}
+            required
+          >
             <option value="" disabled>
               Выберите вид
             </option>
@@ -2275,7 +2340,7 @@ function FinancePanel({
             <option value="" disabled>
               Выберите тариф
             </option>
-            {tariffs.map((tariff) => (
+            {compatibleRegularTariffs.map((tariff) => (
               <option value={tariff.id} key={tariff.id}>
                 {tariff.name}
               </option>
@@ -2602,7 +2667,15 @@ function FinancePanel({
 
         <form className="dictionary-form" onSubmit={saveRegularAccruals}>
           <h3>Регулярные начисления</h3>
-          <select aria-label="Вид регулярного начисления" value={regularForm.incomeTypeId} onChange={(event) => setRegularForm({ ...regularForm, incomeTypeId: event.target.value })} required>
+          <select
+            aria-label="Вид регулярного начисления"
+            value={regularForm.incomeTypeId}
+            onChange={(event) => {
+              const incomeTypeId = event.target.value
+              setRegularForm({ ...regularForm, incomeTypeId, tariffId: chooseRegularTariffId(incomeTypeId, regularForm.tariffId, incomeTypes, tariffs) })
+            }}
+            required
+          >
             <option value="" disabled>
               Выберите вид
             </option>
@@ -2616,7 +2689,7 @@ function FinancePanel({
             <option value="" disabled>
               Выберите тариф
             </option>
-            {tariffs.map((tariff) => (
+            {compatibleRegularTariffs.map((tariff) => (
               <option value={tariff.id} key={tariff.id}>
                 {tariff.name} · {formatMoney(tariff.rate)}
               </option>

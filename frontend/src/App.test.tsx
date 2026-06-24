@@ -1898,6 +1898,46 @@ describe('App', () => {
     expect(within(dialog).getByText('Начисление за месяц')).toBeInTheDocument()
   })
 
+  it('uses only fixed tariffs for membership regular accruals', async () => {
+    const user = userEvent.setup()
+    let regularRequest: GenerateRegularAccrualsRequest | null = null
+    const incomeType = createAccountingType({ id: 'income-membership', name: 'Членский взнос', code: 'membership', isSystem: true })
+    const waterTariff = createTariff({ id: 'tariff-water', name: 'Вода', calculationBase: 'meter_water', rate: 50, effectiveFrom: '2026-01-01' })
+    const fixedTariff = createTariff({ id: 'tariff-membership', name: 'Членский тариф', calculationBase: 'fixed', rate: 300, effectiveFrom: '2026-01-01' })
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => [waterTariff, fixedTariff],
+    })
+    const financeClient = createFinanceClient({
+      generateRegularAccruals: async (_token, request) => {
+        regularRequest = request
+        return createRegularAccrualGenerationResult({
+          incomeTypeId: request.incomeTypeId,
+          incomeTypeName: incomeType.name,
+          tariffId: request.tariffId,
+          tariffName: fixedTariff.name,
+          createdAccruals: [createAccrual({ incomeTypeId: incomeType.id, incomeTypeName: incomeType.name, tariffId: fixedTariff.id, tariffName: fixedTariff.name, amount: fixedTariff.rate })],
+          totalAmount: fixedTariff.rate,
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tariffSelect = within(financePanel).getByLabelText('Тариф регулярного начисления')
+
+    expect(within(tariffSelect).queryByRole('option', { name: 'Вода · 50,00' })).not.toBeInTheDocument()
+    expect(within(tariffSelect).getByRole('option', { name: 'Членский тариф · 300,00' })).toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('button', { name: 'Создать месяц' }))
+
+    await within(financePanel).findByText('Создано 1, пропущено 0')
+    expect(regularRequest?.incomeTypeId).toBe(incomeType.id)
+    expect(regularRequest?.tariffId).toBe(fixedTariff.id)
+  })
+
   it('creates meter reading and shows calculated consumption', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()

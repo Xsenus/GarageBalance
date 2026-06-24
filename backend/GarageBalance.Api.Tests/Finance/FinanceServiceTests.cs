@@ -815,6 +815,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
         var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
@@ -836,10 +837,33 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_RejectsTariffThatDoesNotMatchIncomeType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("regular_accrual_tariff_mismatch", result.ErrorCode);
+        Assert.Empty(database.Context.Accruals);
+        Assert.Empty(database.Context.AuditEvents.Where(item => item.Action == "finance.regular_accruals_generated"));
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_CalculatesTieredElectricityAmountFromReading()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "electricity";
         var tariff = new Tariff
         {
             Name = "Электроэнергия",
@@ -879,6 +903,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
         var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();

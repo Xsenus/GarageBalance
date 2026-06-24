@@ -713,6 +713,13 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_effective", "Тариф еще не действует в выбранном месяце.");
         }
 
+        if (!IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))
+        {
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                "regular_accrual_tariff_mismatch",
+                "Выбранный тариф не подходит для этого вида регулярного начисления.");
+        }
+
         var garages = await dbContext.Garages
             .Include(garage => garage.Owner)
             .Where(garage => !garage.IsArchived)
@@ -787,6 +794,18 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
             created,
             skipped);
         return FinanceResult<RegularAccrualGenerationResultDto>.Success(result);
+    }
+
+    private static bool IsIncomeTypeCompatibleWithTariff(string? incomeTypeCode, string calculationBase)
+    {
+        return NormalizeIncomeTypeCode(incomeTypeCode) switch
+        {
+            "water" => calculationBase == TariffCalculationBases.MeterWater,
+            "trash" => calculationBase == TariffCalculationBases.People,
+            "electricity" => calculationBase == TariffCalculationBases.MeterElectricity,
+            "membership" or "target" or "entry" or "connection" => calculationBase == TariffCalculationBases.Fixed,
+            _ => true
+        };
     }
 
     public async Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1330,6 +1349,11 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeIncomeTypeCode(string? value)
+    {
+        return NormalizeOptional(value)?.ToLowerInvariant();
     }
 
     private static string AppendCancelReason(string? comment, string reason)
