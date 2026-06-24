@@ -6,6 +6,7 @@ using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Application.Releases;
 using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Application.Security;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
@@ -14,6 +15,7 @@ using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -45,8 +47,17 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordPolicyValidator, PasswordPolicyValidator>();
 builder.Services.AddSingleton<ITokenService, JwtTokenService>();
+builder.Services.AddSingleton<ISensitiveDataProtector, DataProtectionSensitiveDataProtector>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationMiddlewareResultHandler>();
+var dataProtection = builder.Services
+    .AddDataProtection()
+    .SetApplicationName("GarageBalance");
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
 
 builder.Services.AddCors(options =>
 {

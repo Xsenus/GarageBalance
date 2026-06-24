@@ -148,6 +148,8 @@ Audit-журнал перед выдачей в API/UI маскирует чув
 
 JWT-секрет хранится только во внешней конфигурации: для локальной разработки можно использовать `Jwt:SigningKey` из `appsettings.json` или `JWT_SIGNING_KEY` в `.env`, но вне `Development` backend не запустится с примерным `change-this`/`development` ключом, пустым значением или ключом короче 32 UTF-8 байт. Для локального production-like запуска задавайте секрет через переменную окружения `Jwt__SigningKey`, user-secrets или секреты контура размещения.
 
+Для будущих токенов 1C Fresh, фискального оборудования и других чувствительных интеграционных настроек добавлен сервис `ISensitiveDataProtector`: значения сохраняются только как строки с префиксом `gb:protected:v1:` и расшифровываются по отдельному purpose. Ключи ASP.NET Core Data Protection используют application name `GarageBalance`; для production-like стенда можно задать `DataProtection:KeysPath`, чтобы ключи переживали перезапуск контейнера или службы.
+
 API-контракты дополнительно защищены backend-тестом от случайной выдачи секретов: response DTO не должны содержать поля вроде `password`, `passwordHash`, `signingKey`, `secret`, `apiKey` или `token`, кроме штатного `AuthResponse.AccessToken` в ответах входа и создания первого администратора.
 
 API добавляет защитные HTTP-заголовки: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`. Для маршрутов `/api/*` дополнительно выставляется `Cache-Control: no-store, no-cache, max-age=0`, `Pragma: no-cache` и `Expires: 0`, чтобы ответы с персональными и финансовыми данными не сохранялись браузером или прокси.
