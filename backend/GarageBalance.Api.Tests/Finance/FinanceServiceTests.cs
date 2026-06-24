@@ -1190,6 +1190,55 @@ public sealed class FinanceServiceTests
         Assert.Equal(20m, reading.Consumption);
     }
 
+    [Fact]
+    public async Task GetMissingMeterReadingsAsync_ReturnsActiveGaragesWithoutReadingForMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
+        var secondGarage = new Garage { Number = "13", PeopleCount = 2, FloorCount = 1, Owner = secondOwner };
+        var archivedGarage = new Garage { Number = "14", PeopleCount = 1, FloorCount = 1, IsArchived = true };
+        database.Context.AddRange(secondOwner, secondGarage, archivedGarage);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var canceledElectricity = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, null),
+            null,
+            CancellationToken.None);
+        await service.CancelMeterReadingAsync(canceledElectricity.Value!.Id, new CancelFinanceEntryRequest("Ошибочное показание"), null, CancellationToken.None);
+
+        var result = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(new DateOnly(2026, 6, 15), null, null),
+            CancellationToken.None);
+
+        Assert.Equal(3, result.Count);
+        Assert.Contains(result, item => item.GarageNumber == "12" && item.MeterKind == "electricity" && item.AccountingMonth == new DateOnly(2026, 6, 1));
+        Assert.Contains(result, item => item.GarageNumber == "13" && item.MeterKind == "water");
+        Assert.Contains(result, item => item.GarageNumber == "13" && item.MeterKind == "electricity");
+        Assert.DoesNotContain(result, item => item.GarageNumber == "14");
+    }
+
+    [Fact]
+    public async Task GetMissingMeterReadingsAsync_FiltersByKindSearchAndLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), "water", "12", 1),
+            CancellationToken.None);
+
+        var missing = Assert.Single(result);
+        Assert.Equal("12", missing.GarageNumber);
+        Assert.Equal("water", missing.MeterKind);
+        Assert.Equal("Иванов Иван", missing.OwnerName);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

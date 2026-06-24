@@ -166,6 +166,13 @@ public sealed record MeterReadingDto(
     string? Comment,
     bool IsCanceled);
 
+public sealed record MissingMeterReadingDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    string MeterKind,
+    DateOnly AccountingMonth);
+
 public sealed record CreateMeterReadingRequest(
     Guid GarageId,
     [Required, MaxLength(40)] string MeterKind,
@@ -181,6 +188,12 @@ public sealed record MeterReadingListRequest(
     string? Search,
     int? Limit = null,
     int? Offset = null);
+
+public sealed record MissingMeterReadingListRequest(
+    DateOnly? AccountingMonth,
+    string? MeterKind,
+    string? Search,
+    int? Limit = null);
 
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,

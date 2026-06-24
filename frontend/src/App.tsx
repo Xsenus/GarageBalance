@@ -26,7 +26,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
 import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -1369,6 +1369,7 @@ function FinancePanel({
   const [accruals, setAccruals] = useState<AccrualDto[]>([])
   const [supplierAccruals, setSupplierAccruals] = useState<SupplierAccrualDto[]>([])
   const [meterReadings, setMeterReadings] = useState<MeterReadingDto[]>([])
+  const [missingMeterReadings, setMissingMeterReadings] = useState<MissingMeterReadingDto[]>([])
   const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0, meterReadingCount: 0 })
   const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
   const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '' })
@@ -1419,7 +1420,7 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSupplierGroups(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
@@ -1430,6 +1431,7 @@ function FinancePanel({
           financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
           financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
           financeClient.getMeterReadings(auth.accessToken, financeScreenRequestLimit),
+          financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: month, limit: financeScreenRequestLimit }),
           financeClient.getSummary(auth.accessToken),
         ])
         if (!ignore) {
@@ -1443,6 +1445,7 @@ function FinancePanel({
           setAccruals(loadedAccruals)
           setSupplierAccruals(loadedSupplierAccruals)
           setMeterReadings(loadedMeterReadings)
+          setMissingMeterReadings(loadedMissingMeterReadings)
           setSummary(loadedSummary)
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
@@ -1474,7 +1477,7 @@ function FinancePanel({
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient, financeClient])
+  }, [auth.accessToken, dictionaryClient, financeClient, month])
 
   useEffect(() => {
     const handleWindowClick = () => setFinanceContextMenu(null)
@@ -1493,12 +1496,14 @@ function FinancePanel({
         offset,
         limit,
       }
-      const [incomePage, expensePage, accrualsPage, supplierAccrualsPage, meterReadingsPage, loadedSummary] = await Promise.all([
+      const missingMeterMonth = financeFilter.monthFrom || meterForm.accountingMonth
+      const [incomePage, expensePage, accrualsPage, supplierAccrualsPage, meterReadingsPage, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
         financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income', limit: section === 'income' ? limit : 1, offset: section === 'income' ? offset : 0 }),
         financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense', limit: section === 'expense' ? limit : 1, offset: section === 'expense' ? offset : 0 }),
         financeClient.getAccrualsPage(auth.accessToken, { ...params, limit: section === 'accruals' ? limit : 1, offset: section === 'accruals' ? offset : 0 }),
         financeClient.getSupplierAccrualsPage(auth.accessToken, { ...params, limit: section === 'supplierAccruals' ? limit : 1, offset: section === 'supplierAccruals' ? offset : 0 }),
         financeClient.getMeterReadingsPage(auth.accessToken, { ...params, limit: section === 'meterReadings' ? limit : 1, offset: section === 'meterReadings' ? offset : 0 }),
+        financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit }),
         financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search }),
       ])
 
@@ -1526,12 +1531,13 @@ function FinancePanel({
         setMeterReadings(meterReadingsPage.items)
         setFinancePage(meterReadingsPage as FinancePagedResult<FinanceRecord>)
       }
+      setMissingMeterReadings(loadedMissingMeterReadings)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
     } finally {
       setLoading(false)
     }
-  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search])
+  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, meterForm.accountingMonth])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -2156,37 +2162,44 @@ function FinancePanel({
     }
 
     return (
-      <table className="dictionary-data-table finance-data-table">
-        <thead>
-          <tr>
-            <th>Месяц</th>
-            <th>Дата</th>
-            <th>Гараж</th>
-            <th>Счетчик</th>
-            <th>Пред. знач.</th>
-            <th>Нов. знач.</th>
-            <th>Разница</th>
-            <th>Комментарий</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredMeterReadings.map((reading) => (
-            <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={() => editFinanceRecord('meterReadings', reading)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
-              <td>{formatMonth(reading.accountingMonth)}</td>
-              <td>{formatDateOnly(reading.readingDate)}</td>
-              <td>Гараж {reading.garageNumber}</td>
-              <td>{reading.meterKind === 'water' ? 'Вода' : 'Электричество'}</td>
-              <td>{reading.previousValue}</td>
-              <td>{reading.currentValue}</td>
-              <td>
-                {reading.consumption}
-                {reading.hasGapWarning ? <small className="warning-text">проверьте месяц</small> : null}
-              </td>
-              <td>{reading.comment ?? 'Нет комментария'}</td>
+      <>
+        {missingMeterReadings.length > 0 ? (
+          <p className="empty-state warning-text" role="status" aria-live="polite">
+            Нет показаний за {formatMonth(missingMeterReadings[0].accountingMonth)}: {formatMissingMeterReadings(missingMeterReadings)}
+          </p>
+        ) : null}
+        <table className="dictionary-data-table finance-data-table">
+          <thead>
+            <tr>
+              <th>Месяц</th>
+              <th>Дата</th>
+              <th>Гараж</th>
+              <th>Счетчик</th>
+              <th>Пред. знач.</th>
+              <th>Нов. знач.</th>
+              <th>Разница</th>
+              <th>Комментарий</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredMeterReadings.map((reading) => (
+              <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={() => editFinanceRecord('meterReadings', reading)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
+                <td>{formatMonth(reading.accountingMonth)}</td>
+                <td>{formatDateOnly(reading.readingDate)}</td>
+                <td>Гараж {reading.garageNumber}</td>
+                <td>{reading.meterKind === 'water' ? 'Вода' : 'Электричество'}</td>
+                <td>{reading.previousValue}</td>
+                <td>{reading.currentValue}</td>
+                <td>
+                  {reading.consumption}
+                  {reading.hasGapWarning ? <small className="warning-text">проверьте месяц</small> : null}
+                </td>
+                <td>{reading.comment ?? 'Нет комментария'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
     )
   }
 
@@ -6700,6 +6713,12 @@ function formatAccrualSource(source: string): string {
   }
 
   return source
+}
+
+function formatMissingMeterReadings(items: MissingMeterReadingDto[]): string {
+  const visibleItems = items.slice(0, 6)
+  const suffix = items.length > visibleItems.length ? ` и еще ${items.length - visibleItems.length}` : ''
+  return `${visibleItems.map((item) => `Гараж ${item.garageNumber} - ${item.meterKind === 'water' ? 'Вода' : 'Электричество'}`).join(', ')}${suffix}`
 }
 
 function formatImportRunStatus(status: AccessImportRunDto['status']): string {

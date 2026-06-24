@@ -92,6 +92,14 @@ export type MeterReadingDto = {
   isCanceled: boolean
 }
 
+export type MissingMeterReadingDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  meterKind: 'water' | 'electricity'
+  accountingMonth: string
+}
+
 export type CreateIncomeOperationRequest = {
   garageId: string
   incomeTypeId: string
@@ -195,6 +203,7 @@ export type FinanceClient = {
   getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<SupplierAccrualDto>>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
+  getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }): Promise<MissingMeterReadingDto[]>
   getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -311,6 +320,14 @@ export const financeApi: FinanceClient = {
       meterKind: params.meterKind,
       search: params.search,
       offset: params.offset,
+      limit: params.limit,
+    }))
+  },
+  getMissingMeterReadings(accessToken, params = {}) {
+    return requestJson(accessToken, withQuery('/api/finance/meter-readings/missing', {
+      accountingMonth: toMonthStart(params.accountingMonth),
+      meterKind: params.meterKind,
+      search: params.search,
       limit: params.limit,
     }))
   },

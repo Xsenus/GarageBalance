@@ -4,7 +4,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -2029,6 +2029,29 @@ describe('App', () => {
     expect(await within(financePanel).findByText('проверьте предыдущий месяц')).toBeInTheDocument()
   })
 
+  it('highlights garages without meter readings for selected month', async () => {
+    const user = userEvent.setup()
+    const missingReadings = [
+      createMissingMeterReading({ garageNumber: '12', meterKind: 'water', accountingMonth: '2026-06-01' }),
+      createMissingMeterReading({ garageNumber: '13', meterKind: 'electricity', accountingMonth: '2026-06-01' }),
+    ]
+    const financeClient = createFinanceClient({
+      getMissingMeterReadings: async () => missingReadings,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+
+    const warning = await within(financePanel).findByText(/Нет показаний за 06\.2026/)
+    expect(warning).toHaveAttribute('role', 'status')
+    expect(warning).toHaveTextContent('Гараж 12 - Вода')
+    expect(warning).toHaveTextContent('Гараж 13 - Электричество')
+  })
+
   it('runs Access import dry-run and shows checks history', async () => {
     const user = userEvent.setup()
     const importClient = createStatefulImportClient()
@@ -3047,6 +3070,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
   const accrual = createAccrual({ id: 'accrual-1', amount: 2000, garageNumber: '12', incomeTypeName: 'Членский взнос' })
   const supplierAccrual = createSupplierAccrual({ id: 'supplier-accrual-1', amount: 650 })
   const meterReading = createMeterReading({ id: 'meter-reading-1', consumption: 5.5, currentValue: 15.5, previousValue: 10 })
+  const missingMeterReading = createMissingMeterReading({})
 
   const client: FinanceClient = {
     getOperations: async () => [operation],
@@ -3057,6 +3081,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getSupplierAccrualsPage: async () => ({ items: [supplierAccrual], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadings: async () => [meterReading],
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
+    getMissingMeterReadings: async () => [missingMeterReading],
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
@@ -3971,6 +3996,17 @@ function createMeterReading(overrides: Partial<MeterReadingDto>): MeterReadingDt
     hasGapWarning: false,
     comment: null,
     isCanceled: false,
+    ...overrides,
+  }
+}
+
+function createMissingMeterReading(overrides: Partial<MissingMeterReadingDto>): MissingMeterReadingDto {
+  return {
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    meterKind: 'electricity',
+    accountingMonth: '2026-06-01',
     ...overrides,
   }
 }

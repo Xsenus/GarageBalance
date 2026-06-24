@@ -115,6 +115,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetMeterReadingsPageAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search, limit, offset), cancellationToken));
     }
 
+    [HttpGet("meter-readings/missing")]
+    [ProducesResponseType<IReadOnlyList<MissingMeterReadingDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MissingMeterReadingDto>>> GetMissingMeterReadings(
+        [FromQuery] DateOnly? accountingMonth,
+        [FromQuery] string? meterKind,
+        [FromQuery] string? search,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetMissingMeterReadingsAsync(new MissingMeterReadingListRequest(accountingMonth, meterKind, search, limit), cancellationToken));
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType<FinanceSummaryDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinanceSummaryDto>> GetSummary(

@@ -18,11 +18,15 @@ public sealed class FinanceControllerTests
         await controller.GetAccruals(null, null, "12", 51, CancellationToken.None);
         await controller.GetSupplierAccruals(null, null, "water", 52, CancellationToken.None);
         await controller.GetMeterReadings(null, null, "electricity", "12", 53, CancellationToken.None);
+        await controller.GetMissingMeterReadings(new DateOnly(2026, 6, 1), "water", "12", 54, CancellationToken.None);
 
         Assert.Equal(50, service.LastFinancialOperationListRequest?.Limit);
         Assert.Equal(51, service.LastAccrualListRequest?.Limit);
         Assert.Equal(52, service.LastSupplierAccrualListRequest?.Limit);
         Assert.Equal(53, service.LastMeterReadingListRequest?.Limit);
+        Assert.Equal(54, service.LastMissingMeterReadingListRequest?.Limit);
+        Assert.Equal(new DateOnly(2026, 6, 1), service.LastMissingMeterReadingListRequest?.AccountingMonth);
+        Assert.Equal("water", service.LastMissingMeterReadingListRequest?.MeterKind);
     }
 
     [Fact]
@@ -505,6 +509,7 @@ public sealed class FinanceControllerTests
         public AccrualListRequest? LastAccrualListRequest { get; private set; }
         public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
+        public MissingMeterReadingListRequest? LastMissingMeterReadingListRequest { get; private set; }
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -568,6 +573,12 @@ public sealed class FinanceControllerTests
         {
             LastMeterReadingListRequest = request;
             return Task.FromResult(new FinancePagedResult<MeterReadingDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
+        }
+
+        public Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken)
+        {
+            LastMissingMeterReadingListRequest = request;
+            return Task.FromResult<IReadOnlyList<MissingMeterReadingDto>>([]);
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)

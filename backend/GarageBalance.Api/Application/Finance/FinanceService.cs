@@ -119,6 +119,51 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         return new FinancePagedResult<MeterReadingDto>(items, totalCount, normalizedOffset, normalizedLimit);
     }
 
+    public async Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
+        var meterKinds = NormalizeMeterKindFilter(request.MeterKind);
+        var search = NormalizeSearch(request.Search);
+        var limit = NormalizeListLimit(request.Limit);
+
+        var garageQuery = dbContext.Garages.AsNoTracking()
+            .Include(garage => garage.Owner)
+            .Where(garage => !garage.IsArchived);
+        if (search is not null)
+        {
+            garageQuery = garageQuery.Where(garage =>
+                garage.Number.ToLower().Contains(search) ||
+                (garage.Owner != null && (
+                    garage.Owner.LastName.ToLower().Contains(search) ||
+                    garage.Owner.FirstName.ToLower().Contains(search) ||
+                    (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(search)) ||
+                    (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(search))));
+        }
+
+        var garages = await garageQuery
+            .OrderBy(garage => garage.Number)
+            .ToListAsync(cancellationToken);
+        var existingReadings = await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading => !reading.IsCanceled && reading.AccountingMonth == month && meterKinds.Contains(reading.MeterKind))
+            .Select(reading => new { reading.GarageId, reading.MeterKind })
+            .ToListAsync(cancellationToken);
+        var existingKeys = existingReadings
+            .Select(reading => (reading.GarageId, reading.MeterKind))
+            .ToHashSet();
+
+        return garages
+            .SelectMany(garage => meterKinds
+                .Where(meterKind => !existingKeys.Contains((garage.Id, meterKind)))
+                .Select(meterKind => new MissingMeterReadingDto(
+                    garage.Id,
+                    garage.Number,
+                    garage.Owner?.FullName,
+                    meterKind,
+                    month)))
+            .Take(limit)
+            .ToList();
+    }
+
     private static int NormalizeListLimit(int? limit)
     {
         if (limit is null or <= 0)
@@ -1361,6 +1406,22 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         }
 
         return query;
+    }
+
+    private static string[] NormalizeMeterKindFilter(string? meterKind)
+    {
+        if (string.IsNullOrWhiteSpace(meterKind))
+        {
+            return [MeterKinds.Water, MeterKinds.Electricity];
+        }
+
+        var normalized = meterKind.Trim();
+        return normalized is MeterKinds.Water or MeterKinds.Electricity ? [normalized] : [];
+    }
+
+    private static string? NormalizeSearch(string? search)
+    {
+        return string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
     }
 
     private static IQueryable<Accrual> ApplyAccrualFilters(IQueryable<Accrual> query, AccrualListRequest request)
