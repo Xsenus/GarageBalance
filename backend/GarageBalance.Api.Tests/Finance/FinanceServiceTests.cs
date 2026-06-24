@@ -688,7 +688,17 @@ public sealed class FinanceServiceTests
         Assert.Equal(10m, result.Value!.PreviousValue);
         Assert.Equal(5.5m, result.Value.Consumption);
         Assert.False(result.Value.HasGapWarning);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Внесено показание water", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("дата 20.06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("предыдущее 10", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("текущее 15,5", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("расход 5,5", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("без предупреждения", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Контроль", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

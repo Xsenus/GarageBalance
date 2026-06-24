@@ -517,7 +517,7 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
         };
 
         dbContext.MeterReadings.Add(reading);
-        AddAudit(actorUserId, "finance.meter_reading_created", "meter_reading", reading.Id, $"Внесено показание {meterKind} по гаражу {garage.Number}: расход {consumption:N3}.");
+        AddAudit(actorUserId, "finance.meter_reading_created", "meter_reading", reading.Id, FormatMeterReadingCreatedAuditSummary(reading));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
@@ -633,6 +633,14 @@ public sealed class FinanceService(GarageBalanceDbContext dbContext) : IFinanceS
     private static string FormatMeterReadingCanceledAuditSummary(MeterReading reading, string reason)
     {
         return $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; расход {reading.Consumption.ToString("0.####", RussianCulture)}. Причина: {reason}";
+    }
+
+    private static string FormatMeterReadingCreatedAuditSummary(MeterReading reading)
+    {
+        var warning = reading.HasGapWarning ? "есть предупреждение по разрыву истории" : "без предупреждения";
+        var comment = NormalizeOptional(reading.Comment);
+        var summary = $"Внесено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}; {warning}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
     private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
