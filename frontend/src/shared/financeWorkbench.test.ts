@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey, FinanceVisibleListStatusKind } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -14,6 +14,7 @@ const editorKeys: FinanceEditorKey[] = [
 
 const contextMenuActions: FinanceContextMenuAction[] = ['add', 'edit', 'delete']
 const sectionKeys: FinanceSectionKey[] = ['income', 'expense', 'accruals', 'supplierAccruals', 'meterReadings']
+const visibleListKeys: FinanceVisibleListStatusKind[] = ['operations', 'accruals', 'supplierAccruals', 'meterReadings']
 const fallbackKeys: FinanceFallbackLabelKey[] = ['missingValue', 'noData', 'noComment', 'meterGapWarning']
 const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
   'sectionTabs',
@@ -240,6 +241,21 @@ describe('finance workbench metadata', () => {
       accruals: 'Начислений пока нет',
       supplierAccruals: 'Начислений поставщикам пока нет',
       meterReadings: 'Показаний пока нет',
+    })
+  })
+
+  it('returns table metadata for short finance lists', () => {
+    expect(Object.fromEntries(visibleListKeys.map((key) => [key, getFinanceVisibleListTableLabel(key)]))).toEqual({
+      operations: 'Последние платежи',
+      accruals: 'Последние начисления',
+      supplierAccruals: 'Последние начисления поставщикам',
+      meterReadings: 'Последние показания',
+    })
+    expect(Object.fromEntries(visibleListKeys.map((key) => [key, getFinanceVisibleListTableHeaders(key)]))).toEqual({
+      operations: ['Дата', 'Операция', 'Сумма'],
+      accruals: ['Месяц', 'Начисление', 'Сумма'],
+      supplierAccruals: ['Месяц', 'Поставщик', 'Сумма'],
+      meterReadings: ['Месяц', 'Счетчик', 'Расход'],
     })
   })
 

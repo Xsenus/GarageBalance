@@ -199,6 +199,20 @@ const financeVisibleListEmptyLabels: Record<FinanceVisibleListStatusKind, string
   meterReadings: 'Показаний пока нет',
 }
 
+const financeVisibleListTableLabels: Record<FinanceVisibleListStatusKind, string> = {
+  operations: 'Последние платежи',
+  accruals: 'Последние начисления',
+  supplierAccruals: 'Последние начисления поставщикам',
+  meterReadings: 'Последние показания',
+}
+
+const financeVisibleListTableHeaders: Record<FinanceVisibleListStatusKind, string[]> = {
+  operations: ['Дата', 'Операция', 'Сумма'],
+  accruals: ['Месяц', 'Начисление', 'Сумма'],
+  supplierAccruals: ['Месяц', 'Поставщик', 'Сумма'],
+  meterReadings: ['Месяц', 'Счетчик', 'Расход'],
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -269,6 +283,14 @@ export function formatFinanceVisibleListStatus(visibleCount: number, totalCount:
 
 export function getFinanceVisibleListEmptyLabel(kind: FinanceVisibleListStatusKind) {
   return financeVisibleListEmptyLabels[kind]
+}
+
+export function getFinanceVisibleListTableLabel(kind: FinanceVisibleListStatusKind) {
+  return financeVisibleListTableLabels[kind]
+}
+
+export function getFinanceVisibleListTableHeaders(kind: FinanceVisibleListStatusKind) {
+  return financeVisibleListTableHeaders[kind]
 }
 
 export function formatFinanceIncomeGarageSearchStatus(foundCount: number, hasSearch: boolean) {

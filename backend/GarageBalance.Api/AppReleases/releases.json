@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-short-list-table-labels",
+    "version": "0.299.0",
+    "publishedAt": "2026-06-25T20:45:00+07:00",
+    "title": "Заголовки коротких списков платежей вынесены в shared",
+    "summary": "Короткие списки последних платежей, начислений и показаний теперь берут aria-label и колонки из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит подписи таблиц Последние платежи, Последние начисления, Последние начисления поставщикам и Последние показания внутри JSX."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют aria-label и заголовки колонок для всех коротких платежных списков."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-income-garage-search-labels",
     "version": "0.298.0",
     "publishedAt": "2026-06-25T20:30:00+07:00",
