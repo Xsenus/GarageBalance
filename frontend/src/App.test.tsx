@@ -1811,6 +1811,13 @@ describe('App', () => {
 
     await user.type(within(dialog).getByLabelText('Документ поступления'), 'PKO-draft')
     expect(within(dialog).getByText('Есть несохраненные изменения формы платежа.')).toHaveAttribute('role', 'status')
+    expect(dialog).toHaveAccessibleDescription('Есть несохраненные изменения формы платежа.')
+    await user.keyboard('{Escape}')
+    expect(confirmSpy).toHaveBeenCalledWith('Закрыть форму платежа без сохранения изменений?')
+    expect(screen.getByRole('dialog', { name: 'Новое поступление' })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
+    expect(confirmSpy).toHaveBeenCalledWith('Закрыть форму платежа без сохранения изменений?')
+    expect(screen.getByRole('dialog', { name: 'Новое поступление' })).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
     expect(confirmSpy).toHaveBeenCalledWith('Закрыть форму платежа без сохранения изменений?')
     expect(screen.getByRole('dialog', { name: 'Новое поступление' })).toBeInTheDocument()

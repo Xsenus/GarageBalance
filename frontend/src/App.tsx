@@ -2718,6 +2718,8 @@ function FinancePanel({
     )
   }
 
+  const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
+
   return (
     <section className="finance-panel" aria-label="Платежи">
       <div className="section-heading">
@@ -3181,7 +3183,15 @@ function FinancePanel({
       ) : null}
       {financeEditor ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => closeFinanceEditor()}>
-          <section ref={financeEditorDialogRef} className="detail-dialog finance-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-editor-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section
+            ref={financeEditorDialogRef}
+            className="detail-dialog finance-editor-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="finance-editor-title"
+            aria-describedby={financeEditorHasUnsavedChanges ? 'finance-editor-unsaved-changes' : undefined}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">{financeEditor.mode === 'edit' ? 'Изменение' : 'Платежи'}</p>
@@ -3193,7 +3203,7 @@ function FinancePanel({
             </div>
             <form className="dictionary-form finance-editor-form" onSubmit={handleFinanceEditorSubmit}>
               {renderFinanceEditorFields(financeEditor.section)}
-              {hasUnsavedFinanceEditorChanges() ? <p className="form-hint" role="status" aria-live="polite">Есть несохраненные изменения формы платежа.</p> : null}
+              {financeEditorHasUnsavedChanges ? <p className="form-hint" id="finance-editor-unsaved-changes" role="status" aria-live="polite">Есть несохраненные изменения формы платежа.</p> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={() => closeFinanceEditor()}>
                   Отмена
