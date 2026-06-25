@@ -1412,6 +1412,7 @@ function FinancePanel({
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
   const financeEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditor))
+  const financeContextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeContextMenu))
 
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   useEscapeKey(Boolean(financeEditor), () => setFinanceEditor(null))
@@ -3056,7 +3057,7 @@ function FinancePanel({
       </div>
       {financeContextMenu ? (
         <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label="Операции с платежами" onClick={(event) => event.stopPropagation()}>
-          <button type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
+          <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
             <span>Добавить</span>
           </button>
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>

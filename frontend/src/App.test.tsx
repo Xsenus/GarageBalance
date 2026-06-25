@@ -1808,7 +1808,9 @@ describe('App', () => {
     expect(paymentRow).toHaveFocus()
     fireEvent.keyDown(paymentRow, { key: 'F10', shiftKey: true })
     const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
-    expect(within(menu).getByRole('menuitem', { name: 'Добавить' })).toBeEnabled()
+    const addItem = within(menu).getByRole('menuitem', { name: 'Добавить' })
+    await waitFor(() => expect(addItem).toHaveFocus())
+    expect(addItem).toBeEnabled()
     expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeEnabled()
     expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeEnabled()
 
