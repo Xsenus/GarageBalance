@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-session-storage",
+    "version": "0.264.0",
+    "publishedAt": "2026-06-25T16:15:00+07:00",
+    "title": "SessionStorage frontend вынесен в shared",
+    "summary": "Восстановление auth-сессии и сохранение фильтров теперь используют общий безопасный storage-модуль.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "sessionStorage.ts безопасно читает, сохраняет и удаляет JSON без падения интерфейса при ошибках браузерного хранилища."
+      },
+      {
+        "type": "fixed",
+        "text": "Проверка сохраненной AuthResponse-сессии вынесена из App.tsx и покрыта тестами на валидную, битую и просроченную сессию."
+      },
+      {
+        "type": "improved",
+        "text": "Helpers для строк, date-only значений, массивов строк и режима строк отчетов переиспользуются при загрузке сохраненных фильтров."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-file-exports",
     "version": "0.263.0",
     "publishedAt": "2026-06-25T16:00:00+07:00",

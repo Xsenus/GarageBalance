@@ -59,6 +59,7 @@ import {
   getLocalDateInputValue,
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
+import { clearStoredAuthSession, getDateOnlyOrDefault, getRowModeOrDefault, getStringArrayOrDefault, getStringOrDefault, isRecord, loadStoredAuthSession, readSessionJson, saveSessionJson, saveStoredAuthSession } from './shared/sessionStorage'
 import './App.css'
 
 type AppProps = {
@@ -748,11 +749,11 @@ const roadmap = [
 ]
 
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
-  const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuth())
+  const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
 
   function handleAuthenticated(nextAuth: AuthResponse) {
-    saveStoredAuth(nextAuth)
+    saveStoredAuthSession(authSessionStorageKey, nextAuth)
     setAuth(nextAuth)
   }
 
@@ -763,13 +764,13 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       }
 
       const nextAuth = { ...current, user }
-      saveStoredAuth(nextAuth)
+      saveStoredAuthSession(authSessionStorageKey, nextAuth)
       return nextAuth
     })
   }
 
   function handleLogout() {
-    clearStoredAuth()
+    clearStoredAuthSession(authSessionStorageKey)
     setAuth(null)
     setActiveSection('dashboard')
   }
@@ -6738,94 +6739,5 @@ function loadExpenseReportFilters(month: string, today: string): ExpenseReportFi
     rowMode: getRowModeOrDefault(parsed.rowMode),
   }
 }
-
-function readSessionJson(key: string): unknown {
-  try {
-    const value = window.sessionStorage.getItem(key)
-    return value ? JSON.parse(value) : null
-  } catch {
-    return null
-  }
-}
-
-function saveSessionJson(key: string, value: unknown) {
-  try {
-    window.sessionStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    // Session storage is a convenience only; reports must still work without it.
-  }
-}
-
-function removeSessionJson(key: string) {
-  try {
-    window.sessionStorage.removeItem(key)
-  } catch {
-    // Session storage is a convenience only; logout must still complete without it.
-  }
-}
-
-function loadStoredAuth(): AuthResponse | null {
-  const parsed = readSessionJson(authSessionStorageKey)
-  if (!isStoredAuthResponse(parsed)) {
-    clearStoredAuth()
-    return null
-  }
-
-  if (Date.parse(parsed.expiresAtUtc) <= Date.now()) {
-    clearStoredAuth()
-    return null
-  }
-
-  return parsed
-}
-
-function saveStoredAuth(auth: AuthResponse) {
-  saveSessionJson(authSessionStorageKey, auth)
-}
-
-function clearStoredAuth() {
-  removeSessionJson(authSessionStorageKey)
-}
-
-function isStoredAuthResponse(value: unknown): value is AuthResponse {
-  if (!isRecord(value) || typeof value.accessToken !== 'string' || typeof value.expiresAtUtc !== 'string' || !isRecord(value.user)) {
-    return false
-  }
-
-  if (!Number.isFinite(Date.parse(value.expiresAtUtc))) {
-    return false
-  }
-
-  return (
-    typeof value.user.id === 'string' &&
-    typeof value.user.email === 'string' &&
-    typeof value.user.displayName === 'string' &&
-    Array.isArray(value.user.roles) &&
-    value.user.roles.every((role) => typeof role === 'string') &&
-    Array.isArray(value.user.permissions) &&
-    value.user.permissions.every((permission) => typeof permission === 'string')
-  )
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function getStringOrDefault(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback
-}
-
-function getDateOnlyOrDefault(value: unknown, fallback: string): string {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback
-}
-
-function getStringArrayOrDefault(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
-}
-
-function getRowModeOrDefault(value: unknown): string {
-  return value === 'accruals' || value === 'payments' ? value : 'all'
-}
-
 
 export default App
