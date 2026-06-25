@@ -82,7 +82,7 @@
 - [ ] `npm run build`.
 - [ ] `npm run lint`.
 - [ ] `dotnet format --verify-no-changes`.
-- [ ] Сгенерировать `dotnet tool run dotnet-ef migrations script --idempotent`.
+- [ ] Сгенерировать idempotent SQL через `infrastructure/scripts/generate-migration-script.ps1`.
 - [ ] Проверить JSON `backend/GarageBalance.Api/AppReleases/releases.json`.
 - [ ] Проверить UTF-8 no-BOM для измененных файлов.
 - [ ] Убедиться, что "Что нового" содержит запись версии.

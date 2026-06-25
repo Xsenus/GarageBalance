@@ -20,7 +20,7 @@ public sealed class AdminOperationsGuideTests
         Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);
         Assert.Contains("register-local-backup-task.ps1", document, StringComparison.Ordinal);
         Assert.Contains("docs/version-update-checklist.md", document, StringComparison.Ordinal);
-        Assert.Contains("dotnet tool run dotnet-ef migrations script --idempotent", document, StringComparison.Ordinal);
+        Assert.Contains("generate-migration-script.ps1", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS http://127.0.0.1:5080/health", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);
         Assert.Contains("docker compose logs --tail=200 api", document, StringComparison.Ordinal);

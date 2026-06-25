@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-migration-script-artifact",
+    "version": "0.259.0",
+    "publishedAt": "2026-06-25T15:00:00+07:00",
+    "title": "Миграционный SQL оформлен как артефакт релиза",
+    "summary": "Для обновлений добавлен отдельный скрипт генерации idempotent SQL миграций.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "generate-migration-script.ps1 создает artifacts/deploy-migrations.sql и проверяет, что файл миграций не пустой."
+      },
+      {
+        "type": "improved",
+        "text": "Скрипт поддерживает относительный и абсолютный OutputPath, поэтому его можно запускать как для релизного артефакта, так и для временной проверки."
+      },
+      {
+        "type": "fixed",
+        "text": "Checklist обновления и админская инструкция больше не требуют вручную набирать длинную команду dotnet-ef migrations script."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-local-postgres-preflight",
     "version": "0.258.0",
     "publishedAt": "2026-06-25T14:45:00+07:00",

@@ -83,13 +83,12 @@ dotnet format --verify-no-changes
 Перед применением миграций сформировать idempotent SQL:
 
 ```powershell
-dotnet tool run dotnet-ef migrations script --idempotent `
-  --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj `
-  --startup-project .\backend\GarageBalance.Api\GarageBalance.Api.csproj `
-  --output .\artifacts\deploy-migrations.sql
+.\infrastructure\scripts\generate-migration-script.ps1 `
+  -OutputPath artifacts\deploy-migrations.sql
 ```
 
 - [ ] SQL-скрипт сохранен как артефакт релиза.
+- [ ] В выводе есть `migrationScriptPath=...` и `migrationScriptBytes=...`.
 - [ ] Если схема не менялась, это явно записано в историю работ.
 - [ ] Если схема менялась, миграции применяются только после backup и restore-check.
 

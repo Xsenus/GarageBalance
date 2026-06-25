@@ -16,7 +16,9 @@ public sealed class VersionUpdateChecklistTests
         Assert.Contains("npm run build", document, StringComparison.Ordinal);
         Assert.Contains("npm run lint", document, StringComparison.Ordinal);
         Assert.Contains("dotnet format --verify-no-changes", document, StringComparison.Ordinal);
-        Assert.Contains("dotnet tool run dotnet-ef migrations script --idempotent", document, StringComparison.Ordinal);
+        Assert.Contains("generate-migration-script.ps1", document, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptPath=", document, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptBytes=", document, StringComparison.Ordinal);
         Assert.Contains("docker compose up --build -d", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS http://127.0.0.1:5080/health", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);

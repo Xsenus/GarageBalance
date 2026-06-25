@@ -142,6 +142,29 @@ public sealed class DatabaseMigrationPolicyTests
         Assert.Empty(offenders);
     }
 
+    [Fact]
+    public void MigrationScriptGeneratorCreatesIdempotentSqlArtifact()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "infrastructure",
+            "scripts",
+            "generate-migration-script.ps1"));
+
+        Assert.Contains("[CmdletBinding()]", script, StringComparison.Ordinal);
+        Assert.Contains("artifacts\\deploy-migrations.sql", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet-ef", script, StringComparison.Ordinal);
+        Assert.Contains("IsPathRooted", script, StringComparison.Ordinal);
+        Assert.Contains("migrations", script, StringComparison.Ordinal);
+        Assert.Contains("script", script, StringComparison.Ordinal);
+        Assert.Contains("--idempotent", script, StringComparison.Ordinal);
+        Assert.Contains("--project", script, StringComparison.Ordinal);
+        Assert.Contains("--startup-project", script, StringComparison.Ordinal);
+        Assert.Contains("Migration script is empty", script, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptPath=", script, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptBytes=", script, StringComparison.Ordinal);
+    }
+
     private static IEnumerable<string> EnumerateConcreteMigrationNames()
     {
         return Directory.EnumerateFiles(FindMigrationRoot(), "*.cs", SearchOption.TopDirectoryOnly)
