@@ -35,6 +35,7 @@ import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
+import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
   formatAccrualSource,
@@ -6826,41 +6827,5 @@ function getRowModeOrDefault(value: unknown): string {
   return value === 'accruals' || value === 'payments' ? value : 'all'
 }
 
-
-function buildReportFileName(type: 'consolidated' | 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
-  return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
-}
-
-function buildImportReportFileName(run: AccessImportRunDto): string {
-  const startedAt = run.startedAtUtc.slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '-')
-  const sourceName = run.originalFileName.replace(/\.[^.]+$/, '').replaceAll(' ', '-').toLowerCase()
-  return `garagebalance-access-dry-run-${sourceName}-${startedAt}.json`
-}
-
-function buildAuditExportFileName(): string {
-  return `garagebalance-audit-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}.csv`
-}
-
-function getFormValues(form: FormData, name: string): string[] {
-  return form
-    .getAll(name)
-    .map((value) => String(value))
-    .filter(Boolean)
-}
-
-function downloadBlob(blob: Blob, fileName: string) {
-  if (typeof URL.createObjectURL !== 'function') {
-    return
-  }
-
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  document.body.append(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
-}
 
 export default App

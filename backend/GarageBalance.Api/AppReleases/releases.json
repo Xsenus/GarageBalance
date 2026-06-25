@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-file-exports",
+    "version": "0.263.0",
+    "publishedAt": "2026-06-25T16:00:00+07:00",
+    "title": "Экспортные helpers frontend вынесены в shared",
+    "summary": "Имена файлов отчетов, импорта и audit, скачивание Blob и чтение multi-select значений формы теперь живут в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "fileExports.ts переиспользуется в App.tsx для XLSX/PDF/CSV/JSON-выгрузок."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют стабильные имена файлов отчетов, audit CSV и dry-run JSON импорта."
+      },
+      {
+        "type": "improved",
+        "text": "downloadBlob проверяется отдельно: временная ссылка создается, нажимается, удаляется и object URL освобождается."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-formatters",
     "version": "0.262.0",
     "publishedAt": "2026-06-25T15:45:00+07:00",
