@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel } from './financeWorkbench'
 import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
@@ -235,5 +235,10 @@ describe('finance workbench metadata', () => {
       supplierAccruals: 'Начислений поставщикам пока нет',
       meterReadings: 'Показаний пока нет',
     })
+  })
+
+  it('formats income garage search status text', () => {
+    expect(formatFinanceIncomeGarageSearchStatus(3, true)).toBe('Найдено гаражей: 3')
+    expect(formatFinanceIncomeGarageSearchStatus(12, false)).toBe('Показаны все гаражи: 12')
   })
 })

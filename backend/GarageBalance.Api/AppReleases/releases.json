@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-income-garage-search-status",
+    "version": "0.297.0",
+    "publishedAt": "2026-06-25T20:15:00+07:00",
+    "title": "Статус поиска гаража в поступлении вынесен в shared",
+    "summary": "Форма поступления теперь формирует Найдено гаражей и Показаны все гаражи через общий frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не собирает статус поиска гаража для поступления внутри async-обработчика."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют тексты статуса при поиске и при пустой строке поиска гаража."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-short-list-empty-labels",
     "version": "0.296.0",
     "publishedAt": "2026-06-25T20:00:00+07:00",

@@ -264,3 +264,7 @@ export function formatFinanceVisibleListStatus(visibleCount: number, totalCount:
 export function getFinanceVisibleListEmptyLabel(kind: FinanceVisibleListStatusKind) {
   return financeVisibleListEmptyLabels[kind]
 }
+
+export function formatFinanceIncomeGarageSearchStatus(foundCount: number, hasSearch: boolean) {
+  return hasSearch ? `Найдено гаражей: ${foundCount}` : `Показаны все гаражи: ${foundCount}`
+}
