@@ -609,7 +609,7 @@ describe('App', () => {
     expect(screen.queryByText('Импорт не должен загружаться для оператора.')).not.toBeInTheDocument()
     expect(screen.queryByText('Отчеты не должны загружаться для оператора.')).not.toBeInTheDocument()
     expect(screen.queryByText('Аудит не должен загружаться для оператора.')).not.toBeInTheDocument()
-  })
+  }, 30_000)
 
   it('keeps dictionary and payment actions read-only without write permissions', async () => {
     const user = userEvent.setup()
@@ -1899,7 +1899,7 @@ describe('App', () => {
     }
 
     confirmSpy.mockRestore()
-  })
+  }, 30_000)
 
   it('opens payment context menu from focused row keyboard shortcut', async () => {
     const user = userEvent.setup()

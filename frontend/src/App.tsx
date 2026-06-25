@@ -62,8 +62,10 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createEmptyPage, createFallbackPage, pageSizeOptions } from './shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
+import type { UserFormState } from './shared/userManagement'
+import { getPrimaryRoleCode, getRoleLabel, getUserEditorValidationErrors } from './shared/userManagement'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters, OwnerGarageLinkForm } from './shared/validation'
-import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseReportValidationErrors, getExpenseValidationErrors, getGarageValidationErrors, getIncomeReportValidationErrors, getIncomeValidationErrors, getManagedUserValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getPasswordPolicyErrors, getRegularAccrualValidationErrorsForCatalog, getReportMonthRangeValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
+import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseReportValidationErrors, getExpenseValidationErrors, getGarageValidationErrors, getIncomeReportValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getRegularAccrualValidationErrorsForCatalog, getReportMonthRangeValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
 import './App.css'
 
 type AppProps = {
@@ -3731,36 +3733,6 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 }
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
-type UserFormState = { email: string; displayName: string; password: string; roleCode: string; isActive: boolean }
-
-function getPrimaryRoleCode(user: ManagedUserDto | undefined, roles: ManagedRoleDto[]) {
-  return user?.roles[0] ?? roles[0]?.code ?? ''
-}
-
-function getRoleLabel(roleCode: string, roles: ManagedRoleDto[]) {
-  return roles.find((role) => role.code === roleCode)?.name ?? roleCode
-}
-
-function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'edit') {
-  if (mode === 'create') {
-    return getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCode)
-  }
-
-  const errors: string[] = []
-  if (!form.displayName.trim()) {
-    errors.push('Укажите имя пользователя.')
-  }
-
-  if (!form.roleCode) {
-    errors.push('Выберите роль пользователя.')
-  }
-
-  if (form.password.trim()) {
-    errors.push(...getPasswordPolicyErrors(form.password, 'Укажите новый пароль или оставьте поле пустым.'))
-  }
-
-  return errors
-}
 
 function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])

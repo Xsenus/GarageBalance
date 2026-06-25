@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-user-management",
+    "version": "0.272.0",
+    "publishedAt": "2026-06-25T14:20:00+07:00",
+    "title": "Helpers пользователей вынесены в shared",
+    "summary": "Выбор роли, подписи ролей и проверка формы пользователя теперь живут в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует userManagement.ts для формы создания и редактирования пользователей."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют выбор основной роли, fallback подписи роли и ошибки формы пользователя."
+      },
+      {
+        "type": "improved",
+        "text": "Длинные UI-сценарии пользователей и платежей в App.test.tsx получили явный timeout, чтобы полный frontend-прогон был стабильнее."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-pagination",
     "version": "0.271.0",
     "publishedAt": "2026-06-25T13:20:00+07:00",
