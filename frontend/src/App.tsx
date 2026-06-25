@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -1889,25 +1889,25 @@ function FinancePanel({
   const financeNavigation = getPageNavigation(financePage)
 
   return (
-    <section className="finance-panel" aria-label="Платежи">
+    <section className="finance-panel" aria-label={getFinancePanelLabel('section')}>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Платежи</p>
-          <h2>Поступления владельцев и выплаты поставщикам</h2>
+          <p className="eyebrow">{getFinancePanelLabel('section')}</p>
+          <h2>{getFinancePanelLabel('title')}</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${summary.operationCount} операций`}</span>
+        <span>{loading ? getFinancePanelLabel('loading') : formatFinanceOperationCount(summary.operationCount)}</span>
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
-      {!canWritePayments ? <p className="form-hint">Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.</p> : null}
+      {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
-      <div className="summary-strip" aria-label="Итоги платежей">
+      <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
-          <span>Поступления</span>
+          <span>{getFinancePanelLabel('incomeTotal')}</span>
           <strong>{formatMoney(summary.incomeTotal)}</strong>
         </div>
         <div>
-          <span>Начислено</span>
+          <span>{getFinancePanelLabel('accrualTotal')}</span>
           <strong>{formatMoney(summary.accrualTotal)}</strong>
         </div>
         <div>
@@ -1915,15 +1915,15 @@ function FinancePanel({
           <strong className={getDebtClassName(summary.debt)}>{formatDebtAmount(summary.debt)}</strong>
         </div>
         <div>
-          <span>Выплаты</span>
+          <span>{getFinancePanelLabel('expenseTotal')}</span>
           <strong>{formatMoney(summary.expenseTotal)}</strong>
         </div>
         <div>
-          <span>Баланс</span>
+          <span>{getFinancePanelLabel('balance')}</span>
           <strong>{formatMoney(summary.balance)}</strong>
         </div>
         <div>
-          <span>Счетчики</span>
+          <span>{getFinancePanelLabel('meterReadings')}</span>
           <strong>{summary.meterReadingCount}</strong>
         </div>
       </div>

@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-panel-labels",
+    "version": "0.292.0",
+    "publishedAt": "2026-06-25T19:00:00+07:00",
+    "title": "Подписи панели платежей вынесены в shared",
+    "summary": "Верхняя часть раздела платежей и summary-strip теперь берут подписи из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит заголовок раздела, loading-состояние, read-only hint и подписи итогов платежей внутри JSX."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют подписи панели платежей, summary-strip и формат счетчика операций."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-editor-labels",
     "version": "0.291.0",
     "publishedAt": "2026-06-25T18:45:00+07:00",

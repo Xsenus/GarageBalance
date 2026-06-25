@@ -42,6 +42,17 @@ export type FinanceEditorUiLabelKey =
   | 'unsavedHint'
   | 'unsavedConfirm'
 export type FinanceEditorValidationTitleVariant = 'default' | 'batch' | 'detailed'
+export type FinancePanelLabelKey =
+  | 'section'
+  | 'title'
+  | 'loading'
+  | 'readOnlyHint'
+  | 'summary'
+  | 'incomeTotal'
+  | 'accrualTotal'
+  | 'expenseTotal'
+  | 'balance'
+  | 'meterReadings'
 
 export const financeSectionOptions: FinanceSectionOption[] = [
   { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
@@ -146,6 +157,19 @@ const financeEditorUiLabels: Record<FinanceEditorUiLabelKey, string> = {
   unsavedConfirm: 'Закрыть форму платежа без сохранения изменений?',
 }
 
+const financePanelLabels: Record<FinancePanelLabelKey, string> = {
+  section: 'Платежи',
+  title: 'Поступления владельцев и выплаты поставщикам',
+  loading: 'Загрузка...',
+  readOnlyHint: 'Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.',
+  summary: 'Итоги платежей',
+  incomeTotal: 'Поступления',
+  accrualTotal: 'Начислено',
+  expenseTotal: 'Выплаты',
+  balance: 'Баланс',
+  meterReadings: 'Счетчики',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -196,4 +220,12 @@ export function getFinanceEditorValidationTitle(section: FinanceEditorKey, varia
 
 export function getFinanceEditorUiLabel(key: FinanceEditorUiLabelKey) {
   return financeEditorUiLabels[key]
+}
+
+export function getFinancePanelLabel(key: FinancePanelLabelKey) {
+  return financePanelLabels[key]
+}
+
+export function formatFinanceOperationCount(count: number) {
+  return `${count} операций`
 }

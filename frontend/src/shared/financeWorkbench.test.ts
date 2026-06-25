@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -30,6 +30,18 @@ const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
   'pageSize',
 ]
 const editorUiLabelKeys: FinanceEditorUiLabelKey[] = ['createMode', 'editMode', 'close', 'cancel', 'save', 'unsavedHint', 'unsavedConfirm']
+const panelLabelKeys: FinancePanelLabelKey[] = [
+  'section',
+  'title',
+  'loading',
+  'readOnlyHint',
+  'summary',
+  'incomeTotal',
+  'accrualTotal',
+  'expenseTotal',
+  'balance',
+  'meterReadings',
+]
 
 describe('finance workbench metadata', () => {
   it('keeps the payment table sections in the expected order', () => {
@@ -166,5 +178,21 @@ describe('finance workbench metadata', () => {
       rows: 'Строк',
       pageSize: 'Количество строк платежей',
     })
+  })
+
+  it('returns panel and summary labels for the payment workbench', () => {
+    expect(Object.fromEntries(panelLabelKeys.map((key) => [key, getFinancePanelLabel(key)]))).toEqual({
+      section: 'Платежи',
+      title: 'Поступления владельцев и выплаты поставщикам',
+      loading: 'Загрузка...',
+      readOnlyHint: 'Режим просмотра: для записи платежей, начислений и показаний нужно право payments.write.',
+      summary: 'Итоги платежей',
+      incomeTotal: 'Поступления',
+      accrualTotal: 'Начислено',
+      expenseTotal: 'Выплаты',
+      balance: 'Баланс',
+      meterReadings: 'Счетчики',
+    })
+    expect(formatFinanceOperationCount(7)).toBe('7 операций')
   })
 })
