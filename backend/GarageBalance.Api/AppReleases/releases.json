@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-dictionary-controller-permission-guard",
+    "version": "0.254.0",
+    "publishedAt": "2026-06-25T13:45:00+07:00",
+    "title": "Права справочников закреплены тестом",
+    "summary": "Backend-тест теперь защищает API справочников от случайного добавления изменяющего endpoint без нужного permission.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "DictionariesController проверяется на общий dictionaries.read на уровне контроллера."
+      },
+      {
+        "type": "fixed",
+        "text": "Изменяющие actions справочников обязаны иметь dictionaries.write, а тарифные actions - tariffs.manage."
+      },
+      {
+        "type": "improved",
+        "text": "README описывает backend guard для владельцев, гаражей, поставщиков, видов оплат/выплат и тарифов."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-finance-controller-permission-guard",
     "version": "0.253.0",
     "publishedAt": "2026-06-25T13:30:00+07:00",
