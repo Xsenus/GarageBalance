@@ -36,6 +36,8 @@ import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
+import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
+import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -619,17 +621,7 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
   )
 }
 
-type FinanceSectionKey = 'income' | 'expense' | 'accruals' | 'supplierAccruals' | 'meterReadings'
-type FinanceEditorKey = FinanceSectionKey | 'regularAccruals' | 'supplierGroupSalaryAccruals'
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
-
-const financeSectionOptions: Array<{ key: FinanceSectionKey; label: string; description: string }> = [
-  { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
-  { key: 'expense', label: 'Расходы', description: 'Выплаты поставщикам' },
-  { key: 'accruals', label: 'Начисления владельцам', description: 'Долги по гаражам' },
-  { key: 'supplierAccruals', label: 'Начисления поставщикам', description: 'Обязательства' },
-  { key: 'meterReadings', label: 'Счетчики', description: 'Вода и электричество' },
-]
 
 function FinancePanel({
   auth,
@@ -1650,66 +1642,6 @@ function FinancePanel({
         </table>
       </>
     )
-  }
-
-  function getFinanceEditorTitle(section: FinanceEditorKey) {
-    if (section === 'income') {
-      return 'Новое поступление'
-    }
-    if (section === 'expense') {
-      return 'Новая выплата'
-    }
-    if (section === 'accruals') {
-      return 'Ручное начисление'
-    }
-    if (section === 'regularAccruals') {
-      return 'Регулярные начисления'
-    }
-    if (section === 'supplierGroupSalaryAccruals') {
-      return 'Зарплата группы'
-    }
-    if (section === 'supplierAccruals') {
-      return 'Начисление поставщику'
-    }
-    return 'Показание счетчика'
-  }
-
-  function getFinanceEditorSubmitLabel(section: FinanceEditorKey) {
-    if (section === 'income' || section === 'expense') {
-      return 'Провести'
-    }
-    if (section === 'meterReadings') {
-      return 'Внести'
-    }
-    if (section === 'regularAccruals') {
-      return 'Создать месяц'
-    }
-    if (section === 'supplierGroupSalaryAccruals') {
-      return 'Начислить зарплату'
-    }
-    return 'Начислить'
-  }
-
-  function getFinanceEditorSavingScope(section: FinanceEditorKey) {
-    if (section === 'income') {
-      return 'income'
-    }
-    if (section === 'expense') {
-      return 'expense'
-    }
-    if (section === 'accruals') {
-      return 'accrual'
-    }
-    if (section === 'regularAccruals') {
-      return 'regular-accruals'
-    }
-    if (section === 'supplierGroupSalaryAccruals') {
-      return 'salary-accruals'
-    }
-    if (section === 'supplierAccruals') {
-      return 'supplier-accrual'
-    }
-    return 'meter-reading'
   }
 
   function handleFinanceEditorSubmit(event: FormEvent<HTMLFormElement>) {

@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-workbench",
+    "version": "0.273.0",
+    "publishedAt": "2026-06-25T14:30:00+07:00",
+    "title": "Metadata платежей вынесена в shared",
+    "summary": "Разделы платежного рабочего стола, заголовки форм и saving-scope теперь описаны в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует financeWorkbench.ts для вкладок платежей и подписей модалок."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют порядок платежных таблиц, заголовки редакторов, подписи кнопок и saving-scope."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-user-management",
     "version": "0.272.0",
     "publishedAt": "2026-06-25T14:20:00+07:00",
