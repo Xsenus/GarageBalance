@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-electricity-tier-visibility",
+    "version": "0.283.0",
+    "publishedAt": "2026-06-25T16:45:00+07:00",
+    "title": "Правило показа трехтарифных полей вынесено в shared",
+    "summary": "Форма тарифа теперь берет решение о показе порогов и ставок электроэнергии из общего frontend-модуля справочников.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 больше не сравнивает calculationBase со строкой meter_electricity внутри JSX."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют, что пороги и ставки показываются только для базы расчета по счетчику электричества."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-tariff-base-options",
     "version": "0.282.0",
     "publishedAt": "2026-06-25T16:30:00+07:00",

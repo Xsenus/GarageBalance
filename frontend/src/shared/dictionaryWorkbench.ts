@@ -197,6 +197,8 @@ const tariffCalculationBaseOptions: TariffCalculationBaseOption[] = [
   { value: 'meter_electricity', label: 'По счетчику электричества' },
 ]
 
+const electricityTierCalculationBase = 'meter_electricity'
+
 export function createEmptyOwnerForm(): DictionaryOwnerFormState {
   return {
     lastName: '',
@@ -328,6 +330,10 @@ export function getDictionaryEditorFieldMeta(key: DictionaryEditorFieldKey) {
 
 export function getTariffCalculationBaseOptions() {
   return tariffCalculationBaseOptions
+}
+
+export function usesElectricityTariffTiers(calculationBase: string) {
+  return calculationBase === electricityTierCalculationBase
 }
 
 export function getDictionaryRecordCells(section: DictionarySectionKey, item: DictionaryRecord): Array<string | number> {
