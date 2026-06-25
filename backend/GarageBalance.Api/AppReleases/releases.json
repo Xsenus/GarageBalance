@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-context-menu",
+    "version": "0.287.0",
+    "publishedAt": "2026-06-25T17:45:00+07:00",
+    "title": "Команды меню платежей вынесены в shared",
+    "summary": "ПКМ-меню таблиц платежей теперь берет CRUD-подписи из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит строки Добавить, Изменить и Удалить внутри разметки платежного меню."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют подписи CRUD-команд платежных таблиц и повторное использование submit-label регулярных начислений."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-section-descriptions",
     "version": "0.286.0",
     "publishedAt": "2026-06-25T17:30:00+07:00",

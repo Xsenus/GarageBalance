@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './shared/financeWorkbench'
+import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -2224,7 +2224,7 @@ function FinancePanel({
           <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте регулярные начисления" items={regularValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
-            <span>Создать месяц</span>
+            <span>{getFinanceEditorSubmitLabel('regularAccruals')}</span>
           </button>
           {regularStatus ? <p className="empty-state" role="status" aria-live="polite">{regularStatus}</p> : null}
         </form>
@@ -2381,13 +2381,13 @@ function FinancePanel({
       {financeContextMenu ? (
         <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label="Операции с платежами" onClick={(event) => event.stopPropagation()} onKeyDown={handleFinanceContextMenuKeyDown}>
           <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
-            <span>Добавить</span>
+            <span>{getFinanceContextMenuLabel('add')}</span>
           </button>
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
-            <span>Изменить</span>
+            <span>{getFinanceContextMenuLabel('edit')}</span>
           </button>
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
-            <span>Удалить</span>
+            <span>{getFinanceContextMenuLabel('delete')}</span>
           </button>
         </div>
       ) : null}

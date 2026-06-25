@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './financeWorkbench'
-import type { FinanceEditorKey } from './financeWorkbench'
+import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -11,6 +11,8 @@ const editorKeys: FinanceEditorKey[] = [
   'supplierAccruals',
   'meterReadings',
 ]
+
+const contextMenuActions: FinanceContextMenuAction[] = ['add', 'edit', 'delete']
 
 describe('finance workbench metadata', () => {
   it('keeps the payment table sections in the expected order', () => {
@@ -67,5 +69,13 @@ describe('finance workbench metadata', () => {
       supplierAccruals: 7,
       meterReadings: 40,
     })).toBe('Оплаты владельцев · 12')
+  })
+
+  it('returns context menu labels for payment table CRUD actions', () => {
+    expect(Object.fromEntries(contextMenuActions.map((action) => [action, getFinanceContextMenuLabel(action)]))).toEqual({
+      add: 'Добавить',
+      edit: 'Изменить',
+      delete: 'Удалить',
+    })
   })
 })

@@ -18,6 +18,8 @@ export type FinanceEditorSavingScope =
   | 'supplier-accrual'
   | 'meter-reading'
 
+export type FinanceContextMenuAction = 'add' | 'edit' | 'delete'
+
 export const financeSectionOptions: FinanceSectionOption[] = [
   { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
   { key: 'expense', label: 'Расходы', description: 'Выплаты поставщикам' },
@@ -56,6 +58,12 @@ const financeEditorSavingScopes: Record<FinanceEditorKey, FinanceEditorSavingSco
   meterReadings: 'meter-reading',
 }
 
+const financeContextMenuLabels: Record<FinanceContextMenuAction, string> = {
+  add: 'Добавить',
+  edit: 'Изменить',
+  delete: 'Удалить',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -70,4 +78,8 @@ export function getFinanceEditorSavingScope(section: FinanceEditorKey) {
 
 export function getFinanceSectionDescription(section: FinanceSectionOption, counts: FinanceSectionCounts) {
   return `${section.description} · ${counts[section.key]}`
+}
+
+export function getFinanceContextMenuLabel(action: FinanceContextMenuAction) {
+  return financeContextMenuLabels[action]
 }
