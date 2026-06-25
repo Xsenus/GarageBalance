@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-artifact-privacy-guard",
+    "version": "0.260.0",
+    "publishedAt": "2026-06-25T15:15:00+07:00",
+    "title": "Артефакты миграций защищены от публикации",
+    "summary": "Папка artifacts с релизными SQL-файлами теперь исключена из Git и проверяется privacy-скриптом.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": ".gitignore скрывает artifacts/, чтобы deploy-migrations.sql не становился untracked-кандидатом для коммита."
+      },
+      {
+        "type": "fixed",
+        "text": "verify-package-privacy.ps1 блокирует artifacts/ даже при принудительном добавлении файлов."
+      },
+      {
+        "type": "improved",
+        "text": "README, checklist передачи в Git и checklist обновления явно предупреждают не публиковать релизные SQL-артефакты."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-migration-script-artifact",
     "version": "0.259.0",
     "publishedAt": "2026-06-25T15:00:00+07:00",

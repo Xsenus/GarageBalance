@@ -17,6 +17,7 @@ public sealed class PackagePrivacyScriptTests
         Assert.Contains("mdb", script, StringComparison.Ordinal);
         Assert.Contains("pgdump", script, StringComparison.Ordinal);
         Assert.Contains("sql\\.gz", script, StringComparison.Ordinal);
+        Assert.Contains("artifacts", script, StringComparison.Ordinal);
         Assert.Contains("private-imports", script, StringComparison.Ordinal);
         Assert.Contains("imports/(private|raw)", script, StringComparison.Ordinal);
         Assert.Contains("Privacy check failed", script, StringComparison.Ordinal);

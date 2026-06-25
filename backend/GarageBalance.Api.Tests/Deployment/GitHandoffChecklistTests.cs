@@ -16,7 +16,7 @@ public sealed class GitHandoffChecklistTests
         Assert.Contains("npm run build", document, StringComparison.Ordinal);
         Assert.Contains("npm run lint", document, StringComparison.Ordinal);
         Assert.Contains("dotnet format --verify-no-changes", document, StringComparison.Ordinal);
-        Assert.Contains("dotnet tool run dotnet-ef migrations script --idempotent", document, StringComparison.Ordinal);
+        Assert.Contains("generate-migration-script.ps1", document, StringComparison.Ordinal);
         Assert.Contains("git diff --check", document, StringComparison.Ordinal);
         Assert.Contains("UTF-8/no BOM", document, StringComparison.Ordinal);
         Assert.Contains("postgresTcp=False", document, StringComparison.Ordinal);
@@ -24,6 +24,7 @@ public sealed class GitHandoffChecklistTests
         Assert.Contains("только после прямой команды пользователя", document, StringComparison.Ordinal);
         Assert.Contains(".accdb", document, StringComparison.Ordinal);
         Assert.Contains(".pgdump", document, StringComparison.Ordinal);
+        Assert.Contains("artifacts/", document, StringComparison.Ordinal);
         Assert.Contains("appsettings.Local.json", document, StringComparison.Ordinal);
         Assert.Contains("private-imports/", document, StringComparison.Ordinal);
         Assert.Contains("1C Fresh", document, StringComparison.Ordinal);

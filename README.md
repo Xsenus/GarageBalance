@@ -350,7 +350,7 @@ Checklist передачи проекта в Git описан в `docs/git-hando
 
 Приватные данные кооператива нельзя добавлять в Git: реальные `.env`, `appsettings.Local.json`, `.accdb`/`.mdb`, дампы, backup-файлы и папки `private-imports/`, `imports/private/`, `imports/raw/` должны оставаться только локально. Это правило закреплено в корневом `.gitignore` и backend-тесте `SensitiveFileGitIgnoreTests`.
 
-Перед будущей публикацией в Git или упаковкой архива поставки запускайте `infrastructure/scripts/verify-package-privacy.ps1`: скрипт проверяет tracked/untracked Git-кандидаты и падает, если `.env`, `appsettings.Local.json`, Access-БД, дампы, backup или приватные import-папки видны Git.
+Перед будущей публикацией в Git или упаковкой архива поставки запускайте `infrastructure/scripts/verify-package-privacy.ps1`: скрипт проверяет tracked/untracked Git-кандидаты и падает, если `.env`, `appsettings.Local.json`, Access-БД, дампы, backup, `artifacts/` или приватные import-папки видны Git.
 
 Классы чувствительных данных, поля повышенной защиты, сроки хранения raw-импортов Access, quarantine/error bucket, логов и будущие требования к шифрованию описаны в `docs/security-data-protection.md`.
 

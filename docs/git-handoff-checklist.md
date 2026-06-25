@@ -20,7 +20,8 @@
 - реальные `.env`, `appsettings.Local.json`, production secrets и JWT-ключи;
 - Access-БД `.accdb` и `.mdb`;
 - PostgreSQL backup и dump: `.pgdump`, `.dump`, `.backup`, `.sql.gz`;
-- папки `backups/`, `dumps/`, `private-imports/`, `imports/private/`, `imports/raw/`;
+- релизные артефакты миграций и временные SQL-файлы в `artifacts/`;
+- папки `artifacts/`, `backups/`, `dumps/`, `private-imports/`, `imports/private/`, `imports/raw/`;
 - платежные документы, договоры, счета, чеки и персональные выгрузки;
 - реальные файлы отчетов XLSX/PDF, созданные для заказчика;
 - логи с персональными, финансовыми или секретными данными;
@@ -38,7 +39,7 @@
 4. `npm run build` в папке `frontend`.
 5. `npm run lint` в папке `frontend`.
 6. `dotnet format --verify-no-changes`.
-7. `dotnet tool run dotnet-ef migrations script --idempotent` для проверки миграционной цепочки.
+7. `infrastructure/scripts/generate-migration-script.ps1` для проверки миграционной цепочки и SQL-артефакта.
 8. `git diff --check`.
 9. JSON-проверку `backend/GarageBalance.Api/AppReleases/releases.json`.
 10. Строгую проверку UTF-8/no BOM для измененных `.md`, `.json`, `.cs`, `.ts`, `.tsx`, `.css`, `.html`, `.yml`, `.yaml`, `.conf`, `.ps1` и Dockerfile.

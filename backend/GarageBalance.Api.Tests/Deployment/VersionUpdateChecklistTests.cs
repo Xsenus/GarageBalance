@@ -19,6 +19,7 @@ public sealed class VersionUpdateChecklistTests
         Assert.Contains("generate-migration-script.ps1", document, StringComparison.Ordinal);
         Assert.Contains("migrationScriptPath=", document, StringComparison.Ordinal);
         Assert.Contains("migrationScriptBytes=", document, StringComparison.Ordinal);
+        Assert.Contains("artifacts/", document, StringComparison.Ordinal);
         Assert.Contains("docker compose up --build -d", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS http://127.0.0.1:5080/health", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);

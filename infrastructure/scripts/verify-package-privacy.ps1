@@ -27,7 +27,7 @@ try {
         '(^|/)appsettings\.Local\.json$',
         '\.(accdb|mdb|pgdump|dump|backup|bak|db|sqlite|sqlite3)$',
         '\.sql\.gz$',
-        '(^|/)(backups|dumps|local-db-backups|private-imports)(/|$)',
+        '(^|/)(artifacts|backups|dumps|local-db-backups|private-imports)(/|$)',
         '(^|/)imports/(private|raw)(/|$)'
     )
 

@@ -35,6 +35,7 @@ local-db-backups/
 private-imports/
 imports/private/
 imports/raw/
+artifacts/
 .deploy/
 
 # OS/editor

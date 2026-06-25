@@ -23,7 +23,8 @@ public sealed class SensitiveFileGitIgnoreTests
         "local-db-backups/",
         "private-imports/",
         "imports/private/",
-        "imports/raw/"
+        "imports/raw/",
+        "artifacts/"
     ];
 
     [Fact]
