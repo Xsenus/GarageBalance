@@ -1640,9 +1640,9 @@ function FinancePanel({
           <div className="inline-fields">
             <label className="dictionary-search">
               <Search size={16} aria-hidden="true" />
-              <input aria-label="Поиск гаража для поступления" placeholder="Гараж или владелец" value={incomeGarageSearch} onChange={(event) => setIncomeGarageSearch(event.target.value)} />
+              <input aria-label={getFinanceToolbarLabel('incomeGarageSearch')} placeholder={getFinanceToolbarLabel('incomeGarageSearchPlaceholder')} value={incomeGarageSearch} onChange={(event) => setIncomeGarageSearch(event.target.value)} />
             </label>
-            <button className="icon-button" type="button" aria-label="Найти гараж для поступления" disabled={saving === 'income-garage-search'} onClick={() => void searchIncomeGarages()}>
+            <button className="icon-button" type="button" aria-label={getFinanceToolbarLabel('incomeGarageSearchSubmit')} disabled={saving === 'income-garage-search'} onClick={() => void searchIncomeGarages()}>
               <Search size={16} aria-hidden="true" />
             </button>
           </div>
@@ -2000,9 +2000,9 @@ function FinancePanel({
           <div className="inline-fields">
             <label className="dictionary-search">
               <Search size={16} aria-hidden="true" />
-              <input aria-label="Поиск гаража для поступления" placeholder="Гараж или владелец" value={incomeGarageSearch} onChange={(event) => setIncomeGarageSearch(event.target.value)} />
+              <input aria-label={getFinanceToolbarLabel('incomeGarageSearch')} placeholder={getFinanceToolbarLabel('incomeGarageSearchPlaceholder')} value={incomeGarageSearch} onChange={(event) => setIncomeGarageSearch(event.target.value)} />
             </label>
-            <button className="icon-button" type="button" aria-label="Найти гараж для поступления" disabled={saving === 'income-garage-search'} onClick={() => void searchIncomeGarages()}>
+            <button className="icon-button" type="button" aria-label={getFinanceToolbarLabel('incomeGarageSearchSubmit')} disabled={saving === 'income-garage-search'} onClick={() => void searchIncomeGarages()}>
               <Search size={16} aria-hidden="true" />
             </button>
           </div>

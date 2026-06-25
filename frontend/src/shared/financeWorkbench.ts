@@ -28,6 +28,9 @@ export type FinanceToolbarLabelKey =
   | 'periodTo'
   | 'search'
   | 'searchPlaceholder'
+  | 'incomeGarageSearch'
+  | 'incomeGarageSearchPlaceholder'
+  | 'incomeGarageSearchSubmit'
   | 'regularAccruals'
   | 'supplierGroupSalaryAccruals'
   | 'tableArea'
@@ -125,6 +128,9 @@ const financeToolbarLabels: Record<FinanceToolbarLabelKey, string> = {
   periodTo: 'Период по',
   search: 'Поиск по платежам',
   searchPlaceholder: 'Гараж, владелец, поставщик или документ',
+  incomeGarageSearch: 'Поиск гаража для поступления',
+  incomeGarageSearchPlaceholder: 'Гараж или владелец',
+  incomeGarageSearchSubmit: 'Найти гараж для поступления',
   regularAccruals: 'Регулярные',
   supplierGroupSalaryAccruals: 'Зарплата группы',
   tableArea: 'Рабочая область платежной таблицы',

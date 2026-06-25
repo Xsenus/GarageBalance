@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-income-garage-search-labels",
+    "version": "0.298.0",
+    "publishedAt": "2026-06-25T20:30:00+07:00",
+    "title": "Подписи поиска гаража в поступлении вынесены в shared",
+    "summary": "Поле и кнопка поиска гаража в форме поступления теперь берут подписи из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит aria-label и placeholder мини-поиска гаража в платежной форме."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют подписи поля, placeholder и кнопки поиска гаража для поступления."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-income-garage-search-status",
     "version": "0.297.0",
     "publishedAt": "2026-06-25T20:15:00+07:00",
