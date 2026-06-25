@@ -1,4 +1,14 @@
 import type { TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../services/dictionariesApi'
+import type { AccountingTypeDto } from '../services/dictionariesApi'
+import type {
+  CreateAccrualRequest,
+  CreateExpenseOperationRequest,
+  CreateIncomeOperationRequest,
+  CreateMeterReadingRequest,
+  CreateSupplierAccrualRequest,
+  GenerateRegularAccrualsRequest,
+  GenerateSupplierGroupSalaryAccrualsRequest,
+} from '../services/financeApi'
 
 export type OwnerGarageLinkForm = {
   existingGarageId: string
@@ -9,6 +19,31 @@ export type OwnerGarageLinkForm = {
   initialWaterMeterValue: string
   initialElectricityMeterValue: string
   comment: string
+}
+
+export type IncomeReportFilters = {
+  dateFrom: string
+  dateTo: string
+  search: string
+  garageIds: string[]
+  ownerIds: string[]
+  incomeTypeIds: string[]
+  rowMode: string
+}
+
+export type ConsolidatedReportFilters = {
+  monthFrom: string
+  monthTo: string
+  search: string
+}
+
+export type ExpenseReportFilters = {
+  dateFrom: string
+  dateTo: string
+  search: string
+  supplierIds: string[]
+  expenseTypeIds: string[]
+  rowMode: string
 }
 
 export function getPasswordPolicyErrors(password: string, emptyMessage = 'Укажите пароль.') {
@@ -314,4 +349,263 @@ export function withoutElectricityTierFields(form: UpsertTariffRequest): UpsertT
 export function updateTariffCalculationBase(form: UpsertTariffRequest, calculationBase: string): UpsertTariffRequest {
   const nextForm = { ...form, calculationBase }
   return calculationBase === 'meter_electricity' ? nextForm : withoutElectricityTierFields(nextForm)
+}
+
+export function isAccountingMonthValue(value: string) {
+  return /^\d{4}-\d{2}-01$/.test(value) && !Number.isNaN(Date.parse(value))
+}
+
+function addPositiveAmountValidation(errors: string[], amount: number, label: string) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    errors.push(`${label} должна быть больше 0.`)
+  }
+}
+
+export function getIncomeValidationErrors(form: CreateIncomeOperationRequest) {
+  const errors: string[] = []
+
+  if (!form.garageId) {
+    errors.push('Выберите гараж для поступления.')
+  }
+
+  if (!form.incomeTypeId) {
+    errors.push('Выберите вид поступления.')
+  }
+
+  if (!isDateInputValue(form.operationDate)) {
+    errors.push('Укажите дату поступления.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц поступления.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма поступления')
+
+  return errors
+}
+
+export function getExpenseValidationErrors(form: CreateExpenseOperationRequest) {
+  const errors: string[] = []
+
+  if (!form.supplierId) {
+    errors.push('Выберите поставщика для выплаты.')
+  }
+
+  if (!form.expenseTypeId) {
+    errors.push('Выберите вид выплаты.')
+  }
+
+  if (!isDateInputValue(form.operationDate)) {
+    errors.push('Укажите дату выплаты.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц выплаты.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма выплаты')
+
+  return errors
+}
+
+export function getAccrualValidationErrors(form: CreateAccrualRequest) {
+  const errors: string[] = []
+
+  if (!form.garageId) {
+    errors.push('Выберите гараж для начисления.')
+  }
+
+  if (!form.incomeTypeId) {
+    errors.push('Выберите вид начисления.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц начисления.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма начисления')
+
+  if (!form.comment?.trim()) {
+    errors.push('Укажите комментарий начисления.')
+  }
+
+  return errors
+}
+
+export function getSupplierAccrualValidationErrors(form: CreateSupplierAccrualRequest) {
+  const errors: string[] = []
+
+  if (!form.supplierId) {
+    errors.push('Выберите поставщика для начисления.')
+  }
+
+  if (!form.expenseTypeId) {
+    errors.push('Выберите вид начисления поставщику.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц начисления поставщику.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма начисления поставщику')
+
+  if (!form.comment?.trim()) {
+    errors.push('Укажите комментарий начисления поставщику.')
+  }
+
+  return errors
+}
+
+export function getSupplierGroupSalaryValidationErrors(form: GenerateSupplierGroupSalaryAccrualsRequest) {
+  const errors: string[] = []
+
+  if (!form.supplierGroupId) {
+    errors.push('Выберите группу персонала.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц зарплаты.')
+  }
+
+  addPositiveAmountValidation(errors, form.amount, 'Сумма зарплаты')
+
+  return errors
+}
+
+export function getRegularAccrualValidationErrors(form: GenerateRegularAccrualsRequest) {
+  const errors: string[] = []
+
+  if (!form.incomeTypeId) {
+    errors.push('Выберите вид регулярного начисления.')
+  }
+
+  if (!form.tariffId) {
+    errors.push('Выберите тариф регулярного начисления.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц регулярных начислений.')
+  }
+
+  return errors
+}
+
+export function getRegularAccrualValidationErrorsForCatalog(
+  form: GenerateRegularAccrualsRequest,
+  incomeTypes: AccountingTypeDto[],
+  tariffs: TariffDto[],
+) {
+  const errors = getRegularAccrualValidationErrors(form)
+  const incomeType = incomeTypes.find((item) => item.id === form.incomeTypeId)
+  const tariff = tariffs.find((item) => item.id === form.tariffId)
+
+  if (incomeType && tariff && !isTariffCompatibleWithRegularIncomeType(incomeType, tariff)) {
+    errors.push('Выбранный тариф не подходит для этого вида регулярного начисления.')
+  }
+
+  return errors
+}
+
+export function getRegularIncomeTypeCalculationBase(incomeType?: AccountingTypeDto | null) {
+  switch (incomeType?.code?.trim().toLowerCase()) {
+    case 'water':
+      return 'meter_water'
+    case 'trash':
+      return 'people'
+    case 'electricity':
+      return 'meter_electricity'
+    case 'membership':
+    case 'target':
+    case 'entry':
+    case 'connection':
+      return 'fixed'
+    default:
+      return null
+  }
+}
+
+export function isTariffCompatibleWithRegularIncomeType(incomeType: AccountingTypeDto, tariff: TariffDto) {
+  const calculationBase = getRegularIncomeTypeCalculationBase(incomeType)
+  return calculationBase === null || tariff.calculationBase === calculationBase
+}
+
+export function getCompatibleRegularTariffs(incomeTypeId: string, incomeTypes: AccountingTypeDto[], tariffs: TariffDto[]) {
+  const incomeType = incomeTypes.find((item) => item.id === incomeTypeId)
+  return incomeType ? tariffs.filter((tariff) => isTariffCompatibleWithRegularIncomeType(incomeType, tariff)) : tariffs
+}
+
+export function chooseRegularTariffId(incomeTypeId: string, currentTariffId: string, incomeTypes: AccountingTypeDto[], tariffs: TariffDto[]) {
+  const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
+  return compatibleTariffs.some((tariff) => tariff.id === currentTariffId) ? currentTariffId : compatibleTariffs[0]?.id ?? ''
+}
+
+export function getMeterReadingValidationErrors(form: CreateMeterReadingRequest) {
+  const errors: string[] = []
+
+  if (!form.garageId) {
+    errors.push('Выберите гараж для счетчика.')
+  }
+
+  if (!['water', 'electricity'].includes(form.meterKind)) {
+    errors.push('Выберите тип счетчика.')
+  }
+
+  if (!isAccountingMonthValue(form.accountingMonth)) {
+    errors.push('Укажите месяц показания.')
+  }
+
+  if (!isDateInputValue(form.readingDate)) {
+    errors.push('Укажите дату показания.')
+  }
+
+  if (!Number.isFinite(form.currentValue) || form.currentValue < 0) {
+    errors.push('Новое показание должно быть 0 или больше.')
+  }
+
+  return errors
+}
+
+export function getReportMonthRangeValidationErrors(filters: ConsolidatedReportFilters) {
+  const errors: string[] = []
+
+  if (!isAccountingMonthValue(filters.monthFrom)) {
+    errors.push('Укажите начало периода отчета.')
+  }
+
+  if (!isAccountingMonthValue(filters.monthTo)) {
+    errors.push('Укажите конец периода отчета.')
+  }
+
+  if (isAccountingMonthValue(filters.monthFrom) && isAccountingMonthValue(filters.monthTo) && filters.monthFrom > filters.monthTo) {
+    errors.push('Начало периода отчета не может быть позже конца.')
+  }
+
+  return errors
+}
+
+export function getReportDateRangeValidationErrors(dateFrom: string, dateTo: string, label: string) {
+  const errors: string[] = []
+
+  if (!isDateInputValue(dateFrom)) {
+    errors.push(`Укажите начало ${label}.`)
+  }
+
+  if (!isDateInputValue(dateTo)) {
+    errors.push(`Укажите конец ${label}.`)
+  }
+
+  if (isDateInputValue(dateFrom) && isDateInputValue(dateTo) && dateFrom > dateTo) {
+    errors.push(`Начало ${label} не может быть позже конца.`)
+  }
+
+  return errors
+}
+
+export function getIncomeReportValidationErrors(filters: IncomeReportFilters) {
+  return getReportDateRangeValidationErrors(filters.dateFrom, filters.dateTo, 'отчета по поступлениям')
+}
+
+export function getExpenseReportValidationErrors(filters: ExpenseReportFilters) {
+  return getReportDateRangeValidationErrors(filters.dateFrom, filters.dateTo, 'отчета по выплатам')
 }

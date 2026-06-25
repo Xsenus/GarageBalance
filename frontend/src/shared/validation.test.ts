@@ -1,18 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import type { TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
+import type { AccountingTypeDto } from '../services/dictionariesApi'
 import {
+  chooseRegularTariffId,
   createTariffFormFromDto,
+  getAccrualValidationErrors,
   getAccountingTypeValidationErrors,
   getAuthValidationErrors,
+  getCompatibleRegularTariffs,
+  getExpenseReportValidationErrors,
+  getExpenseValidationErrors,
   getGarageValidationErrors,
+  getIncomeReportValidationErrors,
+  getIncomeValidationErrors,
   getManagedUserValidationErrors,
+  getMeterReadingValidationErrors,
   getOwnerGarageLinkValidationErrors,
   getOwnerValidationErrors,
   getPasswordChangeValidationErrors,
   getPasswordPolicyErrors,
+  getRegularAccrualValidationErrorsForCatalog,
+  getReportMonthRangeValidationErrors,
+  getSupplierAccrualValidationErrors,
+  getSupplierGroupSalaryValidationErrors,
   getSupplierGroupValidationErrors,
   getSupplierValidationErrors,
   getTariffValidationErrors,
+  isAccountingMonthValue,
   isDateInputValue,
   parseOptionalNumberInput,
   updateTariffCalculationBase,
@@ -179,9 +193,95 @@ describe('shared validation helpers', () => {
     expect(updateTariffCalculationBase(tariffForm, 'fixed')).not.toHaveProperty('electricityThirdRate')
     expect(updateTariffCalculationBase(tariffForm, 'meter_electricity')).toHaveProperty('electricityThirdRate')
   })
+
+  it('validates finance operation and accrual forms', () => {
+    expect(getIncomeValidationErrors({ garageId: '', incomeTypeId: '', operationDate: 'bad', accountingMonth: '2026-06', amount: 0, documentNumber: '', comment: '' })).toEqual([
+      'Выберите гараж для поступления.',
+      'Выберите вид поступления.',
+      'Укажите дату поступления.',
+      'Укажите месяц поступления.',
+      'Сумма поступления должна быть больше 0.',
+    ])
+
+    expect(getExpenseValidationErrors({ supplierId: '', expenseTypeId: '', operationDate: 'bad', accountingMonth: 'bad', amount: -1, documentNumber: '', comment: '' })).toEqual([
+      'Выберите поставщика для выплаты.',
+      'Выберите вид выплаты.',
+      'Укажите дату выплаты.',
+      'Укажите месяц выплаты.',
+      'Сумма выплаты должна быть больше 0.',
+    ])
+
+    expect(getAccrualValidationErrors({ garageId: '', incomeTypeId: '', accountingMonth: 'bad', amount: 0, source: 'manual', comment: '' })).toEqual([
+      'Выберите гараж для начисления.',
+      'Выберите вид начисления.',
+      'Укажите месяц начисления.',
+      'Сумма начисления должна быть больше 0.',
+      'Укажите комментарий начисления.',
+    ])
+
+    expect(getSupplierAccrualValidationErrors({ supplierId: '', expenseTypeId: '', accountingMonth: 'bad', amount: 0, source: 'manual', documentNumber: '', comment: '' })).toEqual([
+      'Выберите поставщика для начисления.',
+      'Выберите вид начисления поставщику.',
+      'Укажите месяц начисления поставщику.',
+      'Сумма начисления поставщику должна быть больше 0.',
+      'Укажите комментарий начисления поставщику.',
+    ])
+  })
+
+  it('validates regular accruals, salary accruals and meter readings', () => {
+    const incomeTypes = [
+      createIncomeType('water-type', 'water'),
+      createIncomeType('membership-type', 'membership'),
+    ]
+    const tariffs = [
+      createTariffDto({ id: 'water-tariff', calculationBase: 'meter_water' }),
+      createTariffDto({ id: 'fixed-tariff', calculationBase: 'fixed' }),
+    ]
+
+    expect(getSupplierGroupSalaryValidationErrors({ supplierGroupId: '', accountingMonth: 'bad', amount: 0, documentNumber: '', comment: '' })).toEqual([
+      'Выберите группу персонала.',
+      'Укажите месяц зарплаты.',
+      'Сумма зарплаты должна быть больше 0.',
+    ])
+    expect(getRegularAccrualValidationErrorsForCatalog({ incomeTypeId: '', tariffId: '', accountingMonth: 'bad', comment: '' }, incomeTypes, tariffs)).toEqual([
+      'Выберите вид регулярного начисления.',
+      'Выберите тариф регулярного начисления.',
+      'Укажите месяц регулярных начислений.',
+    ])
+    expect(getRegularAccrualValidationErrorsForCatalog({ incomeTypeId: 'water-type', tariffId: 'fixed-tariff', accountingMonth: '2026-06-01', comment: '' }, incomeTypes, tariffs)).toEqual([
+      'Выбранный тариф не подходит для этого вида регулярного начисления.',
+    ])
+    expect(getCompatibleRegularTariffs('water-type', incomeTypes, tariffs).map((tariff) => tariff.id)).toEqual(['water-tariff'])
+    expect(chooseRegularTariffId('water-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('water-tariff')
+    expect(chooseRegularTariffId('membership-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('fixed-tariff')
+    expect(getMeterReadingValidationErrors({ garageId: '', meterKind: 'bad' as 'water', accountingMonth: 'bad', readingDate: 'bad', currentValue: -1, comment: '' })).toEqual([
+      'Выберите гараж для счетчика.',
+      'Выберите тип счетчика.',
+      'Укажите месяц показания.',
+      'Укажите дату показания.',
+      'Новое показание должно быть 0 или больше.',
+    ])
+  })
+
+  it('validates report periods', () => {
+    expect(isAccountingMonthValue('2026-06-01')).toBe(true)
+    expect(isAccountingMonthValue('2026-06-02')).toBe(false)
+    expect(getReportMonthRangeValidationErrors({ monthFrom: '2026-07-01', monthTo: '2026-06-01', search: '' })).toEqual(['Начало периода отчета не может быть позже конца.'])
+    expect(getReportMonthRangeValidationErrors({ monthFrom: 'bad', monthTo: 'bad', search: '' })).toEqual([
+      'Укажите начало периода отчета.',
+      'Укажите конец периода отчета.',
+    ])
+    expect(getIncomeReportValidationErrors({ dateFrom: '2026-07-01', dateTo: '2026-06-01', search: '', garageIds: [], ownerIds: [], incomeTypeIds: [], rowMode: 'all' })).toEqual([
+      'Начало отчета по поступлениям не может быть позже конца.',
+    ])
+    expect(getExpenseReportValidationErrors({ dateFrom: 'bad', dateTo: 'bad', search: '', supplierIds: [], expenseTypeIds: [], rowMode: 'all' })).toEqual([
+      'Укажите начало отчета по выплатам.',
+      'Укажите конец отчета по выплатам.',
+    ])
+  })
 })
 
-function createTariffDto(): TariffDto {
+function createTariffDto(overrides: Partial<TariffDto> = {}): TariffDto {
   return {
     id: 'tariff-1',
     name: 'Электроэнергия',
@@ -194,6 +294,17 @@ function createTariffDto(): TariffDto {
     electricityThirdRate: 5,
     effectiveFrom: '2026-06-01',
     comment: null,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createIncomeType(id: string, code: string): AccountingTypeDto {
+  return {
+    id,
+    name: id,
+    code,
+    isSystem: false,
     isArchived: false,
   }
 }
