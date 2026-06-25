@@ -2081,22 +2081,6 @@ function FinancePanel({
     return financePage.items.length
   }
 
-  function getFinanceAddLabel() {
-    if (activeFinanceSection === 'income') {
-      return 'Провести поступление'
-    }
-    if (activeFinanceSection === 'expense') {
-      return 'Провести выплату'
-    }
-    if (activeFinanceSection === 'accruals') {
-      return 'Начислить'
-    }
-    if (activeFinanceSection === 'supplierAccruals') {
-      return 'Начислить поставщику'
-    }
-    return 'Внести показание'
-  }
-
   function renderFinanceTable() {
     if (activeFinanceSection === 'income') {
       return (
@@ -2693,10 +2677,6 @@ function FinancePanel({
                 <span>Зарплата группы</span>
               </button>
             ) : null}
-            <button className="secondary-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor(activeFinanceSection)}>
-              <Plus size={16} aria-hidden="true" />
-              <span>{getFinanceAddLabel()}</span>
-            </button>
           </div>
         </div>
 
