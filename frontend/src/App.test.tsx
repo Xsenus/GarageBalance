@@ -1832,6 +1832,75 @@ describe('App', () => {
     confirmSpy.mockRestore()
   })
 
+  it('keeps changed payment editor drafts for every editor type', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    async function selectFinanceTab(name: RegExp) {
+      const tab = within(financePanel).getByRole('tab', { name })
+      await user.click(tab)
+      await waitFor(() => expect(tab).toHaveAttribute('aria-selected', 'true'))
+    }
+
+    async function openCreateDialogFromTable(tabName: RegExp) {
+      await selectFinanceTab(tabName)
+      fireEvent.contextMenu(tableArea)
+      const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+      await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
+    }
+
+    const cases = [
+      { dialog: 'Новая выплата', field: 'Документ выплаты', draft: 'RKO-draft', open: () => openCreateDialogFromTable(/Расходы/) },
+      { dialog: 'Ручное начисление', field: 'Комментарий к начислению', draft: 'Начисление draft', open: () => openCreateDialogFromTable(/Начисления владельцам/) },
+      {
+        dialog: 'Регулярные начисления',
+        field: 'Комментарий к регулярному начислению',
+        draft: 'Регулярное draft',
+        open: async () => {
+          await selectFinanceTab(/Начисления владельцам/)
+          await user.click(within(financePanel).getByRole('button', { name: 'Регулярные' }))
+        },
+      },
+      { dialog: 'Начисление поставщику', field: 'Документ начисления поставщику', draft: 'BILL-draft', open: () => openCreateDialogFromTable(/Начисления поставщикам/) },
+      {
+        dialog: 'Зарплата группы',
+        field: 'Документ зарплаты',
+        draft: 'SALARY-draft',
+        open: async () => {
+          await selectFinanceTab(/Начисления поставщикам/)
+          await user.click(within(financePanel).getByRole('button', { name: 'Зарплата группы' }))
+        },
+      },
+      { dialog: 'Показание счетчика', field: 'Комментарий к показанию', draft: 'Счетчик draft', open: () => openCreateDialogFromTable(/Счетчики/) },
+    ]
+
+    for (const item of cases) {
+      await item.open()
+      const dialog = await screen.findByRole('dialog', { name: item.dialog })
+      const field = within(dialog).getByLabelText(item.field)
+      await user.type(field, item.draft)
+      expect(within(dialog).getByText('Есть несохраненные изменения формы платежа.')).toHaveAttribute('role', 'status')
+      await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+      expect(confirmSpy).toHaveBeenCalledWith('Закрыть форму платежа без сохранения изменений?')
+      expect(screen.getByRole('dialog', { name: item.dialog })).toBeInTheDocument()
+      expect(field).toHaveValue(item.draft)
+
+      confirmSpy.mockReturnValue(true)
+      await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: item.dialog })).not.toBeInTheDocument())
+      confirmSpy.mockReturnValue(false)
+    }
+
+    confirmSpy.mockRestore()
+  })
+
   it('opens payment context menu from focused row keyboard shortcut', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
