@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription, getFinanceTableHeaders } from './shared/financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -1491,13 +1491,13 @@ function FinancePanel({
               <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'income', operation)} onClick={() => editFinanceRecord('income', operation)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'income', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
-                <td>Гараж {operation.garageNumber}</td>
-                <td>{operation.ownerName ?? 'Не указан'}</td>
+                <td>{formatFinanceGarageLabel(operation.garageNumber)}</td>
+                <td>{getFinanceOptionalText(operation.ownerName)}</td>
                 <td>{operation.incomeTypeName}</td>
-                <td>{operation.documentNumber ?? 'Не указан'}</td>
+                <td>{getFinanceOptionalText(operation.documentNumber)}</td>
                 <td className="money-income">{formatMoney(operation.amount)}</td>
-                <td className={operation.garageDebtAfter !== null ? getDebtClassName(operation.garageDebtAfter) : undefined}>{operation.garageDebtAfter !== null ? formatDebtAmount(operation.garageDebtAfter) : 'Нет данных'}</td>
-                <td>{operation.comment ?? 'Нет комментария'}</td>
+                <td className={operation.garageDebtAfter !== null ? getDebtClassName(operation.garageDebtAfter) : undefined}>{operation.garageDebtAfter !== null ? formatDebtAmount(operation.garageDebtAfter) : getFinanceFallbackLabel('noData')}</td>
+                <td>{getFinanceOptionalText(operation.comment, 'noComment')}</td>
               </tr>
             ))}
           </tbody>
@@ -1514,12 +1514,12 @@ function FinancePanel({
               <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={() => editFinanceRecord('expense', operation)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
-                <td>{operation.supplierName ?? 'Не указан'}</td>
+                <td>{getFinanceOptionalText(operation.supplierName)}</td>
                 <td>{operation.expenseTypeName}</td>
-                <td>{operation.documentNumber ?? 'Не указан'}</td>
+                <td>{getFinanceOptionalText(operation.documentNumber)}</td>
                 <td className="money-expense">{formatMoney(operation.amount)}</td>
-                <td>{operation.supplierDebtAfter !== null ? formatMoney(operation.supplierDebtAfter) : 'Нет данных'}</td>
-                <td>{operation.comment ?? 'Нет комментария'}</td>
+                <td>{operation.supplierDebtAfter !== null ? formatMoney(operation.supplierDebtAfter) : getFinanceFallbackLabel('noData')}</td>
+                <td>{getFinanceOptionalText(operation.comment, 'noComment')}</td>
               </tr>
             ))}
           </tbody>
@@ -1535,12 +1535,12 @@ function FinancePanel({
             {filteredAccruals.map((accrual) => (
               <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={() => editFinanceRecord('accruals', accrual)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
                 <td>{formatMonth(accrual.accountingMonth)}</td>
-                <td>Гараж {accrual.garageNumber}</td>
-                <td>{accrual.ownerName ?? 'Не указан'}</td>
+                <td>{formatFinanceGarageLabel(accrual.garageNumber)}</td>
+                <td>{getFinanceOptionalText(accrual.ownerName)}</td>
                 <td>{accrual.incomeTypeName}</td>
                 <td>{formatAccrualSource(accrual.source)}</td>
                 <td className="money-accrual">{formatMoney(accrual.amount)}</td>
-                <td>{accrual.comment ?? 'Нет комментария'}</td>
+                <td>{getFinanceOptionalText(accrual.comment, 'noComment')}</td>
               </tr>
             ))}
           </tbody>
@@ -1559,9 +1559,9 @@ function FinancePanel({
                 <td>{accrual.supplierName}</td>
                 <td>{accrual.expenseTypeName}</td>
                 <td>{formatAccrualSource(accrual.source)}</td>
-                <td>{accrual.documentNumber ?? 'Не указан'}</td>
+                <td>{getFinanceOptionalText(accrual.documentNumber)}</td>
                 <td className="money-expense">{formatMoney(accrual.amount)}</td>
-                <td>{accrual.comment ?? 'Нет комментария'}</td>
+                <td>{getFinanceOptionalText(accrual.comment, 'noComment')}</td>
               </tr>
             ))}
           </tbody>
@@ -1583,15 +1583,15 @@ function FinancePanel({
               <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={() => editFinanceRecord('meterReadings', reading)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
                 <td>{formatMonth(reading.accountingMonth)}</td>
                 <td>{formatDateOnly(reading.readingDate)}</td>
-                <td>Гараж {reading.garageNumber}</td>
-                <td>{reading.meterKind === 'water' ? 'Вода' : 'Электричество'}</td>
+                <td>{formatFinanceGarageLabel(reading.garageNumber)}</td>
+                <td>{getFinanceMeterKindLabel(reading.meterKind)}</td>
                 <td>{reading.previousValue}</td>
                 <td>{reading.currentValue}</td>
                 <td>
                   {reading.consumption}
-                  {reading.hasGapWarning ? <small className="warning-text">проверьте месяц</small> : null}
+                  {reading.hasGapWarning ? <small className="warning-text">{getFinanceFallbackLabel('meterGapWarning')}</small> : null}
                 </td>
-                <td>{reading.comment ?? 'Нет комментария'}</td>
+                <td>{getFinanceOptionalText(reading.comment, 'noComment')}</td>
               </tr>
             ))}
           </tbody>

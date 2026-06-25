@@ -19,6 +19,7 @@ export type FinanceEditorSavingScope =
   | 'meter-reading'
 
 export type FinanceContextMenuAction = 'add' | 'edit' | 'delete'
+export type FinanceFallbackLabelKey = 'missingValue' | 'noData' | 'noComment' | 'meterGapWarning'
 
 export const financeSectionOptions: FinanceSectionOption[] = [
   { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
@@ -72,6 +73,13 @@ const financeTableHeaders: Record<FinanceSectionKey, string[]> = {
   meterReadings: ['Месяц', 'Дата', 'Гараж', 'Счетчик', 'Пред. знач.', 'Нов. знач.', 'Разница', 'Комментарий'],
 }
 
+const financeFallbackLabels: Record<FinanceFallbackLabelKey, string> = {
+  missingValue: 'Не указан',
+  noData: 'Нет данных',
+  noComment: 'Нет комментария',
+  meterGapWarning: 'проверьте месяц',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -94,4 +102,20 @@ export function getFinanceContextMenuLabel(action: FinanceContextMenuAction) {
 
 export function getFinanceTableHeaders(section: FinanceSectionKey) {
   return financeTableHeaders[section]
+}
+
+export function getFinanceFallbackLabel(key: FinanceFallbackLabelKey) {
+  return financeFallbackLabels[key]
+}
+
+export function getFinanceOptionalText(value: string | null | undefined, fallback: FinanceFallbackLabelKey = 'missingValue') {
+  return value ?? getFinanceFallbackLabel(fallback)
+}
+
+export function formatFinanceGarageLabel(garageNumber: string | number | null | undefined) {
+  return `Гараж ${garageNumber ?? ''}`
+}
+
+export function getFinanceMeterKindLabel(kind: string) {
+  return kind === 'water' ? 'Вода' : 'Электричество'
 }

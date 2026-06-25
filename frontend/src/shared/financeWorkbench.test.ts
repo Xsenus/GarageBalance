@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription, getFinanceTableHeaders } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey, FinanceSectionKey } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey, FinanceFallbackLabelKey, FinanceSectionKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -14,6 +14,7 @@ const editorKeys: FinanceEditorKey[] = [
 
 const contextMenuActions: FinanceContextMenuAction[] = ['add', 'edit', 'delete']
 const sectionKeys: FinanceSectionKey[] = ['income', 'expense', 'accruals', 'supplierAccruals', 'meterReadings']
+const fallbackKeys: FinanceFallbackLabelKey[] = ['missingValue', 'noData', 'noComment', 'meterGapWarning']
 
 describe('finance workbench metadata', () => {
   it('keeps the payment table sections in the expected order', () => {
@@ -88,5 +89,24 @@ describe('finance workbench metadata', () => {
       supplierAccruals: ['Месяц', 'Поставщик', 'Вид выплаты', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
       meterReadings: ['Месяц', 'Дата', 'Гараж', 'Счетчик', 'Пред. знач.', 'Нов. знач.', 'Разница', 'Комментарий'],
     })
+  })
+
+  it('returns fallback labels for empty payment table values', () => {
+    expect(Object.fromEntries(fallbackKeys.map((key) => [key, getFinanceFallbackLabel(key)]))).toEqual({
+      missingValue: 'Не указан',
+      noData: 'Нет данных',
+      noComment: 'Нет комментария',
+      meterGapWarning: 'проверьте месяц',
+    })
+    expect(getFinanceOptionalText(null)).toBe('Не указан')
+    expect(getFinanceOptionalText(undefined, 'noComment')).toBe('Нет комментария')
+    expect(getFinanceOptionalText('Документ 7')).toBe('Документ 7')
+  })
+
+  it('formats table labels for garages and meter kinds', () => {
+    expect(formatFinanceGarageLabel(42)).toBe('Гараж 42')
+    expect(formatFinanceGarageLabel(null)).toBe('Гараж ')
+    expect(getFinanceMeterKindLabel('water')).toBe('Вода')
+    expect(getFinanceMeterKindLabel('electricity')).toBe('Электричество')
   })
 })
