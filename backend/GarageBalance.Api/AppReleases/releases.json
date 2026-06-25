@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-page-visible-range",
+    "version": "0.284.0",
+    "publishedAt": "2026-06-25T17:00:00+07:00",
+    "title": "Диапазон строк пагинации вынесен в shared",
+    "summary": "Пользователи, платежи и справочники теперь считают надпись \"Показано X-Y из N\" через общий frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует pagination.ts для видимого диапазона страниц вместо локальных формул в таблицах."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют диапазон для пустой страницы, первой страницы и последней неполной страницы."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-electricity-tier-visibility",
     "version": "0.283.0",
     "publishedAt": "2026-06-25T16:45:00+07:00",

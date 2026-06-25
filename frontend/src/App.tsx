@@ -63,7 +63,7 @@ import {
   getLocalDateInputValue,
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
-import { createEmptyPage, createFallbackPage, pageSizeOptions } from './shared/pagination'
+import { createEmptyPage, createFallbackPage, getPageVisibleRange, pageSizeOptions } from './shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { UserFormState } from './shared/userManagement'
@@ -1931,6 +1931,7 @@ function FinancePanel({
   }
 
   const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
+  const financeVisibleRange = getPageVisibleRange(financePage)
 
   return (
     <section className="finance-panel" aria-label="Платежи">
@@ -2025,7 +2026,7 @@ function FinancePanel({
             {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранным условиям записей нет</p> : null}
           </div>
           <div className="dictionary-pagination" role="navigation" aria-label="Пагинация платежей">
-            <span role="status" aria-live="polite">Показано {financePage.totalCount === 0 ? 0 : financePage.offset + 1}-{Math.min(financePage.offset + financePage.items.length, financePage.totalCount)} из {financePage.totalCount}</span>
+            <span role="status" aria-live="polite">Показано {financeVisibleRange.from}-{financeVisibleRange.to} из {financePage.totalCount}</span>
             <label>
               Строк
               <select aria-label="Количество строк платежей" value={financePage.limit} onChange={(event) => void loadFinanceWorkbench(activeFinanceSection, 0, Number(event.target.value))}>
@@ -3852,8 +3853,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
     setOffset(0)
   }
 
-  const pageStart = page.totalCount === 0 ? 0 : page.offset + 1
-  const pageEnd = Math.min(page.offset + page.items.length, page.totalCount)
+  const pageVisibleRange = getPageVisibleRange(page)
   const canGoPrev = page.offset > 0
   const canGoNext = page.offset + page.limit < page.totalCount
 
@@ -3929,7 +3929,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
           </div>
 
           <div className="dictionary-pagination">
-            <span role="status" aria-live="polite">Показано {pageStart}-{pageEnd} из {page.totalCount}</span>
+            <span role="status" aria-live="polite">Показано {pageVisibleRange.from}-{pageVisibleRange.to} из {page.totalCount}</span>
             <label>
               Строк:
               <select aria-label="Количество строк пользователей" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setOffset(0) }}>
@@ -4725,8 +4725,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   const rows = getRows()
-  const visibleFrom = activePage.totalCount === 0 ? 0 : activePage.offset + 1
-  const visibleTo = Math.min(activePage.offset + activePage.limit, activePage.totalCount)
+  const visibleRange = getPageVisibleRange(activePage)
 
   return (
     <section className="dictionary-panel dictionary-panel-v2" aria-label="Справочники">
@@ -4785,7 +4784,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
           </div>
 
           <div className="dictionary-pagination" role="navigation" aria-label="Пагинация справочника">
-            <span role="status" aria-live="polite">Показано {visibleFrom}-{visibleTo} из {activePage.totalCount}</span>
+            <span role="status" aria-live="polite">Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}</span>
             <label>
               Строк
               <select aria-label="Количество строк справочника" value={activePage.limit} onChange={(event) => changePageSize(Number(event.target.value))}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyPage, createFallbackPage, pageSizeOptions } from './pagination'
+import { createEmptyPage, createFallbackPage, getPageVisibleRange, pageSizeOptions } from './pagination'
 
 describe('pagination helpers', () => {
   it('keeps shared page size options stable', () => {
@@ -27,5 +27,12 @@ describe('pagination helpers', () => {
       offset: 3,
       limit: 2,
     })
+  })
+
+  it('returns the visible row range for paged tables', () => {
+    expect(getPageVisibleRange(createEmptyPage<string>())).toEqual({ from: 0, to: 0 })
+    expect(getPageVisibleRange({ items: ['one', 'two'], totalCount: 4, offset: 0, limit: 2 })).toEqual({ from: 1, to: 2 })
+    expect(getPageVisibleRange({ items: ['four'], totalCount: 4, offset: 3, limit: 2 })).toEqual({ from: 4, to: 4 })
+    expect(getPageVisibleRange({ items: [], totalCount: 4, offset: 4, limit: 2 })).toEqual({ from: 0, to: 0 })
   })
 })
