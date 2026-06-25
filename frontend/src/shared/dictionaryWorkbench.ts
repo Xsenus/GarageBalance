@@ -1,4 +1,5 @@
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
+import { formatDateOnly, formatMoney, formatTariffRateSummary } from './formatters'
 import type { OwnerGarageLinkForm } from './validation'
 
 export type DictionarySectionKey = 'owners' | 'garages' | 'supplierGroups' | 'suppliers' | 'incomeTypes' | 'expenseTypes' | 'tariffs'
@@ -209,6 +210,36 @@ export function getDictionarySearchPlaceholder(section: DictionarySectionKey) {
 
 export function getDictionaryTableHeaders(section: DictionarySectionKey) {
   return dictionaryTableHeaders[section]
+}
+
+export function getDictionaryRecordCells(section: DictionarySectionKey, item: DictionaryRecord): Array<string | number> {
+  if (section === 'owners') {
+    const owner = item as OwnerDto
+    return [owner.fullName, owner.garageNumbers?.length ? owner.garageNumbers.join(', ') : 'без гаража', owner.phone ?? 'не указан', owner.address ?? 'не указан']
+  }
+
+  if (section === 'garages') {
+    const garage = item as GarageDto
+    return [garage.number, garage.ownerName ?? 'без владельца', garage.peopleCount, garage.floorCount, formatMoney(garage.startingBalance)]
+  }
+
+  if (section === 'supplierGroups') {
+    const group = item as SupplierGroupDto
+    return [group.name, group.isSystem ? 'Системная' : 'Пользовательская']
+  }
+
+  if (section === 'suppliers') {
+    const supplier = item as SupplierDto
+    return [supplier.name, supplier.groupName, supplier.inn ?? 'не указан', formatMoney(supplier.startingBalance)]
+  }
+
+  if (section === 'tariffs') {
+    const tariff = item as TariffDto
+    return [tariff.name, tariff.calculationBase, formatTariffRateSummary(tariff), formatDateOnly(tariff.effectiveFrom)]
+  }
+
+  const type = item as AccountingTypeDto
+  return [type.name, type.code ?? 'не указан', type.isSystem ? 'Системный' : 'Пользовательский']
 }
 
 export function getDictionarySectionOption(section: DictionarySectionKey) {

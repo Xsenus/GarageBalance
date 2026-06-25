@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4610,28 +4610,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   function renderCells(item: DictionaryRecord) {
-    if (activeSection === 'owners') {
-      const owner = item as OwnerDto
-      return [owner.fullName, owner.garageNumbers?.length ? owner.garageNumbers.join(', ') : 'без гаража', owner.phone ?? 'не указан', owner.address ?? 'не указан'].map((value, index) => <td key={index}>{value}</td>)
-    }
-    if (activeSection === 'garages') {
-      const garage = item as GarageDto
-      return [garage.number, garage.ownerName ?? 'без владельца', garage.peopleCount, garage.floorCount, formatMoney(garage.startingBalance)].map((value, index) => <td key={index}>{value}</td>)
-    }
-    if (activeSection === 'supplierGroups') {
-      const group = item as SupplierGroupDto
-      return [group.name, group.isSystem ? 'Системная' : 'Пользовательская'].map((value, index) => <td key={index}>{value}</td>)
-    }
-    if (activeSection === 'suppliers') {
-      const supplier = item as SupplierDto
-      return [supplier.name, supplier.groupName, supplier.inn ?? 'не указан', formatMoney(supplier.startingBalance)].map((value, index) => <td key={index}>{value}</td>)
-    }
-    if (activeSection === 'tariffs') {
-      const tariff = item as TariffDto
-      return [tariff.name, tariff.calculationBase, formatTariffRateSummary(tariff), formatDateOnly(tariff.effectiveFrom)].map((value, index) => <td key={index}>{value}</td>)
-    }
-    const type = item as AccountingTypeDto
-    return [type.name, type.code ?? 'не указан', type.isSystem ? 'Системный' : 'Пользовательский'].map((value, index) => <td key={index}>{value}</td>)
+    return getDictionaryRecordCells(activeSection, item).map((value, index) => <td key={index}>{value}</td>)
   }
 
   function renderEditorFields(section: DictionarySectionKey) {

@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-table-cells",
+    "version": "0.280.0",
+    "publishedAt": "2026-06-25T16:00:00+07:00",
+    "title": "Ячейки таблиц справочников вынесены в shared",
+    "summary": "Значения строк справочников теперь формируются в общем frontend-модуле вместе с форматированием денег, дат и тарифов.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 использует dictionaryWorkbench.ts для данных ячеек владельцев, гаражей, поставщиков, видов операций и тарифов."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют fallback-значения, системные признаки, деньги и дату тарифа для таблиц справочников."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-table-headers",
     "version": "0.279.0",
     "publishedAt": "2026-06-25T15:45:00+07:00",

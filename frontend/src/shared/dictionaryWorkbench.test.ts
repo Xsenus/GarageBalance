@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -196,6 +196,20 @@ describe('dictionary workbench metadata', () => {
     })
   })
 
+  it('returns table cell values for every dictionary section', () => {
+    expect(getDictionaryRecordCells('owners', createOwner({ garageNumbers: ['1', '2'] }))).toEqual(['Иванов Иван', '1, 2', 'не указан', 'не указан'])
+    expect(getDictionaryRecordCells('owners', createOwner({ phone: '+79990000000', address: 'ул. Ленина, 1' }))).toEqual(['Иванов Иван', 'без гаража', '+79990000000', 'ул. Ленина, 1'])
+    expect(getDictionaryRecordCells('garages', createGarage({ ownerName: 'Иванов Иван', startingBalance: 350 }))).toEqual(['42', 'Иванов Иван', 1, 1, '350,00'])
+    expect(getDictionaryRecordCells('garages', createGarage())).toEqual(['42', 'без владельца', 1, 1, '0,00'])
+    expect(getDictionaryRecordCells('supplierGroups', createSupplierGroup({ isSystem: true }))).toEqual(['Банковские услуги', 'Системная'])
+    expect(getDictionaryRecordCells('supplierGroups', createSupplierGroup())).toEqual(['Банковские услуги', 'Пользовательская'])
+    expect(getDictionaryRecordCells('suppliers', createSupplier({ inn: '5400000000', startingBalance: 250 }))).toEqual(['БАНК 12', 'Банковские услуги', '5400000000', '250,00'])
+    expect(getDictionaryRecordCells('suppliers', createSupplier())).toEqual(['БАНК 12', 'Банковские услуги', 'не указан', '0,00'])
+    expect(getDictionaryRecordCells('incomeTypes', createAccountingType({ code: 'MEMBER_FEE', isSystem: true }))).toEqual(['Членский взнос', 'MEMBER_FEE', 'Системный'])
+    expect(getDictionaryRecordCells('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toEqual(['Вывоз мусора', 'не указан', 'Пользовательский'])
+    expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'water', '1,00', '01.07.2026'])
+  })
+
   it('returns record titles for every dictionary section', () => {
     expect(getDictionaryRecordTitle('owners', createOwner())).toBe('Иванов Иван')
     expect(getDictionaryRecordTitle('garages', createGarage())).toBe('Гараж 42')
@@ -251,12 +265,13 @@ function createGarage(overrides: Partial<GarageDto> = {}): GarageDto {
   }
 }
 
-function createSupplierGroup(): SupplierGroupDto {
+function createSupplierGroup(overrides: Partial<SupplierGroupDto> = {}): SupplierGroupDto {
   return {
     id: 'group-1',
     name: 'Банковские услуги',
     isSystem: false,
     isArchived: false,
+    ...overrides,
   }
 }
 
