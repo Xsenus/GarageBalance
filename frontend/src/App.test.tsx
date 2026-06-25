@@ -1767,6 +1767,9 @@ describe('App', () => {
 
     fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
     const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    expect(menu.querySelector('svg')).not.toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeEnabled()
     await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })

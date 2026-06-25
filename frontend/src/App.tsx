@@ -3070,15 +3070,12 @@ function FinancePanel({
       {financeContextMenu ? (
         <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label="Операции с платежами" onClick={(event) => event.stopPropagation()}>
           <button type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
-            <Plus size={15} aria-hidden="true" />
             <span>Добавить</span>
           </button>
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
-            <Save size={15} aria-hidden="true" />
             <span>Изменить</span>
           </button>
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
-            <Trash2 size={15} aria-hidden="true" />
             <span>Удалить</span>
           </button>
         </div>
