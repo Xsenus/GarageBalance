@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-report-filters",
+    "version": "0.269.0",
+    "publishedAt": "2026-06-25T12:30:00+07:00",
+    "title": "Фильтры отчетов вынесены в shared",
+    "summary": "Дефолтные значения, восстановление и сохранение фильтров отчетов теперь живут в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует reportFilters.ts для сводного отчета, отчета по поступлениям и отчета по выплатам."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют дефолтные фильтры, нормализацию сохраненных значений и стабильные ключи sessionStorage."
+      },
+      {
+        "type": "improved",
+        "text": "Разделение frontend на shared-модули продолжено без изменения API, схемы БД и поведения отчетов."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-access-control",
     "version": "0.268.0",
     "publishedAt": "2026-06-25T12:20:00+07:00",

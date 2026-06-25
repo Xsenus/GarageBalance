@@ -60,7 +60,8 @@ import {
   getLocalDateInputValue,
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
-import { clearStoredAuthSession, getDateOnlyOrDefault, getRowModeOrDefault, getStringArrayOrDefault, getStringOrDefault, isRecord, loadStoredAuthSession, readSessionJson, saveSessionJson, saveStoredAuthSession } from './shared/sessionStorage'
+import { loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
+import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters, OwnerGarageLinkForm } from './shared/validation'
 import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseReportValidationErrors, getExpenseValidationErrors, getGarageValidationErrors, getIncomeReportValidationErrors, getIncomeValidationErrors, getManagedUserValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getPasswordPolicyErrors, getRegularAccrualValidationErrorsForCatalog, getReportMonthRangeValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
 import './App.css'
@@ -80,11 +81,6 @@ type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
   | { kind: 'supplier'; accrual: SupplierAccrualDto }
 
-const reportFilterStorageKeys = {
-  consolidated: 'garagebalance.reports.consolidatedFilters',
-  income: 'garagebalance.reports.incomeFilters',
-  expense: 'garagebalance.reports.expenseFilters',
-} as const
 const authSessionStorageKey = 'garagebalance.auth.session'
 const garageReportScreenRowLimit = 12
 const reportScreenRowLimit = 16
@@ -3166,7 +3162,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
     setReportValidationErrors([])
     setFilters(nextFilters)
-    saveSessionJson(reportFilterStorageKeys.consolidated, nextFilters)
+    saveConsolidatedReportFilters(nextFilters)
   }
 
   function applyIncomeFilters(event: FormEvent<HTMLFormElement>) {
@@ -3190,7 +3186,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
     setIncomeReportValidationErrors([])
     setIncomeFilters(nextFilters)
-    saveSessionJson(reportFilterStorageKeys.income, nextFilters)
+    saveIncomeReportFilters(nextFilters)
   }
 
   function applyExpenseFilters(event: FormEvent<HTMLFormElement>) {
@@ -3213,7 +3209,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
     setExpenseReportValidationErrors([])
     setExpenseFilters(nextFilters)
-    saveSessionJson(reportFilterStorageKeys.expense, nextFilters)
+    saveExpenseReportFilters(nextFilters)
   }
 
   async function exportConsolidatedXlsx() {
@@ -6051,64 +6047,6 @@ function createDefaultGarageBalanceHistoryFilters(date = new Date()) {
   const to = new Date(date.getFullYear(), date.getMonth(), 1)
   const from = new Date(date.getFullYear(), date.getMonth() - 5, 1)
   return { monthFrom: formatMonthInputValue(from), monthTo: formatMonthInputValue(to) }
-}
-
-function createDefaultConsolidatedReportFilters(month: string): ConsolidatedReportFilters {
-  return { monthFrom: month, monthTo: month, search: '' }
-}
-
-function createDefaultIncomeReportFilters(month: string, today: string): IncomeReportFilters {
-  return { dateFrom: month, dateTo: today, search: '', garageIds: [], ownerIds: [], incomeTypeIds: [], rowMode: 'all' }
-}
-
-function createDefaultExpenseReportFilters(month: string, today: string): ExpenseReportFilters {
-  return { dateFrom: month, dateTo: today, search: '', supplierIds: [], expenseTypeIds: [], rowMode: 'all' }
-}
-
-function loadConsolidatedReportFilters(month: string): ConsolidatedReportFilters {
-  const parsed = readSessionJson(reportFilterStorageKeys.consolidated)
-  if (!isRecord(parsed)) {
-    return createDefaultConsolidatedReportFilters(month)
-  }
-
-  return {
-    monthFrom: getDateOnlyOrDefault(parsed.monthFrom, month),
-    monthTo: getDateOnlyOrDefault(parsed.monthTo, month),
-    search: getStringOrDefault(parsed.search, ''),
-  }
-}
-
-function loadIncomeReportFilters(month: string, today: string): IncomeReportFilters {
-  const parsed = readSessionJson(reportFilterStorageKeys.income)
-  if (!isRecord(parsed)) {
-    return createDefaultIncomeReportFilters(month, today)
-  }
-
-  return {
-    dateFrom: getDateOnlyOrDefault(parsed.dateFrom, month),
-    dateTo: getDateOnlyOrDefault(parsed.dateTo, today),
-    search: getStringOrDefault(parsed.search, ''),
-    garageIds: getStringArrayOrDefault(parsed.garageIds),
-    ownerIds: getStringArrayOrDefault(parsed.ownerIds),
-    incomeTypeIds: getStringArrayOrDefault(parsed.incomeTypeIds),
-    rowMode: getRowModeOrDefault(parsed.rowMode),
-  }
-}
-
-function loadExpenseReportFilters(month: string, today: string): ExpenseReportFilters {
-  const parsed = readSessionJson(reportFilterStorageKeys.expense)
-  if (!isRecord(parsed)) {
-    return createDefaultExpenseReportFilters(month, today)
-  }
-
-  return {
-    dateFrom: getDateOnlyOrDefault(parsed.dateFrom, month),
-    dateTo: getDateOnlyOrDefault(parsed.dateTo, today),
-    search: getStringOrDefault(parsed.search, ''),
-    supplierIds: getStringArrayOrDefault(parsed.supplierIds),
-    expenseTypeIds: getStringArrayOrDefault(parsed.expenseTypeIds),
-    rowMode: getRowModeOrDefault(parsed.rowMode),
-  }
 }
 
 export default App
