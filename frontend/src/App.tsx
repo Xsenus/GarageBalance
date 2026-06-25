@@ -2084,6 +2084,20 @@ function FinancePanel({
     }
   }
 
+  function handleFinanceTableAreaKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.target !== event.currentTarget || (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))) {
+      return
+    }
+
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    setFinanceContextMenu({
+      section: activeFinanceSection,
+      x: rect.left,
+      y: rect.top + Math.min(rect.height, 48),
+    })
+  }
+
   function handleFinanceContextMenuKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
       return
@@ -2719,7 +2733,14 @@ function FinancePanel({
         </div>
 
         <div className="dictionary-table-shell">
-          <div className="dictionary-table-scroll" role="group" aria-label="Рабочая область платежной таблицы" onContextMenu={(event) => openFinanceContextMenu(event, activeFinanceSection)}>
+          <div
+            className="dictionary-table-scroll"
+            role="group"
+            aria-label="Рабочая область платежной таблицы"
+            tabIndex={getActiveFinanceRowsCount() === 0 ? 0 : -1}
+            onContextMenu={(event) => openFinanceContextMenu(event, activeFinanceSection)}
+            onKeyDown={handleFinanceTableAreaKeyDown}
+          >
             {renderFinanceTable()}
             {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранным условиям записей нет</p> : null}
           </div>
