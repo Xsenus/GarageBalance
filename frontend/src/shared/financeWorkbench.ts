@@ -1,5 +1,6 @@
 export type FinanceSectionKey = 'income' | 'expense' | 'accruals' | 'supplierAccruals' | 'meterReadings'
 export type FinanceEditorKey = FinanceSectionKey | 'regularAccruals' | 'supplierGroupSalaryAccruals'
+export type FinanceVisibleListStatusKind = 'operations' | 'accruals' | 'supplierAccruals' | 'meterReadings'
 
 export type FinanceSectionOption = {
   key: FinanceSectionKey
@@ -178,6 +179,13 @@ const financePanelLabels: Record<FinancePanelLabelKey, string> = {
   meterReadings: 'Счетчики',
 }
 
+const financeVisibleListStatusSuffixes: Record<FinanceVisibleListStatusKind, string> = {
+  operations: 'операций',
+  accruals: 'начислений',
+  supplierAccruals: 'начислений поставщикам',
+  meterReadings: 'показаний',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -240,4 +248,8 @@ export function formatFinanceOperationCount(count: number) {
 
 export function formatFinanceVisibleRange(range: { from: number; to: number }, totalCount: number) {
   return `Показано ${range.from}-${range.to} из ${totalCount}`
+}
+
+export function formatFinanceVisibleListStatus(visibleCount: number, totalCount: number, kind: FinanceVisibleListStatusKind) {
+  return `Показано ${visibleCount} из ${totalCount} ${financeVisibleListStatusSuffixes[kind]}`
 }

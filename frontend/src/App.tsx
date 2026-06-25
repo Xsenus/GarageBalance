@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -2246,7 +2246,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {operations.length > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleOperations.length} из {operations.length} операций</p> : null}
+          {operations.length > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operations.length, 'operations')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Последние начисления">
@@ -2277,7 +2277,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {accruals.length > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleAccruals.length} из {accruals.length} начислений</p> : null}
+          {accruals.length > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, accruals.length, 'accruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Последние начисления поставщикам">
@@ -2308,7 +2308,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {supplierAccruals.length > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleSupplierAccruals.length} из {supplierAccruals.length} начислений поставщикам</p> : null}
+          {supplierAccruals.length > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccruals.length, 'supplierAccruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label="Последние показания">
@@ -2333,7 +2333,7 @@ function FinancePanel({
               </span>
             </div>
           ))}
-          {meterReadings.length > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleMeterReadings.length} из {meterReadings.length} показаний</p> : null}
+          {meterReadings.length > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, meterReadings.length, 'meterReadings')}</p> : null}
         </div>
       </div>
       {financeContextMenu ? (

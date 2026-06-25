@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
 import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
@@ -207,5 +207,19 @@ describe('finance workbench metadata', () => {
   it('formats payment pagination status text', () => {
     expect(formatFinanceVisibleRange({ from: 1, to: 25 }, 80)).toBe('Показано 1-25 из 80')
     expect(formatFinanceVisibleRange({ from: 0, to: 0 }, 0)).toBe('Показано 0-0 из 0')
+  })
+
+  it('formats visible finance list status text', () => {
+    expect({
+      operations: formatFinanceVisibleListStatus(8, 12, 'operations'),
+      accruals: formatFinanceVisibleListStatus(8, 15, 'accruals'),
+      supplierAccruals: formatFinanceVisibleListStatus(8, 20, 'supplierAccruals'),
+      meterReadings: formatFinanceVisibleListStatus(8, 25, 'meterReadings'),
+    }).toEqual({
+      operations: 'Показано 8 из 12 операций',
+      accruals: 'Показано 8 из 15 начислений',
+      supplierAccruals: 'Показано 8 из 20 начислений поставщикам',
+      meterReadings: 'Показано 8 из 25 показаний',
+    })
   })
 })
