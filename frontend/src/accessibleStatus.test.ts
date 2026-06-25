@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('accessible dynamic messages', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src', 'App.tsx'), 'utf8')
+  const formFeedbackSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'formFeedback.tsx'), 'utf8')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -17,8 +18,9 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps shared form errors and validation summaries exposed as alerts', () => {
-    expect(appSource).toContain('<div className="form-error" role="alert">')
-    expect(appSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
+    expect(appSource).toContain("import { FormError, FormValidationSummary } from './shared/formFeedback'")
+    expect(formFeedbackSource).toContain('<div className="form-error" role="alert">')
+    expect(formFeedbackSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
   })
 
   it('keeps detail dialogs named, described and modal', () => {

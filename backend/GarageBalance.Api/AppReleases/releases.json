@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-foundation",
+    "version": "0.261.0",
+    "publishedAt": "2026-06-25T15:30:00+07:00",
+    "title": "Frontend получил общий слой форм и фокуса",
+    "summary": "Повторяемые ошибки форм и keyboard/focus-поведение dialog вынесены из App.tsx в shared-модули.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "FormError и FormValidationSummary теперь живут в frontend/src/shared/formFeedback.tsx и покрыты отдельными React-тестами."
+      },
+      {
+        "type": "improved",
+        "text": "useEscapeKey, useFocusOnOpen, useFocusTrap и useRestoreFocusOnClose вынесены в frontend/src/shared/focusHooks.ts и проверяются отдельно."
+      },
+      {
+        "type": "fixed",
+        "text": "Основной App.tsx больше не держит общую accessibility-инфраструктуру внутри себя, что упрощает дальнейший вынос платежей, справочников и отчетов по feature-модулям."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-artifact-privacy-guard",
     "version": "0.260.0",
     "publishedAt": "2026-06-25T15:15:00+07:00",
