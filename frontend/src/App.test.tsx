@@ -1794,6 +1794,34 @@ describe('App', () => {
     expect(within(financePanel).getByRole('button', { name: 'Зарплата группы' }).querySelector('svg')).not.toBeInTheDocument()
   })
 
+  it('warns before closing changed payment editor', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    await user.type(within(dialog).getByLabelText('Документ поступления'), 'PKO-draft')
+    expect(within(dialog).getByText('Есть несохраненные изменения формы платежа.')).toHaveAttribute('role', 'status')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    expect(confirmSpy).toHaveBeenCalledWith('Закрыть форму платежа без сохранения изменений?')
+    expect(screen.getByRole('dialog', { name: 'Новое поступление' })).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Документ поступления')).toHaveValue('PKO-draft')
+
+    confirmSpy.mockReturnValue(true)
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument())
+    confirmSpy.mockRestore()
+  })
+
   it('opens payment context menu from focused row keyboard shortcut', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

@@ -1392,6 +1392,7 @@ function FinancePanel({
   const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
   const [financeSearchInput, setFinanceSearchInput] = useState('')
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
+  const [financeEditorInitialSnapshot, setFinanceEditorInitialSnapshot] = useState('')
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
@@ -1415,8 +1416,47 @@ function FinancePanel({
   const financeEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditor))
   const financeContextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeContextMenu))
 
+  function getFinanceEditorFormSnapshot(section: FinanceEditorKey) {
+    if (section === 'income') {
+      return JSON.stringify(incomeForm)
+    }
+    if (section === 'expense') {
+      return JSON.stringify(expenseForm)
+    }
+    if (section === 'accruals') {
+      return JSON.stringify(accrualForm)
+    }
+    if (section === 'regularAccruals') {
+      return JSON.stringify(regularForm)
+    }
+    if (section === 'supplierGroupSalaryAccruals') {
+      return JSON.stringify(salaryForm)
+    }
+    if (section === 'supplierAccruals') {
+      return JSON.stringify(supplierAccrualForm)
+    }
+    return JSON.stringify(meterForm)
+  }
+
+  function hasUnsavedFinanceEditorChanges() {
+    return Boolean(financeEditor && financeEditorInitialSnapshot && financeEditorInitialSnapshot !== getFinanceEditorFormSnapshot(financeEditor.section))
+  }
+
+  function closeFinanceEditor(options?: { skipConfirmation?: boolean }) {
+    if (!financeEditor) {
+      return
+    }
+
+    if (!options?.skipConfirmation && hasUnsavedFinanceEditorChanges() && !window.confirm('Закрыть форму платежа без сохранения изменений?')) {
+      return
+    }
+
+    setFinanceEditorInitialSnapshot('')
+    setFinanceEditor(null)
+  }
+
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
-  useEscapeKey(Boolean(financeEditor), () => setFinanceEditor(null))
+  useEscapeKey(Boolean(financeEditor), () => closeFinanceEditor())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
   const visibleOperations = operations.slice(0, 8)
@@ -1612,7 +1652,7 @@ function FinancePanel({
       setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
     }
   }
 
@@ -1650,7 +1690,7 @@ function FinancePanel({
       setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
     }
   }
 
@@ -1687,7 +1727,7 @@ function FinancePanel({
       setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
     }
   }
 
@@ -1725,7 +1765,7 @@ function FinancePanel({
       setRegularForm((value) => ({ ...value, comment: '' }))
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
       setActiveFinanceSection('accruals')
     }
   }
@@ -1764,7 +1804,7 @@ function FinancePanel({
       setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
     }
   }
 
@@ -1798,7 +1838,7 @@ function FinancePanel({
       await loadFinanceWorkbench('supplierAccruals', 0, financePage.limit)
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
       setActiveFinanceSection('supplierAccruals')
     }
   }
@@ -1836,7 +1876,7 @@ function FinancePanel({
       setMeterForm((value) => ({ ...value, currentValue: 0, comment: '' }))
     })
     if (saved) {
-      setFinanceEditor(null)
+      closeFinanceEditor({ skipConfirmation: true })
     }
   }
 
@@ -1954,6 +1994,7 @@ function FinancePanel({
     setRegularValidationErrors([])
     setSalaryValidationErrors([])
     setMeterValidationErrors([])
+    let initialSnapshot = ''
     if (record && section === 'income' && 'operationKind' in record) {
       if (record.garageId) {
         const garageId = record.garageId
@@ -1973,7 +2014,7 @@ function FinancePanel({
               isArchived: false,
             }, ...items]))
       }
-      setIncomeForm({
+      const nextForm = {
         garageId: record.garageId ?? '',
         incomeTypeId: record.incomeTypeId ?? '',
         operationDate: record.operationDate,
@@ -1981,11 +2022,15 @@ function FinancePanel({
         amount: record.amount,
         documentNumber: record.documentNumber ?? '',
         comment: record.comment ?? '',
-      })
+      }
+      setIncomeForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'income') {
-      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      const nextForm = { ...incomeForm, amount: 0, documentNumber: '', comment: '' }
+      setIncomeForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'expense' && 'operationKind' in record) {
-      setExpenseForm({
+      const nextForm = {
         supplierId: record.supplierId ?? '',
         expenseTypeId: record.expenseTypeId ?? '',
         operationDate: record.operationDate,
@@ -1993,22 +2038,32 @@ function FinancePanel({
         amount: record.amount,
         documentNumber: record.documentNumber ?? '',
         comment: record.comment ?? '',
-      })
+      }
+      setExpenseForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'expense') {
-      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      const nextForm = { ...expenseForm, amount: 0, documentNumber: '', comment: '' }
+      setExpenseForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'accruals' && 'incomeTypeId' in record && !('operationKind' in record)) {
-      setAccrualForm({
+      const nextForm = {
         garageId: record.garageId,
         incomeTypeId: record.incomeTypeId,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
         source: record.source,
         comment: record.comment ?? '',
-      })
+      }
+      setAccrualForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'accruals') {
-      setAccrualForm((value) => ({ ...value, source: 'manual', amount: 0, comment: '' }))
+      const nextForm = { ...accrualForm, source: 'manual' as const, amount: 0, comment: '' }
+      setAccrualForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
+    } else if (!record && section === 'regularAccruals') {
+      initialSnapshot = JSON.stringify(regularForm)
     } else if (record && section === 'supplierAccruals' && 'supplierId' in record && !('operationKind' in record)) {
-      setSupplierAccrualForm({
+      const nextForm = {
         supplierId: record.supplierId,
         expenseTypeId: record.expenseTypeId,
         accountingMonth: record.accountingMonth,
@@ -2016,21 +2071,32 @@ function FinancePanel({
         source: record.source,
         documentNumber: record.documentNumber ?? '',
         comment: record.comment ?? '',
-      })
+      }
+      setSupplierAccrualForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'supplierAccruals') {
-      setSupplierAccrualForm((value) => ({ ...value, source: 'manual', amount: 0, documentNumber: '', comment: '' }))
+      const nextForm = { ...supplierAccrualForm, source: 'manual' as const, amount: 0, documentNumber: '', comment: '' }
+      setSupplierAccrualForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'supplierGroupSalaryAccruals') {
-      setSalaryForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      const nextForm = { ...salaryForm, amount: 0, documentNumber: '', comment: '' }
+      setSalaryForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'meterReadings' && 'meterKind' in record) {
-      setMeterForm({
+      const nextForm = {
         garageId: record.garageId,
         meterKind: record.meterKind,
         accountingMonth: record.accountingMonth,
         readingDate: record.readingDate,
         currentValue: record.currentValue,
         comment: record.comment ?? '',
-      })
+      }
+      setMeterForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
+    } else if (!record && section === 'meterReadings') {
+      initialSnapshot = JSON.stringify(meterForm)
     }
+    setFinanceEditorInitialSnapshot(initialSnapshot || getFinanceEditorFormSnapshot(section))
     setFinanceEditor({ section, mode: record ? 'edit' : 'create', record })
   }
 
@@ -3114,21 +3180,22 @@ function FinancePanel({
         </div>
       ) : null}
       {financeEditor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setFinanceEditor(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => closeFinanceEditor()}>
           <section ref={financeEditorDialogRef} className="detail-dialog finance-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">{financeEditor.mode === 'edit' ? 'Изменение' : 'Платежи'}</p>
                 <h3 id="finance-editor-title">{getFinanceEditorTitle(financeEditor.section)}</h3>
               </div>
-              <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть форму платежа" onClick={() => setFinanceEditor(null)}>
+              <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть форму платежа" onClick={() => closeFinanceEditor()}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
             <form className="dictionary-form finance-editor-form" onSubmit={handleFinanceEditorSubmit}>
               {renderFinanceEditorFields(financeEditor.section)}
+              {hasUnsavedFinanceEditorChanges() ? <p className="form-hint" role="status" aria-live="polite">Есть несохраненные изменения формы платежа.</p> : null}
               <div className="detail-dialog-actions">
-                <button className="ghost-button" type="button" onClick={() => setFinanceEditor(null)}>
+                <button className="ghost-button" type="button" onClick={() => closeFinanceEditor()}>
                   Отмена
                 </button>
                 <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === getFinanceEditorSavingScope(financeEditor.section)}>
