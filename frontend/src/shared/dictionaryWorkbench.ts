@@ -51,6 +51,57 @@ export type DictionaryAccountingTypeFormState = {
   code: string
 }
 
+export type DictionaryEditorFieldMeta = {
+  ariaLabel: string
+  placeholder?: string
+}
+
+export type DictionaryEditorFieldKey =
+  | 'ownerLastName'
+  | 'ownerFirstName'
+  | 'ownerMiddleName'
+  | 'ownerPhone'
+  | 'ownerAddress'
+  | 'ownerMeterNotes'
+  | 'ownerExistingGarage'
+  | 'ownerNewGarageNumber'
+  | 'ownerNewGaragePeopleCount'
+  | 'ownerNewGarageFloorCount'
+  | 'ownerNewGarageStartingBalance'
+  | 'ownerNewGarageInitialWaterMeterValue'
+  | 'ownerNewGarageInitialElectricityMeterValue'
+  | 'ownerNewGarageComment'
+  | 'garageNumber'
+  | 'garagePeopleCount'
+  | 'garageFloorCount'
+  | 'garageOwner'
+  | 'garageStartingBalance'
+  | 'garageInitialWaterMeterValue'
+  | 'garageInitialElectricityMeterValue'
+  | 'garageComment'
+  | 'supplierGroupName'
+  | 'supplierName'
+  | 'supplierGroup'
+  | 'supplierInn'
+  | 'supplierLegalAddress'
+  | 'supplierContactPerson'
+  | 'supplierPhone'
+  | 'supplierEmail'
+  | 'supplierStartingBalance'
+  | 'supplierComment'
+  | 'accountingTypeName'
+  | 'accountingTypeCode'
+  | 'tariffName'
+  | 'tariffCalculationBase'
+  | 'tariffRate'
+  | 'tariffEffectiveFrom'
+  | 'tariffElectricityFirstThreshold'
+  | 'tariffElectricitySecondThreshold'
+  | 'tariffElectricityFirstRate'
+  | 'tariffElectricitySecondRate'
+  | 'tariffElectricityThirdRate'
+  | 'tariffComment'
+
 export const dictionarySectionGroups: Array<{ key: DictionarySectionGroupKey; label: string }> = [
   { key: 'counterparties', label: 'Контрагенты' },
   { key: 'operations', label: 'Операции' },
@@ -85,6 +136,53 @@ const dictionaryTableHeaders: Record<DictionarySectionKey, string[]> = {
   incomeTypes: ['Название', 'Код', 'Тип'],
   expenseTypes: ['Название', 'Код', 'Тип'],
   tariffs: ['Название', 'База', 'Ставка', 'Дата начала'],
+}
+
+const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEditorFieldMeta> = {
+  ownerLastName: { ariaLabel: 'Фамилия владельца', placeholder: 'Фамилия' },
+  ownerFirstName: { ariaLabel: 'Имя владельца', placeholder: 'Имя' },
+  ownerMiddleName: { ariaLabel: 'Отчество владельца', placeholder: 'Отчество' },
+  ownerPhone: { ariaLabel: 'Телефон владельца', placeholder: 'Телефон' },
+  ownerAddress: { ariaLabel: 'Адрес владельца', placeholder: 'Адрес' },
+  ownerMeterNotes: { ariaLabel: 'Комментарий владельца по счетчикам', placeholder: 'Комментарий по счетчикам' },
+  ownerExistingGarage: { ariaLabel: 'Привязать существующий гараж' },
+  ownerNewGarageNumber: { ariaLabel: 'Номер нового гаража владельца', placeholder: 'Новый гараж' },
+  ownerNewGaragePeopleCount: { ariaLabel: 'Количество людей в новом гараже' },
+  ownerNewGarageFloorCount: { ariaLabel: 'Количество этажей в новом гараже' },
+  ownerNewGarageStartingBalance: { ariaLabel: 'Стартовый баланс нового гаража' },
+  ownerNewGarageInitialWaterMeterValue: { ariaLabel: 'Стартовый счетчик воды нового гаража' },
+  ownerNewGarageInitialElectricityMeterValue: { ariaLabel: 'Стартовый счетчик электричества нового гаража' },
+  ownerNewGarageComment: { ariaLabel: 'Комментарий нового гаража', placeholder: 'Комментарий по гаражу' },
+  garageNumber: { ariaLabel: 'Номер гаража', placeholder: 'Номер' },
+  garagePeopleCount: { ariaLabel: 'Количество людей' },
+  garageFloorCount: { ariaLabel: 'Количество этажей' },
+  garageOwner: { ariaLabel: 'Владелец гаража' },
+  garageStartingBalance: { ariaLabel: 'Стартовый баланс гаража' },
+  garageInitialWaterMeterValue: { ariaLabel: 'Стартовый счетчик воды' },
+  garageInitialElectricityMeterValue: { ariaLabel: 'Стартовый счетчик электричества' },
+  garageComment: { ariaLabel: 'Комментарий по гаражу', placeholder: 'Комментарий' },
+  supplierGroupName: { ariaLabel: 'Группа поставщиков', placeholder: 'Группа' },
+  supplierName: { ariaLabel: 'Название поставщика', placeholder: 'Название' },
+  supplierGroup: { ariaLabel: 'Группа для поставщика' },
+  supplierInn: { ariaLabel: 'ИНН поставщика', placeholder: 'ИНН' },
+  supplierLegalAddress: { ariaLabel: 'Юридический адрес поставщика', placeholder: 'Юридический адрес' },
+  supplierContactPerson: { ariaLabel: 'Контактное лицо поставщика', placeholder: 'Контактное лицо' },
+  supplierPhone: { ariaLabel: 'Телефон поставщика', placeholder: 'Телефон' },
+  supplierEmail: { ariaLabel: 'Email поставщика', placeholder: 'Email' },
+  supplierStartingBalance: { ariaLabel: 'Стартовый баланс поставщика' },
+  supplierComment: { ariaLabel: 'Комментарий поставщика', placeholder: 'Комментарий' },
+  accountingTypeName: { ariaLabel: 'Название вида операции', placeholder: 'Название' },
+  accountingTypeCode: { ariaLabel: 'Код вида операции', placeholder: 'Код' },
+  tariffName: { ariaLabel: 'Название тарифа', placeholder: 'Название' },
+  tariffCalculationBase: { ariaLabel: 'База расчета тарифа' },
+  tariffRate: { ariaLabel: 'Ставка тарифа' },
+  tariffEffectiveFrom: { ariaLabel: 'Дата начала тарифа' },
+  tariffElectricityFirstThreshold: { ariaLabel: 'Первый порог электроэнергии', placeholder: 'Порог 1, кВт' },
+  tariffElectricitySecondThreshold: { ariaLabel: 'Второй порог электроэнергии', placeholder: 'Порог 2, кВт' },
+  tariffElectricityFirstRate: { ariaLabel: 'Первая ставка электроэнергии', placeholder: 'Ставка 1' },
+  tariffElectricitySecondRate: { ariaLabel: 'Вторая ставка электроэнергии', placeholder: 'Ставка 2' },
+  tariffElectricityThirdRate: { ariaLabel: 'Третья ставка электроэнергии', placeholder: 'Ставка 3' },
+  tariffComment: { ariaLabel: 'Комментарий тарифа', placeholder: 'Комментарий' },
 }
 
 export function createEmptyOwnerForm(): DictionaryOwnerFormState {
@@ -210,6 +308,10 @@ export function getDictionarySearchPlaceholder(section: DictionarySectionKey) {
 
 export function getDictionaryTableHeaders(section: DictionarySectionKey) {
   return dictionaryTableHeaders[section]
+}
+
+export function getDictionaryEditorFieldMeta(key: DictionaryEditorFieldKey) {
+  return dictionaryEditorFieldMeta[key]
 }
 
 export function getDictionaryRecordCells(section: DictionarySectionKey, item: DictionaryRecord): Array<string | number> {

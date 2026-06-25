@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-editor-fields",
+    "version": "0.281.0",
+    "publishedAt": "2026-06-25T16:15:00+07:00",
+    "title": "Поля модалок справочников вынесены в shared",
+    "summary": "Подписи и placeholder-ы CRUD-модалок справочников теперь описаны в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 использует dictionaryWorkbench.ts для доступных имен и подсказок полей владельцев, гаражей, поставщиков, видов операций и тарифов."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют ключевые подписи полей, включая привязку гаража из карточки владельца и трехтарифную электроэнергию."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-table-cells",
     "version": "0.280.0",
     "publishedAt": "2026-06-25T16:00:00+07:00",

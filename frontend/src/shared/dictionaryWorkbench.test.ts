@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -208,6 +208,19 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryRecordCells('incomeTypes', createAccountingType({ code: 'MEMBER_FEE', isSystem: true }))).toEqual(['Членский взнос', 'MEMBER_FEE', 'Системный'])
     expect(getDictionaryRecordCells('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toEqual(['Вывоз мусора', 'не указан', 'Пользовательский'])
     expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'water', '1,00', '01.07.2026'])
+  })
+
+  it('returns editor field metadata used by dictionary CRUD modals', () => {
+    expect(getDictionaryEditorFieldMeta('ownerLastName')).toEqual({ ariaLabel: 'Фамилия владельца', placeholder: 'Фамилия' })
+    expect(getDictionaryEditorFieldMeta('ownerExistingGarage')).toEqual({ ariaLabel: 'Привязать существующий гараж' })
+    expect(getDictionaryEditorFieldMeta('ownerNewGarageComment')).toEqual({ ariaLabel: 'Комментарий нового гаража', placeholder: 'Комментарий по гаражу' })
+    expect(getDictionaryEditorFieldMeta('garageComment')).toEqual({ ariaLabel: 'Комментарий по гаражу', placeholder: 'Комментарий' })
+    expect(getDictionaryEditorFieldMeta('supplierGroupName')).toEqual({ ariaLabel: 'Группа поставщиков', placeholder: 'Группа' })
+    expect(getDictionaryEditorFieldMeta('supplierLegalAddress')).toEqual({ ariaLabel: 'Юридический адрес поставщика', placeholder: 'Юридический адрес' })
+    expect(getDictionaryEditorFieldMeta('accountingTypeCode')).toEqual({ ariaLabel: 'Код вида операции', placeholder: 'Код' })
+    expect(getDictionaryEditorFieldMeta('tariffCalculationBase')).toEqual({ ariaLabel: 'База расчета тарифа' })
+    expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toEqual({ ariaLabel: 'Второй порог электроэнергии', placeholder: 'Порог 2, кВт' })
+    expect(getDictionaryEditorFieldMeta('tariffComment')).toEqual({ ariaLabel: 'Комментарий тарифа', placeholder: 'Комментарий' })
   })
 
   it('returns record titles for every dictionary section', () => {
