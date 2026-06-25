@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-pagination",
+    "version": "0.271.0",
+    "publishedAt": "2026-06-25T13:20:00+07:00",
+    "title": "Пагинация frontend вынесена в shared",
+    "summary": "Варианты размера страницы, пустая страница и fallback-срезы таблиц теперь живут в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует pagination.ts для пользователей, платежей и справочников."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют стабильные размеры страниц, пустую страницу и fallback-срезы с сохранением totalCount."
+      },
+      {
+        "type": "improved",
+        "text": "Общие правила табличной пагинации больше не дублируются внутри рабочих панелей."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-balance-history-filter",
     "version": "0.270.0",
     "publishedAt": "2026-06-25T13:10:00+07:00",

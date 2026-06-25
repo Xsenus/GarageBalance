@@ -59,6 +59,7 @@ import {
   getLocalDateInputValue,
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
+import { createEmptyPage, createFallbackPage, pageSizeOptions } from './shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters, OwnerGarageLinkForm } from './shared/validation'
@@ -2092,7 +2093,7 @@ function FinancePanel({
             <label>
               Строк
               <select aria-label="Количество строк платежей" value={financePage.limit} onChange={(event) => void loadFinanceWorkbench(activeFinanceSection, 0, Number(event.target.value))}>
-                {dictionaryPageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
             <button className="ghost-button" type="button" disabled={loading || financePage.offset === 0} onClick={() => void loadFinanceWorkbench(activeFinanceSection, Math.max(0, financePage.offset - financePage.limit), financePage.limit)}>Назад</button>
@@ -3732,12 +3733,6 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
 type UserFormState = { email: string; displayName: string; password: string; roleCode: string; isActive: boolean }
 
-const userPageSizeOptions = [10, 25, 50, 100]
-
-function createEmptyUsersPage(limit = 25): PagedManagedUsersDto {
-  return { items: [], totalCount: 0, offset: 0, limit }
-}
-
 function getPrimaryRoleCode(user: ManagedUserDto | undefined, roles: ManagedRoleDto[]) {
   return user?.roles[0] ?? roles[0]?.code ?? ''
 }
@@ -3769,7 +3764,7 @@ function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'ed
 
 function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
-  const [page, setPage] = useState<PagedManagedUsersDto>(() => createEmptyUsersPage())
+  const [page, setPage] = useState<PagedManagedUsersDto>(() => createEmptyPage<ManagedUserDto>())
   const [searchDraft, setSearchDraft] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
   const [offset, setOffset] = useState(0)
@@ -4032,7 +4027,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <label>
               Строк:
               <select aria-label="Количество строк пользователей" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setOffset(0) }}>
-                {userPageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
             <button className="ghost-button" type="button" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={!canGoPrev || loading}>Назад</button>
@@ -4209,8 +4204,6 @@ const dictionarySectionOptions: DictionarySectionOption[] = [
   { key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' },
 ]
 
-const dictionaryPageSizeOptions = [10, 25, 50, 100]
-
 function createEmptyOwnerGarageLinkForm(): OwnerGarageLinkForm {
   return {
     existingGarageId: '',
@@ -4222,14 +4215,6 @@ function createEmptyOwnerGarageLinkForm(): OwnerGarageLinkForm {
     initialElectricityMeterValue: '',
     comment: '',
   }
-}
-
-function createEmptyDictionaryPage<TItem>(limit = 25): PagedResult<TItem> {
-  return { items: [], totalCount: 0, offset: 0, limit }
-}
-
-function createFallbackPage<TItem>(items: TItem[], offset: number, limit: number): PagedResult<TItem> {
-  return { items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit }
 }
 
 function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; initialSection: DictionarySectionKey }) {
@@ -4245,13 +4230,13 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
   const [groupOptions, setGroupOptions] = useState<SupplierGroupDto[]>([])
   const [pages, setPages] = useState<Record<DictionarySectionKey, PagedResult<DictionaryRecord>>>({
-    owners: createEmptyDictionaryPage<DictionaryRecord>(),
-    garages: createEmptyDictionaryPage<DictionaryRecord>(),
-    supplierGroups: createEmptyDictionaryPage<DictionaryRecord>(),
-    suppliers: createEmptyDictionaryPage<DictionaryRecord>(),
-    incomeTypes: createEmptyDictionaryPage<DictionaryRecord>(),
-    expenseTypes: createEmptyDictionaryPage<DictionaryRecord>(),
-    tariffs: createEmptyDictionaryPage<DictionaryRecord>(),
+    owners: createEmptyPage<DictionaryRecord>(),
+    garages: createEmptyPage<DictionaryRecord>(),
+    supplierGroups: createEmptyPage<DictionaryRecord>(),
+    suppliers: createEmptyPage<DictionaryRecord>(),
+    incomeTypes: createEmptyPage<DictionaryRecord>(),
+    expenseTypes: createEmptyPage<DictionaryRecord>(),
+    tariffs: createEmptyPage<DictionaryRecord>(),
   })
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -5004,7 +4989,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
             <label>
               Строк
               <select aria-label="Количество строк справочника" value={activePage.limit} onChange={(event) => changePageSize(Number(event.target.value))}>
-                {dictionaryPageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
             <button className="ghost-button" type="button" disabled={loading || activePage.offset === 0} onClick={() => movePage(-1)}>Назад</button>
