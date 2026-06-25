@@ -1929,7 +1929,7 @@ function FinancePanel({
       </div>
 
       <div className="finance-workbench">
-        <div className="finance-tabs" role="tablist" aria-label="Разделы платежей">
+        <div className="finance-tabs" role="tablist" aria-label={getFinanceToolbarLabel('sectionTabs')}>
           {financeSectionOptions.map((section) => (
             <button
               type="button"
@@ -1988,8 +1988,8 @@ function FinancePanel({
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoPrevious} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.previousOffset, financePage.limit)}>Назад</button>
-            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoNext} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.nextOffset, financePage.limit)}>Вперед</button>
+            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoPrevious} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.previousOffset, financePage.limit)}>{getFinanceToolbarLabel('previousPage')}</button>
+            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoNext} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.nextOffset, financePage.limit)}>{getFinanceToolbarLabel('nextPage')}</button>
           </div>
         </div>
       </div>
@@ -2337,7 +2337,7 @@ function FinancePanel({
         </div>
       </div>
       {financeContextMenu ? (
-        <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label="Операции с платежами" onClick={(event) => event.stopPropagation()} onKeyDown={handleFinanceContextMenuKeyDown}>
+        <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label={getFinanceToolbarLabel('contextMenu')} onClick={(event) => event.stopPropagation()} onKeyDown={handleFinanceContextMenuKeyDown}>
           <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
             <span>{getFinanceContextMenuLabel('add')}</span>
           </button>

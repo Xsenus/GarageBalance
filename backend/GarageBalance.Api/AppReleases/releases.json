@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-navigation-labels",
+    "version": "0.293.0",
+    "publishedAt": "2026-06-25T19:15:00+07:00",
+    "title": "Подписи навигации платежей вынесены в shared",
+    "summary": "Вкладки, ПКМ-меню и кнопки пагинации платежей теперь берут подписи из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит aria-label Разделы платежей, Операции с платежами и подписи Назад/Вперед внутри платежного рабочего стола."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют доступные подписи навигации и контекстного меню платежей."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-panel-labels",
     "version": "0.292.0",
     "publishedAt": "2026-06-25T19:00:00+07:00",

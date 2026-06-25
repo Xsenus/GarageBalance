@@ -21,6 +21,7 @@ export type FinanceEditorSavingScope =
 export type FinanceContextMenuAction = 'add' | 'edit' | 'delete'
 export type FinanceFallbackLabelKey = 'missingValue' | 'noData' | 'noComment' | 'meterGapWarning'
 export type FinanceToolbarLabelKey =
+  | 'sectionTabs'
   | 'periodFilter'
   | 'periodFrom'
   | 'periodTo'
@@ -33,6 +34,9 @@ export type FinanceToolbarLabelKey =
   | 'pagination'
   | 'rows'
   | 'pageSize'
+  | 'previousPage'
+  | 'nextPage'
+  | 'contextMenu'
 export type FinanceEditorUiLabelKey =
   | 'createMode'
   | 'editMode'
@@ -114,6 +118,7 @@ const financeFallbackLabels: Record<FinanceFallbackLabelKey, string> = {
 }
 
 const financeToolbarLabels: Record<FinanceToolbarLabelKey, string> = {
+  sectionTabs: 'Разделы платежей',
   periodFilter: 'Фильтр периода',
   periodFrom: 'Период с',
   periodTo: 'Период по',
@@ -126,6 +131,9 @@ const financeToolbarLabels: Record<FinanceToolbarLabelKey, string> = {
   pagination: 'Пагинация платежей',
   rows: 'Строк',
   pageSize: 'Количество строк платежей',
+  previousPage: 'Назад',
+  nextPage: 'Вперед',
+  contextMenu: 'Операции с платежами',
 }
 
 const financeEditorValidationTitles: Record<FinanceEditorKey, string> = {

@@ -16,6 +16,7 @@ const contextMenuActions: FinanceContextMenuAction[] = ['add', 'edit', 'delete']
 const sectionKeys: FinanceSectionKey[] = ['income', 'expense', 'accruals', 'supplierAccruals', 'meterReadings']
 const fallbackKeys: FinanceFallbackLabelKey[] = ['missingValue', 'noData', 'noComment', 'meterGapWarning']
 const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
+  'sectionTabs',
   'periodFilter',
   'periodFrom',
   'periodTo',
@@ -28,6 +29,9 @@ const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
   'pagination',
   'rows',
   'pageSize',
+  'previousPage',
+  'nextPage',
+  'contextMenu',
 ]
 const editorUiLabelKeys: FinanceEditorUiLabelKey[] = ['createMode', 'editMode', 'close', 'cancel', 'save', 'unsavedHint', 'unsavedConfirm']
 const panelLabelKeys: FinancePanelLabelKey[] = [
@@ -165,6 +169,7 @@ describe('finance workbench metadata', () => {
 
   it('returns toolbar labels for payment filters and pagination', () => {
     expect(Object.fromEntries(toolbarLabelKeys.map((key) => [key, getFinanceToolbarLabel(key)]))).toEqual({
+      sectionTabs: 'Разделы платежей',
       periodFilter: 'Фильтр периода',
       periodFrom: 'Период с',
       periodTo: 'Период по',
@@ -177,6 +182,9 @@ describe('finance workbench metadata', () => {
       pagination: 'Пагинация платежей',
       rows: 'Строк',
       pageSize: 'Количество строк платежей',
+      previousPage: 'Назад',
+      nextPage: 'Вперед',
+      contextMenu: 'Операции с платежами',
     })
   })
 
