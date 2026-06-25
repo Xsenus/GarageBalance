@@ -3182,7 +3182,7 @@ function FinancePanel({
         </div>
       ) : null}
       {financeEditor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => closeFinanceEditor()}>
+        <div className="modal-backdrop" role="presentation" data-testid="finance-editor-backdrop" onMouseDown={() => closeFinanceEditor()}>
           <section
             ref={financeEditorDialogRef}
             className="detail-dialog finance-editor-dialog"
