@@ -127,7 +127,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("supplier_groups");
             entity.HasKey(group => group.Id);
             entity.Property(group => group.Name).HasMaxLength(200).IsRequired();
-            entity.HasIndex(group => group.Name).IsUnique();
+            entity.HasIndex(group => group.Name).IsUnique().HasFilter("\"IsArchived\" = false");
         });
 
         modelBuilder.Entity<Supplier>(entity =>
@@ -158,7 +158,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Code).HasMaxLength(80);
-            entity.HasIndex(item => item.Name).IsUnique();
+            entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.Code);
         });
 
@@ -168,7 +168,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Code).HasMaxLength(80);
-            entity.HasIndex(item => item.Name).IsUnique();
+            entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.Code);
         });
 
@@ -185,7 +185,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.ElectricitySecondRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricityThirdRate).HasPrecision(18, 4);
             entity.Property(item => item.Comment).HasMaxLength(1000);
-            entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique();
+            entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
         });

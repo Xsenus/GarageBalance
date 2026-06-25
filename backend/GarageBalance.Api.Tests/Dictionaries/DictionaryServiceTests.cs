@@ -282,6 +282,21 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateSupplierGroupAsync_AllowsNameFromArchivedGroup()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var archived = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(archived.Value!.Id, null, CancellationToken.None);
+
+        var result = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsArchived);
+        Assert.Equal(2, await database.Context.SupplierGroups.CountAsync(group => group.Name == "Коммунальные услуги"));
+    }
+
+    [Fact]
     public async Task CreateSupplierAsync_RejectsMissingGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -324,6 +339,22 @@ public sealed class DictionaryServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("income_type_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateIncomeTypeAsync_AllowsNameFromArchivedType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var archived = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_old"), null, CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(archived.Value!.Id, null, CancellationToken.None);
+
+        var result = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_new"), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsArchived);
+        Assert.Equal("target_new", result.Value.Code);
+        Assert.Equal(2, await database.Context.IncomeTypes.CountAsync(item => item.Name == "Целевой взнос"));
     }
 
     [Fact]
@@ -405,6 +436,22 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseTypeAsync_AllowsNameFromArchivedType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var archived = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_old"), null, CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(archived.Value!.Id, null, CancellationToken.None);
+
+        var result = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_new"), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsArchived);
+        Assert.Equal("trash_new", result.Value.Code);
+        Assert.Equal(2, await database.Context.ExpenseTypes.CountAsync(item => item.Name == "Вывоз мусора"));
+    }
+
+    [Fact]
     public async Task CreateTariffAsync_RejectsDuplicateNameAndDate()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -416,6 +463,23 @@ public sealed class DictionaryServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("tariff_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateTariffAsync_AllowsNameAndDateFromArchivedTariff()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var effectiveFrom = new DateOnly(2026, 7, 1);
+        var archived = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50m, effectiveFrom, null), null, CancellationToken.None);
+        await service.ArchiveTariffAsync(archived.Value!.Id, null, CancellationToken.None);
+
+        var result = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 60m, effectiveFrom, "Новая редакция"), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsArchived);
+        Assert.Equal(60m, result.Value.Rate);
+        Assert.Equal(2, await database.Context.Tariffs.CountAsync(item => item.Name == "Вода" && item.EffectiveFrom == effectiveFrom));
     }
 
     [Fact]

@@ -318,7 +318,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     public async Task<DictionaryResult<SupplierGroupDto>> CreateSupplierGroupAsync(UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.SupplierGroups.AnyAsync(group => group.Name == name, cancellationToken))
+        if (await dbContext.SupplierGroups.AnyAsync(group => !group.IsArchived && group.Name == name, cancellationToken))
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Группа поставщиков с таким названием уже существует.");
         }
@@ -344,7 +344,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.SupplierGroups.AnyAsync(item => item.Id != id && item.Name == name, cancellationToken))
+        if (await dbContext.SupplierGroups.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Группа поставщиков с таким названием уже существует.");
         }
@@ -538,7 +538,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     public async Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.IncomeTypes.AnyAsync(item => item.Name == name, cancellationToken))
+        if (await dbContext.IncomeTypes.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
         }
@@ -569,7 +569,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.IncomeTypes.AnyAsync(item => item.Id != id && item.Name == name, cancellationToken))
+        if (await dbContext.IncomeTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
         }
@@ -633,7 +633,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     public async Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Name == name, cancellationToken))
+        if (await dbContext.ExpenseTypes.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
         }
@@ -664,7 +664,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Id != id && item.Name == name, cancellationToken))
+        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
         }
@@ -778,7 +778,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             return DictionaryResult<TariffDto>.Failure(electricityTiers.ErrorCode!, electricityTiers.ErrorMessage!);
         }
 
-        if (await dbContext.Tariffs.AnyAsync(item => item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
+        if (await dbContext.Tariffs.AnyAsync(item => !item.IsArchived && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
         }
@@ -820,7 +820,7 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             return DictionaryResult<TariffDto>.Failure(electricityTiers.ErrorCode!, electricityTiers.ErrorMessage!);
         }
 
-        if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
+        if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
         }
