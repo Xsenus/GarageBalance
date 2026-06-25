@@ -1814,7 +1814,13 @@ describe('App', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeEnabled()
     expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeEnabled()
 
-    await user.click(within(menu).getByRole('menuitem', { name: 'Изменить' }))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument())
+    await waitFor(() => expect(paymentRow).toHaveFocus())
+
+    fireEvent.keyDown(paymentRow, { key: 'F10', shiftKey: true })
+    const reopenedMenu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    await user.click(within(reopenedMenu).getByRole('menuitem', { name: 'Изменить' }))
     const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
   })

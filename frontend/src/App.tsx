@@ -1408,6 +1408,7 @@ function FinancePanel({
   const [error, setError] = useState<string | null>(null)
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
+  useRestoreFocusOnClose(Boolean(financeContextMenu))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
