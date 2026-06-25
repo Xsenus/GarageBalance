@@ -1,3 +1,4 @@
+import { formatMonthInputValue } from './formatters'
 import { getDateOnlyOrDefault, getRowModeOrDefault, getStringArrayOrDefault, getStringOrDefault, isRecord, readSessionJson, saveSessionJson } from './sessionStorage'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters } from './validation'
 
@@ -17,6 +18,12 @@ export function createDefaultIncomeReportFilters(month: string, today: string): 
 
 export function createDefaultExpenseReportFilters(month: string, today: string): ExpenseReportFilters {
   return { dateFrom: month, dateTo: today, search: '', supplierIds: [], expenseTypeIds: [], rowMode: 'all' }
+}
+
+export function createDefaultGarageBalanceHistoryFilters(date = new Date()) {
+  const to = new Date(date.getFullYear(), date.getMonth(), 1)
+  const from = new Date(date.getFullYear(), date.getMonth() - 5, 1)
+  return { monthFrom: formatMonthInputValue(from), monthTo: formatMonthInputValue(to) }
 }
 
 export function loadConsolidatedReportFilters(month: string): ConsolidatedReportFilters {

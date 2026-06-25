@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   createDefaultConsolidatedReportFilters,
   createDefaultExpenseReportFilters,
+  createDefaultGarageBalanceHistoryFilters,
   createDefaultIncomeReportFilters,
   loadConsolidatedReportFilters,
   loadExpenseReportFilters,
@@ -41,6 +42,18 @@ describe('report filter storage helpers', () => {
       supplierIds: [],
       expenseTypeIds: [],
       rowMode: 'all',
+    })
+  })
+
+  it('creates a six-month garage balance history period ending at the selected month', () => {
+    expect(createDefaultGarageBalanceHistoryFilters(new Date(2026, 5, 25))).toEqual({
+      monthFrom: '2026-01',
+      monthTo: '2026-06',
+    })
+
+    expect(createDefaultGarageBalanceHistoryFilters(new Date(2026, 1, 10))).toEqual({
+      monthFrom: '2025-09',
+      monthTo: '2026-02',
     })
   })
 

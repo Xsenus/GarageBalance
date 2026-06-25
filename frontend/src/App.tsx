@@ -51,7 +51,6 @@ import {
   formatMissingMeterReadings,
   formatMoney,
   formatMonth,
-  formatMonthInputValue,
   formatNullableNumber,
   formatPaymentAllocations,
   formatReleaseDate,
@@ -60,7 +59,7 @@ import {
   getLocalDateInputValue,
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
-import { loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
+import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters, OwnerGarageLinkForm } from './shared/validation'
 import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseReportValidationErrors, getExpenseValidationErrors, getGarageValidationErrors, getIncomeReportValidationErrors, getIncomeValidationErrors, getManagedUserValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getPasswordPolicyErrors, getRegularAccrualValidationErrorsForCatalog, getReportMonthRangeValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
@@ -6041,12 +6040,6 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
       ) : null}
     </>
   )
-}
-
-function createDefaultGarageBalanceHistoryFilters(date = new Date()) {
-  const to = new Date(date.getFullYear(), date.getMonth(), 1)
-  const from = new Date(date.getFullYear(), date.getMonth() - 5, 1)
-  return { monthFrom: formatMonthInputValue(from), monthTo: formatMonthInputValue(to) }
 }
 
 export default App
