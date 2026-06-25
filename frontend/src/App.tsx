@@ -36,6 +36,8 @@ import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
+import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
+import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4079,48 +4081,6 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
   )
 }
 
-type DictionarySectionKey = 'owners' | 'garages' | 'supplierGroups' | 'suppliers' | 'incomeTypes' | 'expenseTypes' | 'tariffs'
-
-type DictionaryRecord = OwnerDto | GarageDto | SupplierGroupDto | SupplierDto | AccountingTypeDto | TariffDto
-
-type DictionarySectionGroupKey = 'counterparties' | 'operations' | 'tariffs'
-
-type DictionarySectionOption = {
-  key: DictionarySectionKey
-  label: string
-  group: DictionarySectionGroupKey
-  writePermission: 'dictionaries' | 'tariffs'
-}
-
-const dictionarySectionGroups: { key: DictionarySectionGroupKey; label: string }[] = [
-  { key: 'counterparties', label: 'Контрагенты' },
-  { key: 'operations', label: 'Операции' },
-  { key: 'tariffs', label: 'Тарифы' },
-]
-
-const dictionarySectionOptions: DictionarySectionOption[] = [
-  { key: 'owners', label: 'Владельцы', group: 'counterparties', writePermission: 'dictionaries' },
-  { key: 'garages', label: 'Гаражи', group: 'counterparties', writePermission: 'dictionaries' },
-  { key: 'supplierGroups', label: 'Группы поставщиков и персонала', group: 'counterparties', writePermission: 'dictionaries' },
-  { key: 'suppliers', label: 'Поставщики и персонал', group: 'counterparties', writePermission: 'dictionaries' },
-  { key: 'incomeTypes', label: 'Виды поступлений', group: 'operations', writePermission: 'dictionaries' },
-  { key: 'expenseTypes', label: 'Виды выплат', group: 'operations', writePermission: 'dictionaries' },
-  { key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' },
-]
-
-function createEmptyOwnerGarageLinkForm(): OwnerGarageLinkForm {
-  return {
-    existingGarageId: '',
-    newGarageNumber: '',
-    peopleCount: 1,
-    floorCount: 1,
-    startingBalance: 0,
-    initialWaterMeterValue: '',
-    initialElectricityMeterValue: '',
-    comment: '',
-  }
-}
-
 function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; initialSection: DictionarySectionKey }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
@@ -4174,16 +4134,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const activePage = pages[activeSection]
   const activeOption = dictionarySectionOptions.find((item) => item.key === activeSection) ?? dictionarySectionOptions[0]
   const canWriteActiveSection = activeOption.writePermission === 'tariffs' ? canManageTariffs : canWriteDictionaries
-  const supportsSearch = supportsSearchFor(activeSection)
-  const searchPlaceholder = activeSection === 'garages'
-    ? 'Номер гаража или ФИО владельца'
-    : activeSection === 'suppliers'
-      ? 'Название, ИНН или контакт'
-      : activeSection === 'owners'
-        ? 'ФИО или телефон'
-        : activeSection === 'tariffs'
-          ? 'Название или база расчета'
-          : 'Поиск для этого справочника пока не применяется'
+  const supportsSearch = supportsDictionarySearch(activeSection)
+  const searchPlaceholder = getDictionarySearchPlaceholder(activeSection)
   const ownerGarageOptions = garageOptions.filter((garage) => {
     if (!garage.ownerId) {
       return true
@@ -4276,7 +4228,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }, [activeSection, auth.accessToken, dictionaryClient, search])
 
   async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit) {
-    const query = supportsSearchFor(section) ? search.trim() || undefined : undefined
+    const query = supportsDictionarySearch(section) ? search.trim() || undefined : undefined
     let page: PagedResult<DictionaryRecord>
     if (section === 'owners') {
       page = dictionaryClient.getOwnersPage
@@ -4316,10 +4268,6 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     }
 
     setPages((current) => ({ ...current, [section]: page }))
-  }
-
-  function supportsSearchFor(section: DictionarySectionKey) {
-    return section === 'owners' || section === 'garages' || section === 'suppliers' || section === 'tariffs'
   }
 
   function showToast(text: string, kind: 'success' | 'error' = 'success') {

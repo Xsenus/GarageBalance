@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-workbench",
+    "version": "0.274.0",
+    "publishedAt": "2026-06-25T14:45:00+07:00",
+    "title": "Metadata справочников вынесена в shared",
+    "summary": "Группы и разделы справочников, поиск и пустая форма привязки гаража теперь описаны в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует dictionaryWorkbench.ts для вкладок справочников, прав записи и placeholders поиска."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют порядок разделов, поддержку серверного поиска и defaults формы гаража владельца."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-workbench",
     "version": "0.273.0",
     "publishedAt": "2026-06-25T14:30:00+07:00",
