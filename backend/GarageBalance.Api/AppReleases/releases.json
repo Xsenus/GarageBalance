@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-edit-forms",
+    "version": "0.277.0",
+    "publishedAt": "2026-06-25T15:25:00+07:00",
+    "title": "Формы редактирования справочников вынесены в shared",
+    "summary": "Преобразование DTO владельцев, гаражей, поставщиков и видов операций в формы редактирования теперь живет в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 использует dictionaryWorkbench.ts при открытии карточек справочников на редактирование."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют преобразование nullable-полей и стартовых значений счетчиков в строковые поля формы."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-form-defaults",
     "version": "0.276.0",
     "publishedAt": "2026-06-25T15:15:00+07:00",

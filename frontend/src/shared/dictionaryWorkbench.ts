@@ -87,6 +87,17 @@ export function createEmptyOwnerForm(): DictionaryOwnerFormState {
   }
 }
 
+export function createOwnerFormFromDto(owner: OwnerDto): DictionaryOwnerFormState {
+  return {
+    lastName: owner.lastName,
+    firstName: owner.firstName,
+    middleName: owner.middleName ?? '',
+    phone: owner.phone ?? '',
+    address: owner.address ?? '',
+    meterNotes: owner.meterNotes ?? '',
+  }
+}
+
 export function createEmptyGarageForm(): DictionaryGarageFormState {
   return {
     number: '',
@@ -97,6 +108,19 @@ export function createEmptyGarageForm(): DictionaryGarageFormState {
     initialWaterMeterValue: '',
     initialElectricityMeterValue: '',
     comment: '',
+  }
+}
+
+export function createGarageFormFromDto(garage: GarageDto): DictionaryGarageFormState {
+  return {
+    number: garage.number,
+    peopleCount: garage.peopleCount,
+    floorCount: garage.floorCount,
+    ownerId: garage.ownerId ?? '',
+    startingBalance: garage.startingBalance,
+    initialWaterMeterValue: garage.initialWaterMeterValue?.toString() ?? '',
+    initialElectricityMeterValue: garage.initialElectricityMeterValue?.toString() ?? '',
+    comment: garage.comment ?? '',
   }
 }
 
@@ -114,10 +138,31 @@ export function createEmptySupplierForm(groupId = ''): DictionarySupplierFormSta
   }
 }
 
+export function createSupplierFormFromDto(supplier: SupplierDto): DictionarySupplierFormState {
+  return {
+    name: supplier.name,
+    groupId: supplier.groupId,
+    inn: supplier.inn ?? '',
+    legalAddress: supplier.legalAddress ?? '',
+    contactPerson: supplier.contactPerson ?? '',
+    phone: supplier.phone ?? '',
+    email: supplier.email ?? '',
+    startingBalance: supplier.startingBalance,
+    comment: supplier.comment ?? '',
+  }
+}
+
 export function createEmptyAccountingTypeForm(): DictionaryAccountingTypeFormState {
   return {
     name: '',
     code: '',
+  }
+}
+
+export function createAccountingTypeFormFromDto(type: AccountingTypeDto): DictionaryAccountingTypeFormState {
+  return {
+    name: type.name,
+    code: type.code ?? '',
   }
 }
 

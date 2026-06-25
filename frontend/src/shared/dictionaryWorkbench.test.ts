@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
+import { createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -83,6 +83,73 @@ describe('dictionary workbench metadata', () => {
     })
   })
 
+  it('creates dictionary editor forms from dto records', () => {
+    expect(createOwnerFormFromDto(createOwner({
+      middleName: 'Петрович',
+      phone: '+79990000000',
+      address: 'ул. Ленина, 1',
+      meterNotes: 'Счетчик в боксе',
+    }))).toEqual({
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      middleName: 'Петрович',
+      phone: '+79990000000',
+      address: 'ул. Ленина, 1',
+      meterNotes: 'Счетчик в боксе',
+    })
+
+    expect(createOwnerFormFromDto(createOwner())).toEqual({
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      middleName: '',
+      phone: '',
+      address: '',
+      meterNotes: '',
+    })
+
+    expect(createGarageFormFromDto(createGarage({
+      ownerId: 'owner-1',
+      startingBalance: -150,
+      initialWaterMeterValue: 12.5,
+      initialElectricityMeterValue: 1024,
+      comment: 'угловой',
+    }))).toEqual({
+      number: '42',
+      peopleCount: 1,
+      floorCount: 1,
+      ownerId: 'owner-1',
+      startingBalance: -150,
+      initialWaterMeterValue: '12.5',
+      initialElectricityMeterValue: '1024',
+      comment: 'угловой',
+    })
+
+    expect(createSupplierFormFromDto(createSupplier({
+      inn: '5400000000',
+      legalAddress: 'Новосибирск',
+      contactPerson: 'Петр',
+      phone: '+73830000000',
+      email: 'bank@example.test',
+      startingBalance: 250,
+      comment: 'основной банк',
+    }))).toEqual({
+      name: 'БАНК 12',
+      groupId: 'group-1',
+      inn: '5400000000',
+      legalAddress: 'Новосибирск',
+      contactPerson: 'Петр',
+      phone: '+73830000000',
+      email: 'bank@example.test',
+      startingBalance: 250,
+      comment: 'основной банк',
+    })
+
+    expect(createAccountingTypeFormFromDto(createAccountingType({ code: 'MEMBER_FEE' }))).toEqual({
+      name: 'Членский взнос',
+      code: 'MEMBER_FEE',
+    })
+  })
+
   it('marks only server-searchable dictionary sections as searchable', () => {
     expect(Object.fromEntries(dictionarySectionOptions.map((section) => [section.key, supportsDictionarySearch(section.key)]))).toEqual({
       owners: true,
@@ -118,7 +185,7 @@ describe('dictionary workbench metadata', () => {
   })
 })
 
-function createOwner(): OwnerDto {
+function createOwner(overrides: Partial<OwnerDto> = {}): OwnerDto {
   return {
     id: 'owner-1',
     lastName: 'Иванов',
@@ -129,10 +196,11 @@ function createOwner(): OwnerDto {
     address: null,
     meterNotes: null,
     isArchived: false,
+    ...overrides,
   }
 }
 
-function createGarage(): GarageDto {
+function createGarage(overrides: Partial<GarageDto> = {}): GarageDto {
   return {
     id: 'garage-1',
     number: '42',
@@ -145,6 +213,7 @@ function createGarage(): GarageDto {
     initialElectricityMeterValue: null,
     comment: null,
     isArchived: false,
+    ...overrides,
   }
 }
 
@@ -157,7 +226,7 @@ function createSupplierGroup(): SupplierGroupDto {
   }
 }
 
-function createSupplier(): SupplierDto {
+function createSupplier(overrides: Partial<SupplierDto> = {}): SupplierDto {
   return {
     id: 'supplier-1',
     name: 'БАНК 12',
@@ -171,6 +240,7 @@ function createSupplier(): SupplierDto {
     startingBalance: 0,
     comment: null,
     isArchived: false,
+    ...overrides,
   }
 }
 

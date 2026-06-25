@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4320,19 +4320,19 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     if (mode === 'edit' && item) {
       if (section === 'owners') {
         const owner = item as OwnerDto
-        setOwnerForm({ lastName: owner.lastName, firstName: owner.firstName, middleName: owner.middleName ?? '', phone: owner.phone ?? '', address: owner.address ?? '', meterNotes: owner.meterNotes ?? '' })
+        setOwnerForm(createOwnerFormFromDto(owner))
         setOwnerGarageLinkForm({ ...createEmptyOwnerGarageLinkForm(), existingGarageId: garageOptions.find((garage) => garage.ownerId === owner.id)?.id ?? '' })
       } else if (section === 'garages') {
         const garage = item as GarageDto
-        setGarageForm({ number: garage.number, peopleCount: garage.peopleCount, floorCount: garage.floorCount, ownerId: garage.ownerId ?? '', startingBalance: garage.startingBalance, initialWaterMeterValue: garage.initialWaterMeterValue?.toString() ?? '', initialElectricityMeterValue: garage.initialElectricityMeterValue?.toString() ?? '', comment: garage.comment ?? '' })
+        setGarageForm(createGarageFormFromDto(garage))
       } else if (section === 'supplierGroups') {
         setSupplierGroupName((item as SupplierGroupDto).name)
       } else if (section === 'suppliers') {
         const supplier = item as SupplierDto
-        setSupplierForm({ name: supplier.name, groupId: supplier.groupId, inn: supplier.inn ?? '', legalAddress: supplier.legalAddress ?? '', contactPerson: supplier.contactPerson ?? '', phone: supplier.phone ?? '', email: supplier.email ?? '', startingBalance: supplier.startingBalance, comment: supplier.comment ?? '' })
+        setSupplierForm(createSupplierFormFromDto(supplier))
       } else if (section === 'incomeTypes' || section === 'expenseTypes') {
         const type = item as AccountingTypeDto
-        setAccountingTypeForm({ name: type.name, code: type.code ?? '' })
+        setAccountingTypeForm(createAccountingTypeFormFromDto(type))
       } else {
         const tariff = item as TariffDto
         setTariffForm(createTariffFormFromDto(tariff))
