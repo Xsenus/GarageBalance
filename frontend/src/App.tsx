@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getOwnerGarageOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4132,21 +4132,11 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
   const activePage = pages[activeSection]
-  const activeOption = dictionarySectionOptions.find((item) => item.key === activeSection) ?? dictionarySectionOptions[0]
-  const canWriteActiveSection = activeOption.writePermission === 'tariffs' ? canManageTariffs : canWriteDictionaries
+  const activeOption = getDictionarySectionOption(activeSection)
+  const canWriteActiveSection = canWriteDictionarySection(activeSection, canWriteDictionaries, canManageTariffs)
   const supportsSearch = supportsDictionarySearch(activeSection)
   const searchPlaceholder = getDictionarySearchPlaceholder(activeSection)
-  const ownerGarageOptions = garageOptions.filter((garage) => {
-    if (!garage.ownerId) {
-      return true
-    }
-
-    if (editor?.section === 'owners' && editor.item) {
-      return garage.ownerId === (editor.item as OwnerDto).id
-    }
-
-    return false
-  })
+  const ownerGarageOptions = getOwnerGarageOptions(garageOptions, editor?.section === 'owners' && editor.item ? editor.item as OwnerDto : undefined)
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor), () => closeEditor())

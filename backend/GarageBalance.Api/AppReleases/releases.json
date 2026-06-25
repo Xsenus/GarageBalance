@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-section-rules",
+    "version": "0.278.0",
+    "publishedAt": "2026-06-25T15:35:00+07:00",
+    "title": "Правила разделов справочников вынесены в shared",
+    "summary": "Выбор активного раздела, права записи и доступные гаражи владельца теперь считаются в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 использует dictionaryWorkbench.ts для write-доступа и списка гаражей в карточке владельца."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют права тарифных разделов и фильтр свободных/уже привязанных гаражей."
+      },
+      {
+        "type": "improved",
+        "text": "Длинный UI-сценарий создания справочников получил явный timeout, чтобы frontend-прогон не зависел от скорости окружения."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-edit-forms",
     "version": "0.277.0",
     "publishedAt": "2026-06-25T15:25:00+07:00",

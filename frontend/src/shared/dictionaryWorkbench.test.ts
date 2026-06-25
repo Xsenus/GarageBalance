@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -21,6 +21,16 @@ describe('dictionary workbench metadata', () => {
       { key: 'expenseTypes', label: 'Виды выплат', group: 'operations', writePermission: 'dictionaries' },
       { key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' },
     ])
+  })
+
+  it('returns section options and write access based on section permission', () => {
+    expect(getDictionarySectionOption('tariffs')).toEqual({ key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' })
+    expect(getDictionarySectionOption('owners')).toEqual({ key: 'owners', label: 'Владельцы', group: 'counterparties', writePermission: 'dictionaries' })
+
+    expect(canWriteDictionarySection('owners', true, false)).toBe(true)
+    expect(canWriteDictionarySection('owners', false, true)).toBe(false)
+    expect(canWriteDictionarySection('tariffs', true, false)).toBe(false)
+    expect(canWriteDictionarySection('tariffs', false, true)).toBe(true)
   })
 
   it('creates an empty owner garage link form with numeric defaults', () => {
@@ -182,6 +192,18 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryRecordTitle('incomeTypes', createAccountingType())).toBe('Членский взнос')
     expect(getDictionaryRecordTitle('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toBe('Вывоз мусора')
     expect(getDictionaryRecordTitle('tariffs', createTariff())).toBe('Тариф на воду')
+  })
+
+  it('returns empty garages and garages already linked to the edited owner', () => {
+    const owner = createOwner({ id: 'owner-1' })
+    const garages = [
+      createGarage({ id: 'free', number: '1', ownerId: null }),
+      createGarage({ id: 'same-owner', number: '2', ownerId: 'owner-1' }),
+      createGarage({ id: 'other-owner', number: '3', ownerId: 'owner-2' }),
+    ]
+
+    expect(getOwnerGarageOptions(garages).map((garage) => garage.id)).toEqual(['free'])
+    expect(getOwnerGarageOptions(garages, owner).map((garage) => garage.id)).toEqual(['free', 'same-owner'])
   })
 })
 

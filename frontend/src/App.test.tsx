@@ -1072,7 +1072,7 @@ describe('App', () => {
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
-  })
+  }, 30_000)
 
   it('shows dictionary list truncation counter when there are more rows', async () => {
     const user = userEvent.setup()

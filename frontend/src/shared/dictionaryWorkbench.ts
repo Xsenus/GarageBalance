@@ -197,6 +197,14 @@ export function getDictionarySearchPlaceholder(section: DictionarySectionKey) {
   return dictionarySearchPlaceholders[section]
 }
 
+export function getDictionarySectionOption(section: DictionarySectionKey) {
+  return dictionarySectionOptions.find((item) => item.key === section) ?? dictionarySectionOptions[0]
+}
+
+export function canWriteDictionarySection(section: DictionarySectionKey, canWriteDictionaries: boolean, canManageTariffs: boolean) {
+  return getDictionarySectionOption(section).writePermission === 'tariffs' ? canManageTariffs : canWriteDictionaries
+}
+
 export function getDictionaryRecordTitle(section: DictionarySectionKey, item: DictionaryRecord) {
   if (section === 'owners') {
     return (item as OwnerDto).fullName
@@ -219,4 +227,8 @@ export function getDictionaryRecordTitle(section: DictionarySectionKey, item: Di
   }
 
   return (item as AccountingTypeDto).name
+}
+
+export function getOwnerGarageOptions(garages: GarageDto[], owner?: OwnerDto) {
+  return garages.filter((garage) => !garage.ownerId || (owner ? garage.ownerId === owner.id : false))
 }
