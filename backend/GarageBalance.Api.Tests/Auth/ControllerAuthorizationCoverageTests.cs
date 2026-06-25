@@ -162,6 +162,47 @@ public sealed class ControllerAuthorizationCoverageTests
         Assert.Empty(mutatingTariffActionsWithoutTariffPolicy);
     }
 
+    [Theory]
+    [InlineData(typeof(UsersController), SystemPermissions.UsersManage)]
+    [InlineData(typeof(ImportController), SystemPermissions.ImportRun)]
+    [InlineData(typeof(AuditController), SystemPermissions.AuditRead)]
+    public void WorkspaceSectionControllersRequireExpectedPermissions(Type controllerType, string expectedPolicy)
+    {
+        var controllerPolicy = controllerType
+            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == expectedPolicy);
+        Assert.NotNull(controllerPolicy);
+
+        var anonymousActions = controllerType
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true).Any())
+            .Where(method => HasAnonymousMetadata(method))
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Empty(anonymousActions);
+    }
+
+    [Fact]
+    public void AppReleasesControllerRequiresAuthenticatedAccess()
+    {
+        var controllerPolicy = typeof(AppReleasesController)
+            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy is null);
+        Assert.NotNull(controllerPolicy);
+
+        var anonymousActions = typeof(AppReleasesController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true).Any())
+            .Where(method => HasAnonymousMetadata(method))
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Empty(anonymousActions);
+    }
+
     private static IEnumerable<MethodInfo> GetControllerActionMethods()
     {
         return typeof(AuthController).Assembly

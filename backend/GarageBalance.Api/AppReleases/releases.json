@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-workspace-controller-permission-guard",
+    "version": "0.255.0",
+    "publishedAt": "2026-06-25T14:00:00+07:00",
+    "title": "Права рабочих контроллеров закреплены тестом",
+    "summary": "Структурные backend-тесты теперь проверяют controller-level permissions для пользователей, импорта, audit и истории релизов.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "UsersController, ImportController и AuditController проверяются на свои ожидаемые политики users.manage, import.run и audit.read."
+      },
+      {
+        "type": "fixed",
+        "text": "AppReleasesController проверяется на обязательную авторизацию без anonymous endpoints."
+      },
+      {
+        "type": "improved",
+        "text": "README описывает backend guard для оставшихся рабочих разделов."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-dictionary-controller-permission-guard",
     "version": "0.254.0",
     "publishedAt": "2026-06-25T13:45:00+07:00",
