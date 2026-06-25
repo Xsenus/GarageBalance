@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
 import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
@@ -202,5 +202,10 @@ describe('finance workbench metadata', () => {
       meterReadings: 'Счетчики',
     })
     expect(formatFinanceOperationCount(7)).toBe('7 операций')
+  })
+
+  it('formats payment pagination status text', () => {
+    expect(formatFinanceVisibleRange({ from: 1, to: 25 }, 80)).toBe('Показано 1-25 из 80')
+    expect(formatFinanceVisibleRange({ from: 0, to: 0 }, 0)).toBe('Показано 0-0 из 0')
   })
 })

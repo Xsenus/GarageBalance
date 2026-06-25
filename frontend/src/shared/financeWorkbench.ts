@@ -237,3 +237,7 @@ export function getFinancePanelLabel(key: FinancePanelLabelKey) {
 export function formatFinanceOperationCount(count: number) {
   return `${count} операций`
 }
+
+export function formatFinanceVisibleRange(range: { from: number; to: number }, totalCount: number) {
+  return `Показано ${range.from}-${range.to} из ${totalCount}`
+}

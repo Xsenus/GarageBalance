@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-range-status",
+    "version": "0.294.0",
+    "publishedAt": "2026-06-25T19:30:00+07:00",
+    "title": "Статус пагинации платежей вынесен в shared",
+    "summary": "Строка Показано X-Y из Z в платежной таблице теперь формируется общим frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не собирает текст live-region для серверной пагинации платежей внутри JSX."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют формат статуса видимого диапазона платежей, включая пустую выборку."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-navigation-labels",
     "version": "0.293.0",
     "publishedAt": "2026-06-25T19:15:00+07:00",
