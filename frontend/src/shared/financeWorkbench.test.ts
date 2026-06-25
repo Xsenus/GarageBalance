@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './financeWorkbench'
+import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './financeWorkbench'
 import type { FinanceEditorKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
@@ -57,5 +57,15 @@ describe('finance workbench metadata', () => {
       supplierAccruals: 'supplier-accrual',
       meterReadings: 'meter-reading',
     })
+  })
+
+  it('returns section descriptions with server counts', () => {
+    expect(getFinanceSectionDescription(financeSectionOptions[0], {
+      income: 12,
+      expense: 3,
+      accruals: 25,
+      supplierAccruals: 7,
+      meterReadings: 40,
+    })).toBe('Оплаты владельцев · 12')
   })
 })

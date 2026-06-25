@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
+import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -1459,10 +1459,6 @@ function FinancePanel({
     }
   }
 
-  function getFinanceSectionCount(section: FinanceSectionKey) {
-    return financeSectionCounts[section]
-  }
-
   const filteredIncomeOperations = operations.filter((operation) => operation.operationKind === 'income')
   const filteredExpenseOperations = operations.filter((operation) => operation.operationKind === 'expense')
   const filteredAccruals = accruals
@@ -1986,7 +1982,7 @@ function FinancePanel({
               onClick={() => selectFinanceSection(section.key)}
             >
               <span>{section.label}</span>
-              <small>{section.description} · {getFinanceSectionCount(section.key)}</small>
+              <small>{getFinanceSectionDescription(section, financeSectionCounts)}</small>
             </button>
           ))}
         </div>

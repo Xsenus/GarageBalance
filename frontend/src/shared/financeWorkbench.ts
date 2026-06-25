@@ -7,6 +7,8 @@ export type FinanceSectionOption = {
   description: string
 }
 
+export type FinanceSectionCounts = Record<FinanceSectionKey, number>
+
 export type FinanceEditorSavingScope =
   | 'income'
   | 'expense'
@@ -64,4 +66,8 @@ export function getFinanceEditorSubmitLabel(section: FinanceEditorKey) {
 
 export function getFinanceEditorSavingScope(section: FinanceEditorKey) {
   return financeEditorSavingScopes[section]
+}
+
+export function getFinanceSectionDescription(section: FinanceSectionOption, counts: FinanceSectionCounts) {
+  return `${section.description} · ${counts[section.key]}`
 }

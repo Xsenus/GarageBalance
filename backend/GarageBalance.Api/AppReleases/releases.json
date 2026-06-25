@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-section-descriptions",
+    "version": "0.286.0",
+    "publishedAt": "2026-06-25T17:30:00+07:00",
+    "title": "Подписи вкладок платежей вынесены в shared",
+    "summary": "Разделы платежей теперь формируют подпись со счетчиком через общий frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не собирает описание вкладки платежей и количество записей прямо в JSX."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют подпись раздела с серверным счетчиком для таблиц платежей."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-page-navigation",
     "version": "0.285.0",
     "publishedAt": "2026-06-25T17:15:00+07:00",
