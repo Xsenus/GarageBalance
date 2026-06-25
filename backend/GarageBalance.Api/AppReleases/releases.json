@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-finance-controller-permission-guard",
+    "version": "0.253.0",
+    "publishedAt": "2026-06-25T13:30:00+07:00",
+    "title": "Права финансовых endpoints закреплены тестом",
+    "summary": "Backend-тест теперь защищает финансовые API от случайного добавления изменяющего endpoint без payments.write.",
+    "items": [
+      {
+        "type": "fixed",
+        "text": "FinanceController проверяется на общий payments.read на уровне контроллера."
+      },
+      {
+        "type": "fixed",
+        "text": "Все non-GET actions финансового контроллера обязаны иметь action-level политику payments.write."
+      },
+      {
+        "type": "improved",
+        "text": "README описывает backend guard для прав платежей, начислений и показаний счетчиков."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-finance-editor-draft-coverage",
     "version": "0.252.0",
     "publishedAt": "2026-06-25T13:15:00+07:00",

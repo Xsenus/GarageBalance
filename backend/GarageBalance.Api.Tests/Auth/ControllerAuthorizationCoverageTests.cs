@@ -2,6 +2,7 @@ using System.Reflection;
 using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 
@@ -86,6 +87,36 @@ public sealed class ControllerAuthorizationCoverageTests
             .ToList();
 
         Assert.Empty(anonymousReportActions);
+    }
+
+    [Fact]
+    public void FinanceActionsRequireExpectedPaymentPermissions()
+    {
+        var controllerPolicy = typeof(FinanceController)
+            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.PaymentsRead);
+        Assert.NotNull(controllerPolicy);
+
+        var financeActions = typeof(FinanceController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true).Any())
+            .ToList();
+
+        var anonymousFinanceActions = financeActions
+            .Where(method => HasAnonymousMetadata(method))
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        Assert.Empty(anonymousFinanceActions);
+
+        var mutatingActionsWithoutWritePolicy = financeActions
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true).SelectMany(attribute => attribute.HttpMethods).Any(httpMethod => !string.Equals(httpMethod, HttpMethods.Get, StringComparison.OrdinalIgnoreCase)))
+            .Where(method => !method.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => attribute.Policy == SystemPermissions.PaymentsWrite))
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Empty(mutatingActionsWithoutWritePolicy);
     }
 
     private static IEnumerable<MethodInfo> GetControllerActionMethods()
