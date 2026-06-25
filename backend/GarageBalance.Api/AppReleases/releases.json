@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-table-headers",
+    "version": "0.279.0",
+    "publishedAt": "2026-06-25T15:45:00+07:00",
+    "title": "Заголовки таблиц справочников вынесены в shared",
+    "summary": "Колонки таблиц владельцев, гаражей, поставщиков, видов операций и тарифов теперь описаны в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 использует dictionaryWorkbench.ts для отрисовки заголовков таблиц справочников."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют порядок колонок для каждого раздела справочников."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-section-rules",
     "version": "0.278.0",
     "publishedAt": "2026-06-25T15:35:00+07:00",

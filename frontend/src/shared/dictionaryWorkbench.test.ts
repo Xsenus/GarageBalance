@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -181,6 +181,18 @@ describe('dictionary workbench metadata', () => {
       incomeTypes: 'Поиск для этого справочника пока не применяется',
       expenseTypes: 'Поиск для этого справочника пока не применяется',
       tariffs: 'Название или база расчета',
+    })
+  })
+
+  it('returns table headers for every dictionary section', () => {
+    expect(Object.fromEntries(dictionarySectionOptions.map((section) => [section.key, getDictionaryTableHeaders(section.key)]))).toEqual({
+      owners: ['ФИО', 'Гаражи', 'Телефон', 'Адрес'],
+      garages: ['Номер', 'Владелец', 'Людей', 'Этажей', 'Стартовый баланс'],
+      supplierGroups: ['Название', 'Тип'],
+      suppliers: ['Название', 'Группа', 'ИНН', 'Стартовый баланс'],
+      incomeTypes: ['Название', 'Код', 'Тип'],
+      expenseTypes: ['Название', 'Код', 'Тип'],
+      tariffs: ['Название', 'База', 'Ставка', 'Дата начала'],
     })
   })
 

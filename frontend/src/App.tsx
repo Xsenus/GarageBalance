@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getOwnerGarageOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4606,18 +4606,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   function renderHeaders() {
-    const headers = activeSection === 'owners'
-      ? ['ФИО', 'Гаражи', 'Телефон', 'Адрес']
-      : activeSection === 'garages'
-        ? ['Номер', 'Владелец', 'Людей', 'Этажей', 'Стартовый баланс']
-        : activeSection === 'supplierGroups'
-          ? ['Название', 'Тип']
-          : activeSection === 'suppliers'
-            ? ['Название', 'Группа', 'ИНН', 'Стартовый баланс']
-            : activeSection === 'tariffs'
-              ? ['Название', 'База', 'Ставка', 'Дата начала']
-              : ['Название', 'Код', 'Тип']
-    return headers.map((header) => <th key={header}>{header}</th>)
+    return getDictionaryTableHeaders(activeSection).map((header) => <th key={header}>{header}</th>)
   }
 
   function renderCells(item: DictionaryRecord) {

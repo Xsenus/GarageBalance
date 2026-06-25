@@ -76,6 +76,16 @@ const dictionarySearchPlaceholders: Record<DictionarySectionKey, string> = {
   tariffs: 'Название или база расчета',
 }
 
+const dictionaryTableHeaders: Record<DictionarySectionKey, string[]> = {
+  owners: ['ФИО', 'Гаражи', 'Телефон', 'Адрес'],
+  garages: ['Номер', 'Владелец', 'Людей', 'Этажей', 'Стартовый баланс'],
+  supplierGroups: ['Название', 'Тип'],
+  suppliers: ['Название', 'Группа', 'ИНН', 'Стартовый баланс'],
+  incomeTypes: ['Название', 'Код', 'Тип'],
+  expenseTypes: ['Название', 'Код', 'Тип'],
+  tariffs: ['Название', 'База', 'Ставка', 'Дата начала'],
+}
+
 export function createEmptyOwnerForm(): DictionaryOwnerFormState {
   return {
     lastName: '',
@@ -195,6 +205,10 @@ export function supportsDictionarySearch(section: DictionarySectionKey) {
 
 export function getDictionarySearchPlaceholder(section: DictionarySectionKey) {
   return dictionarySearchPlaceholders[section]
+}
+
+export function getDictionaryTableHeaders(section: DictionarySectionKey) {
+  return dictionaryTableHeaders[section]
 }
 
 export function getDictionarySectionOption(section: DictionarySectionKey) {
