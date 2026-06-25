@@ -186,6 +186,13 @@ const financeVisibleListStatusSuffixes: Record<FinanceVisibleListStatusKind, str
   meterReadings: 'показаний',
 }
 
+const financeVisibleListEmptyLabels: Record<FinanceVisibleListStatusKind, string> = {
+  operations: 'Операций пока нет',
+  accruals: 'Начислений пока нет',
+  supplierAccruals: 'Начислений поставщикам пока нет',
+  meterReadings: 'Показаний пока нет',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -252,4 +259,8 @@ export function formatFinanceVisibleRange(range: { from: number; to: number }, t
 
 export function formatFinanceVisibleListStatus(visibleCount: number, totalCount: number, kind: FinanceVisibleListStatusKind) {
   return `Показано ${visibleCount} из ${totalCount} ${financeVisibleListStatusSuffixes[kind]}`
+}
+
+export function getFinanceVisibleListEmptyLabel(kind: FinanceVisibleListStatusKind) {
+  return financeVisibleListEmptyLabels[kind]
 }

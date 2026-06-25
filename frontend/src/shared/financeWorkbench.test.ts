@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel } from './financeWorkbench'
 import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
@@ -220,6 +220,20 @@ describe('finance workbench metadata', () => {
       accruals: 'Показано 8 из 15 начислений',
       supplierAccruals: 'Показано 8 из 20 начислений поставщикам',
       meterReadings: 'Показано 8 из 25 показаний',
+    })
+  })
+
+  it('returns empty labels for short finance lists', () => {
+    expect({
+      operations: getFinanceVisibleListEmptyLabel('operations'),
+      accruals: getFinanceVisibleListEmptyLabel('accruals'),
+      supplierAccruals: getFinanceVisibleListEmptyLabel('supplierAccruals'),
+      meterReadings: getFinanceVisibleListEmptyLabel('meterReadings'),
+    }).toEqual({
+      operations: 'Операций пока нет',
+      accruals: 'Начислений пока нет',
+      supplierAccruals: 'Начислений поставщикам пока нет',
+      meterReadings: 'Показаний пока нет',
     })
   })
 })
