@@ -79,6 +79,17 @@ createuser --pwprompt garagebalance_local
 createdb --owner=garagebalance_local garagebalance_local
 ```
 
+- [ ] Проверить локальную PostgreSQL перед миграциями:
+
+```powershell
+.\infrastructure\scripts\check-local-postgres.ps1 `
+  -Database garagebalance_local `
+  -HostName 127.0.0.1 `
+  -Port 5432 `
+  -Username garagebalance_local `
+  -RequirePsql
+```
+
 - [ ] Восстановить инструменты проекта: `dotnet tool restore`.
 - [ ] Применить миграции:
 

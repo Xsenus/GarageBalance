@@ -46,10 +46,27 @@ public sealed class BackupScriptTests
     }
 
     [Fact]
+    public void LocalPostgresPreflightChecksTcpPsqlAndAvoidsPrintingSecrets()
+    {
+        var script = ReadRepositoryFile("infrastructure", "scripts", "check-local-postgres.ps1");
+
+        Assert.Contains("[CmdletBinding()]", script, StringComparison.Ordinal);
+        Assert.Contains("Test-NetConnection", script, StringComparison.Ordinal);
+        Assert.Contains("Get-Command psql", script, StringComparison.Ordinal);
+        Assert.Contains("SELECT 1;", script, StringComparison.Ordinal);
+        Assert.Contains("connectionStringProvided=", script, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=", script, StringComparison.Ordinal);
+        Assert.Contains("psqlConnection=", script, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write-Output $ConnectionString", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackupDocumentationReferencesScriptsRestoreCheckAndMonthlyValidation()
     {
         var document = ReadRepositoryFile("docs", "postgres-backup-restore.md");
 
+        Assert.Contains("check-local-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("register-local-backup-task.ps1", document, StringComparison.Ordinal);

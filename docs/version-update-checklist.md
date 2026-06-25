@@ -12,6 +12,17 @@
 
 ## 2. Обязательный backup
 
+Перед backup проверить доступность локальной PostgreSQL:
+
+```powershell
+.\infrastructure\scripts\check-local-postgres.ps1 `
+  -Database garagebalance_local `
+  -HostName 127.0.0.1 `
+  -Port 5432 `
+  -Username garagebalance_local `
+  -RequirePsql
+```
+
 Для локальной установки:
 
 ```powershell

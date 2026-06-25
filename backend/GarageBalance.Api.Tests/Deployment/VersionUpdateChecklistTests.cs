@@ -7,6 +7,7 @@ public sealed class VersionUpdateChecklistTests
     {
         var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "version-update-checklist.md"));
 
+        Assert.Contains("check-local-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);

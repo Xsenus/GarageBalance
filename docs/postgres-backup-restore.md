@@ -4,11 +4,27 @@
 
 ## Скрипты
 
+- `infrastructure/scripts/check-local-postgres.ps1` проверяет доступность локальной PostgreSQL по TCP, наличие `psql` и, если клиент установлен, выполняет безопасный `SELECT 1`.
 - `infrastructure/scripts/backup-postgres.ps1` создает `.pgdump` через `pg_dump --format=custom`.
 - `infrastructure/scripts/restore-postgres.ps1` восстанавливает backup через `pg_restore` в проверочную базу `garagebalance_restore_check`.
 - `infrastructure/scripts/register-local-backup-task.ps1` регистрирует ежедневную задачу Windows Task Scheduler `GarageBalance Local PostgreSQL Backup`.
 
 Скрипты не хранят пароль базы. Для автоматического запуска используйте безопасно настроенный PostgreSQL password file (`pgpass`) или переменную окружения на машине установки, а не файл в Git.
+
+## Preflight локальной PostgreSQL
+
+Перед миграциями, backup, restore-check и импортом сначала убедиться, что локальная база действительно доступна:
+
+```powershell
+.\infrastructure\scripts\check-local-postgres.ps1 `
+  -Database garagebalance_local `
+  -HostName 127.0.0.1 `
+  -Port 5432 `
+  -Username garagebalance_local `
+  -RequirePsql
+```
+
+Ожидаемый успешный вывод содержит `postgresTcp=True`, `psql=True`, `psqlConnection=True` и `localPostgresPreflight=OK`. Скрипт выводит только факт наличия connection string через `connectionStringProvided=True/False`, но не печатает пароль или полный connection string.
 
 ## Ручной backup
 
@@ -63,6 +79,7 @@
 
 ## Перед импортом и обновлением
 
+- [ ] Выполнить `check-local-postgres.ps1`.
 - [ ] Выполнить `backup-postgres.ps1`.
 - [ ] Проверить, что backup не пустой.
 - [ ] Выполнить `restore-postgres.ps1` в `garagebalance_restore_check`, если меняется схема или импортируются реальные данные.

@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-local-postgres-preflight",
+    "version": "0.258.0",
+    "publishedAt": "2026-06-25T14:45:00+07:00",
+    "title": "Добавлена проверка локальной PostgreSQL",
+    "summary": "Перед миграциями, backup и restore-check теперь есть отдельный preflight-скрипт для локальной базы.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "check-local-postgres.ps1 проверяет TCP-доступность PostgreSQL, наличие psql и безопасный SELECT 1 без вывода секретов."
+      },
+      {
+        "type": "improved",
+        "text": "Локальная инструкция установки, backup/restore и checklist обновления теперь требуют preflight перед рисковыми операциями с БД."
+      },
+      {
+        "type": "fixed",
+        "text": "Backend-тесты закрепляют наличие preflight-скрипта и ссылок на него в эксплуатационной документации."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-migration-history-guard",
     "version": "0.257.0",
     "publishedAt": "2026-06-25T14:30:00+07:00",
