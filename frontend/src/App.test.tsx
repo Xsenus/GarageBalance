@@ -2129,6 +2129,41 @@ describe('App', () => {
     promptSpy.mockRestore()
   })
 
+  it('cancels expense operation with required reason from payments table context menu', async () => {
+    const user = userEvent.setup()
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочная выплата')
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    const expenseAmountInput = within(financePanel).getByLabelText('Сумма выплаты')
+    const expenseForm = expenseAmountInput.closest('form')!
+    await user.clear(expenseAmountInput)
+    await user.type(expenseAmountInput, '500')
+    await user.type(within(expenseForm).getByLabelText('Документ выплаты'), 'RKO-cancel')
+    await user.type(within(expenseForm).getByLabelText('Комментарий выплаты'), 'Ошибочный расход')
+    await user.click(within(expenseForm).getByRole('button', { name: 'Провести' }))
+
+    const expenseTab = within(financePanel).getByRole('tab', { name: /Расходы/ })
+    await user.click(expenseTab)
+    await waitFor(() => expect(expenseTab).toHaveAttribute('aria-selected', 'true'))
+    expect(await within(financePanel).findByText('RKO-cancel')).toBeInTheDocument()
+    expect(within(financePanel).queryByRole('button', { name: /Отменить операцию/i })).not.toBeInTheDocument()
+
+    const operationMenu = await openFinanceContextMenuByCellText(financePanel, 'RKO-cancel')
+    await user.click(within(operationMenu).getByRole('menuitem', { name: 'Удалить' }))
+
+    expect(promptSpy).toHaveBeenCalledWith('Укажите причину отмены операции')
+    await waitFor(() => expect(within(financePanel).queryByText('RKO-cancel')).not.toBeInTheDocument())
+    expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
+    expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
+    promptSpy.mockRestore()
+  })
+
   it('cancels accruals and meter readings with required reasons from payments workspace', async () => {
     const user = userEvent.setup()
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный ввод')
