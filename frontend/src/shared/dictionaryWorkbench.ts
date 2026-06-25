@@ -59,3 +59,27 @@ export function supportsDictionarySearch(section: DictionarySectionKey) {
 export function getDictionarySearchPlaceholder(section: DictionarySectionKey) {
   return dictionarySearchPlaceholders[section]
 }
+
+export function getDictionaryRecordTitle(section: DictionarySectionKey, item: DictionaryRecord) {
+  if (section === 'owners') {
+    return (item as OwnerDto).fullName
+  }
+
+  if (section === 'garages') {
+    return `Гараж ${(item as GarageDto).number}`
+  }
+
+  if (section === 'supplierGroups') {
+    return (item as SupplierGroupDto).name
+  }
+
+  if (section === 'suppliers') {
+    return (item as SupplierDto).name
+  }
+
+  if (section === 'tariffs') {
+    return (item as TariffDto).name
+  }
+
+  return (item as AccountingTypeDto).name
+}

@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-record-titles",
+    "version": "0.275.0",
+    "publishedAt": "2026-06-25T15:00:00+07:00",
+    "title": "Заголовки записей справочников вынесены в shared",
+    "summary": "Формирование названий строк справочников для таблиц и модалок теперь переиспользуется из общего frontend-модуля.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует dictionaryWorkbench.ts для заголовков владельцев, гаражей, поставщиков, видов операций и тарифов."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют title для каждого типа записи справочника, включая гараж с префиксом номера."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-workbench",
     "version": "0.274.0",
     "publishedAt": "2026-06-25T14:45:00+07:00",

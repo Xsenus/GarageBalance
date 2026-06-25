@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4655,15 +4655,6 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     return [type.name, type.code ?? 'не указан', type.isSystem ? 'Системный' : 'Пользовательский'].map((value, index) => <td key={index}>{value}</td>)
   }
 
-  function getRecordTitle(section: DictionarySectionKey, item: DictionaryRecord) {
-    if (section === 'owners') return (item as OwnerDto).fullName
-    if (section === 'garages') return `Гараж ${(item as GarageDto).number}`
-    if (section === 'supplierGroups') return (item as SupplierGroupDto).name
-    if (section === 'suppliers') return (item as SupplierDto).name
-    if (section === 'tariffs') return (item as TariffDto).name
-    return (item as AccountingTypeDto).name
-  }
-
   function renderEditorFields(section: DictionarySectionKey) {
     if (section === 'owners') {
       return (
@@ -4827,7 +4818,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
               </thead>
               <tbody>
                 {rows.map((item) => (
-                  <tr tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => openEditor(activeSection, 'edit', item)} key={`${activeSection}-${getRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
+                  <tr tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => openEditor(activeSection, 'edit', item)} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
                     {renderCells(item)}
                   </tr>
                 ))}
@@ -4992,7 +4983,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
               <div>
                 <p className="eyebrow">Удаление</p>
                 <h3 id="dictionary-archive-title">Подтвердите удаление</h3>
-                <p>{getRecordTitle(archiveTarget.section, archiveTarget.item)}</p>
+                <p>{getDictionaryRecordTitle(archiveTarget.section, archiveTarget.item)}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Отменить удаление" onClick={() => setArchiveTarget(null)} disabled={saving === 'dictionary-archive'}>
                 <X size={18} />

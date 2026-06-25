@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
+import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
+import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -58,4 +59,98 @@ describe('dictionary workbench metadata', () => {
       tariffs: 'Название или база расчета',
     })
   })
+
+  it('returns record titles for every dictionary section', () => {
+    expect(getDictionaryRecordTitle('owners', createOwner())).toBe('Иванов Иван')
+    expect(getDictionaryRecordTitle('garages', createGarage())).toBe('Гараж 42')
+    expect(getDictionaryRecordTitle('supplierGroups', createSupplierGroup())).toBe('Банковские услуги')
+    expect(getDictionaryRecordTitle('suppliers', createSupplier())).toBe('БАНК 12')
+    expect(getDictionaryRecordTitle('incomeTypes', createAccountingType())).toBe('Членский взнос')
+    expect(getDictionaryRecordTitle('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toBe('Вывоз мусора')
+    expect(getDictionaryRecordTitle('tariffs', createTariff())).toBe('Тариф на воду')
+  })
 })
+
+function createOwner(): OwnerDto {
+  return {
+    id: 'owner-1',
+    lastName: 'Иванов',
+    firstName: 'Иван',
+    middleName: null,
+    fullName: 'Иванов Иван',
+    phone: null,
+    address: null,
+    meterNotes: null,
+    isArchived: false,
+  }
+}
+
+function createGarage(): GarageDto {
+  return {
+    id: 'garage-1',
+    number: '42',
+    peopleCount: 1,
+    floorCount: 1,
+    ownerId: null,
+    ownerName: null,
+    startingBalance: 0,
+    initialWaterMeterValue: null,
+    initialElectricityMeterValue: null,
+    comment: null,
+    isArchived: false,
+  }
+}
+
+function createSupplierGroup(): SupplierGroupDto {
+  return {
+    id: 'group-1',
+    name: 'Банковские услуги',
+    isSystem: false,
+    isArchived: false,
+  }
+}
+
+function createSupplier(): SupplierDto {
+  return {
+    id: 'supplier-1',
+    name: 'БАНК 12',
+    groupId: 'group-1',
+    groupName: 'Банковские услуги',
+    inn: null,
+    legalAddress: null,
+    contactPerson: null,
+    phone: null,
+    email: null,
+    startingBalance: 0,
+    comment: null,
+    isArchived: false,
+  }
+}
+
+function createAccountingType(overrides: Partial<AccountingTypeDto> = {}): AccountingTypeDto {
+  return {
+    id: 'type-1',
+    name: 'Членский взнос',
+    code: null,
+    isSystem: false,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createTariff(): TariffDto {
+  return {
+    id: 'tariff-1',
+    name: 'Тариф на воду',
+    calculationBase: 'water',
+    rate: 1,
+    electricityFirstThreshold: null,
+    electricitySecondThreshold: null,
+    electricityFirstRate: null,
+    electricitySecondRate: null,
+    electricityThirdRate: null,
+    effectiveFrom: '2026-07-01',
+    comment: null,
+    isArchived: false,
+  }
+}

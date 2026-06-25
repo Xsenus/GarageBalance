@@ -253,7 +253,7 @@ Backend-контроллер справочников покрыт таким ж
 
 Общие helpers табличной пагинации вынесены в `frontend/src/shared/pagination.ts`: варианты размера страницы, пустая страница и fallback-срезы используются в пользователях, платежах и справочниках. Тесты `pagination.test.ts` закрепляют стабильные размеры страниц, пустое состояние и сохранение `totalCount` при локальном fallback-срезе.
 
-Metadata справочников вынесена в `frontend/src/shared/dictionaryWorkbench.ts`: группы, разделы, права записи, поддержка серверного поиска, placeholders и пустая форма привязки гаража владельца теперь описаны вне `App.tsx`. Тесты `dictionaryWorkbench.test.ts` закрепляют порядок разделов, searchable-разделы и defaults формы гаража.
+Metadata справочников вынесена в `frontend/src/shared/dictionaryWorkbench.ts`: группы, разделы, права записи, поддержка серверного поиска, placeholders, заголовки записей и пустая форма привязки гаража владельца теперь описаны вне `App.tsx`. Тесты `dictionaryWorkbench.test.ts` закрепляют порядок разделов, searchable-разделы, titles записей и defaults формы гаража.
 
 Metadata платежного рабочего стола вынесена в `frontend/src/shared/financeWorkbench.ts`: порядок таблиц, подписи вкладок, заголовки модалок, подписи submit-кнопок и `saving`-scope теперь описаны вне `App.tsx`. Тесты `financeWorkbench.test.ts` закрепляют все редакторы платежей и порядок рабочих вкладок.
 
