@@ -1779,6 +1779,31 @@ describe('App', () => {
     expect(within(dialog).queryByText('Изменение')).not.toBeInTheDocument()
   })
 
+  it('opens new income dialog from empty payment table context menu', async () => {
+    const user = userEvent.setup()
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => ({ items: [], totalCount: 0, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+
+    expect(await within(tableArea).findByText('По выбранным условиям записей нет')).toHaveAttribute('role', 'status')
+    fireEvent.contextMenu(tableArea)
+    const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    expect(within(menu).getByRole('menuitem', { name: 'Добавить' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
+    await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(within(dialog).getByText('Платежи')).toBeInTheDocument()
+  })
+
   it('does not call finance APIs when payment forms fail client validation', async () => {
     const user = userEvent.setup()
     const financeCalls = {

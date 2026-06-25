@@ -2681,7 +2681,7 @@ function FinancePanel({
         </div>
 
         <div className="dictionary-table-shell">
-          <div className="dictionary-table-scroll" onContextMenu={(event) => openFinanceContextMenu(event, activeFinanceSection)}>
+          <div className="dictionary-table-scroll" role="group" aria-label="Рабочая область платежной таблицы" onContextMenu={(event) => openFinanceContextMenu(event, activeFinanceSection)}>
             {renderFinanceTable()}
             {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранным условиям записей нет</p> : null}
           </div>
