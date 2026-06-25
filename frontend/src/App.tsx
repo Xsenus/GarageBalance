@@ -2070,6 +2070,15 @@ function FinancePanel({
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       editFinanceRecord(section, record)
+    } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault()
+      const rect = event.currentTarget.getBoundingClientRect()
+      setFinanceContextMenu({
+        section,
+        record,
+        x: rect.left,
+        y: rect.top + rect.height / 2,
+      })
     }
   }
 

@@ -1794,6 +1794,29 @@ describe('App', () => {
     expect(within(financePanel).getByRole('button', { name: 'Зарплата группы' }).querySelector('svg')).not.toBeInTheDocument()
   })
 
+  it('opens payment context menu from focused row keyboard shortcut', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const paymentRow = within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!
+
+    paymentRow.focus()
+    expect(paymentRow).toHaveFocus()
+    fireEvent.keyDown(paymentRow, { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    expect(within(menu).getByRole('menuitem', { name: 'Добавить' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeEnabled()
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Изменить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+  })
+
   it('closes payment context menu when switching payment table tabs', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
