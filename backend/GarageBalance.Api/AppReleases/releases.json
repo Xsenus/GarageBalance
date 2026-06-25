@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-validation",
+    "version": "0.266.0",
+    "publishedAt": "2026-06-25T16:45:00+07:00",
+    "title": "Валидация справочников вынесена в shared",
+    "summary": "Проверки владельцев, гаражей, поставщиков, видов операций и тарифов теперь живут в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "validation.ts переиспользуется в App.tsx для форм справочников и тарифов."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют ошибки гаража, владельца, поставщика, ИНН, кодов видов операций и трехтарифной электроэнергии."
+      },
+      {
+        "type": "improved",
+        "text": "Тарифные helpers createTariffFormFromDto, withoutElectricityTierFields и updateTariffCalculationBase покрыты отдельными проверками."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-validation",
     "version": "0.265.0",
     "publishedAt": "2026-06-25T16:30:00+07:00",
