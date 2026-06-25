@@ -1851,6 +1851,42 @@ describe('App', () => {
     }
   })
 
+  it('opens edit dialogs from every payment table context menu', async () => {
+    const user = userEvent.setup()
+    const financeClient = createFinanceClient({
+      getOperations: async () => [
+        createFinancialOperation({ id: 'income-context-edit', documentNumber: 'PKO-context-edit', incomeTypeName: 'Членский взнос' }),
+        createFinancialOperation({ id: 'expense-context-edit', operationKind: 'expense', documentNumber: 'RKO-context-edit', supplierName: 'Водоканал', expenseTypeName: 'Вода', amount: 500 }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const cases = [
+      { tab: /Расходы/, rowText: 'RKO-context-edit', dialog: 'Новая выплата' },
+      { tab: /Начисления владельцам/, rowText: '2 000,00', dialog: 'Ручное начисление' },
+      { tab: /Начисления поставщикам/, rowText: '650,00', dialog: 'Начисление поставщику' },
+      { tab: /Счетчики/, rowText: '5.5', dialog: 'Показание счетчика' },
+    ]
+
+    for (const item of cases) {
+      const tab = within(financePanel).getByRole('tab', { name: item.tab })
+      await user.click(tab)
+      await waitFor(() => expect(tab).toHaveAttribute('aria-selected', 'true'))
+      const menu = await openFinanceContextMenuByCellText(financePanel, item.rowText)
+      expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeEnabled()
+      await user.click(within(menu).getByRole('menuitem', { name: 'Изменить' }))
+
+      const dialog = await screen.findByRole('dialog', { name: item.dialog })
+      expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+      await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: item.dialog })).not.toBeInTheDocument())
+    }
+  })
+
   it('does not call finance APIs when payment forms fail client validation', async () => {
     const user = userEvent.setup()
     const financeCalls = {
