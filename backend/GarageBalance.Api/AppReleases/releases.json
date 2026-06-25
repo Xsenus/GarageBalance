@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-access-control",
+    "version": "0.268.0",
+    "publishedAt": "2026-06-25T12:20:00+07:00",
+    "title": "Права frontend вынесены в shared",
+    "summary": "Список permissions, группы прав для матрицы ролей и helpers проверки доступа теперь живут в общем frontend-модуле.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx использует accessControl.ts для проверки доступа к разделам, действиям платежей, справочников, отчетов, импорта и audit."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют одиночную проверку permission, any-permission сценарии и состав групп прав для матрицы ролей."
+      },
+      {
+        "type": "improved",
+        "text": "Разделение frontend на shared-модули продолжено без изменения API, схемы БД и видимого поведения интерфейса."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-validation",
     "version": "0.267.0",
     "publishedAt": "2026-06-25T12:05:00+07:00",

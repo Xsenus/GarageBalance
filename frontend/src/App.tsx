@@ -35,6 +35,7 @@ import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
+import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -102,30 +103,6 @@ type NavigationItem = {
 type WorkspaceSection = 'dashboard' | 'users' | 'dictionaries' | 'payments' | 'reports' | 'import' | 'audit' | 'releases'
 type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
-
-const permissions = {
-  usersManage: 'users.manage',
-  dictionariesRead: 'dictionaries.read',
-  dictionariesWrite: 'dictionaries.write',
-  paymentsRead: 'payments.read',
-  paymentsWrite: 'payments.write',
-  reportsRead: 'reports.read',
-  importRun: 'import.run',
-  auditRead: 'audit.read',
-  tariffsManage: 'tariffs.manage',
-  appReleasesManage: 'app_releases.manage',
-} as const
-
-const rolePermissionGroups = [
-  { label: 'Пользователи', permission: permissions.usersManage },
-  { label: 'Справочники', permission: permissions.dictionariesWrite },
-  { label: 'Тарифы', permission: permissions.tariffsManage },
-  { label: 'Платежи', permission: permissions.paymentsWrite },
-  { label: 'Отчеты', permission: permissions.reportsRead },
-  { label: 'Импорт', permission: permissions.importRun },
-  { label: 'Audit', permission: permissions.auditRead },
-  { label: 'Что нового', permission: permissions.appReleasesManage },
-] as const
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Панель', icon: Gauge },
@@ -565,14 +542,6 @@ function AccessNotice({ label, title, permission, description }: { label: string
       </div>
     </section>
   )
-}
-
-function hasPermission(auth: AuthResponse, permission: string): boolean {
-  return auth.user.permissions.includes(permission)
-}
-
-function hasAnyPermission(auth: AuthResponse, requiredAny?: readonly string[]): boolean {
-  return !requiredAny || requiredAny.some((permission) => hasPermission(auth, permission))
 }
 
 function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClient: ReleaseClient }) {
