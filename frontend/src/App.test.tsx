@@ -1819,6 +1819,38 @@ describe('App', () => {
     expect(within(dialog).getByText('Платежи')).toBeInTheDocument()
   })
 
+  it('opens create dialogs from every payment table context menu', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+    const cases = [
+      { tab: /Расходы/, dialog: 'Новая выплата' },
+      { tab: /Начисления владельцам/, dialog: 'Ручное начисление' },
+      { tab: /Начисления поставщикам/, dialog: 'Начисление поставщику' },
+      { tab: /Счетчики/, dialog: 'Показание счетчика' },
+    ]
+
+    for (const item of cases) {
+      const tab = within(financePanel).getByRole('tab', { name: item.tab })
+      await user.click(tab)
+      await waitFor(() => expect(tab).toHaveAttribute('aria-selected', 'true'))
+      fireEvent.contextMenu(tableArea)
+      const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+      await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
+
+      const dialog = await screen.findByRole('dialog', { name: item.dialog })
+      expect(within(dialog).getByText('Платежи')).toBeInTheDocument()
+      expect(within(dialog).queryByText('Изменение')).not.toBeInTheDocument()
+      await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: item.dialog })).not.toBeInTheDocument())
+    }
+  })
+
   it('does not call finance APIs when payment forms fail client validation', async () => {
     const user = userEvent.setup()
     const financeCalls = {
