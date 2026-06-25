@@ -2974,18 +2974,6 @@ function FinancePanel({
               <span role="cell" className={`operation-amount ${operation.operationKind === 'income' ? 'money-income' : 'money-expense'}`}>
                 {operation.operationKind === 'income' ? '+' : '-'}
                 {formatMoney(operation.amount)}
-                {canWritePayments ? (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`Отменить операцию ${operation.documentNumber ?? operation.id}`}
-                    title="Отменить операцию"
-                    disabled={saving === `cancel-${operation.id}`}
-                    onClick={() => void cancelOperation(operation)}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>
-                ) : null}
               </span>
             </div>
           ))}
@@ -3017,21 +3005,6 @@ function FinancePanel({
               </span>
               <span role="cell" className="operation-amount money-accrual">
                 {formatMoney(accrual.amount)}
-                {canWritePayments ? (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`Отменить начисление ${accrual.incomeTypeName} гараж ${accrual.garageNumber}`}
-                    title="Отменить начисление"
-                    disabled={saving === `cancel-accrual-${accrual.id}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void cancelAccrual(accrual)
-                    }}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>
-                ) : null}
               </span>
             </div>
           ))}
@@ -3063,21 +3036,6 @@ function FinancePanel({
               </span>
               <span role="cell" className="operation-amount money-expense">
                 {formatMoney(accrual.amount)}
-                {canWritePayments ? (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`Отменить начисление поставщику ${accrual.supplierName}`}
-                    title="Отменить начисление поставщику"
-                    disabled={saving === `cancel-supplier-accrual-${accrual.id}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void cancelSupplierAccrual(accrual)
-                    }}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>
-                ) : null}
               </span>
             </div>
           ))}
@@ -3103,18 +3061,6 @@ function FinancePanel({
               </span>
               <span role="cell" className="operation-amount money-accrual">
                 {reading.consumption}
-                {canWritePayments ? (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`Отменить показание ${reading.meterKind === 'water' ? 'Вода' : 'Электричество'} гараж ${reading.garageNumber}`}
-                    title="Отменить показание"
-                    disabled={saving === `cancel-meter-reading-${reading.id}`}
-                    onClick={() => void cancelMeterReading(reading)}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>
-                ) : null}
               </span>
             </div>
           ))}

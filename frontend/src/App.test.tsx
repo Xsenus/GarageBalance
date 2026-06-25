@@ -23,6 +23,19 @@ describe('App', () => {
     }
   }
 
+  async function openFinanceContextMenuByCellText(panel: HTMLElement, text: string) {
+    const row = (await within(panel).findAllByText(text))
+      .map((node) => node.closest('tr'))
+      .find((node): node is HTMLTableRowElement => node !== null)
+
+    if (!row) {
+      throw new Error(`Строка платежной таблицы с текстом "${text}" не найдена.`)
+    }
+
+    fireEvent.contextMenu(row)
+    return screen.findByRole('menu', { name: 'Операции с платежами' })
+  }
+
   async function openDictionarySubgroup(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement, name: string) {
     const aliases: Record<string, string[]> = {
       'Группы поставщиков': ['Группы поставщиков и персонала'],
@@ -1983,14 +1996,18 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
-    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '700')
-    await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-cancel')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+    const incomeAmountInput = within(financePanel).getByLabelText('Сумма поступления')
+    const incomeForm = incomeAmountInput.closest('form')!
+    await user.clear(incomeAmountInput)
+    await user.type(incomeAmountInput, '700')
+    await user.type(within(incomeForm).getByLabelText('Документ поступления'), 'PKO-cancel')
+    await user.click(within(incomeForm).getByRole('button', { name: 'Провести' }))
 
     expect(await within(financePanel).findByText('+700,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 операций')).toBeInTheDocument()
-    await user.click(within(financePanel).getByRole('button', { name: 'Отменить операцию PKO-cancel' }))
+    expect(within(financePanel).queryByRole('button', { name: /Отменить операцию/i })).not.toBeInTheDocument()
+    const operationMenu = await openFinanceContextMenuByCellText(financePanel, 'PKO-cancel')
+    await user.click(within(operationMenu).getByRole('menuitem', { name: 'Удалить' }))
 
     expect(promptSpy).toHaveBeenCalledWith('Укажите причину отмены операции')
     await waitFor(() => expect(within(financePanel).queryByText('+700,00')).not.toBeInTheDocument())
@@ -2010,32 +2027,47 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
-    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
-    await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
+    const accrualAmountInput = within(financePanel).getByLabelText('Сумма начисления')
+    const accrualForm = accrualAmountInput.closest('form')!
+    await user.clear(accrualAmountInput)
+    await user.type(accrualAmountInput, '900')
+    await user.type(within(accrualForm).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
+    await user.click(within(accrualForm).getByRole('button', { name: 'Начислить' }))
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(await within(accrualTable).findByText('900,00')).toBeInTheDocument()
-    await user.click(within(accrualTable).getByRole('button', { name: 'Отменить начисление Членский взнос гараж 12' }))
+    expect(within(accrualTable).queryByRole('button', { name: /Отменить начисление/i })).not.toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+    const accrualMenu = await openFinanceContextMenuByCellText(financePanel, '900,00')
+    await user.click(within(accrualMenu).getByRole('menuitem', { name: 'Удалить' }))
     await waitFor(() => expect(within(accrualTable).queryByText('900,00')).not.toBeInTheDocument())
     expect(within(accrualTable).getByText('Начислений пока нет')).toHaveAttribute('role', 'status')
 
-    await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
-    await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
-    await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[1])
+    const supplierAccrualAmountInput = within(financePanel).getByLabelText('Сумма начисления поставщику')
+    const supplierAccrualForm = supplierAccrualAmountInput.closest('form')!
+    await user.clear(supplierAccrualAmountInput)
+    await user.type(supplierAccrualAmountInput, '650')
+    await user.type(within(supplierAccrualForm).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
+    await user.click(within(supplierAccrualForm).getByRole('button', { name: 'Начислить' }))
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
     expect(await within(supplierAccrualTable).findByText('650,00')).toBeInTheDocument()
-    await user.click(within(supplierAccrualTable).getByRole('button', { name: 'Отменить начисление поставщику Водоканал' }))
+    expect(within(supplierAccrualTable).queryByRole('button', { name: /Отменить начисление поставщику/i })).not.toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
+    const supplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650,00')
+    await user.click(within(supplierAccrualMenu).getByRole('menuitem', { name: 'Удалить' }))
     await waitFor(() => expect(within(supplierAccrualTable).queryByText('650,00')).not.toBeInTheDocument())
     expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toHaveAttribute('role', 'status')
 
-    await user.clear(within(financePanel).getByLabelText('Новое показание'))
-    await user.type(within(financePanel).getByLabelText('Новое показание'), '15.5')
-    await user.click(within(financePanel).getByRole('button', { name: 'Внести' }))
+    const meterValueInput = within(financePanel).getByLabelText('Новое показание')
+    const meterForm = meterValueInput.closest('form')!
+    await user.clear(meterValueInput)
+    await user.type(meterValueInput, '15.5')
+    await user.click(within(meterForm).getByRole('button', { name: 'Внести' }))
     const meterReadingTable = within(financePanel).getByRole('table', { name: 'Последние показания' })
     expect(await within(meterReadingTable).findByText('5.5')).toBeInTheDocument()
-    await user.click(within(meterReadingTable).getByRole('button', { name: 'Отменить показание Вода гараж 12' }))
+    expect(within(meterReadingTable).queryByRole('button', { name: /Отменить показание/i })).not.toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+    const meterReadingMenu = await openFinanceContextMenuByCellText(financePanel, '5.5')
+    await user.click(within(meterReadingMenu).getByRole('menuitem', { name: 'Удалить' }))
     await waitFor(() => expect(within(meterReadingTable).queryByText('5.5')).not.toBeInTheDocument())
     expect(within(meterReadingTable).getByText('Показаний пока нет')).toHaveAttribute('role', 'status')
     expect(promptSpy).toHaveBeenCalledTimes(3)
