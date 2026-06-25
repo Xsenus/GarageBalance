@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey, FinanceFallbackLabelKey, FinanceSectionKey } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey, FinanceFallbackLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -15,6 +15,20 @@ const editorKeys: FinanceEditorKey[] = [
 const contextMenuActions: FinanceContextMenuAction[] = ['add', 'edit', 'delete']
 const sectionKeys: FinanceSectionKey[] = ['income', 'expense', 'accruals', 'supplierAccruals', 'meterReadings']
 const fallbackKeys: FinanceFallbackLabelKey[] = ['missingValue', 'noData', 'noComment', 'meterGapWarning']
+const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
+  'periodFilter',
+  'periodFrom',
+  'periodTo',
+  'search',
+  'searchPlaceholder',
+  'regularAccruals',
+  'supplierGroupSalaryAccruals',
+  'tableArea',
+  'emptyState',
+  'pagination',
+  'rows',
+  'pageSize',
+]
 
 describe('finance workbench metadata', () => {
   it('keeps the payment table sections in the expected order', () => {
@@ -108,5 +122,22 @@ describe('finance workbench metadata', () => {
     expect(formatFinanceGarageLabel(null)).toBe('Гараж ')
     expect(getFinanceMeterKindLabel('water')).toBe('Вода')
     expect(getFinanceMeterKindLabel('electricity')).toBe('Электричество')
+  })
+
+  it('returns toolbar labels for payment filters and pagination', () => {
+    expect(Object.fromEntries(toolbarLabelKeys.map((key) => [key, getFinanceToolbarLabel(key)]))).toEqual({
+      periodFilter: 'Фильтр периода',
+      periodFrom: 'Период с',
+      periodTo: 'Период по',
+      search: 'Поиск по платежам',
+      searchPlaceholder: 'Гараж, владелец, поставщик или документ',
+      regularAccruals: 'Регулярные',
+      supplierGroupSalaryAccruals: 'Зарплата группы',
+      tableArea: 'Рабочая область платежной таблицы',
+      emptyState: 'По выбранным условиям записей нет',
+      pagination: 'Пагинация платежей',
+      rows: 'Строк',
+      pageSize: 'Количество строк платежей',
+    })
   })
 })

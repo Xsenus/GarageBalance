@@ -20,6 +20,19 @@ export type FinanceEditorSavingScope =
 
 export type FinanceContextMenuAction = 'add' | 'edit' | 'delete'
 export type FinanceFallbackLabelKey = 'missingValue' | 'noData' | 'noComment' | 'meterGapWarning'
+export type FinanceToolbarLabelKey =
+  | 'periodFilter'
+  | 'periodFrom'
+  | 'periodTo'
+  | 'search'
+  | 'searchPlaceholder'
+  | 'regularAccruals'
+  | 'supplierGroupSalaryAccruals'
+  | 'tableArea'
+  | 'emptyState'
+  | 'pagination'
+  | 'rows'
+  | 'pageSize'
 
 export const financeSectionOptions: FinanceSectionOption[] = [
   { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
@@ -80,6 +93,21 @@ const financeFallbackLabels: Record<FinanceFallbackLabelKey, string> = {
   meterGapWarning: 'проверьте месяц',
 }
 
+const financeToolbarLabels: Record<FinanceToolbarLabelKey, string> = {
+  periodFilter: 'Фильтр периода',
+  periodFrom: 'Период с',
+  periodTo: 'Период по',
+  search: 'Поиск по платежам',
+  searchPlaceholder: 'Гараж, владелец, поставщик или документ',
+  regularAccruals: 'Регулярные',
+  supplierGroupSalaryAccruals: 'Зарплата группы',
+  tableArea: 'Рабочая область платежной таблицы',
+  emptyState: 'По выбранным условиям записей нет',
+  pagination: 'Пагинация платежей',
+  rows: 'Строк',
+  pageSize: 'Количество строк платежей',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -118,4 +146,8 @@ export function formatFinanceGarageLabel(garageNumber: string | number | null | 
 
 export function getFinanceMeterKindLabel(kind: string) {
   return kind === 'water' ? 'Вода' : 'Электричество'
+}
+
+export function getFinanceToolbarLabel(key: FinanceToolbarLabelKey) {
+  return financeToolbarLabels[key]
 }

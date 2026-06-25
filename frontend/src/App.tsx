@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders } from './shared/financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -1946,23 +1946,23 @@ function FinancePanel({
         </div>
 
         <div className="dictionary-toolbar finance-table-toolbar">
-          <div className="finance-period-filter" aria-label="Фильтр периода">
-            <input aria-label="Период с" type="month" value={financeFilter.monthFrom} onChange={(event) => setFinanceFilter((value) => ({ ...value, monthFrom: event.target.value }))} />
-            <input aria-label="Период по" type="month" value={financeFilter.monthTo} onChange={(event) => setFinanceFilter((value) => ({ ...value, monthTo: event.target.value }))} />
+          <div className="finance-period-filter" aria-label={getFinanceToolbarLabel('periodFilter')}>
+            <input aria-label={getFinanceToolbarLabel('periodFrom')} type="month" value={financeFilter.monthFrom} onChange={(event) => setFinanceFilter((value) => ({ ...value, monthFrom: event.target.value }))} />
+            <input aria-label={getFinanceToolbarLabel('periodTo')} type="month" value={financeFilter.monthTo} onChange={(event) => setFinanceFilter((value) => ({ ...value, monthTo: event.target.value }))} />
           </div>
           <label className="dictionary-search">
             <Search size={16} aria-hidden="true" />
-            <input aria-label="Поиск по платежам" placeholder="Гараж, владелец, поставщик или документ" value={financeSearchInput} onChange={(event) => setFinanceSearchInput(event.target.value)} />
+            <input aria-label={getFinanceToolbarLabel('search')} placeholder={getFinanceToolbarLabel('searchPlaceholder')} value={financeSearchInput} onChange={(event) => setFinanceSearchInput(event.target.value)} />
           </label>
           <div className="finance-toolbar-actions">
             {activeFinanceSection === 'accruals' ? (
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('regularAccruals')}>
-                <span>Регулярные</span>
+                <span>{getFinanceToolbarLabel('regularAccruals')}</span>
               </button>
             ) : null}
             {activeFinanceSection === 'supplierAccruals' ? (
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('supplierGroupSalaryAccruals')}>
-                <span>Зарплата группы</span>
+                <span>{getFinanceToolbarLabel('supplierGroupSalaryAccruals')}</span>
               </button>
             ) : null}
           </div>
@@ -1972,19 +1972,19 @@ function FinancePanel({
           <div
             className="dictionary-table-scroll"
             role="group"
-            aria-label="Рабочая область платежной таблицы"
+            aria-label={getFinanceToolbarLabel('tableArea')}
             tabIndex={getActiveFinanceRowsCount() === 0 ? 0 : -1}
             onContextMenu={(event) => openFinanceContextMenu(event, activeFinanceSection)}
             onKeyDown={handleFinanceTableAreaKeyDown}
           >
             {renderFinanceTable()}
-            {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранным условиям записей нет</p> : null}
+            {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
           </div>
-          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация платежей">
+          <div className="dictionary-pagination" role="navigation" aria-label={getFinanceToolbarLabel('pagination')}>
             <span role="status" aria-live="polite">Показано {financeVisibleRange.from}-{financeVisibleRange.to} из {financePage.totalCount}</span>
             <label>
-              Строк
-              <select aria-label="Количество строк платежей" value={financePage.limit} onChange={(event) => void loadFinanceWorkbench(activeFinanceSection, 0, Number(event.target.value))}>
+              {getFinanceToolbarLabel('rows')}
+              <select aria-label={getFinanceToolbarLabel('pageSize')} value={financePage.limit} onChange={(event) => void loadFinanceWorkbench(activeFinanceSection, 0, Number(event.target.value))}>
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
