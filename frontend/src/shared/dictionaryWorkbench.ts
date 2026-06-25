@@ -1,4 +1,4 @@
-import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
+import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
 import type { OwnerGarageLinkForm } from './validation'
 
 export type DictionarySectionKey = 'owners' | 'garages' | 'supplierGroups' | 'suppliers' | 'incomeTypes' | 'expenseTypes' | 'tariffs'
@@ -11,6 +11,43 @@ export type DictionarySectionOption = {
   label: string
   group: DictionarySectionGroupKey
   writePermission: DictionaryWritePermission
+}
+
+export type DictionaryOwnerFormState = {
+  lastName: string
+  firstName: string
+  middleName: string
+  phone: string
+  address: string
+  meterNotes: string
+}
+
+export type DictionaryGarageFormState = {
+  number: string
+  peopleCount: number
+  floorCount: number
+  ownerId: string
+  startingBalance: number
+  initialWaterMeterValue: string
+  initialElectricityMeterValue: string
+  comment: string
+}
+
+export type DictionarySupplierFormState = {
+  name: string
+  groupId: string
+  inn: string
+  legalAddress: string
+  contactPerson: string
+  phone: string
+  email: string
+  startingBalance: number
+  comment: string
+}
+
+export type DictionaryAccountingTypeFormState = {
+  name: string
+  code: string
 }
 
 export const dictionarySectionGroups: Array<{ key: DictionarySectionGroupKey; label: string }> = [
@@ -37,6 +74,61 @@ const dictionarySearchPlaceholders: Record<DictionarySectionKey, string> = {
   incomeTypes: 'Поиск для этого справочника пока не применяется',
   expenseTypes: 'Поиск для этого справочника пока не применяется',
   tariffs: 'Название или база расчета',
+}
+
+export function createEmptyOwnerForm(): DictionaryOwnerFormState {
+  return {
+    lastName: '',
+    firstName: '',
+    middleName: '',
+    phone: '',
+    address: '',
+    meterNotes: '',
+  }
+}
+
+export function createEmptyGarageForm(): DictionaryGarageFormState {
+  return {
+    number: '',
+    peopleCount: 1,
+    floorCount: 1,
+    ownerId: '',
+    startingBalance: 0,
+    initialWaterMeterValue: '',
+    initialElectricityMeterValue: '',
+    comment: '',
+  }
+}
+
+export function createEmptySupplierForm(groupId = ''): DictionarySupplierFormState {
+  return {
+    name: '',
+    groupId,
+    inn: '',
+    legalAddress: '',
+    contactPerson: '',
+    phone: '',
+    email: '',
+    startingBalance: 0,
+    comment: '',
+  }
+}
+
+export function createEmptyAccountingTypeForm(): DictionaryAccountingTypeFormState {
+  return {
+    name: '',
+    code: '',
+  }
+}
+
+export function createEmptyTariffForm(effectiveFrom = '2026-07-01'): UpsertTariffRequest {
+  return {
+    name: '',
+    calculationBase: 'fixed',
+    rate: 1,
+    effectiveFrom,
+    comment: '',
+  }
 }
 
 export function createEmptyOwnerGarageLinkForm(): OwnerGarageLinkForm {

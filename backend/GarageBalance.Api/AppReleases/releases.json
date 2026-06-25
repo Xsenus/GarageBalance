@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-dictionary-form-defaults",
+    "version": "0.276.0",
+    "publishedAt": "2026-06-25T15:15:00+07:00",
+    "title": "Defaults форм справочников вынесены в shared",
+    "summary": "Пустые формы владельца, гаража, поставщика, вида операции и тарифа теперь создаются через общий frontend-модуль.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DictionaryPanelV2 использует dictionaryWorkbench.ts для начального состояния и сброса форм создания."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют числовые defaults, стартовую дату тарифа и groupId поставщика при создании формы."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-record-titles",
     "version": "0.275.0",
     "publishedAt": "2026-06-25T15:00:00+07:00",

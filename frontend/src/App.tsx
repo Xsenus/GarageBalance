@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4115,13 +4115,13 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [balanceHistoryFilters, setBalanceHistoryFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
   const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false)
   const [balanceHistoryError, setBalanceHistoryError] = useState<string | null>(null)
-  const [ownerForm, setOwnerForm] = useState<UpsertOwnerRequest>({ lastName: '', firstName: '', middleName: '', phone: '', address: '', meterNotes: '' })
+  const [ownerForm, setOwnerForm] = useState<UpsertOwnerRequest>(createEmptyOwnerForm())
   const [ownerGarageLinkForm, setOwnerGarageLinkForm] = useState<OwnerGarageLinkForm>(createEmptyOwnerGarageLinkForm())
-  const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
+  const [garageForm, setGarageForm] = useState(createEmptyGarageForm())
   const [supplierGroupName, setSupplierGroupName] = useState('')
-  const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', startingBalance: 0, comment: '' })
-  const [accountingTypeForm, setAccountingTypeForm] = useState({ name: '', code: '' })
-  const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
+  const [supplierForm, setSupplierForm] = useState(createEmptySupplierForm())
+  const [accountingTypeForm, setAccountingTypeForm] = useState(createEmptyAccountingTypeForm())
+  const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>(createEmptyTariffForm())
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
@@ -4338,13 +4338,13 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         setTariffForm(createTariffFormFromDto(tariff))
       }
     } else {
-      setOwnerForm({ lastName: '', firstName: '', middleName: '', phone: '', address: '', meterNotes: '' })
+      setOwnerForm(createEmptyOwnerForm())
       setOwnerGarageLinkForm(createEmptyOwnerGarageLinkForm())
-      setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
+      setGarageForm(createEmptyGarageForm())
       setSupplierGroupName('')
-      setSupplierForm({ name: '', groupId: groupOptions[0]?.id ?? '', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', startingBalance: 0, comment: '' })
-      setAccountingTypeForm({ name: '', code: '' })
-      setTariffForm({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
+      setSupplierForm(createEmptySupplierForm(groupOptions[0]?.id ?? ''))
+      setAccountingTypeForm(createEmptyAccountingTypeForm())
+      setTariffForm(createEmptyTariffForm())
     }
 
     setEditor({ section, mode, item })

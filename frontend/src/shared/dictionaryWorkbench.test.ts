@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { createEmptyOwnerGarageLinkForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
+import { createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, dictionarySectionGroups, dictionarySectionOptions, getDictionaryRecordTitle, getDictionarySearchPlaceholder, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -32,6 +32,53 @@ describe('dictionary workbench metadata', () => {
       startingBalance: 0,
       initialWaterMeterValue: '',
       initialElectricityMeterValue: '',
+      comment: '',
+    })
+  })
+
+  it('creates empty dictionary editor forms with stable defaults', () => {
+    expect(createEmptyOwnerForm()).toEqual({
+      lastName: '',
+      firstName: '',
+      middleName: '',
+      phone: '',
+      address: '',
+      meterNotes: '',
+    })
+
+    expect(createEmptyGarageForm()).toEqual({
+      number: '',
+      peopleCount: 1,
+      floorCount: 1,
+      ownerId: '',
+      startingBalance: 0,
+      initialWaterMeterValue: '',
+      initialElectricityMeterValue: '',
+      comment: '',
+    })
+
+    expect(createEmptySupplierForm('group-1')).toEqual({
+      name: '',
+      groupId: 'group-1',
+      inn: '',
+      legalAddress: '',
+      contactPerson: '',
+      phone: '',
+      email: '',
+      startingBalance: 0,
+      comment: '',
+    })
+
+    expect(createEmptyAccountingTypeForm()).toEqual({
+      name: '',
+      code: '',
+    })
+
+    expect(createEmptyTariffForm()).toEqual({
+      name: '',
+      calculationBase: 'fixed',
+      rate: 1,
+      effectiveFrom: '2026-07-01',
       comment: '',
     })
   })
