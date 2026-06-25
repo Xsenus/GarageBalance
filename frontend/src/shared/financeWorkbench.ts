@@ -33,6 +33,15 @@ export type FinanceToolbarLabelKey =
   | 'pagination'
   | 'rows'
   | 'pageSize'
+export type FinanceEditorUiLabelKey =
+  | 'createMode'
+  | 'editMode'
+  | 'close'
+  | 'cancel'
+  | 'save'
+  | 'unsavedHint'
+  | 'unsavedConfirm'
+export type FinanceEditorValidationTitleVariant = 'default' | 'batch' | 'detailed'
 
 export const financeSectionOptions: FinanceSectionOption[] = [
   { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
@@ -108,6 +117,35 @@ const financeToolbarLabels: Record<FinanceToolbarLabelKey, string> = {
   pageSize: 'Количество строк платежей',
 }
 
+const financeEditorValidationTitles: Record<FinanceEditorKey, string> = {
+  income: 'Проверьте поступление',
+  expense: 'Проверьте выплату',
+  accruals: 'Проверьте начисление',
+  regularAccruals: 'Проверьте регулярное начисление',
+  supplierGroupSalaryAccruals: 'Проверьте начисление зарплаты',
+  supplierAccruals: 'Проверьте начисление поставщику',
+  meterReadings: 'Проверьте показание',
+}
+
+const financeEditorValidationTitleVariants: Partial<Record<FinanceEditorKey, Partial<Record<FinanceEditorValidationTitleVariant, string>>>> = {
+  regularAccruals: {
+    batch: 'Проверьте регулярные начисления',
+  },
+  meterReadings: {
+    detailed: 'Проверьте показание счетчика',
+  },
+}
+
+const financeEditorUiLabels: Record<FinanceEditorUiLabelKey, string> = {
+  createMode: 'Платежи',
+  editMode: 'Изменение',
+  close: 'Закрыть форму платежа',
+  cancel: 'Отмена',
+  save: 'Сохранить',
+  unsavedHint: 'Есть несохраненные изменения формы платежа.',
+  unsavedConfirm: 'Закрыть форму платежа без сохранения изменений?',
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -150,4 +188,12 @@ export function getFinanceMeterKindLabel(kind: string) {
 
 export function getFinanceToolbarLabel(key: FinanceToolbarLabelKey) {
   return financeToolbarLabels[key]
+}
+
+export function getFinanceEditorValidationTitle(section: FinanceEditorKey, variant: FinanceEditorValidationTitleVariant = 'default') {
+  return financeEditorValidationTitleVariants[section]?.[variant] ?? financeEditorValidationTitles[section]
+}
+
+export function getFinanceEditorUiLabel(key: FinanceEditorUiLabelKey) {
+  return financeEditorUiLabels[key]
 }

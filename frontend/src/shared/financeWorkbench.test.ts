@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey, FinanceFallbackLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinanceSectionKey, FinanceToolbarLabelKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -29,6 +29,7 @@ const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
   'rows',
   'pageSize',
 ]
+const editorUiLabelKeys: FinanceEditorUiLabelKey[] = ['createMode', 'editMode', 'close', 'cancel', 'save', 'unsavedHint', 'unsavedConfirm']
 
 describe('finance workbench metadata', () => {
   it('keeps the payment table sections in the expected order', () => {
@@ -62,6 +63,32 @@ describe('finance workbench metadata', () => {
       supplierGroupSalaryAccruals: 'Начислить зарплату',
       supplierAccruals: 'Начислить',
       meterReadings: 'Внести',
+    })
+  })
+
+  it('returns validation titles for every payment editor', () => {
+    expect(Object.fromEntries(editorKeys.map((key) => [key, getFinanceEditorValidationTitle(key)]))).toEqual({
+      income: 'Проверьте поступление',
+      expense: 'Проверьте выплату',
+      accruals: 'Проверьте начисление',
+      regularAccruals: 'Проверьте регулярное начисление',
+      supplierGroupSalaryAccruals: 'Проверьте начисление зарплаты',
+      supplierAccruals: 'Проверьте начисление поставщику',
+      meterReadings: 'Проверьте показание',
+    })
+    expect(getFinanceEditorValidationTitle('regularAccruals', 'batch')).toBe('Проверьте регулярные начисления')
+    expect(getFinanceEditorValidationTitle('meterReadings', 'detailed')).toBe('Проверьте показание счетчика')
+  })
+
+  it('returns common labels for the payment editor dialog', () => {
+    expect(Object.fromEntries(editorUiLabelKeys.map((key) => [key, getFinanceEditorUiLabel(key)]))).toEqual({
+      createMode: 'Платежи',
+      editMode: 'Изменение',
+      close: 'Закрыть форму платежа',
+      cancel: 'Отмена',
+      save: 'Сохранить',
+      unsavedHint: 'Есть несохраненные изменения формы платежа.',
+      unsavedConfirm: 'Закрыть форму платежа без сохранения изменений?',
     })
   })
 

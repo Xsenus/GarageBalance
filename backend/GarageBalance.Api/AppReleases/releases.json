@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-editor-labels",
+    "version": "0.291.0",
+    "publishedAt": "2026-06-25T18:45:00+07:00",
+    "title": "Подписи редактора платежей вынесены в shared",
+    "summary": "Модалка платежей и validation summary теперь берут пользовательские подписи из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит заголовки проверок, подписи режима редактора, Отмена, Сохранить и тексты несохраненных изменений внутри формы платежей."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют подписи validation summary и общие тексты модалки редактора платежей."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-toolbar-labels",
     "version": "0.290.0",
     "publishedAt": "2026-06-25T18:30:00+07:00",

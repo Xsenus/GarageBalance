@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -719,7 +719,7 @@ function FinancePanel({
       return
     }
 
-    if (!options?.skipConfirmation && hasUnsavedFinanceEditorChanges() && !window.confirm('Закрыть форму платежа без сохранения изменений?')) {
+    if (!options?.skipConfirmation && hasUnsavedFinanceEditorChanges() && !window.confirm(getFinanceEditorUiLabel('unsavedConfirm'))) {
       return
     }
 
@@ -1676,7 +1676,7 @@ function FinancePanel({
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте поступление" items={incomeValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('income')} items={incomeValidationErrors} />
         </>
       )
     }
@@ -1713,7 +1713,7 @@ function FinancePanel({
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте выплату" items={expenseValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('expense')} items={expenseValidationErrors} />
         </>
       )
     }
@@ -1747,7 +1747,7 @@ function FinancePanel({
           </div>
           <input aria-label="Источник начисления" value={formatAccrualSource(accrualForm.source)} readOnly />
           <input aria-label="Комментарий к начислению" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте начисление" items={accrualValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('accruals')} items={accrualValidationErrors} />
         </>
       )
     }
@@ -1785,7 +1785,7 @@ function FinancePanel({
           </select>
           <input aria-label="Месяц регулярного начисления" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />
           <input aria-label="Комментарий к регулярному начислению" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте регулярное начисление" items={regularValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('regularAccruals')} items={regularValidationErrors} />
           {regularStatus ? <p className="form-hint">{regularStatus}</p> : null}
         </>
       )
@@ -1823,7 +1823,7 @@ function FinancePanel({
             <input aria-label="Документ начисления поставщику" placeholder="Документ" value={supplierAccrualForm.documentNumber} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, documentNumber: event.target.value })} />
             <input aria-label="Комментарий начисления поставщику" placeholder="Комментарий" value={supplierAccrualForm.comment} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, comment: event.target.value })} />
           </div>
-          <FormValidationSummary title="Проверьте начисление поставщику" items={supplierAccrualValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('supplierAccruals')} items={supplierAccrualValidationErrors} />
         </>
       )
     }
@@ -1849,7 +1849,7 @@ function FinancePanel({
             <input aria-label="Документ зарплаты" placeholder="Документ" value={salaryForm.documentNumber} onChange={(event) => setSalaryForm({ ...salaryForm, documentNumber: event.target.value })} />
             <input aria-label="Комментарий зарплаты" placeholder="Комментарий" value={salaryForm.comment} onChange={(event) => setSalaryForm({ ...salaryForm, comment: event.target.value })} />
           </div>
-          <FormValidationSummary title="Проверьте начисление зарплаты" items={salaryValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('supplierGroupSalaryAccruals')} items={salaryValidationErrors} />
           {salaryStatus ? <p className="form-hint">{salaryStatus}</p> : null}
         </>
       )
@@ -1879,7 +1879,7 @@ function FinancePanel({
           <input aria-label="Текущее показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />
           <input aria-label="Комментарий к показанию" placeholder="Комментарий" value={meterForm.comment} onChange={(event) => setMeterForm({ ...meterForm, comment: event.target.value })} />
         </div>
-        <FormValidationSummary title="Проверьте показание" items={meterValidationErrors} />
+        <FormValidationSummary title={getFinanceEditorValidationTitle('meterReadings')} items={meterValidationErrors} />
       </>
     )
   }
@@ -2036,7 +2036,7 @@ function FinancePanel({
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте поступление" items={incomeValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('income')} items={incomeValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
             <span>Провести</span>
           </button>
@@ -2073,7 +2073,7 @@ function FinancePanel({
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте выплату" items={expenseValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('expense')} items={expenseValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
             <span>Провести</span>
           </button>
@@ -2106,7 +2106,7 @@ function FinancePanel({
             <input aria-label="Сумма начисления" type="number" min="0.01" step="0.01" value={accrualForm.amount} onChange={(event) => setAccrualForm({ ...accrualForm, amount: Number(event.target.value) })} required />
           </div>
           <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
-          <FormValidationSummary title="Проверьте начисление" items={accrualValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('accruals')} items={accrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
             <span>Начислить</span>
           </button>
@@ -2142,7 +2142,7 @@ function FinancePanel({
             <input aria-label="Документ начисления поставщику" placeholder="Документ" value={supplierAccrualForm.documentNumber} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, documentNumber: event.target.value })} />
             <input aria-label="Комментарий начисления поставщику" placeholder="Комментарий" value={supplierAccrualForm.comment} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, comment: event.target.value })} required />
           </div>
-          <FormValidationSummary title="Проверьте начисление поставщику" items={supplierAccrualValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('supplierAccruals')} items={supplierAccrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
             <span>Начислить</span>
           </button>
@@ -2180,7 +2180,7 @@ function FinancePanel({
           </select>
           <input aria-label="Месяц регулярных начислений" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />
           <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
-          <FormValidationSummary title="Проверьте регулярные начисления" items={regularValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('regularAccruals', 'batch')} items={regularValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
             <span>{getFinanceEditorSubmitLabel('regularAccruals')}</span>
           </button>
@@ -2211,7 +2211,7 @@ function FinancePanel({
             <input aria-label="Новое показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />
             <input aria-label="Комментарий счетчика" placeholder="Комментарий" value={meterForm.comment} onChange={(event) => setMeterForm({ ...meterForm, comment: event.target.value })} />
           </div>
-          <FormValidationSummary title="Проверьте показание счетчика" items={meterValidationErrors} />
+          <FormValidationSummary title={getFinanceEditorValidationTitle('meterReadings', 'detailed')} items={meterValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'meter-reading' || !meterForm.garageId}>
             <span>Внести</span>
           </button>
@@ -2362,22 +2362,22 @@ function FinancePanel({
           >
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">{financeEditor.mode === 'edit' ? 'Изменение' : 'Платежи'}</p>
+                <p className="eyebrow">{financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('editMode') : getFinanceEditorUiLabel('createMode')}</p>
                 <h3 id="finance-editor-title">{getFinanceEditorTitle(financeEditor.section)}</h3>
               </div>
-              <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть форму платежа" onClick={() => closeFinanceEditor()}>
+              <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" aria-label={getFinanceEditorUiLabel('close')} onClick={() => closeFinanceEditor()}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
             <form className="dictionary-form finance-editor-form" onSubmit={handleFinanceEditorSubmit}>
               {renderFinanceEditorFields(financeEditor.section)}
-              {financeEditorHasUnsavedChanges ? <p className="form-hint" id="finance-editor-unsaved-changes" role="status" aria-live="polite">Есть несохраненные изменения формы платежа.</p> : null}
+              {financeEditorHasUnsavedChanges ? <p className="form-hint" id="finance-editor-unsaved-changes" role="status" aria-live="polite">{getFinanceEditorUiLabel('unsavedHint')}</p> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={() => closeFinanceEditor()}>
-                  Отмена
+                  {getFinanceEditorUiLabel('cancel')}
                 </button>
                 <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === getFinanceEditorSavingScope(financeEditor.section)}>
-                  <span>{financeEditor.mode === 'edit' ? 'Сохранить' : getFinanceEditorSubmitLabel(financeEditor.section)}</span>
+                  <span>{financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('save') : getFinanceEditorSubmitLabel(financeEditor.section)}</span>
                 </button>
               </div>
             </form>
