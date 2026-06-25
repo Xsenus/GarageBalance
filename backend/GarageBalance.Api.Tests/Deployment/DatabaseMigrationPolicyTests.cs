@@ -81,6 +81,98 @@ public sealed class DatabaseMigrationPolicyTests
         Assert.NotEmpty(concreteMigrations);
     }
 
+    [Fact]
+    public void ConcreteMigrations_HaveStrictlyIncreasingUniqueTimestamps()
+    {
+        var migrationNames = EnumerateConcreteMigrationNames()
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var previousTimestamp = string.Empty;
+        var duplicateTimestamps = migrationNames
+            .Select(name => name[..14])
+            .GroupBy(timestamp => timestamp, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+
+        Assert.Empty(duplicateTimestamps);
+        foreach (var migrationName in migrationNames)
+        {
+            var timestamp = migrationName[..14];
+
+            Assert.Matches("^\\d{14}_.+\\.cs$", migrationName);
+            Assert.True(
+                string.CompareOrdinal(timestamp, previousTimestamp) > 0,
+                $"Migration timestamp must be strictly increasing. Offender: {migrationName}.");
+            previousTimestamp = timestamp;
+        }
+    }
+
+    [Fact]
+    public void DesignerMigrations_HaveMigrationAttributeMatchingFileName()
+    {
+        var migrationRoot = FindMigrationRoot();
+        var offenders = Directory.EnumerateFiles(migrationRoot, "*.Designer.cs", SearchOption.TopDirectoryOnly)
+            .Select(path =>
+            {
+                var expectedMigrationId = Path.GetFileName(path).Replace(".Designer.cs", string.Empty, StringComparison.Ordinal);
+                var text = File.ReadAllText(path);
+                var expectedAttribute = $"[Migration(\"{expectedMigrationId}\")]";
+
+                return text.Contains(expectedAttribute, StringComparison.Ordinal)
+                    ? null
+                    : $"{Path.GetFileName(path)} must contain {expectedAttribute}";
+            })
+            .Where(message => message is not null)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
+    public void MigrationSourceFiles_AreUtf8WithoutBom()
+    {
+        var migrationRoot = FindMigrationRoot();
+        var offenders = Directory.EnumerateFiles(migrationRoot, "*.cs", SearchOption.TopDirectoryOnly)
+            .Where(HasUtf8Bom)
+            .Select(Path.GetFileName)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    private static IEnumerable<string> EnumerateConcreteMigrationNames()
+    {
+        return Directory.EnumerateFiles(FindMigrationRoot(), "*.cs", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .Where(name => name is not null)
+            .Cast<string>()
+            .Where(name => !name.EndsWith(".Designer.cs", StringComparison.Ordinal))
+            .Where(name => !name.Equals("GarageBalanceDbContextModelSnapshot.cs", StringComparison.Ordinal));
+    }
+
+    private static string FindMigrationRoot()
+    {
+        return Path.Combine(
+            FindRepositoryRoot(),
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Data",
+            "Migrations");
+    }
+
+    private static bool HasUtf8Bom(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+
+        return bytes.Length >= 3 &&
+            bytes[0] == 0xEF &&
+            bytes[1] == 0xBB &&
+            bytes[2] == 0xBF;
+    }
+
     private static IEnumerable<string> EnumerateProductionSourceFiles(string apiRoot)
     {
         return Directory.EnumerateFiles(apiRoot, "*.cs", SearchOption.AllDirectories)

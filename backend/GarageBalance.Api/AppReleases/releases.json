@@ -1,5 +1,26 @@
 [
   {
+    "releaseId": "2026-06-25-migration-history-guard",
+    "version": "0.257.0",
+    "publishedAt": "2026-06-25T14:30:00+07:00",
+    "title": "История миграций БД защищена тестами",
+    "summary": "Backend-тесты теперь проверяют порядок EF migrations, соответствие designer-атрибутов именам файлов и кодировку migration-файлов.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "DatabaseMigrationPolicyTests проверяет строго возрастающие и уникальные timestamp migration-файлов."
+      },
+      {
+        "type": "improved",
+        "text": "Designer-файлы миграций должны содержать [Migration(...)] с тем же идентификатором, что и имя файла."
+      },
+      {
+        "type": "fixed",
+        "text": "Старые migration-файлы нормализованы в UTF-8 без BOM, а тест теперь не даст вернуть BOM в историю схемы."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-active-dictionary-unique-indexes",
     "version": "0.256.0",
     "publishedAt": "2026-06-25T14:15:00+07:00",
