@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey } from './financeWorkbench'
+import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription, getFinanceTableHeaders } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorKey, FinanceSectionKey } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -13,6 +13,7 @@ const editorKeys: FinanceEditorKey[] = [
 ]
 
 const contextMenuActions: FinanceContextMenuAction[] = ['add', 'edit', 'delete']
+const sectionKeys: FinanceSectionKey[] = ['income', 'expense', 'accruals', 'supplierAccruals', 'meterReadings']
 
 describe('finance workbench metadata', () => {
   it('keeps the payment table sections in the expected order', () => {
@@ -76,6 +77,16 @@ describe('finance workbench metadata', () => {
       add: 'Добавить',
       edit: 'Изменить',
       delete: 'Удалить',
+    })
+  })
+
+  it('returns table headers for every payment section', () => {
+    expect(Object.fromEntries(sectionKeys.map((section) => [section, getFinanceTableHeaders(section)]))).toEqual({
+      income: ['Дата', 'Месяц', 'Гараж', 'Владелец', 'Вид оплаты', 'Документ', 'Оплачено', 'Долг после', 'Комментарий'],
+      expense: ['Дата', 'Месяц', 'Поставщик', 'Вид выплаты', 'Документ', 'Выплачено', 'Обязательство после', 'Комментарий'],
+      accruals: ['Месяц', 'Гараж', 'Владелец', 'Вид оплаты', 'Источник', 'Начислено', 'Комментарий'],
+      supplierAccruals: ['Месяц', 'Поставщик', 'Вид выплаты', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
+      meterReadings: ['Месяц', 'Дата', 'Гараж', 'Счетчик', 'Пред. знач.', 'Нов. знач.', 'Разница', 'Комментарий'],
     })
   })
 })

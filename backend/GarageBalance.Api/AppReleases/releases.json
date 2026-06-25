@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-finance-table-headers",
+    "version": "0.288.0",
+    "publishedAt": "2026-06-25T18:00:00+07:00",
+    "title": "Заголовки таблиц платежей вынесены в shared",
+    "summary": "Таблицы поступлений, выплат, начислений и счетчиков теперь берут колонки из общего frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не хранит пять наборов th-заголовков внутри платежного рабочего стола."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют порядок колонок для всех таблиц платежей."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-finance-context-menu",
     "version": "0.287.0",
     "publishedAt": "2026-06-25T17:45:00+07:00",

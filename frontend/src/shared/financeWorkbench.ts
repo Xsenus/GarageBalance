@@ -64,6 +64,14 @@ const financeContextMenuLabels: Record<FinanceContextMenuAction, string> = {
   delete: 'Удалить',
 }
 
+const financeTableHeaders: Record<FinanceSectionKey, string[]> = {
+  income: ['Дата', 'Месяц', 'Гараж', 'Владелец', 'Вид оплаты', 'Документ', 'Оплачено', 'Долг после', 'Комментарий'],
+  expense: ['Дата', 'Месяц', 'Поставщик', 'Вид выплаты', 'Документ', 'Выплачено', 'Обязательство после', 'Комментарий'],
+  accruals: ['Месяц', 'Гараж', 'Владелец', 'Вид оплаты', 'Источник', 'Начислено', 'Комментарий'],
+  supplierAccruals: ['Месяц', 'Поставщик', 'Вид выплаты', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
+  meterReadings: ['Месяц', 'Дата', 'Гараж', 'Счетчик', 'Пред. знач.', 'Нов. знач.', 'Разница', 'Комментарий'],
+}
+
 export function getFinanceEditorTitle(section: FinanceEditorKey) {
   return financeEditorTitles[section]
 }
@@ -82,4 +90,8 @@ export function getFinanceSectionDescription(section: FinanceSectionOption, coun
 
 export function getFinanceContextMenuLabel(action: FinanceContextMenuAction) {
   return financeContextMenuLabels[action]
+}
+
+export function getFinanceTableHeaders(section: FinanceSectionKey) {
+  return financeTableHeaders[section]
 }

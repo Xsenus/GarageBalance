@@ -39,7 +39,7 @@ import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } fr
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
-import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription } from './shared/financeWorkbench'
+import { financeSectionOptions, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceSectionDescription, getFinanceTableHeaders } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
@@ -1469,23 +1469,23 @@ function FinancePanel({
     return financePage.items.length
   }
 
+  function renderFinanceTableHead(section: FinanceSectionKey) {
+    return (
+      <thead>
+        <tr>
+          {getFinanceTableHeaders(section).map((header) => (
+            <th key={header}>{header}</th>
+          ))}
+        </tr>
+      </thead>
+    )
+  }
+
   function renderFinanceTable() {
     if (activeFinanceSection === 'income') {
       return (
         <table className="dictionary-data-table finance-data-table">
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>Месяц</th>
-              <th>Гараж</th>
-              <th>Владелец</th>
-              <th>Вид оплаты</th>
-              <th>Документ</th>
-              <th>Оплачено</th>
-              <th>Долг после</th>
-              <th>Комментарий</th>
-            </tr>
-          </thead>
+          {renderFinanceTableHead('income')}
           <tbody>
             {filteredIncomeOperations.map((operation) => (
               <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'income', operation)} onClick={() => editFinanceRecord('income', operation)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'income', operation)}>
@@ -1508,18 +1508,7 @@ function FinancePanel({
     if (activeFinanceSection === 'expense') {
       return (
         <table className="dictionary-data-table finance-data-table">
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>Месяц</th>
-              <th>Поставщик</th>
-              <th>Вид выплаты</th>
-              <th>Документ</th>
-              <th>Выплачено</th>
-              <th>Обязательство после</th>
-              <th>Комментарий</th>
-            </tr>
-          </thead>
+          {renderFinanceTableHead('expense')}
           <tbody>
             {filteredExpenseOperations.map((operation) => (
               <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={() => editFinanceRecord('expense', operation)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
@@ -1541,17 +1530,7 @@ function FinancePanel({
     if (activeFinanceSection === 'accruals') {
       return (
         <table className="dictionary-data-table finance-data-table">
-          <thead>
-            <tr>
-              <th>Месяц</th>
-              <th>Гараж</th>
-              <th>Владелец</th>
-              <th>Вид оплаты</th>
-              <th>Источник</th>
-              <th>Начислено</th>
-              <th>Комментарий</th>
-            </tr>
-          </thead>
+          {renderFinanceTableHead('accruals')}
           <tbody>
             {filteredAccruals.map((accrual) => (
               <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={() => editFinanceRecord('accruals', accrual)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
@@ -1572,17 +1551,7 @@ function FinancePanel({
     if (activeFinanceSection === 'supplierAccruals') {
       return (
         <table className="dictionary-data-table finance-data-table">
-          <thead>
-            <tr>
-              <th>Месяц</th>
-              <th>Поставщик</th>
-              <th>Вид выплаты</th>
-              <th>Источник</th>
-              <th>Документ</th>
-              <th>Начислено</th>
-              <th>Комментарий</th>
-            </tr>
-          </thead>
+          {renderFinanceTableHead('supplierAccruals')}
           <tbody>
             {filteredSupplierAccruals.map((accrual) => (
               <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'supplierAccruals', accrual)} onClick={() => editFinanceRecord('supplierAccruals', accrual)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'supplierAccruals', accrual)}>
@@ -1608,18 +1577,7 @@ function FinancePanel({
           </p>
         ) : null}
         <table className="dictionary-data-table finance-data-table">
-          <thead>
-            <tr>
-              <th>Месяц</th>
-              <th>Дата</th>
-              <th>Гараж</th>
-              <th>Счетчик</th>
-              <th>Пред. знач.</th>
-              <th>Нов. знач.</th>
-              <th>Разница</th>
-              <th>Комментарий</th>
-            </tr>
-          </thead>
+          {renderFinanceTableHead('meterReadings')}
           <tbody>
             {filteredMeterReadings.map((reading) => (
               <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={() => editFinanceRecord('meterReadings', reading)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
