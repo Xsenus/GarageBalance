@@ -1504,6 +1504,7 @@ function FinancePanel({
   }, [financeSearchInput])
 
   const loadFinanceWorkbench = useCallback(async (section: FinanceSectionKey, offset: number, limit: number) => {
+    setFinanceContextMenu(null)
     setLoading(true)
     setError(null)
     try {

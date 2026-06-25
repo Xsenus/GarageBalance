@@ -1811,6 +1811,22 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument())
   })
 
+  it('closes payment context menu when payment table filters reload data', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    expect(await screen.findByRole('menu', { name: 'Операции с платежами' })).toBeInTheDocument()
+
+    fireEvent.change(within(financePanel).getByLabelText('Период с'), { target: { value: '2026-06' } })
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument())
+  })
+
   it('opens new income dialog from empty payment table context menu', async () => {
     const user = userEvent.setup()
     const financeClient = createFinanceClient({
