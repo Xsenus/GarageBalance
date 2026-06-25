@@ -1794,6 +1794,23 @@ describe('App', () => {
     expect(within(financePanel).getByRole('button', { name: 'Зарплата группы' }).querySelector('svg')).not.toBeInTheDocument()
   })
 
+  it('closes payment context menu when switching payment table tabs', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+    expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeEnabled()
+
+    await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument())
+  })
+
   it('opens new income dialog from empty payment table context menu', async () => {
     const user = userEvent.setup()
     const financeClient = createFinanceClient({

@@ -2037,6 +2037,11 @@ function FinancePanel({
     setFinanceContextMenu({ section, record, x: event.clientX, y: event.clientY })
   }
 
+  function selectFinanceSection(section: FinanceSectionKey) {
+    setFinanceContextMenu(null)
+    setActiveFinanceSection(section)
+  }
+
   function editFinanceRecord(section: FinanceSectionKey, record: FinanceRecord) {
     setFinanceContextMenu(null)
     openFinanceEditor(section, record)
@@ -2647,7 +2652,7 @@ function FinancePanel({
               aria-selected={activeFinanceSection === section.key}
               className={activeFinanceSection === section.key ? 'is-active' : undefined}
               key={section.key}
-              onClick={() => setActiveFinanceSection(section.key)}
+              onClick={() => selectFinanceSection(section.key)}
             >
               <span>{section.label}</span>
               <small>{section.description} · {getFinanceSectionCount(section.key)}</small>
