@@ -25,3 +25,15 @@ export function getPageVisibleRange(page: PagedItems<unknown>) {
     to: Math.min(page.offset + page.items.length, page.totalCount),
   }
 }
+
+export function getPageNavigation(page: PagedItems<unknown>) {
+  const canGoPrevious = page.offset > 0
+  const canGoNext = page.offset + page.limit < page.totalCount
+
+  return {
+    canGoPrevious,
+    canGoNext,
+    previousOffset: Math.max(0, page.offset - page.limit),
+    nextOffset: page.offset + page.limit,
+  }
+}

@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-page-navigation",
+    "version": "0.285.0",
+    "publishedAt": "2026-06-25T17:15:00+07:00",
+    "title": "Навигация пагинации вынесена в shared",
+    "summary": "Кнопки Назад и Вперед в таблицах пользователей, платежей и справочников теперь используют общий frontend-helper.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "App.tsx больше не считает offset переходов пагинации отдельно в каждой рабочей таблице."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют доступность предыдущей и следующей страницы, а также offset переходов."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-page-visible-range",
     "version": "0.284.0",
     "publishedAt": "2026-06-25T17:00:00+07:00",

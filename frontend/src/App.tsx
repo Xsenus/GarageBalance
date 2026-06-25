@@ -63,7 +63,7 @@ import {
   getLocalDateInputValue,
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
-import { createEmptyPage, createFallbackPage, getPageVisibleRange, pageSizeOptions } from './shared/pagination'
+import { createEmptyPage, createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from './shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { UserFormState } from './shared/userManagement'
@@ -1932,6 +1932,7 @@ function FinancePanel({
 
   const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
   const financeVisibleRange = getPageVisibleRange(financePage)
+  const financeNavigation = getPageNavigation(financePage)
 
   return (
     <section className="finance-panel" aria-label="Платежи">
@@ -2033,8 +2034,8 @@ function FinancePanel({
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={loading || financePage.offset === 0} onClick={() => void loadFinanceWorkbench(activeFinanceSection, Math.max(0, financePage.offset - financePage.limit), financePage.limit)}>Назад</button>
-            <button className="ghost-button" type="button" disabled={loading || financePage.offset + financePage.limit >= financePage.totalCount} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financePage.offset + financePage.limit, financePage.limit)}>Вперед</button>
+            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoPrevious} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.previousOffset, financePage.limit)}>Назад</button>
+            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoNext} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.nextOffset, financePage.limit)}>Вперед</button>
           </div>
         </div>
       </div>
@@ -3854,8 +3855,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   }
 
   const pageVisibleRange = getPageVisibleRange(page)
-  const canGoPrev = page.offset > 0
-  const canGoNext = page.offset + page.limit < page.totalCount
+  const pageNavigation = getPageNavigation(page)
 
   return (
     <section className="dictionary-panel-v2 users-panel-v2" aria-label="Пользователи" onClick={() => setContextMenu(null)}>
@@ -3936,8 +3936,8 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={!canGoPrev || loading}>Назад</button>
-            <button className="ghost-button" type="button" onClick={() => setOffset(offset + pageSize)} disabled={!canGoNext || loading}>Вперед</button>
+            <button className="ghost-button" type="button" onClick={() => setOffset(pageNavigation.previousOffset)} disabled={!pageNavigation.canGoPrevious || loading}>Назад</button>
+            <button className="ghost-button" type="button" onClick={() => setOffset(pageNavigation.nextOffset)} disabled={!pageNavigation.canGoNext || loading}>Вперед</button>
           </div>
         </div>
       </div>
@@ -4590,7 +4590,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   function movePage(direction: -1 | 1) {
-    const nextOffset = Math.max(0, Math.min(activePage.offset + direction * activePage.limit, Math.max(0, activePage.totalCount - activePage.limit)))
+    const navigation = getPageNavigation(activePage)
+    const nextOffset = direction === -1 ? navigation.previousOffset : navigation.nextOffset
     setLoading(true)
     void loadPage(activeSection, nextOffset, activePage.limit).finally(() => setLoading(false))
   }
@@ -4726,6 +4727,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
 
   const rows = getRows()
   const visibleRange = getPageVisibleRange(activePage)
+  const pageNavigation = getPageNavigation(activePage)
 
   return (
     <section className="dictionary-panel dictionary-panel-v2" aria-label="Справочники">
@@ -4791,8 +4793,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={loading || activePage.offset === 0} onClick={() => movePage(-1)}>Назад</button>
-            <button className="ghost-button" type="button" disabled={loading || activePage.offset + activePage.limit >= activePage.totalCount} onClick={() => movePage(1)}>Вперед</button>
+            <button className="ghost-button" type="button" disabled={loading || !pageNavigation.canGoPrevious} onClick={() => movePage(-1)}>Назад</button>
+            <button className="ghost-button" type="button" disabled={loading || !pageNavigation.canGoNext} onClick={() => movePage(1)}>Вперед</button>
           </div>
         </div>
       </div>
