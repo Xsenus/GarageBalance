@@ -26,9 +26,9 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertAccountingTypeRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierGroupRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, PaymentAllocationDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { importApi } from './services/importApi'
-import type { AccessImportCheckDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -36,6 +36,27 @@ import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
+import {
+  formatAccrualSource,
+  formatDateOnly,
+  formatDateTime,
+  formatDebtAmount,
+  formatDebtLabel,
+  formatImportCheckStatus,
+  formatImportLogLevel,
+  formatImportRunCheckSummary,
+  formatImportRunStatus,
+  formatMissingMeterReadings,
+  formatMoney,
+  formatMonth,
+  formatMonthInputValue,
+  formatNullableNumber,
+  formatPaymentAllocations,
+  formatReleaseDate,
+  formatTariffRateSummary,
+  getDebtClassName,
+  getLocalDateInputValue,
+} from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
 import './App.css'
 
@@ -6653,55 +6674,10 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
   )
 }
 
-function formatMoney(value: number): string {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
-}
-
-function formatTariffRateSummary(tariff: TariffDto): string {
-  const hasElectricityTiers = tariff.electricityFirstThreshold !== null
-    && tariff.electricitySecondThreshold !== null
-    && tariff.electricityFirstRate !== null
-    && tariff.electricitySecondRate !== null
-    && tariff.electricityThirdRate !== null
-
-  if (!hasElectricityTiers) {
-    return formatMoney(tariff.rate)
-  }
-
-  return `до ${formatMoney(tariff.electricityFirstThreshold!)} кВт: ${formatMoney(tariff.electricityFirstRate!)}, до ${formatMoney(tariff.electricitySecondThreshold!)} кВт: ${formatMoney(tariff.electricitySecondRate!)}, выше: ${formatMoney(tariff.electricityThirdRate!)}`
-}
-
-function formatDebtLabel(value: number): string {
-  return value < 0 ? 'Переплата' : 'Задолженность'
-}
-
-function formatDebtAmount(value: number): string {
-  return formatMoney(Math.abs(value))
-}
-
-function getDebtClassName(value: number): string {
-  return value < 0 ? 'money-overpayment' : 'money-accrual'
-}
-
-function formatPaymentAllocations(allocations: PaymentAllocationDto[]): string {
-  const visible = allocations.slice(0, 3).map((allocation) => {
-    const label = allocation.accountingMonth ? formatMonth(allocation.accountingMonth) : allocation.label
-    return `${label} ${formatMoney(allocation.paidAmount)}`
-  })
-  const hiddenCount = allocations.length - visible.length
-  return hiddenCount > 0 ? `${visible.join(', ')} и еще ${hiddenCount}` : visible.join(', ')
-}
-
 function createDefaultGarageBalanceHistoryFilters(date = new Date()) {
   const to = new Date(date.getFullYear(), date.getMonth(), 1)
   const from = new Date(date.getFullYear(), date.getMonth() - 5, 1)
   return { monthFrom: formatMonthInputValue(from), monthTo: formatMonthInputValue(to) }
-}
-
-function formatMonthInputValue(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  return `${year}-${month}`
 }
 
 function createDefaultConsolidatedReportFilters(month: string): ConsolidatedReportFilters {
@@ -6850,96 +6826,6 @@ function getRowModeOrDefault(value: unknown): string {
   return value === 'accruals' || value === 'payments' ? value : 'all'
 }
 
-function getLocalDateInputValue(date = new Date()): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatDateOnly(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  if (!match) {
-    return value
-  }
-
-  return `${match[3]}.${match[2]}.${match[1]}`
-}
-
-function formatMonth(value: string): string {
-  const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value)
-  if (!match) {
-    return value
-  }
-
-  return `${match[2]}.${match[1]}`
-}
-
-function formatAccrualSource(source: string): string {
-  if (source === 'manual') {
-    return 'Ручное'
-  }
-
-  if (source === 'regular') {
-    return 'Авто'
-  }
-
-  return source
-}
-
-function formatMissingMeterReadings(items: MissingMeterReadingDto[]): string {
-  const visibleItems = items.slice(0, 6)
-  const suffix = items.length > visibleItems.length ? ` и еще ${items.length - visibleItems.length}` : ''
-  return `${visibleItems.map((item) => `Гараж ${item.garageNumber} - ${item.meterKind === 'water' ? 'Вода' : 'Электричество'}`).join(', ')}${suffix}`
-}
-
-function formatImportRunStatus(status: AccessImportRunDto['status']): string {
-  return status === 'completed' ? 'Завершен' : 'Заблокирован'
-}
-
-function formatImportCheckStatus(status: AccessImportCheckDto['status']): string {
-  if (status === 'passed') {
-    return 'Пройдено'
-  }
-
-  if (status === 'warning') {
-    return 'Предупреждение'
-  }
-
-  return 'Ошибка'
-}
-
-function formatImportLogLevel(level: AccessImportRunLogEntryDto['level']): string {
-  if (level === 'warning') {
-    return 'Предупреждение'
-  }
-
-  if (level === 'error') {
-    return 'Ошибка'
-  }
-
-  return 'Инфо'
-}
-
-function formatImportRunCheckSummary(run: AccessImportRunDto): string {
-  return `${run.passedChecks}/${run.totalChecks} · ${formatCount(run.warningCount, 'предупреждение', 'предупреждения', 'предупреждений')} · ${formatCount(run.errorCount, 'ошибка', 'ошибки', 'ошибок')}`
-}
-
-function formatCount(value: number, one: string, few: string, many: string): string {
-  const absoluteValue = Math.abs(value)
-  const lastTwoDigits = absoluteValue % 100
-  const lastDigit = absoluteValue % 10
-  const form = lastTwoDigits >= 11 && lastTwoDigits <= 14 ? many : lastDigit === 1 ? one : lastDigit >= 2 && lastDigit <= 4 ? few : many
-  return `${value} ${form}`
-}
-
-function formatNullableNumber(value: number | null): string {
-  if (value === null) {
-    return 'Не указан'
-  }
-
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(value)
-}
 
 function buildReportFileName(type: 'consolidated' | 'income' | 'expense', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
   return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
@@ -6975,14 +6861,6 @@ function downloadBlob(blob: Blob, fileName: string) {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
-}
-
-function formatReleaseDate(value: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))
 }
 
 export default App
