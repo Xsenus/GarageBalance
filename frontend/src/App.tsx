@@ -2084,6 +2084,29 @@ function FinancePanel({
     }
   }
 
+  function handleFinanceContextMenuKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      return
+    }
+
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'))
+    if (items.length === 0) {
+      return
+    }
+
+    event.preventDefault()
+    const currentIndex = items.findIndex((item) => item === document.activeElement)
+    if (event.key === 'Home') {
+      items[0].focus()
+    } else if (event.key === 'End') {
+      items[items.length - 1].focus()
+    } else if (event.key === 'ArrowDown') {
+      items[(currentIndex + 1) % items.length].focus()
+    } else {
+      items[(currentIndex <= 0 ? items.length : currentIndex) - 1].focus()
+    }
+  }
+
   function getFinanceSectionCount(section: FinanceSectionKey) {
     return financeSectionCounts[section]
   }
@@ -3057,7 +3080,7 @@ function FinancePanel({
         </div>
       </div>
       {financeContextMenu ? (
-        <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label="Операции с платежами" onClick={(event) => event.stopPropagation()}>
+        <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label="Операции с платежами" onClick={(event) => event.stopPropagation()} onKeyDown={handleFinanceContextMenuKeyDown}>
           <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
             <span>Добавить</span>
           </button>
