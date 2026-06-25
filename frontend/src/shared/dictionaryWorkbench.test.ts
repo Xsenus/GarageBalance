@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -221,6 +221,15 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryEditorFieldMeta('tariffCalculationBase')).toEqual({ ariaLabel: 'База расчета тарифа' })
     expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toEqual({ ariaLabel: 'Второй порог электроэнергии', placeholder: 'Порог 2, кВт' })
     expect(getDictionaryEditorFieldMeta('tariffComment')).toEqual({ ariaLabel: 'Комментарий тарифа', placeholder: 'Комментарий' })
+  })
+
+  it('returns tariff calculation base options in the editor order', () => {
+    expect(getTariffCalculationBaseOptions()).toEqual([
+      { value: 'fixed', label: 'Фиксированно' },
+      { value: 'people', label: 'По людям' },
+      { value: 'meter_water', label: 'По счетчику воды' },
+      { value: 'meter_electricity', label: 'По счетчику электричества' },
+    ])
   })
 
   it('returns record titles for every dictionary section', () => {

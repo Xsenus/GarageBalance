@@ -1,5 +1,22 @@
 [
   {
+    "releaseId": "2026-06-25-frontend-shared-tariff-base-options",
+    "version": "0.282.0",
+    "publishedAt": "2026-06-25T16:30:00+07:00",
+    "title": "Базы расчета тарифа вынесены в shared",
+    "summary": "Варианты fixed, people, meter_water и meter_electricity теперь описаны в общем frontend-модуле справочников.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Форма тарифа в справочниках использует dictionaryWorkbench.ts для списка баз расчета вместо локального списка в JSX."
+      },
+      {
+        "type": "fixed",
+        "text": "Тесты закрепляют порядок и русские подписи вариантов базы расчета тарифа."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-06-25-frontend-shared-dictionary-editor-fields",
     "version": "0.281.0",
     "publishedAt": "2026-06-25T16:15:00+07:00",

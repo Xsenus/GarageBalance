@@ -102,6 +102,11 @@ export type DictionaryEditorFieldKey =
   | 'tariffElectricityThirdRate'
   | 'tariffComment'
 
+export type TariffCalculationBaseOption = {
+  value: string
+  label: string
+}
+
 export const dictionarySectionGroups: Array<{ key: DictionarySectionGroupKey; label: string }> = [
   { key: 'counterparties', label: 'Контрагенты' },
   { key: 'operations', label: 'Операции' },
@@ -184,6 +189,13 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   tariffElectricityThirdRate: { ariaLabel: 'Третья ставка электроэнергии', placeholder: 'Ставка 3' },
   tariffComment: { ariaLabel: 'Комментарий тарифа', placeholder: 'Комментарий' },
 }
+
+const tariffCalculationBaseOptions: TariffCalculationBaseOption[] = [
+  { value: 'fixed', label: 'Фиксированно' },
+  { value: 'people', label: 'По людям' },
+  { value: 'meter_water', label: 'По счетчику воды' },
+  { value: 'meter_electricity', label: 'По счетчику электричества' },
+]
 
 export function createEmptyOwnerForm(): DictionaryOwnerFormState {
   return {
@@ -312,6 +324,10 @@ export function getDictionaryTableHeaders(section: DictionarySectionKey) {
 
 export function getDictionaryEditorFieldMeta(key: DictionaryEditorFieldKey) {
   return dictionaryEditorFieldMeta[key]
+}
+
+export function getTariffCalculationBaseOptions() {
+  return tariffCalculationBaseOptions
 }
 
 export function getDictionaryRecordCells(section: DictionarySectionKey, item: DictionaryRecord): Array<string | number> {

@@ -37,7 +37,7 @@ import { usersApi } from './services/usersApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 import { hasAnyPermission, hasPermission, permissions, rolePermissionGroups } from './shared/accessControl'
 import type { DictionaryRecord, DictionarySectionKey } from './shared/dictionaryWorkbench'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
@@ -4704,10 +4704,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       <>
         <input aria-label={fieldMeta('tariffName').ariaLabel} placeholder={fieldMeta('tariffName').placeholder} value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
         <select aria-label={fieldMeta('tariffCalculationBase').ariaLabel} value={tariffForm.calculationBase} onChange={(event) => setTariffForm(updateTariffCalculationBase(tariffForm, event.target.value))}>
-          <option value="fixed">Фиксированно</option>
-          <option value="people">По людям</option>
-          <option value="meter_water">По счетчику воды</option>
-          <option value="meter_electricity">По счетчику электричества</option>
+          {getTariffCalculationBaseOptions().map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
         </select>
         <div className="inline-fields">
           <input aria-label={fieldMeta('tariffRate').ariaLabel} type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
@@ -5613,10 +5610,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <h3>{editingTariffId ? 'Изменение тарифа' : 'Тарифы'}</h3>
           <input aria-label="Название тарифа" placeholder="Вода" value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
           <select aria-label="База расчета тарифа" value={tariffForm.calculationBase} onChange={(event) => setTariffForm(updateTariffCalculationBase(tariffForm, event.target.value))}>
-            <option value="fixed">Фиксированно</option>
-            <option value="people">По людям</option>
-            <option value="meter_water">По счетчику воды</option>
-            <option value="meter_electricity">По счетчику электричества</option>
+            {getTariffCalculationBaseOptions().map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
           <div className="inline-fields">
             <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
