@@ -2667,13 +2667,11 @@ function FinancePanel({
           <div className="finance-toolbar-actions">
             {activeFinanceSection === 'accruals' ? (
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('regularAccruals')}>
-                <Plus size={16} aria-hidden="true" />
                 <span>Регулярные</span>
               </button>
             ) : null}
             {activeFinanceSection === 'supplierAccruals' ? (
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('supplierGroupSalaryAccruals')}>
-                <Plus size={16} aria-hidden="true" />
                 <span>Зарплата группы</span>
               </button>
             ) : null}
@@ -2743,7 +2741,6 @@ function FinancePanel({
           <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте поступление" items={incomeValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'income' || !incomeForm.garageId || !incomeForm.incomeTypeId}>
-            <Plus size={16} />
             <span>Провести</span>
           </button>
         </form>
@@ -2781,7 +2778,6 @@ function FinancePanel({
           <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте выплату" items={expenseValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
-            <Plus size={16} />
             <span>Провести</span>
           </button>
         </form>
@@ -2815,7 +2811,6 @@ function FinancePanel({
           <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
           <FormValidationSummary title="Проверьте начисление" items={accrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
-            <Plus size={16} />
             <span>Начислить</span>
           </button>
         </form>
@@ -2852,7 +2847,6 @@ function FinancePanel({
           </div>
           <FormValidationSummary title="Проверьте начисление поставщику" items={supplierAccrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
-            <Plus size={16} />
             <span>Начислить</span>
           </button>
         </form>
@@ -2891,7 +2885,6 @@ function FinancePanel({
           <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
           <FormValidationSummary title="Проверьте регулярные начисления" items={regularValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
-            <Plus size={16} />
             <span>Создать месяц</span>
           </button>
           {regularStatus ? <p className="empty-state" role="status" aria-live="polite">{regularStatus}</p> : null}
@@ -2923,7 +2916,6 @@ function FinancePanel({
           </div>
           <FormValidationSummary title="Проверьте показание счетчика" items={meterValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'meter-reading' || !meterForm.garageId}>
-            <Plus size={16} />
             <span>Внести</span>
           </button>
         </form>
@@ -3079,7 +3071,6 @@ function FinancePanel({
                   Отмена
                 </button>
                 <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === getFinanceEditorSavingScope(financeEditor.section)}>
-                  <Plus size={16} aria-hidden="true" />
                   <span>{financeEditor.mode === 'edit' ? 'Сохранить' : getFinanceEditorSubmitLabel(financeEditor.section)}</span>
                 </button>
               </div>

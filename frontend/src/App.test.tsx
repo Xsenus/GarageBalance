@@ -1764,8 +1764,17 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const paymentActionButtons = [
+      ...within(financePanel).getAllByRole('button', { name: 'Провести' }),
+      ...within(financePanel).getAllByRole('button', { name: 'Начислить' }),
+      within(financePanel).getByRole('button', { name: 'Создать месяц' }),
+      within(financePanel).getByRole('button', { name: 'Внести' }),
+    ]
 
     expect(within(financePanel).queryByRole('button', { name: 'Провести поступление' })).not.toBeInTheDocument()
+    for (const button of paymentActionButtons) {
+      expect(button.querySelector('svg')).not.toBeInTheDocument()
+    }
     fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
     const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
     expect(menu.querySelector('svg')).not.toBeInTheDocument()
@@ -1777,6 +1786,12 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
     expect(within(dialog).getByText('Платежи')).toBeInTheDocument()
     expect(within(dialog).queryByText('Изменение')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Провести' }).querySelector('svg')).not.toBeInTheDocument()
+
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+    expect(within(financePanel).getByRole('button', { name: 'Регулярные' }).querySelector('svg')).not.toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
+    expect(within(financePanel).getByRole('button', { name: 'Зарплата группы' }).querySelector('svg')).not.toBeInTheDocument()
   })
 
   it('opens new income dialog from empty payment table context menu', async () => {
