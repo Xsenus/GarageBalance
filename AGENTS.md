@@ -32,7 +32,7 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 - update the relevant roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains;
 - add an end-user "Что нового" entry when the change is visible to cooperative staff/admins or changes business rules, permissions, integrations, data handling, reports, imports, or visible defects;
 - if no release note is required because the change is infrastructure-only or documentation-only, leave the release file unchanged and mention the reason when useful;
-- after successful verification, make logical commits with Russian commit messages when the user asked to commit;
+- after successful verification of an implementation task, make logical commits with Russian commit messages unless the user explicitly asked not to commit yet; never treat a commit as permission to push;
 - do not push until the user explicitly asks for push.
 
 When the user asks to check whether the last task is done, inspect the current code, docs, tests, roadmap, and release notes before deciding. If anything is missing, finish it before moving to the next task.
