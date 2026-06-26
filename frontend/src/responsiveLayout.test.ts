@@ -24,4 +24,10 @@ describe('responsive layout styles', () => {
     expect(appCss).toContain('.nav-item {\n  display: flex;\n  width: 100%;\n  min-width: 0;')
     expect(appCss).toContain('.user-table-row > *,\n.operation-row > * {\n  min-width: 0;')
   })
+
+  it('keeps tall dialogs scrollable inside the viewport', () => {
+    expect(appCss).toContain('.detail-dialog {\n  width: min(560px, 100%);\n  max-height: min(860px, calc(100dvh - 48px));\n  overflow-y: auto;')
+    expect(appCss).toContain('.detail-dialog-header {\n  position: sticky;')
+    expect(appCss).toContain('.detail-dialog-actions {\n  position: sticky;')
+  })
 })
