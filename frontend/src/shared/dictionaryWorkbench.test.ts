@@ -211,16 +211,16 @@ describe('dictionary workbench metadata', () => {
   })
 
   it('returns editor field metadata used by dictionary CRUD modals', () => {
-    expect(getDictionaryEditorFieldMeta('ownerLastName')).toEqual({ ariaLabel: 'Фамилия владельца', placeholder: 'Фамилия' })
-    expect(getDictionaryEditorFieldMeta('ownerExistingGarage')).toEqual({ ariaLabel: 'Привязать существующий гараж' })
-    expect(getDictionaryEditorFieldMeta('ownerNewGarageComment')).toEqual({ ariaLabel: 'Комментарий нового гаража', placeholder: 'Комментарий по гаражу' })
-    expect(getDictionaryEditorFieldMeta('garageComment')).toEqual({ ariaLabel: 'Комментарий по гаражу', placeholder: 'Комментарий' })
-    expect(getDictionaryEditorFieldMeta('supplierGroupName')).toEqual({ ariaLabel: 'Группа поставщиков', placeholder: 'Группа' })
-    expect(getDictionaryEditorFieldMeta('supplierLegalAddress')).toEqual({ ariaLabel: 'Юридический адрес поставщика', placeholder: 'Юридический адрес' })
-    expect(getDictionaryEditorFieldMeta('accountingTypeCode')).toEqual({ ariaLabel: 'Код вида операции', placeholder: 'Код' })
-    expect(getDictionaryEditorFieldMeta('tariffCalculationBase')).toEqual({ ariaLabel: 'База расчета тарифа' })
-    expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toEqual({ ariaLabel: 'Второй порог электроэнергии', placeholder: 'Порог 2, кВт' })
-    expect(getDictionaryEditorFieldMeta('tariffComment')).toEqual({ ariaLabel: 'Комментарий тарифа', placeholder: 'Комментарий' })
+    expect(getDictionaryEditorFieldMeta('ownerLastName')).toMatchObject({ label: 'Фамилия', ariaLabel: 'Фамилия владельца', placeholder: 'Иванов' })
+    expect(getDictionaryEditorFieldMeta('ownerExistingGarage')).toMatchObject({ label: 'Существующий гараж', ariaLabel: 'Привязать существующий гараж' })
+    expect(getDictionaryEditorFieldMeta('ownerNewGarageComment')).toMatchObject({ label: 'Комментарий по гаражу', ariaLabel: 'Комментарий нового гаража' })
+    expect(getDictionaryEditorFieldMeta('garageComment')).toMatchObject({ label: 'Комментарий', ariaLabel: 'Комментарий по гаражу' })
+    expect(getDictionaryEditorFieldMeta('supplierGroupName')).toMatchObject({ label: 'Название группы', ariaLabel: 'Группа поставщиков' })
+    expect(getDictionaryEditorFieldMeta('supplierLegalAddress')).toMatchObject({ label: 'Юридический адрес', ariaLabel: 'Юридический адрес поставщика' })
+    expect(getDictionaryEditorFieldMeta('accountingTypeCode')).toMatchObject({ label: 'Код', ariaLabel: 'Код вида операции' })
+    expect(getDictionaryEditorFieldMeta('tariffCalculationBase')).toMatchObject({ label: 'База расчета', ariaLabel: 'База расчета тарифа' })
+    expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toMatchObject({ label: 'Порог 2, кВт', ariaLabel: 'Второй порог электроэнергии' })
+    expect(getDictionaryEditorFieldMeta('tariffComment')).toMatchObject({ label: 'Комментарий', ariaLabel: 'Комментарий тарифа' })
   })
 
   it('returns tariff calculation base options in the editor order', () => {

@@ -61,6 +61,50 @@ export type FinancePanelLabelKey =
   | 'expenseTotal'
   | 'balance'
   | 'meterReadings'
+export type FinanceEditorFieldLabelKey =
+  | 'incomeGarageSearch'
+  | 'incomeGarage'
+  | 'incomeType'
+  | 'incomeDate'
+  | 'incomeMonth'
+  | 'incomeAmount'
+  | 'incomeDocument'
+  | 'incomeComment'
+  | 'expenseSupplier'
+  | 'expenseType'
+  | 'expenseDate'
+  | 'expenseMonth'
+  | 'expenseAmount'
+  | 'expenseDocument'
+  | 'expenseComment'
+  | 'accrualGarage'
+  | 'accrualIncomeType'
+  | 'accrualMonth'
+  | 'accrualAmount'
+  | 'accrualSource'
+  | 'accrualComment'
+  | 'regularIncomeType'
+  | 'regularTariff'
+  | 'regularMonth'
+  | 'regularComment'
+  | 'supplierAccrualSupplier'
+  | 'supplierAccrualType'
+  | 'supplierAccrualMonth'
+  | 'supplierAccrualAmount'
+  | 'supplierAccrualSource'
+  | 'supplierAccrualDocument'
+  | 'supplierAccrualComment'
+  | 'salaryGroup'
+  | 'salaryMonth'
+  | 'salaryAmount'
+  | 'salaryDocument'
+  | 'salaryComment'
+  | 'meterGarage'
+  | 'meterKind'
+  | 'meterMonth'
+  | 'meterDate'
+  | 'meterCurrentValue'
+  | 'meterComment'
 
 export const financeSectionOptions: FinanceSectionOption[] = [
   { key: 'income', label: 'Приходы', description: 'Оплаты владельцев' },
@@ -185,6 +229,52 @@ const financePanelLabels: Record<FinancePanelLabelKey, string> = {
   meterReadings: 'Счетчики',
 }
 
+const financeEditorFieldLabels: Record<FinanceEditorFieldLabelKey, string> = {
+  incomeGarageSearch: 'Поиск гаража или владельца',
+  incomeGarage: 'Гараж',
+  incomeType: 'Вид поступления',
+  incomeDate: 'Дата поступления',
+  incomeMonth: 'Месяц учета',
+  incomeAmount: 'Сумма поступления',
+  incomeDocument: 'Документ',
+  incomeComment: 'Комментарий поступления',
+  expenseSupplier: 'Поставщик',
+  expenseType: 'Вид выплаты',
+  expenseDate: 'Дата выплаты',
+  expenseMonth: 'Месяц учета',
+  expenseAmount: 'Сумма выплаты',
+  expenseDocument: 'Документ',
+  expenseComment: 'Комментарий выплаты',
+  accrualGarage: 'Гараж',
+  accrualIncomeType: 'Вид начисления',
+  accrualMonth: 'Месяц начисления',
+  accrualAmount: 'Сумма начисления',
+  accrualSource: 'Источник',
+  accrualComment: 'Комментарий начисления',
+  regularIncomeType: 'Вид начисления',
+  regularTariff: 'Тариф',
+  regularMonth: 'Месяц начисления',
+  regularComment: 'Комментарий',
+  supplierAccrualSupplier: 'Поставщик',
+  supplierAccrualType: 'Вид начисления',
+  supplierAccrualMonth: 'Месяц начисления',
+  supplierAccrualAmount: 'Сумма начисления',
+  supplierAccrualSource: 'Источник',
+  supplierAccrualDocument: 'Документ',
+  supplierAccrualComment: 'Комментарий',
+  salaryGroup: 'Группа персонала',
+  salaryMonth: 'Месяц начисления',
+  salaryAmount: 'Сумма зарплаты',
+  salaryDocument: 'Документ',
+  salaryComment: 'Комментарий',
+  meterGarage: 'Гараж',
+  meterKind: 'Тип счетчика',
+  meterMonth: 'Месяц учета',
+  meterDate: 'Дата показания',
+  meterCurrentValue: 'Текущее показание',
+  meterComment: 'Комментарий',
+}
+
 const financeVisibleListStatusSuffixes: Record<FinanceVisibleListStatusKind, string> = {
   operations: 'операций',
   accruals: 'начислений',
@@ -267,6 +357,10 @@ export function getFinanceEditorUiLabel(key: FinanceEditorUiLabelKey) {
 
 export function getFinancePanelLabel(key: FinancePanelLabelKey) {
   return financePanelLabels[key]
+}
+
+export function getFinanceEditorFieldLabel(key: FinanceEditorFieldLabelKey) {
+  return financeEditorFieldLabels[key]
 }
 
 export function formatFinanceOperationCount(count: number) {

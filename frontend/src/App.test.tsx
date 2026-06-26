@@ -405,6 +405,9 @@ describe('App', () => {
 
     await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
     const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    expect(within(dialog).getByText('Email')).toBeInTheDocument()
+    expect(within(dialog).getByText('Имя сотрудника')).toBeInTheDocument()
+    expect(within(dialog).getByText('Роль')).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
     await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
@@ -794,6 +797,8 @@ describe('App', () => {
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
     expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить' })).toBeEnabled()
     const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(tariffDialog).getByText('База расчета')).toBeInTheDocument()
+    expect(within(tariffDialog).getByText('Дата начала')).toBeInTheDocument()
     await user.clear(within(tariffDialog).getByLabelText('Название тарифа'))
     await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Тариф обслуживания')
     await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
@@ -2698,6 +2703,8 @@ describe('App', () => {
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
     const file = new File(['garage owner payment'], 'ГСК.accdb', { type: 'application/octet-stream' })
 
+    expect(within(importPanel).getByText('Выбрать .accdb или .mdb')).toBeInTheDocument()
+    expect(within(importPanel).getByText('Файл не выбран')).toHaveAttribute('role', 'status')
     await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
     expect(await within(importPanel).findByText('ГСК.accdb')).toHaveAttribute('role', 'status')
     await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл' }))

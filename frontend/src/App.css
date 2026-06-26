@@ -740,6 +740,139 @@ h1 {
   font: inherit;
 }
 
+.dictionary-form select,
+.dictionary-modal-form select,
+.dictionary-pagination select,
+.report-filter select,
+.balance-history-filters select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #475467 50%),
+    linear-gradient(135deg, #475467 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-repeat: no-repeat;
+  background-size: 6px 6px;
+  padding-right: 34px;
+}
+
+.dictionary-form select[multiple],
+.dictionary-modal-form select[multiple],
+.report-filter select[multiple] {
+  appearance: auto;
+  background-image: none;
+  padding-right: 10px;
+}
+
+.dictionary-form input[type='date'],
+.dictionary-form input[type='month'],
+.dictionary-modal-form input[type='date'],
+.dictionary-modal-form input[type='month'],
+.report-filter input[type='date'],
+.report-filter input[type='month'],
+.balance-history-filters input[type='month'] {
+  color-scheme: light;
+  padding-right: 10px;
+}
+
+.dictionary-form input[type='date']::-webkit-calendar-picker-indicator,
+.dictionary-form input[type='month']::-webkit-calendar-picker-indicator,
+.dictionary-modal-form input[type='date']::-webkit-calendar-picker-indicator,
+.dictionary-modal-form input[type='month']::-webkit-calendar-picker-indicator,
+.report-filter input[type='date']::-webkit-calendar-picker-indicator,
+.report-filter input[type='month']::-webkit-calendar-picker-indicator,
+.balance-history-filters input[type='month']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.form-field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.form-field-label {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.form-field-hint {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.field-input-with-icon {
+  position: relative;
+  display: block;
+}
+
+.field-input-with-icon svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  z-index: 1;
+  color: #475467;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.field-input-with-icon input {
+  padding-left: 34px;
+}
+
+.file-picker {
+  display: grid;
+  gap: 7px;
+}
+
+.file-picker input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.file-picker-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+  font-weight: 750;
+  padding: 9px 12px;
+}
+
+.file-picker-button:hover {
+  border-color: #b2ccff;
+  background: #eef4ff;
+  color: #1849a9;
+}
+
+.file-picker input[type='file']:focus-visible + .file-picker-button {
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+  outline-offset: 2px;
+}
+
+.file-picker-name {
+  min-height: 18px;
+  color: #667085;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .dictionary-form textarea {
   min-height: 74px;
   resize: vertical;
@@ -763,6 +896,7 @@ h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  align-items: end;
 }
 
 .tariff-tier-fields {
@@ -1005,6 +1139,7 @@ h1 {
 .dictionary-modal-form input,
 .dictionary-modal-form select,
 .dictionary-modal-form textarea {
+  width: 100%;
   min-height: 40px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
@@ -1012,6 +1147,14 @@ h1 {
   color: #101828;
   font: inherit;
   padding: 9px 10px;
+}
+
+.dictionary-modal-form input:focus,
+.dictionary-modal-form select:focus,
+.dictionary-modal-form textarea:focus,
+.dictionary-pagination select:focus {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
 }
 
 .dictionary-toolbar input:disabled {

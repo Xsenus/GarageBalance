@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './financeWorkbench'
-import type { FinanceContextMenuAction, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey, FinanceVisibleListStatusKind } from './financeWorkbench'
+import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './financeWorkbench'
+import type { FinanceContextMenuAction, FinanceEditorFieldLabelKey, FinanceEditorKey, FinanceEditorUiLabelKey, FinanceFallbackLabelKey, FinancePanelLabelKey, FinanceSectionKey, FinanceToolbarLabelKey, FinanceVisibleListStatusKind } from './financeWorkbench'
 
 const editorKeys: FinanceEditorKey[] = [
   'income',
@@ -49,6 +49,51 @@ const panelLabelKeys: FinancePanelLabelKey[] = [
   'expenseTotal',
   'balance',
   'meterReadings',
+]
+const editorFieldLabelKeys: FinanceEditorFieldLabelKey[] = [
+  'incomeGarageSearch',
+  'incomeGarage',
+  'incomeType',
+  'incomeDate',
+  'incomeMonth',
+  'incomeAmount',
+  'incomeDocument',
+  'incomeComment',
+  'expenseSupplier',
+  'expenseType',
+  'expenseDate',
+  'expenseMonth',
+  'expenseAmount',
+  'expenseDocument',
+  'expenseComment',
+  'accrualGarage',
+  'accrualIncomeType',
+  'accrualMonth',
+  'accrualAmount',
+  'accrualSource',
+  'accrualComment',
+  'regularIncomeType',
+  'regularTariff',
+  'regularMonth',
+  'regularComment',
+  'supplierAccrualSupplier',
+  'supplierAccrualType',
+  'supplierAccrualMonth',
+  'supplierAccrualAmount',
+  'supplierAccrualSource',
+  'supplierAccrualDocument',
+  'supplierAccrualComment',
+  'salaryGroup',
+  'salaryMonth',
+  'salaryAmount',
+  'salaryDocument',
+  'salaryComment',
+  'meterGarage',
+  'meterKind',
+  'meterMonth',
+  'meterDate',
+  'meterCurrentValue',
+  'meterComment',
 ]
 
 describe('finance workbench metadata', () => {
@@ -109,6 +154,19 @@ describe('finance workbench metadata', () => {
       save: 'Сохранить',
       unsavedHint: 'Есть несохраненные изменения формы платежа.',
       unsavedConfirm: 'Закрыть форму платежа без сохранения изменений?',
+    })
+  })
+
+  it('returns visible labels for payment editor fields', () => {
+    expect(Object.fromEntries(editorFieldLabelKeys.map((key) => [key, getFinanceEditorFieldLabel(key)]))).toMatchObject({
+      incomeGarageSearch: 'Поиск гаража или владельца',
+      incomeGarage: 'Гараж',
+      incomeMonth: 'Месяц учета',
+      incomeDocument: 'Документ',
+      expenseSupplier: 'Поставщик',
+      accrualSource: 'Источник',
+      supplierAccrualDocument: 'Документ',
+      meterCurrentValue: 'Текущее показание',
     })
   })
 
