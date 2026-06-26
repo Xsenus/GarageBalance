@@ -64,7 +64,7 @@ pg_dump --format=custom --file=/opt/garagebalance-staging/backups/garagebalance_
 
 ```powershell
 dotnet test
-npm run test -- --runInBand
+npm run test
 npm run build
 npm run lint
 dotnet format --verify-no-changes
@@ -77,6 +77,8 @@ dotnet format --verify-no-changes
 - [ ] `git diff --check` не показывает whitespace-ошибок.
 - [ ] `backend/GarageBalance.Api/AppReleases/releases.json` проходит JSON-валидацию.
 - [ ] Измененные файлы проходят строгую UTF-8 no-BOM проверку.
+
+Для автоматической выкладки в `master` эти проверки выполняет `.github/workflows/deploy-staging.yml`. Если GitHub Actions падает на любом шаге, релиз не отправляется на VPS.
 
 ## 5. Миграционный SQL
 
@@ -111,8 +113,10 @@ dotnet tool run dotnet-ef database update `
 VPS-вариант:
 
 - [ ] Разложить backend/frontend в новый release-каталог.
-- [ ] Обновить symlink или рабочую папку только после backup.
-- [ ] Выполнить `systemctl restart garagebalance-staging.service`.
+- [ ] Для автоматического deploy проверить, что GitHub Actions загрузил `api.tar.gz`, `frontend.tar.gz` и `deploy-migrations.sql` в `/home/garagebalance-deploy/uploads/<release-id>`.
+- [ ] Запускать применение релиза через `sudo /usr/local/bin/garagebalance-deploy-apply <release-id>`, чтобы backup, миграции, замена каталогов, health-check и rollback выполнялись одним проверяемым сценарием.
+- [ ] Обновлять symlink или рабочую папку только после backup.
+- [ ] Выполнить `systemctl restart garagebalance-staging.service`, если обновление выполняется вручную без apply-скрипта.
 - [ ] Выполнить `nginx -t`.
 - [ ] Выполнить `systemctl reload nginx`, если nginx-конфиг менялся.
 

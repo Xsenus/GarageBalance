@@ -1,0 +1,135 @@
+name: Deploy staging
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: garagebalance-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify-build-deploy:
+    name: Verify, build and deploy staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      FRONTEND_DIR: frontend
+      API_PROJECT: backend/GarageBalance.Api/GarageBalance.Api.csproj
+      RELEASE_ID: ${{ github.sha }}-${{ github.run_number }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore backend
+        run: |
+          dotnet restore GarageBalance.slnx
+          dotnet tool restore
+
+      - name: Check repository privacy
+        shell: pwsh
+        run: ./infrastructure/scripts/verify-package-privacy.ps1
+
+      - name: Test backend
+        run: dotnet test GarageBalance.slnx --configuration Release --no-restore
+
+      - name: Check backend formatting
+        run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      - name: Test frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run test
+
+      - name: Lint frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          npm run build
+          npm run check:bundle
+
+      - name: Generate idempotent migration SQL
+        run: |
+          mkdir -p artifacts
+          dotnet tool run dotnet-ef migrations script --idempotent \
+            --project "$API_PROJECT" \
+            --startup-project "$API_PROJECT" \
+            --output artifacts/deploy-migrations.sql
+          test -s artifacts/deploy-migrations.sql
+
+      - name: Publish backend
+        run: |
+          dotnet publish "$API_PROJECT" \
+            --configuration Release \
+            --runtime linux-x64 \
+            --self-contained true \
+            --output artifacts/api
+          test -x artifacts/api/GarageBalance.Api
+
+      - name: Package release
+        run: |
+          tar -czf artifacts/api.tar.gz -C artifacts/api .
+          tar -czf artifacts/frontend.tar.gz -C frontend/dist .
+          test -s artifacts/api.tar.gz
+          test -s artifacts/frontend.tar.gz
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: garagebalance-staging-${{ github.sha }}
+          path: |
+            artifacts/api.tar.gz
+            artifacts/frontend.tar.gz
+            artifacts/deploy-migrations.sql
+          retention-days: 30
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/garagebalance_staging
+          chmod 600 ~/.ssh/garagebalance_staging
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload artifacts to VPS
+        run: |
+          ssh -i ~/.ssh/garagebalance_staging "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}" \
+            "mkdir -p ~/uploads/${RELEASE_ID}"
+          scp -i ~/.ssh/garagebalance_staging artifacts/api.tar.gz \
+            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}:~/uploads/${RELEASE_ID}/api.tar.gz"
+          scp -i ~/.ssh/garagebalance_staging artifacts/frontend.tar.gz \
+            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}:~/uploads/${RELEASE_ID}/frontend.tar.gz"
+          scp -i ~/.ssh/garagebalance_staging artifacts/deploy-migrations.sql \
+            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}:~/uploads/${RELEASE_ID}/deploy-migrations.sql"
+
+      - name: Apply release on VPS
+        run: |
+          ssh -i ~/.ssh/garagebalance_staging "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}" \
+            "sudo /usr/local/bin/garagebalance-deploy-apply '${RELEASE_ID}'"

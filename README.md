@@ -340,6 +340,8 @@ API Dockerfile собирает `net10.0` через `mcr.microsoft.com/dotnet/s
 
 Checklist для тестового размещения на VPS с доменом `sgk.blagodaty.ru`, TLS, nginx, systemd, backup, smoke-проверками и rollback описан в `docs/vps-deployment-checklist.md`. Документ проверяется backend-тестом, чтобы обязательные шаги deploy не потерялись при следующих изменениях.
 
+Автоматический deploy тестового VPS подготовлен в `.github/workflows/deploy-staging.yml`: после `push` в `master` workflow выполняет проверки, собирает backend/frontend, формирует SQL миграций и вызывает на сервере `/usr/local/bin/garagebalance-deploy-apply`. GitHub Secrets и приватный SSH-ключ не хранятся в репозитории; порядок настройки описан в `docs/vps-deployment-checklist.md`.
+
 Checklist для локальной установки без домена описан в `docs/local-pc-install-checklist.md`: запуск на `127.0.0.1`, secrets вне Git, backup PostgreSQL перед импортом/обновлением, smoke-проверка рабочих разделов и rollback.
 
 Ручной backup, проверочное восстановление и ежедневная локальная задача описаны в `docs/postgres-backup-restore.md`. Скрипты лежат в `infrastructure/scripts`: `backup-postgres.ps1` создает `.pgdump`, `restore-postgres.ps1` по умолчанию восстанавливает в проверочную базу `garagebalance_restore_check`, а `register-local-backup-task.ps1` регистрирует задачу Windows Task Scheduler.

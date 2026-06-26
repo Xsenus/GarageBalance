@@ -12,7 +12,7 @@ public sealed class VersionUpdateChecklistTests
         Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);
         Assert.Contains("dotnet test", document, StringComparison.Ordinal);
-        Assert.Contains("npm run test -- --runInBand", document, StringComparison.Ordinal);
+        Assert.Contains("npm run test", document, StringComparison.Ordinal);
         Assert.Contains("npm run build", document, StringComparison.Ordinal);
         Assert.Contains("npm run lint", document, StringComparison.Ordinal);
         Assert.Contains("dotnet format --verify-no-changes", document, StringComparison.Ordinal);

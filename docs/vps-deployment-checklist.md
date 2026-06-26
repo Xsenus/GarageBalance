@@ -18,7 +18,7 @@
 
 ```bash
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://127.0.0.1:5080
+ASPNETCORE_URLS=http://127.0.0.1:3101
 ConnectionStrings__Postgres=Host=127.0.0.1;Port=5432;Database=garagebalance_staging;Username=garagebalance_staging;Password=REPLACE_WITH_SECRET
 Jwt__Issuer=GarageBalance
 Jwt__Audience=GarageBalance
@@ -48,6 +48,24 @@ dotnet tool run dotnet-ef migrations script --idempotent \
 - [ ] Сохранить SQL-скрипт как артефакт релиза.
 - [ ] Применять миграции только после backup PostgreSQL.
 
+## 3.1. Автоматический deploy через GitHub Actions
+
+Workflow `.github/workflows/deploy-staging.yml` запускается при `push` в `master` и вручную через `workflow_dispatch`. Он не хранит секреты в репозитории и перед выкладкой выполняет обязательные проверки: privacy-check, backend-тесты, frontend-тесты, `dotnet format`, `npm run lint`, `npm run build`, bundle budget, генерацию idempotent SQL миграций и publish backend под `linux-x64`.
+
+На GitHub должны быть заданы repository secrets:
+
+- [ ] `VPS_HOST` - `31.192.110.221`.
+- [ ] `VPS_DEPLOY_USER` - `garagebalance-deploy`.
+- [ ] `VPS_SSH_KEY` - приватный SSH-ключ deploy-пользователя; ключ не хранится в Git и не вставляется в документы.
+
+На VPS автоматический deploy должен идти только через root-owned скрипт `/usr/local/bin/garagebalance-deploy-apply`, установленный из `infrastructure/scripts/vps-apply-release.sh`.
+
+- [ ] Deploy-пользователь не входит в группу `sudo`.
+- [ ] В `/etc/sudoers.d/garagebalance-deploy` разрешен только запуск `/usr/local/bin/garagebalance-deploy-apply *` без пароля.
+- [ ] GitHub Actions загружает артефакты только в `/home/garagebalance-deploy/uploads/<release-id>`.
+- [ ] Серверный apply-скрипт сам создает `pg_dump`, применяет SQL миграций, заменяет только `/opt/garagebalance-staging/api` и `/opt/garagebalance-staging/frontend`, запускает health-check и возвращает предыдущие каталоги при ошибке.
+- [ ] Перед включением автоматического deploy проверить вручную `sudo -l -U garagebalance-deploy` и убедиться, что лишних sudo-команд нет.
+
 ## 4. Backup перед обновлением
 
 - [ ] Создать ручной backup перед миграциями, импортом или обновлением:
@@ -70,12 +88,13 @@ Description=GarageBalance staging API
 After=network.target postgresql.service
 
 [Service]
-WorkingDirectory=/opt/garagebalance-staging/backend
+WorkingDirectory=/opt/garagebalance-staging/api
 EnvironmentFile=/etc/garagebalance-staging.env
-ExecStart=/usr/bin/dotnet /opt/garagebalance-staging/backend/GarageBalance.Api.dll
+ExecStart=/opt/garagebalance-staging/api/GarageBalance.Api
 Restart=always
 RestartSec=5
-User=www-data
+User=garagebalance
+Group=garagebalance
 
 [Install]
 WantedBy=multi-user.target
@@ -85,7 +104,7 @@ WantedBy=multi-user.target
 - [ ] Выполнить `systemctl daemon-reload`.
 - [ ] Запустить `systemctl enable --now garagebalance-staging.service`.
 - [ ] Проверить `systemctl status garagebalance-staging.service`.
-- [ ] Проверить backend health: `curl -fsS http://127.0.0.1:5080/health`.
+- [ ] Проверить backend health: `curl -fsS -H "Host: sgk.blagodaty.ru" http://127.0.0.1:3101/health`.
 - [ ] Проверить логи без вывода secrets: `journalctl -u garagebalance-staging.service -n 100 --no-pager`.
 
 ## 6. nginx и домен
@@ -111,7 +130,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:5080/api/;
+        proxy_pass http://127.0.0.1:3101/api/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -120,7 +139,7 @@ server {
     }
 
     location /health {
-        proxy_pass http://127.0.0.1:5080/health;
+        proxy_pass http://127.0.0.1:3101/health;
     }
 
     location / {

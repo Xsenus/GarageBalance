@@ -18,6 +18,25 @@ Follow the agreed project order unless the user explicitly changes priorities:
 6. Stage 2 integrations: 1C Fresh synchronization and receipt/check printing.
 7. Docker packaging, deployment documentation, and final acceptance.
 
+## Standard Task Workflow
+
+When the user sends a task from chat, screenshots, photos, attached images, or a combination of chat text and images, first study all visible text and customer notes. Treat chat comments above the images as part of the task. If the same request appears more than once, check whether it is already fully implemented; if it is complete and verified, do not duplicate it, otherwise finish or improve the existing work.
+
+For implementation tasks, proceed end to end unless the user explicitly asks only for analysis or a plan:
+
+- clarify only when the missing answer cannot be discovered and guessing would be risky;
+- implement the requested behavior completely, including backend, frontend, data, documentation, and deployment pieces that are in scope;
+- add or update tests so the behavior is protected from regressions;
+- run relevant backend/frontend tests, builds, lint, formatting, privacy checks, and encoding checks;
+- check local database behavior whenever a local PostgreSQL/database environment is available; if it is unavailable, state that honestly in the roadmap history and final response, and use the closest safe substitute such as migration SQL generation, EF/integration tests, or the VPS test environment when appropriate;
+- update the relevant roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains;
+- add an end-user "Что нового" entry when the change is visible to cooperative staff/admins or changes business rules, permissions, integrations, data handling, reports, imports, or visible defects;
+- if no release note is required because the change is infrastructure-only or documentation-only, leave the release file unchanged and mention the reason when useful;
+- after successful verification, make logical commits with Russian commit messages when the user asked to commit;
+- do not push until the user explicitly asks for push.
+
+When the user asks to check whether the last task is done, inspect the current code, docs, tests, roadmap, and release notes before deciding. If anything is missing, finish it before moving to the next task.
+
 ## Roadmaps
 
 Roadmaps live in `docs/` as human-readable Markdown documents. Before starting any implementation that belongs to a roadmap, open the relevant roadmap and update statuses as the work progresses.
@@ -175,3 +194,13 @@ The app must support:
 The project is prepared for Git, but do not publish, push, or create a remote repository unless the user explicitly asks. Keep commits scoped when Git is initialized later.
 
 Before any future push/deployment, verify tests, builds, migrations, Docker configuration, and release notes.
+
+When the user explicitly asks to push:
+
+- ensure the intended commits are present and scoped;
+- run or confirm the required checks before push;
+- push to the requested branch;
+- wait for GitHub Actions to finish;
+- if GitHub Actions fails, inspect the failing job/logs, fix the problem, commit the fix, push again, and repeat until the workflow passes or a real external blocker is found;
+- when the workflow deploys to VPS, verify the deployed service after Actions completes, including `garagebalance-staging.service`, nginx configuration, `/health`, frontend response, and any task-specific smoke checks;
+- report the commit, workflow result, deploy result, and any remaining risks.
