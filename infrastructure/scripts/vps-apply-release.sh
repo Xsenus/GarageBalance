@@ -135,7 +135,7 @@ systemctl stop "$SERVICE_NAME"
 SERVICE_STOPPED=1
 
 log "migrationStatus=started; database=${database_name}"
-sudo -u postgres psql --set ON_ERROR_STOP=1 --dbname="$database_name" --file="$MIGRATION_SQL" >/dev/null
+sudo -u postgres psql --set ON_ERROR_STOP=1 --dbname="$database_name" < "$MIGRATION_SQL" >/dev/null
 log "migrationStatus=completed"
 
 mv "${APP_ROOT}/api" "$PREV_API"
