@@ -123,7 +123,7 @@ chmod 640 "${RELEASE_DIR}/deploy-migrations.sql"
 
 backup_file="${BACKUP_DIR}/garagebalance_${TIMESTAMP}_${release_id}.pgdump"
 log "backupStatus=started; file=${backup_file}"
-sudo -u postgres pg_dump --format=custom --file="$backup_file" "$database_name"
+sudo -u postgres pg_dump --format=custom "$database_name" > "$backup_file"
 [[ -s "$backup_file" ]] || fail "PostgreSQL backup was not created"
 chmod 600 "$backup_file"
 log "backupStatus=completed; file=${backup_file}"
