@@ -9,6 +9,8 @@ import {
   Gauge,
   LockKeyhole,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Save,
   Search,
@@ -87,6 +89,7 @@ type AccrualBreakdown =
   | { kind: 'supplier'; accrual: SupplierAccrualDto }
 
 const authSessionStorageKey = 'garagebalance.auth.session'
+const sidebarExpandedStorageKey = 'garagebalance.sidebar.expanded'
 const garageReportScreenRowLimit = 12
 const reportScreenRowLimit = 16
 const auditScreenRequestLimit = 50
@@ -137,9 +140,26 @@ const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: 
   { title: 'Управление\nфондами', section: 'reports', requiredAny: [permissions.reportsRead] },
 ]
 
+function loadStoredSidebarExpanded(key: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function saveStoredSidebarExpanded(key: string, expanded: boolean) {
+  try {
+    window.localStorage.setItem(key, expanded ? 'true' : 'false')
+  } catch {
+    // Sidebar state is only a UI preference; the app must work if localStorage is unavailable.
+  }
+}
+
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
+  const [isSidebarExpanded, setSidebarExpanded] = useState(() => loadStoredSidebarExpanded(sidebarExpandedStorageKey))
 
   function handleAuthenticated(nextAuth: AuthResponse) {
     saveStoredAuthSession(authSessionStorageKey, nextAuth)
@@ -175,17 +195,30 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
   const activeNavigationItem = navigation.find((entry) => entry.section === activeSection)
   const effectiveActiveSection = activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
   const showSidebar = hasPermission(auth, permissions.usersManage)
+  const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
+  const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
+
+  function handleToggleSidebar() {
+    setSidebarExpanded((current) => {
+      const next = !current
+      saveStoredSidebarExpanded(sidebarExpandedStorageKey, next)
+      return next
+    })
+  }
 
   return (
-    <main className={showSidebar ? 'app-shell' : 'app-shell app-shell--no-sidebar'}>
+    <main className={showSidebar ? `app-shell ${sidebarModeClass}` : 'app-shell app-shell--no-sidebar'}>
       {showSidebar ? (
-        <aside className="sidebar sidebar--collapsed">
+        <aside className={isSidebarExpanded ? 'sidebar sidebar--expanded' : 'sidebar sidebar--collapsed'}>
           <div className="brand">
             <div className="brand-mark">G</div>
-            <div>
+            <div className="brand-text">
               <strong>GarageBalance</strong>
               <span>учет гаражного кооператива</span>
             </div>
+            <button className="icon-button sidebar-toggle" type="button" aria-label={sidebarToggleLabel} title={sidebarToggleLabel} onClick={handleToggleSidebar}>
+              {isSidebarExpanded ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
+            </button>
           </div>
 
           <nav className="nav-list" aria-label="Основные разделы">

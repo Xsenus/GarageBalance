@@ -1,9 +1,16 @@
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 84px 1fr;
   background: #f5f7fb;
   color: #172033;
+}
+
+.app-shell--sidebar-collapsed {
+  grid-template-columns: 84px 1fr;
+}
+
+.app-shell--sidebar-expanded {
+  grid-template-columns: 280px 1fr;
 }
 
 .app-shell--no-sidebar {
@@ -36,11 +43,22 @@
 }
 
 .sidebar--collapsed .brand {
-  justify-content: center;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
   padding: 4px 0 18px;
 }
 
-.sidebar--collapsed .brand > div:not(.brand-mark) {
+.sidebar--expanded .brand {
+  width: 100%;
+}
+
+.brand-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar--collapsed .brand-text {
   display: none;
 }
 
@@ -67,6 +85,10 @@
   margin-top: 2px;
   color: #667085;
   font-size: 12px;
+}
+
+.sidebar-toggle {
+  flex: 0 0 auto;
 }
 
 .nav-list {

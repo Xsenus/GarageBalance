@@ -13,6 +13,7 @@ import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './ser
 describe('App', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
+    window.localStorage.clear()
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -226,6 +227,25 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
+  })
+
+  it('lets administrator expand the sidebar and remembers the choice', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByRole('button', { name: 'Развернуть панель' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Развернуть панель' }))
+
+    expect(screen.getByRole('button', { name: 'Свернуть панель' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('garagebalance.sidebar.expanded')).toBe('true')
+
+    unmount()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    expect(await screen.findByRole('button', { name: 'Свернуть панель' })).toBeInTheDocument()
   })
 
   it('switches workspace sections without stacking panels', async () => {
