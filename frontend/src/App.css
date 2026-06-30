@@ -760,6 +760,166 @@ h1 {
   text-decoration: underline;
 }
 
+.meter-readings-page {
+  display: grid;
+  gap: 18px;
+}
+
+.meter-readings-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.meter-readings-heading h1 {
+  margin: 0;
+}
+
+.meter-readings-heading p {
+  margin: 5px 0 0;
+  color: #667085;
+}
+
+.meter-readings-controls {
+  display: grid;
+  grid-template-columns: 120px 210px;
+  gap: 10px;
+}
+
+.meter-readings-table-shell {
+  overflow: auto;
+  max-height: calc(100vh - 170px);
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.meter-readings-table {
+  min-width: 1550px;
+}
+
+.meter-readings-title-row,
+.meter-readings-month-row,
+.meter-readings-data-row {
+  display: grid;
+  grid-template-columns: 78px repeat(12, 122px);
+}
+
+.meter-readings-title-row {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8fafc;
+}
+
+.meter-readings-title-row span {
+  border-bottom: 1px solid #d0d5dd;
+  padding: 10px 12px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.meter-readings-title-row span:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.meter-readings-title-row span:last-child {
+  grid-column: span 12;
+}
+
+.meter-readings-month-row {
+  position: sticky;
+  top: 40px;
+  z-index: 3;
+  background: #ffffff;
+}
+
+.meter-readings-month-row span,
+.meter-readings-data-row > span {
+  border-right: 1px solid #eaecf0;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.meter-readings-month-row span {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  align-items: center;
+  min-height: 36px;
+  padding: 7px 8px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.meter-readings-month-row span:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  display: block;
+  background: #ffffff;
+}
+
+.meter-readings-month-row small {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.meter-readings-data-row > span:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  min-height: 36px;
+  place-items: center;
+  background: #ffffff;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.meter-readings-data-row > span:not(:first-child) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  min-height: 36px;
+}
+
+.meter-readings-data-row input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-right: 1px solid #f2f4f7;
+  background: transparent;
+  color: #101828;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 6px;
+  text-align: right;
+}
+
+.meter-readings-data-row input:focus {
+  background: #eef4ff;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.meter-readings-data-row:nth-child(even) > span {
+  background: #fcfcfd;
+}
+
+.meter-readings-data-row:nth-child(even) > span:first-child {
+  background: #fcfcfd;
+}
+
 .roadmap-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2356,6 +2516,15 @@ button.operation-row:hover {
     flex-direction: column;
   }
 
+  .meter-readings-heading {
+    flex-direction: column;
+  }
+
+  .meter-readings-controls {
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
+  }
+
   .contractors-actions {
     width: 100%;
   }
@@ -2509,6 +2678,14 @@ button.operation-row:hover {
 
   .contractors-actions {
     flex-direction: column;
+  }
+
+  .meter-readings-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .meter-readings-table-shell {
+    max-height: none;
   }
 
   .contractors-threshold-grid {

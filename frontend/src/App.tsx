@@ -114,7 +114,7 @@ type NavigationItem = {
   requiredAny?: readonly string[]
 }
 
-type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'dictionaries' | 'payments' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
+type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'dictionaries' | 'meterReadings' | 'payments' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
@@ -123,6 +123,7 @@ const navigation: NavigationItem[] = [
   { section: 'users', label: 'Пользователи', icon: ShieldCheck, requiredAny: [permissions.usersManage] },
   { section: 'contractors', label: 'Контрагенты', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
+  { section: 'meterReadings', label: 'Показания', icon: FileSpreadsheet, requiredAny: [permissions.paymentsRead] },
   { section: 'payments', label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
   { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
   { section: 'import', label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
@@ -134,7 +135,7 @@ const navigation: NavigationItem[] = [
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
   { title: 'Тарифы\nи сборы', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
   { title: 'Контрагенты', section: 'contractors', requiredAny: [permissions.dictionariesRead] },
-  { title: 'Счётчики', section: 'payments', requiredAny: [permissions.paymentsRead] },
+  { title: 'Счётчики', section: 'meterReadings', requiredAny: [permissions.paymentsRead] },
   { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
   { title: 'Отчёты', section: 'reports', requiredAny: [permissions.reportsRead] },
   { title: 'Настройки', section: 'settings' },
@@ -407,6 +408,12 @@ function Workspace({
           <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
+        )
+      case 'meterReadings':
+        return canReadPayments ? (
+          <MeterReadingsPrototypePanel />
+        ) : (
+          <AccessNotice label="Показания недоступны" title="Показания" permission={permissions.paymentsRead} description="Для просмотра показаний счетчиков нужно право на чтение финансовых операций." />
         )
       case 'reports':
         return canReadReports && canReadDictionaries ? (
@@ -4374,6 +4381,92 @@ function AddFeePrototypeDialog({ onClose }: { onClose: () => void }) {
         </form>
       </section>
     </div>
+  )
+}
+
+const meterReadingMonths = [
+  'янв',
+  'фев',
+  'мар',
+  'апр',
+  'май',
+  'июн',
+  'июл',
+  'авг',
+  'сен',
+  'окт',
+  'ноя',
+  'дек',
+]
+
+const meterReadingGarageRows = Array.from({ length: 35 }, (_, index) => {
+  const garageNumber = index + 1
+  return {
+    garageNumber,
+    readings: meterReadingMonths.map((month, monthIndex) => ({
+      month,
+      value: garageNumber === 1 && monthIndex === 0 ? '4654' : garageNumber === 7 && monthIndex === 5 ? '1280' : '',
+      consumption: garageNumber === 1 && monthIndex === 1 ? '36' : garageNumber === 12 && monthIndex === 8 ? '18' : '',
+    })),
+  }
+})
+
+function MeterReadingsPrototypePanel() {
+  const [year, setYear] = useState('2026')
+
+  return (
+    <section className="meter-readings-page" aria-label="Показания">
+      <div className="meter-readings-heading">
+        <div>
+          <h1>Показания</h1>
+          <p>Черновой вид годовой таблицы показаний счетчиков по гаражам.</p>
+        </div>
+        <div className="meter-readings-controls">
+          <FormField label="Год">
+            <select aria-label="Год показаний" value={year} onChange={(event) => setYear(event.target.value)}>
+              <option>2026</option>
+              <option>2025</option>
+              <option>2024</option>
+            </select>
+          </FormField>
+          <FormField label="Тип">
+            <select aria-label="Тип показаний" defaultValue="electricity">
+              <option value="electricity">Электроэнергия, кВт</option>
+              <option value="water">Вода, м3</option>
+            </select>
+          </FormField>
+        </div>
+      </div>
+
+      <div className="meter-readings-table-shell">
+        <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${year} год`}>
+          <div className="meter-readings-title-row" role="row">
+            <span role="columnheader">Гараж</span>
+            <span role="columnheader">Показания</span>
+          </div>
+          <div className="meter-readings-month-row" role="row">
+            <span role="columnheader">Гараж</span>
+            {meterReadingMonths.map((month) => (
+              <span role="columnheader" key={month}>
+                <strong>{month}</strong>
+                <small>кВт</small>
+              </span>
+            ))}
+          </div>
+          {meterReadingGarageRows.map((row) => (
+            <div className="meter-readings-data-row" role="row" key={row.garageNumber}>
+              <span role="rowheader">{row.garageNumber}</span>
+              {row.readings.map((reading) => (
+                <span role="cell" key={`${row.garageNumber}-${reading.month}`}>
+                  <input aria-label={`Гараж ${row.garageNumber}, ${reading.month}, показание`} defaultValue={reading.value} />
+                  <input aria-label={`Гараж ${row.garageNumber}, ${reading.month}, кВт`} defaultValue={reading.consumption} />
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 

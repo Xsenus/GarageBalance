@@ -258,6 +258,23 @@ describe('App', () => {
     expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
   })
 
+  it('shows meter readings prototype as a yearly garage table', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Счётчики' }))
+
+    const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    expect(within(readingsPanel).getByLabelText('Год показаний')).toHaveValue('2026')
+    expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 1, янв, показание')).toHaveValue('4654')
+    expect(within(readingsPanel).getByLabelText('Гараж 35, дек, кВт')).toBeInTheDocument()
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
