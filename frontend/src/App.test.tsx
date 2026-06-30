@@ -306,6 +306,24 @@ describe('App', () => {
     expect(within(bankDialog).getByLabelText('Сумма в банке')).toBeInTheDocument()
   })
 
+  it('shows funds management prototype from dashboard tile', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    expect(within(fundsPanel).getByRole('table', { name: 'Фонды и собранные суммы' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('button', { name: 'Изъять из фонда Электроэнергия' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Целевые взносы' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toBeInTheDocument()
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

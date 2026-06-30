@@ -114,7 +114,7 @@ type NavigationItem = {
   requiredAny?: readonly string[]
 }
 
-type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'dictionaries' | 'meterReadings' | 'payments' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
+type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
@@ -125,6 +125,7 @@ const navigation: NavigationItem[] = [
   { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'meterReadings', label: 'Показания', icon: FileSpreadsheet, requiredAny: [permissions.paymentsRead] },
   { section: 'payments', label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
+  { section: 'funds', label: 'Фонды', icon: WalletCards, requiredAny: [permissions.reportsRead] },
   { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
   { section: 'import', label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
   { section: 'audit', label: 'Audit', icon: FileText, requiredAny: [permissions.auditRead] },
@@ -139,7 +140,7 @@ const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: 
   { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
   { title: 'Отчёты', section: 'reports', requiredAny: [permissions.reportsRead] },
   { title: 'Настройки', section: 'settings' },
-  { title: 'Управление\nфондами', section: 'reports', requiredAny: [permissions.reportsRead] },
+  { title: 'Управление\nфондами', section: 'funds', requiredAny: [permissions.reportsRead] },
 ]
 
 function loadStoredSidebarExpanded(key: string): boolean {
@@ -414,6 +415,12 @@ function Workspace({
           <MeterReadingsPrototypePanel />
         ) : (
           <AccessNotice label="Показания недоступны" title="Показания" permission={permissions.paymentsRead} description="Для просмотра показаний счетчиков нужно право на чтение финансовых операций." />
+        )
+      case 'funds':
+        return canReadReports ? (
+          <FundsPrototypePanel />
+        ) : (
+          <AccessNotice label="Фонды недоступны" title="Управление фондами" permission={permissions.reportsRead} description="Для просмотра фондов нужно право на отчетность." />
         )
       case 'reports':
         return canReadReports && canReadDictionaries ? (
@@ -2768,6 +2775,66 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
         </form>
       </section>
     </div>
+  )
+}
+
+const fundPrototypeRows = [
+  { name: 'Электроэнергия', amount: '' },
+  { name: 'Водоснабжение', amount: '' },
+  { name: 'Вывоз мусора', amount: '' },
+  { name: 'Наружное освещение', amount: '' },
+  { name: 'Членские взносы', amount: '', actions: false },
+  { name: 'Целевые взносы', amount: '' },
+  { name: 'Прочее', amount: '', actions: false },
+]
+
+function FundsPrototypePanel() {
+  return (
+    <section className="funds-page" aria-label="Управление фондами">
+      <div className="funds-heading">
+        <h1>Управление фондами</h1>
+      </div>
+
+      <div className="funds-sheet">
+        <table className="funds-table" aria-label="Фонды и собранные суммы">
+          <thead>
+            <tr>
+              <th scope="col">Фонд</th>
+              <th scope="col">Собранная сумма</th>
+              <th scope="col">Изъятие</th>
+              <th scope="col">Пополнение</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fundPrototypeRows.map((row) => (
+              <tr key={row.name}>
+                <td>{row.name}</td>
+                <td>{row.amount || '—'}</td>
+                <td>
+                  {row.actions === false ? null : (
+                    <button className="link-button" type="button" aria-label={`Изъять из фонда ${row.name}`}>
+                      Изъять
+                    </button>
+                  )}
+                </td>
+                <td>
+                  {row.actions === false ? null : (
+                    <button className="link-button" type="button" aria-label={`Пополнить фонд ${row.name}`}>
+                      Пополнить
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="funds-distribution" aria-label="Сумма к распределению">
+        <span>Сумма к распределению</span>
+        <strong>—</strong>
+      </div>
+    </section>
   )
 }
 
