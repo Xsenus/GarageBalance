@@ -75,11 +75,15 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Вход' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Авторизация' })).toBeInTheDocument()
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
     expect(screen.getByLabelText('Пароль')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Войти' })).toBeInTheDocument()
+    expect(screen.queryByText('GarageBalance')).not.toBeInTheDocument()
+    expect(screen.queryByText('Минимум 8 символов: заглавная буква, строчная буква и цифра.')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /сначала вход и права/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Имя пользователя')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Создать администратора' })).not.toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Панель' })).not.toBeInTheDocument()
@@ -88,10 +92,10 @@ describe('App', () => {
   it('restores authenticated workspace after page reload', async () => {
     const user = userEvent.setup()
     const auth = createAuthResponse({ accessToken: 'persisted-token' })
-    const { unmount } = render(<App authClient={createAuthClient({ bootstrapAdmin: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const { unmount } = render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
     expect(JSON.parse(window.sessionStorage.getItem('garagebalance.auth.session') ?? '{}').accessToken).toBe('persisted-token')
@@ -158,7 +162,7 @@ describe('App', () => {
 
     await user.clear(screen.getByLabelText('Пароль'))
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
@@ -208,7 +212,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Пользователи' })).not.toBeInTheDocument()
@@ -268,7 +272,7 @@ describe('App', () => {
     })} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
@@ -288,7 +292,7 @@ describe('App', () => {
     })} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
@@ -325,7 +329,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
@@ -356,7 +360,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
@@ -382,7 +386,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
@@ -402,7 +406,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
@@ -437,7 +441,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
@@ -462,7 +466,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
@@ -498,7 +502,12 @@ describe('App', () => {
     const user = userEvent.setup()
     let operatorSession = false
     const authClient = createAuthClient({
-      login: async () => {
+      login: async (request) => {
+        if (request.email !== 'operator@example.com') {
+          operatorSession = false
+          return createAuthResponse()
+        }
+
         operatorSession = true
         return createAuthResponse({
           accessToken: 'operator-token',
@@ -573,7 +582,7 @@ describe('App', () => {
     render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
 
@@ -587,7 +596,6 @@ describe('App', () => {
     expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Выйти' }))
-    await user.click(screen.getByRole('button', { name: 'Вход' }))
     await user.clear(screen.getByLabelText('Email'))
     await user.type(screen.getByLabelText('Email'), 'operator@example.com')
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -620,7 +628,7 @@ describe('App', () => {
   it('keeps dictionary and payment actions read-only without write permissions', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
-      bootstrapAdmin: async () =>
+      login: async () =>
         createAuthResponse({
           user: {
             email: 'viewer@example.com',
@@ -656,7 +664,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     await openSection(user, 'Справочники')
 
@@ -696,7 +704,7 @@ describe('App', () => {
     const user = userEvent.setup()
     let reportCalls = 0
     const authClient = createAuthClient({
-      bootstrapAdmin: async () =>
+      login: async () =>
         createAuthResponse({
           user: {
             email: 'reports-only@example.com',
@@ -724,7 +732,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
 
     const reportsNotice = await screen.findByLabelText('Отчеты недоступны')
@@ -739,7 +747,7 @@ describe('App', () => {
     const user = userEvent.setup()
     let createdTariffs = 0
     const authClient = createAuthClient({
-      bootstrapAdmin: async () =>
+      login: async () =>
         createAuthResponse({
           user: {
             email: 'tariff@example.com',
@@ -789,7 +797,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -891,7 +899,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
@@ -937,7 +945,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
@@ -977,7 +985,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1092,7 +1100,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1112,7 +1120,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1185,7 +1193,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
@@ -1225,7 +1233,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1286,7 +1294,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1330,7 +1338,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
@@ -1367,7 +1375,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1401,7 +1409,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1465,7 +1473,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1547,7 +1555,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
@@ -1661,7 +1669,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -1709,7 +1717,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -1733,7 +1741,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -1769,7 +1777,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const paymentActionButtons = [
@@ -1807,7 +1815,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -1845,7 +1853,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
@@ -1914,7 +1922,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const paymentRow = within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!
@@ -1955,7 +1963,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -1972,7 +1980,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -1991,7 +1999,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
@@ -2026,7 +2034,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
@@ -2064,7 +2072,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const cases = [
@@ -2128,7 +2136,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2217,7 +2225,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const operationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
@@ -2254,7 +2262,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2289,7 +2297,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2307,7 +2315,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2338,7 +2346,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2373,7 +2381,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2430,7 +2438,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2469,7 +2477,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2493,7 +2501,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2523,7 +2531,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2550,7 +2558,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2578,7 +2586,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2621,7 +2629,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const tariffSelect = within(financePanel).getByLabelText('Тариф регулярного начисления')
@@ -2641,7 +2649,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2660,7 +2668,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
@@ -2684,7 +2692,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
@@ -2701,7 +2709,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
     const file = new File(['garage owner payment'], 'ГСК.accdb', { type: 'application/octet-stream' })
@@ -2771,7 +2779,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
@@ -2803,7 +2811,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
@@ -2841,7 +2849,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: /Access/ })
     await user.click(within(importPanel).getByRole('tab', { name: /Карантин/ }))
@@ -2865,7 +2873,7 @@ describe('App', () => {
     let auditExportRequest: Parameters<AuditClient['exportEvents']>[1] = undefined
     const auth = createAuthResponse()
     const authClient = createAuthClient({
-      bootstrapAdmin: async () => ({
+      login: async () => ({
         ...auth,
         user: {
           ...auth.user,
@@ -2892,7 +2900,7 @@ describe('App', () => {
     render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Audit')
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
 
@@ -2916,7 +2924,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const auth = createAuthResponse()
     const authClient = createAuthClient({
-      bootstrapAdmin: async () => ({
+      login: async () => ({
         ...auth,
         user: {
           ...auth.user,
@@ -2938,7 +2946,7 @@ describe('App', () => {
     render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Audit')
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
@@ -2952,7 +2960,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const auth = createAuthResponse()
     const authClient = createAuthClient({
-      bootstrapAdmin: async () => ({
+      login: async () => ({
         ...auth,
         user: {
           ...auth.user,
@@ -2966,7 +2974,7 @@ describe('App', () => {
     render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Audit')
     const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
@@ -2980,7 +2988,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
@@ -3043,7 +3051,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await within(reportsPanel).findByText('Консолидированный отчет за период')
@@ -3120,7 +3128,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     await openSection(user, 'Отчеты')
 
@@ -3170,7 +3178,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
@@ -3228,7 +3236,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
@@ -3270,7 +3278,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
@@ -3350,7 +3358,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
@@ -3402,7 +3410,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
@@ -3452,7 +3460,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Поступления')
@@ -3507,7 +3515,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Выплаты')
@@ -3544,8 +3552,6 @@ describe('App', () => {
       },
     })
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
-
-    await user.click(screen.getByRole('button', { name: 'Вход' }))
     await user.type(screen.getByLabelText('Пароль'), 'WrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
@@ -3557,16 +3563,14 @@ describe('App', () => {
   it('shows password policy error without opening workspace', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
-      bootstrapAdmin: async () => {
+      login: async () => {
         throw new Error('Пароль должен содержать хотя бы одну цифру.')
       },
     })
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
-    expect(screen.getByText('Минимум 8 символов: заглавная буква, строчная буква и цифра.')).toBeInTheDocument()
-
     await user.type(screen.getByLabelText('Пароль'), 'Password1')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByText('Пароль должен содержать хотя бы одну цифру.')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toBeInTheDocument()
@@ -3575,22 +3579,22 @@ describe('App', () => {
 
   it('shows auth validation summary before calling backend', async () => {
     const user = userEvent.setup()
-    let bootstrapCalled = false
+    let loginCalled = false
     const authClient = createAuthClient({
-      bootstrapAdmin: async () => {
-        bootstrapCalled = true
+      login: async () => {
+        loginCalled = true
         return createAuthResponse()
       },
     })
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'Password')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByText('Проверьте форму входа')).toBeInTheDocument()
     expect(screen.getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toBeInTheDocument()
-    expect(bootstrapCalled).toBe(false)
+    expect(loginCalled).toBe(false)
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
 
@@ -3602,8 +3606,6 @@ describe('App', () => {
       },
     })
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
-
-    await user.click(screen.getByRole('button', { name: 'Вход' }))
     await user.type(screen.getByLabelText('Пароль'), 'WrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
@@ -3617,7 +3619,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     await openSection(user, 'Что нового')
 
@@ -3634,7 +3636,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => [] })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     await openSection(user, 'Что нового')
 
@@ -3651,7 +3653,7 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => releasePromise })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     await openSection(user, 'Что нового')
 
@@ -3704,7 +3706,7 @@ describe('App', () => {
     )
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Создать администратора' }))
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     await openSection(user, 'Пользователи')
     expect(await screen.findByText('Нет доступа к пользователям.')).toBeInTheDocument()

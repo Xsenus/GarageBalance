@@ -136,10 +136,6 @@ describe('accessible dynamic messages', () => {
   it('keeps password policy hints linked to password fields', () => {
     const passwordPolicyHints = [
       {
-        id: 'auth-password-policy-hint',
-        fields: ['aria-label="Пароль"'],
-      },
-      {
         id: 'own-password-policy-hint',
         fields: ['aria-label="Новый пароль"', 'aria-label="Повтор нового пароля"'],
       },

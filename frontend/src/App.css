@@ -144,20 +144,7 @@
 .auth-card-header {
   display: grid;
   justify-items: center;
-  gap: 8px;
   padding-bottom: 4px;
-}
-
-.auth-logo {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 1px solid #d1d5db;
-  border-radius: 9px;
-  background: #ffffff;
-  color: #111827;
-  font-weight: 760;
 }
 
 .auth-card-header h1 {
@@ -166,11 +153,6 @@
   font-size: 24px;
   line-height: 1.2;
   text-align: center;
-}
-
-.auth-card-header p {
-  color: #6b7280;
-  font-size: 14px;
 }
 
 .auth-card label {
@@ -193,24 +175,6 @@
 .auth-card input:focus {
   border-color: #111827;
   outline: 3px solid rgba(17, 24, 39, 0.12);
-}
-
-.auth-mode-link {
-  justify-self: center;
-  border: 0;
-  background: transparent;
-  color: #6b7280;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  padding: 2px 4px;
-}
-
-.auth-mode-link:hover,
-.auth-mode-link:focus-visible {
-  color: #111827;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .form-error {

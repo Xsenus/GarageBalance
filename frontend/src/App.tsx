@@ -237,9 +237,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
 }
 
 function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onAuthenticated: (auth: AuthResponse) => void }) {
-  const [mode, setMode] = useState<'bootstrap' | 'login'>('bootstrap')
   const [email, setEmail] = useState('admin@example.com')
-  const [displayName] = useState('Администратор')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
@@ -248,7 +246,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    const errors = getAuthValidationErrors(mode, email, displayName, password)
+    const errors = getAuthValidationErrors('login', email, '', password)
     if (errors.length > 0) {
       setValidationErrors(errors)
       return
@@ -258,10 +256,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
     setLoading(true)
 
     try {
-      const response =
-        mode === 'bootstrap'
-          ? await authClient.bootstrapAdmin({ email, displayName, password })
-          : await authClient.login({ email, password })
+      const response = await authClient.login({ email, password })
       setPassword('')
       onAuthenticated(response)
     } catch (caught) {
@@ -275,9 +270,7 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
     <section className="auth-layout" aria-label="Вход в систему">
       <form className="auth-card" onSubmit={handleSubmit}>
         <div className="auth-card-header">
-          <div className="auth-logo" aria-hidden="true">G</div>
-          <h1>Вход</h1>
-          <p>GarageBalance</p>
+          <h1>Авторизация</h1>
         </div>
 
         <label>
@@ -287,27 +280,14 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
         <label>
           Пароль
-          <input aria-label="Пароль" aria-describedby="auth-password-policy-hint" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === 'bootstrap' ? 'new-password' : 'current-password'} minLength={8} required />
+          <input aria-label="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" minLength={8} required />
         </label>
-        <p className="form-hint" id="auth-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
         <FormValidationSummary title="Проверьте форму входа" items={validationErrors} />
         {error ? <FormError>{error}</FormError> : null}
 
         <button className="primary-button" type="submit" disabled={loading}>
-          {loading ? 'Проверяем...' : mode === 'bootstrap' ? 'Создать администратора' : 'Войти'}
-        </button>
-
-        <button
-          className="auth-mode-link"
-          type="button"
-          onClick={() => {
-            setError(null)
-            setValidationErrors([])
-            setMode(mode === 'bootstrap' ? 'login' : 'bootstrap')
-          }}
-        >
-          {mode === 'bootstrap' ? 'Вход' : 'Первый администратор'}
+          {loading ? 'Проверяем...' : 'Войти'}
         </button>
       </form>
     </section>
