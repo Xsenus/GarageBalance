@@ -3,7 +3,6 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import {
   Bell,
   BookOpenCheck,
-  CircleDollarSign,
   DatabaseZap,
   FileText,
   FileSpreadsheet,
@@ -112,7 +111,7 @@ type NavigationItem = {
   requiredAny?: readonly string[]
 }
 
-type WorkspaceSection = 'dashboard' | 'users' | 'dictionaries' | 'payments' | 'reports' | 'import' | 'audit' | 'releases'
+type WorkspaceSection = 'dashboard' | 'users' | 'dictionaries' | 'payments' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
@@ -125,29 +124,17 @@ const navigation: NavigationItem[] = [
   { section: 'import', label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
   { section: 'audit', label: 'Audit', icon: FileText, requiredAny: [permissions.auditRead] },
   { section: 'releases', label: 'Что нового', icon: BookOpenCheck },
+  { section: 'settings', label: 'Настройки', icon: LockKeyhole },
 ]
 
-const roadmap = [
-  {
-    title: 'Пользователи и права',
-    text: 'Вход только для разрешенных сотрудников, роли, журнал действий и защита финансовых разделов.',
-    icon: ShieldCheck,
-  },
-  {
-    title: 'Справочники',
-    text: 'Гаражи, владельцы и поставщики доступны в защищенной рабочей области с проверками дублей и связей.',
-    icon: BookOpenCheck,
-  },
-  {
-    title: 'Импорт Access',
-    text: 'Следующий шаг: сопоставление таблиц старой базы и перенос без ручного набора данных.',
-    icon: DatabaseZap,
-  },
-  {
-    title: 'Платежи и начисления',
-    text: 'Помесячные строки, счетчики, регулярные начисления, корректировки и задолженность.',
-    icon: CircleDollarSign,
-  },
+const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
+  { title: 'Тарифы\nи сборы', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
+  { title: 'Контрагенты', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
+  { title: 'Счётчики', section: 'payments', requiredAny: [permissions.paymentsRead] },
+  { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
+  { title: 'Отчёты', section: 'reports', requiredAny: [permissions.reportsRead] },
+  { title: 'Настройки', section: 'settings' },
+  { title: 'Управление\nфондами', section: 'reports', requiredAny: [permissions.reportsRead] },
 ]
 
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
@@ -230,7 +217,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       </aside>
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -305,6 +292,7 @@ function Workspace({
   reportClient,
   releaseClient,
   userClient,
+  onOpenSection,
   onUserChanged,
   onLogout,
 }: {
@@ -318,6 +306,7 @@ function Workspace({
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
+  onOpenSection: (section: WorkspaceSection) => void
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }) {
@@ -332,46 +321,27 @@ function Workspace({
     switch (activeSection) {
       case 'dashboard':
         return (
-          <>
-            <section className="hero-panel" aria-label="Панель">
-              <div>
-                <p className="eyebrow">Старт проекта</p>
-                <h1>Финансовый учет ГСК без ручного переноса старой базы</h1>
-                <p className="lead">
-                  Основа проекта уже разложена под пользователей, справочники, тарифы, платежи, отчеты и импорт Access.
-                </p>
-              </div>
-              <div className="status-stack" aria-label="Ключевые статусы">
-                <div>
-                  <span>Этап 1</span>
-                  <strong>ядро учета</strong>
-                </div>
-                <div>
-                  <span>Права</span>
-                  <strong>{auth.user.permissions.length} доступов</strong>
-                </div>
-                <div>
-                  <span>Docker</span>
-                  <strong>готовится сразу</strong>
-                </div>
-              </div>
-            </section>
-
-            <PasswordPanel auth={auth} authClient={authClient} onUserChanged={onUserChanged} />
-
-            <section className="roadmap-grid" aria-label="Ближайшая очередь">
-              {roadmap.map((item) => {
-                const Icon = item.icon
+          <section className="dashboard-home" aria-label="Панель">
+            <div className="dashboard-tile-grid" role="group" aria-label="Главные разделы">
+              {dashboardTiles.map((tile) => {
+                const canOpen = hasAnyPermission(auth, tile.requiredAny)
                 return (
-                  <article className="work-card" key={item.title}>
-                    <Icon size={22} />
-                    <h2>{item.title}</h2>
-                    <p>{item.text}</p>
-                  </article>
+                  <button
+                    className="dashboard-tile"
+                    type="button"
+                    key={tile.title}
+                    aria-label={tile.title.replace('\n', ' ')}
+                    disabled={!canOpen}
+                    onClick={() => onOpenSection(tile.section)}
+                  >
+                    {tile.title.split('\n').map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </button>
                 )
               })}
-            </section>
-          </>
+            </div>
+          </section>
         )
       case 'users':
         return canManageUsers ? (
@@ -416,6 +386,8 @@ function Workspace({
         )
       case 'releases':
         return <ReleasePanel auth={auth} releaseClient={releaseClient} />
+      case 'settings':
+        return <PasswordPanel auth={auth} authClient={authClient} onUserChanged={onUserChanged} />
       default:
         return null
     }

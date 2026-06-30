@@ -16,7 +16,8 @@ describe('App', () => {
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
-    const tab = screen.getByRole('button', { name })
+    const mainNavigation = screen.getByRole('navigation', { name: 'Основные разделы' })
+    const tab = within(mainNavigation).getByRole('button', { name })
 
     if (tab.getAttribute('aria-current') !== 'page') {
       await user.click(tab)
@@ -97,7 +98,7 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
-    expect(await screen.findByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Тарифы\s+и\s+сборы/i })).toBeInTheDocument()
     expect(JSON.parse(window.sessionStorage.getItem('garagebalance.auth.session') ?? '{}').accessToken).toBe('persisted-token')
 
     unmount()
@@ -114,7 +115,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Тарифы\s+и\s+сборы/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
   })
 
@@ -164,7 +165,14 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
-    expect(await screen.findByRole('heading', { name: /финансовый учет гск/i })).toBeInTheDocument()
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    expect(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i })).toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' })).toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: 'Счётчики' })).toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: 'Платежи' })).toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: 'Отчёты' })).toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
@@ -330,6 +338,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
@@ -361,6 +370,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
@@ -387,6 +397,7 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
@@ -603,13 +614,14 @@ describe('App', () => {
 
     expect(await screen.findByText('Оператор')).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Пользователи' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Импорт' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Отчеты' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Audit' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Справочники' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Платежи' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Что нового' })).toBeEnabled()
+    const mainNavigation = screen.getByRole('navigation', { name: 'Основные разделы' })
+    expect(within(mainNavigation).getByRole('button', { name: 'Пользователи' })).toBeDisabled()
+    expect(within(mainNavigation).getByRole('button', { name: 'Импорт' })).toBeDisabled()
+    expect(within(mainNavigation).getByRole('button', { name: 'Отчеты' })).toBeDisabled()
+    expect(within(mainNavigation).getByRole('button', { name: 'Audit' })).toBeDisabled()
+    expect(within(mainNavigation).getByRole('button', { name: 'Справочники' })).toBeEnabled()
+    expect(within(mainNavigation).getByRole('button', { name: 'Платежи' })).toBeEnabled()
+    expect(within(mainNavigation).getByRole('button', { name: 'Что нового' })).toBeEnabled()
 
     await openSection(user, 'Справочники')
     expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
