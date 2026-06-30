@@ -29,7 +29,7 @@ describe('App', () => {
     }
 
     if (!screen.queryByRole('group', { name: 'Главные разделы' })) {
-      await user.click(screen.getByRole('button', { name: 'Панель' }))
+      await user.click(screen.getByRole('button', { name: 'Главное меню' }))
     }
 
     const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
@@ -100,7 +100,7 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: 'Создать администратора' })).not.toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Панель' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Главное меню' })).not.toBeInTheDocument()
   })
 
   it('restores authenticated workspace after page reload', async () => {
@@ -129,7 +129,7 @@ describe('App', () => {
 
     expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Тарифы\s+и\s+сборы/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Главное меню' })).toBeEnabled()
   })
 
   it('ignores expired stored auth session', () => {
@@ -189,7 +189,7 @@ describe('App', () => {
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Главное меню' })).toBeEnabled()
 
     await openSection(user, 'Пользователи')
 
@@ -754,7 +754,7 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Панель' }))
+    await user.click(screen.getByRole('button', { name: 'Главное меню' }))
     const operatorTilesAgain = await screen.findByRole('group', { name: 'Главные разделы' })
     await user.click(within(operatorTilesAgain).getByRole('button', { name: 'Платежи' }))
     expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()

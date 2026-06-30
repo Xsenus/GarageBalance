@@ -119,7 +119,7 @@ type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
 const navigation: NavigationItem[] = [
-  { section: 'dashboard', label: 'Панель', icon: Gauge },
+  { section: 'dashboard', label: 'Главное меню', icon: Gauge },
   { section: 'users', label: 'Пользователи', icon: ShieldCheck, requiredAny: [permissions.usersManage] },
   { section: 'contractors', label: 'Контрагенты', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
@@ -460,7 +460,7 @@ function Workspace({
         {showHomeButton && activeSection !== 'dashboard' ? (
           <button className="secondary-button topbar-home-button" type="button" onClick={() => onOpenSection('dashboard')}>
             <Gauge size={17} />
-            <span>Панель</span>
+            <span>Главное меню</span>
           </button>
         ) : null}
         {activeSection !== 'dashboard' ? (
