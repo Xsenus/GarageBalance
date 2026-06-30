@@ -114,13 +114,14 @@ type NavigationItem = {
   requiredAny?: readonly string[]
 }
 
-type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
+type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'tariffsAndFees' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Главное меню', icon: Gauge },
   { section: 'users', label: 'Пользователи', icon: ShieldCheck, requiredAny: [permissions.usersManage] },
+  { section: 'tariffsAndFees', label: 'Тарифы и сборы', icon: FileSpreadsheet, requiredAny: [permissions.dictionariesRead] },
   { section: 'contractors', label: 'Контрагенты', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'meterReadings', label: 'Показания', icon: FileSpreadsheet, requiredAny: [permissions.paymentsRead] },
@@ -134,7 +135,7 @@ const navigation: NavigationItem[] = [
 ]
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
-  { title: 'Тарифы\nи сборы', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
+  { title: 'Тарифы\nи сборы', section: 'tariffsAndFees', requiredAny: [permissions.dictionariesRead] },
   { title: 'Контрагенты', section: 'contractors', requiredAny: [permissions.dictionariesRead] },
   { title: 'Счётчики', section: 'meterReadings', requiredAny: [permissions.paymentsRead] },
   { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
@@ -402,7 +403,13 @@ function Workspace({
         return canReadDictionaries ? (
           <ContractorsPrototypePanel />
         ) : (
-          <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг и сборов нужно право на чтение справочников." />
+          <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
+        )
+      case 'tariffsAndFees':
+        return canReadDictionaries ? (
+          <TariffsAndFeesPrototypePanel />
+        ) : (
+          <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
@@ -4476,15 +4483,95 @@ const contractorOneTimeRows = [
   { name: 'Штраф за это', amount: '' },
 ]
 
-function ContractorsPrototypePanel() {
-  const [modal, setModal] = useState<'service' | 'fee' | null>(null)
+const contractorGarageRows = [
+  { garage: '12', owner: 'Иванов Иван', debt: '4 000', status: 'Просрочен', contact: '+7 900 000-00-12' },
+  { garage: '27', owner: 'Петров Петр', debt: '—', status: 'Нет долга', contact: '+7 900 000-00-27' },
+  { garage: '35', owner: 'Сидорова Анна', debt: '1 700', status: 'Просрочен', contact: '+7 900 000-00-35' },
+]
 
+const contractorSupplierRows = [
+  { name: 'Энергосбыт', group: 'Электроэнергия', contact: 'Орлова Мария', balance: '39 000' },
+  { name: 'Водоканал', group: 'Водоснабжение', contact: 'Смирнов Алексей', balance: '32 000' },
+  { name: 'ЭкоВывоз', group: 'Вывоз мусора', contact: 'Кузнецова Ольга', balance: '15 000' },
+]
+
+function ContractorsPrototypePanel() {
   return (
-    <section className="contractors-page" aria-label="Контрагенты">
+    <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
       <div className="contractors-heading">
         <div>
           <h1>Контрагенты</h1>
-          <p>Черновой вид страницы услуг, регулярных платежей и разовых сборов.</p>
+          <p>Гаражи, владельцы, поставщики и сотрудники для будущих карточек и финансовых отчетов.</p>
+        </div>
+        <div className="contractors-actions">
+          <button className="secondary-button" type="button">Показать должников</button>
+          <button className="secondary-button" type="button">Добавить контрагента</button>
+        </div>
+      </div>
+
+      <div className="contractors-directory-grid">
+        <section className="contractors-directory-card" aria-label="Гаражи">
+          <div className="contractors-directory-card-header">
+            <h2>Гаражи</h2>
+            <button className="link-button" type="button">Открыть фин. отчет</button>
+          </div>
+          <div className="contractors-directory-table" role="table" aria-label="Гаражи и задолженность">
+            <div className="contractors-directory-row contractors-directory-row--header" role="row">
+              <span role="columnheader">Гараж</span>
+              <span role="columnheader">Владелец</span>
+              <span role="columnheader">Просрочка</span>
+              <span role="columnheader">Статус</span>
+            </div>
+            {contractorGarageRows.map((row) => (
+              <div className="contractors-directory-row" role="row" key={row.garage}>
+                <span role="cell">{row.garage}</span>
+                <span role="cell">
+                  <strong>{row.owner}</strong>
+                  <small>{row.contact}</small>
+                </span>
+                <span role="cell" className={row.debt === '—' ? undefined : 'money-expense'}>{row.debt}</span>
+                <span role="cell">{row.status}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="contractors-directory-card" aria-label="Поставщики и сотрудники">
+          <div className="contractors-directory-card-header">
+            <h2>Поставщики и сотрудники</h2>
+            <button className="link-button" type="button">Открыть фин. отчет</button>
+          </div>
+          <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики и сотрудники">
+            <div className="contractors-directory-row contractors-directory-row--header" role="row">
+              <span role="columnheader">Контрагент</span>
+              <span role="columnheader">Группа</span>
+              <span role="columnheader">Контактное лицо</span>
+              <span role="columnheader">Баланс</span>
+            </div>
+            {contractorSupplierRows.map((row) => (
+              <div className="contractors-directory-row" role="row" key={row.name}>
+                <span role="cell">{row.name}</span>
+                <span role="cell">{row.group}</span>
+                <span role="cell">{row.contact}</span>
+                <span role="cell">{row.balance}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
+  )
+}
+
+function TariffsAndFeesPrototypePanel() {
+  const [modal, setModal] = useState<'service' | 'fee' | null>(null)
+
+  return (
+    <section className="contractors-page" aria-label="Тарифы и сборы">
+      <div className="contractors-heading">
+        <div>
+          <h1>Тарифы и сборы</h1>
+          <p>Черновой вид страницы услуг, регулярных платежей, порогов и разовых сборов.</p>
         </div>
         <div className="contractors-actions">
           <button className="secondary-button" type="button" onClick={() => setModal('service')}>
@@ -4498,7 +4585,7 @@ function ContractorsPrototypePanel() {
         </div>
       </div>
 
-      <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы контрагентов">
+      <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
         <div className="contractors-sheet-header" role="row">
           <span role="columnheader">Основание</span>
           <span role="columnheader">Значение</span>
@@ -4538,7 +4625,7 @@ function ContractorsPrototypePanel() {
           ))}
         </section>
 
-        <div className="contractors-action-stack" aria-label="Действия по контрагентам">
+        <div className="contractors-action-stack" aria-label="Действия по тарифам и сборам">
           <button className="secondary-button" type="button" onClick={() => setModal('service')}>
             Добавить услугу
           </button>

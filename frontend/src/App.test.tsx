@@ -111,7 +111,7 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
-    expect(await screen.findByRole('button', { name: /Тарифы\s+и\s+сборы/i })).toBeInTheDocument()
+    expect((await screen.findAllByRole('button', { name: /Тарифы\s+и\s+сборы/i })).length).toBeGreaterThan(0)
     expect(JSON.parse(window.sessionStorage.getItem('garagebalance.auth.session') ?? '{}').accessToken).toBe('persisted-token')
 
     unmount()
@@ -128,7 +128,7 @@ describe('App', () => {
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Тарифы\s+и\s+сборы/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Тарифы\s+и\s+сборы/i }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Главное меню' })).toBeEnabled()
   })
 
@@ -229,7 +229,36 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
-  it('shows contractors prototype page and opens service and fee modals', async () => {
+  it('shows tariffs and fees prototype page and opens service and fee modals', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i }))
+
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    expect(within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Тариф на воду')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Добавить услугу' })[0])
+    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    expect(within(serviceDialog).getByLabelText('Периодичность')).toHaveValue('12')
+    await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
+    expect(within(serviceDialog).getByLabelText('Стоимость услуги')).toBeInTheDocument()
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
+    const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
+    expect(within(feeDialog).getByLabelText('Сумма взноса')).toBeInTheDocument()
+    expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
+  })
+
+  it('shows contractors prototype as garages and suppliers directory', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -240,22 +269,11 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
 
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
-    expect(within(contractorsPanel).getByRole('table', { name: 'Тарифы и сборы контрагентов' })).toBeInTheDocument()
-    expect(within(contractorsPanel).getByText('Тариф на воду')).toBeInTheDocument()
-    expect(within(contractorsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()
-
-    await user.click(within(contractorsPanel).getAllByRole('button', { name: 'Добавить услугу' })[0])
-    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
-    expect(within(serviceDialog).getByLabelText('Периодичность')).toHaveValue('12')
-    await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
-    expect(within(serviceDialog).getByLabelText('Стоимость услуги')).toBeInTheDocument()
-    await user.click(within(serviceDialog).getByRole('button', { name: 'Отмена' }))
-
-    await user.click(within(contractorsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
-    const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
-    expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
-    expect(within(feeDialog).getByLabelText('Сумма взноса')).toBeInTheDocument()
-    expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
+    expect(within(contractorsPanel).getByRole('table', { name: 'Гаражи и задолженность' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('table', { name: 'Поставщики и сотрудники' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Энергосбыт')).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
@@ -775,7 +793,7 @@ describe('App', () => {
             email: 'viewer@example.com',
             displayName: 'Наблюдатель',
             roles: ['read_only'],
-            permissions: ['dictionaries.read', 'payments.read', 'reports.read'],
+            permissions: ['users.manage', 'dictionaries.read', 'payments.read', 'reports.read'],
           },
         }),
     })
@@ -894,7 +912,7 @@ describe('App', () => {
             email: 'tariff@example.com',
             displayName: 'Тарифный специалист',
             roles: ['tariff_manager'],
-            permissions: ['dictionaries.read', 'tariffs.manage'],
+            permissions: ['users.manage', 'dictionaries.read', 'tariffs.manage'],
           },
         }),
     })

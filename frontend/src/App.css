@@ -695,6 +695,77 @@ h1 {
   padding: 18px;
 }
 
+.contractors-directory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.contractors-directory-card {
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.contractors-directory-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #eaecf0;
+  padding: 14px 16px;
+}
+
+.contractors-directory-card-header h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+}
+
+.contractors-directory-table {
+  min-width: 560px;
+}
+
+.contractors-directory-row {
+  display: grid;
+  grid-template-columns: 80px minmax(170px, 1.3fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr);
+}
+
+.contractors-directory-table--suppliers .contractors-directory-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.9fr) minmax(150px, 1fr) minmax(90px, 0.6fr);
+}
+
+.contractors-directory-row--header {
+  background: #f8fafc;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.contractors-directory-row > span {
+  min-width: 0;
+  border-bottom: 1px solid #eaecf0;
+  padding: 11px 12px;
+}
+
+.contractors-directory-row:last-child > span {
+  border-bottom: 0;
+}
+
+.contractors-directory-row strong {
+  display: block;
+  color: #101828;
+}
+
+.contractors-directory-row small {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+}
+
 .contractors-dialog {
   width: min(640px, 100%);
 }
@@ -2812,6 +2883,7 @@ button.operation-row:hover {
   .dictionary-grid,
   .finance-settings-grid,
   .finance-grid,
+  .contractors-directory-grid,
   .contractors-bottom-grid,
   .payments-prototype-footer,
   .report-table-grid,
@@ -2845,7 +2917,7 @@ button.operation-row:hover {
   }
 
   .contractors-actions .secondary-button,
-  .contractors-actions .primary-button {
+.contractors-actions .primary-button {
     flex: 1;
     justify-content: center;
   }
@@ -3007,6 +3079,10 @@ button.operation-row:hover {
   }
 
   .contractors-sheet {
+    overflow-x: auto;
+  }
+
+  .contractors-directory-card {
     overflow-x: auto;
   }
 
