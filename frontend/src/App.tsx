@@ -114,13 +114,14 @@ type NavigationItem = {
   requiredAny?: readonly string[]
 }
 
-type WorkspaceSection = 'dashboard' | 'users' | 'dictionaries' | 'payments' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
+type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'dictionaries' | 'payments' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Панель', icon: Gauge },
   { section: 'users', label: 'Пользователи', icon: ShieldCheck, requiredAny: [permissions.usersManage] },
+  { section: 'contractors', label: 'Контрагенты', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
   { section: 'payments', label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
   { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
@@ -132,7 +133,7 @@ const navigation: NavigationItem[] = [
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
   { title: 'Тарифы\nи сборы', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
-  { title: 'Контрагенты', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
+  { title: 'Контрагенты', section: 'contractors', requiredAny: [permissions.dictionariesRead] },
   { title: 'Счётчики', section: 'payments', requiredAny: [permissions.paymentsRead] },
   { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
   { title: 'Отчёты', section: 'reports', requiredAny: [permissions.reportsRead] },
@@ -394,6 +395,12 @@ function Workspace({
           <DictionaryPanelV2 auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} initialSection="owners" />
         ) : (
           <AccessNotice label="Справочники недоступны" title="Справочники" permission={permissions.dictionariesRead} description="Для просмотра гаражей, владельцев и поставщиков нужно право на чтение справочников." />
+        )
+      case 'contractors':
+        return canReadDictionaries ? (
+          <ContractorsPrototypePanel />
+        ) : (
+          <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг и сборов нужно право на чтение справочников." />
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
@@ -4080,6 +4087,293 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
         ))}
       </div>
     </section>
+  )
+}
+
+type ContractorTariffRow = {
+  title: string
+  amount?: string
+  unit?: string
+  threshold?: string
+  byMeter: boolean
+  tiered: boolean
+  group?: string
+}
+
+const contractorTariffRows: ContractorTariffRow[] = [
+  { group: 'Вода', title: 'Тариф на воду', amount: '', unit: 'руб.', byMeter: true, tiered: false },
+  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: false },
+  { group: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
+  { group: 'Электроэнергия', title: 'От 0 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { title: 'От 1 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
+  { group: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { title: 'Оплата до', amount: '30 июн', byMeter: false, tiered: false },
+  { title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
+  { group: 'Целевой взнос', title: 'Сумма целевого взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { title: 'Оплата за год до', amount: '30 июн', byMeter: false, tiered: false },
+  { title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
+  { group: 'Наружное освещение', title: 'Оплата за год до', amount: '31 дек', byMeter: false, tiered: false },
+  { title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { title: 'Перенос долга в просроченный', amount: '0', unit: 'дн.', byMeter: false, tiered: false },
+  { group: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { title: 'Руководство', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+]
+
+const contractorOneTimeRows = [
+  { name: 'Вступительный взнос', amount: '' },
+  { name: 'Подключение канализации', amount: '' },
+  { name: 'Подключение к линии электросети', amount: '' },
+  { name: 'Штраф за то', amount: '' },
+  { name: 'Штраф за это', amount: '' },
+]
+
+function ContractorsPrototypePanel() {
+  const [modal, setModal] = useState<'service' | 'fee' | null>(null)
+
+  return (
+    <section className="contractors-page" aria-label="Контрагенты">
+      <div className="contractors-heading">
+        <div>
+          <h1>Контрагенты</h1>
+          <p>Черновой вид страницы услуг, регулярных платежей и разовых сборов.</p>
+        </div>
+        <div className="contractors-actions">
+          <button className="secondary-button" type="button" onClick={() => setModal('service')}>
+            <Plus size={17} />
+            <span>Добавить услугу</span>
+          </button>
+          <button className="primary-button contractors-primary-action" type="button" onClick={() => setModal('fee')}>
+            <Plus size={17} />
+            <span>Объявить сбор</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы контрагентов">
+        <div className="contractors-sheet-header" role="row">
+          <span role="columnheader">Основание</span>
+          <span role="columnheader">Значение</span>
+          <span role="columnheader">Ед.</span>
+          <span role="columnheader">Пороговая тарификация</span>
+          <span role="columnheader">По счетчику</span>
+        </div>
+        {contractorTariffRows.map((row, index) => (
+          <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row" key={`${row.group ?? row.title}-${index}`}>
+            <span role="cell">
+              {row.group ? <strong>{row.group}</strong> : null}
+              <span>{row.title}</span>
+            </span>
+            <span role="cell" className="contractors-value-cell">
+              {row.threshold ? <em>{row.threshold}</em> : null}
+              {row.amount}
+            </span>
+            <span role="cell">{row.unit ?? ''}</span>
+            <span role="cell">{row.tiered ? 'Да' : 'Нет'}</span>
+            <span role="cell">{row.byMeter ? 'Да' : 'Нет'}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="contractors-bottom-grid">
+        <section className="contractors-mini-table" aria-label="Нерегулярные платежи">
+          <div className="contractors-mini-title">Нерегулярные платежи</div>
+          <div className="contractors-mini-header">
+            <span>Основание</span>
+            <span>Сумма, руб.</span>
+          </div>
+          {contractorOneTimeRows.map((row) => (
+            <div className="contractors-mini-row" key={row.name}>
+              <span>{row.name}</span>
+              <span>{row.amount}</span>
+            </div>
+          ))}
+        </section>
+
+        <div className="contractors-action-stack" aria-label="Действия по контрагентам">
+          <button className="secondary-button" type="button" onClick={() => setModal('service')}>
+            Добавить услугу
+          </button>
+          <button className="secondary-button" type="button" onClick={() => setModal('fee')}>
+            Объявить сбор
+          </button>
+        </div>
+      </div>
+
+      {modal === 'service' ? <AddServicePrototypeDialog onClose={() => setModal(null)} /> : null}
+      {modal === 'fee' ? <AddFeePrototypeDialog onClose={() => setModal(null)} /> : null}
+    </section>
+  )
+}
+
+function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
+  const [isRegular, setIsRegular] = useState(true)
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-service-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="contractor-service-title">Добавить услугу</h3>
+            <p>Макет формы для будущего подключения услуги к расчетам.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Наименование услуги">
+            <input aria-label="Наименование услуги" />
+          </FormField>
+          <label className="contractors-check-row">
+            <input type="checkbox" aria-label="Регулярные платежи" checked={isRegular} onChange={(event) => setIsRegular(event.target.checked)} />
+            <span>Регулярные платежи</span>
+          </label>
+          {isRegular ? (
+            <>
+              <FormField label="Периодичность">
+                <input aria-label="Периодичность" defaultValue="12" />
+              </FormField>
+              <FormField label="Учитывать платеж с">
+                <select aria-label="Учитывать платеж с" defaultValue="Январь">
+                  <option>Январь</option>
+                  <option>Июль</option>
+                </select>
+              </FormField>
+              <FormField label="Оплатить до">
+                <select aria-label="Оплатить до" defaultValue="Июль">
+                  <option>Июнь</option>
+                  <option>Июль</option>
+                  <option>Декабрь</option>
+                </select>
+              </FormField>
+              <FormField label="Перенос долга в просроченный">
+                <div className="contractors-inline-field">
+                  <input aria-label="Перенос долга в просроченный" defaultValue="30" />
+                  <span>дн.</span>
+                </div>
+              </FormField>
+              <label className="contractors-check-row">
+                <input type="checkbox" aria-label="По счетчику" defaultChecked />
+                <span>По счетчику</span>
+              </label>
+              <label className="contractors-check-row">
+                <input type="checkbox" aria-label="Пороговая тарификация" defaultChecked />
+                <span>Пороговая тарификация</span>
+              </label>
+              <FormField label="Единица измерения">
+                <input aria-label="Единица измерения" />
+              </FormField>
+              <div className="contractors-threshold-grid" aria-label="Пороги тарификации">
+                <span>Порог 1</span>
+                <input aria-label="Порог 1" />
+                <span>x</span>
+                <span>Цена за ед.</span>
+                <input aria-label="Цена за единицу 1" />
+                <span>Порог 2</span>
+                <input aria-label="Порог 2" />
+                <span>x</span>
+                <span>Цена за ед.</span>
+                <input aria-label="Цена за единицу 2" />
+              </div>
+              <button className="link-button" type="button">Добавить порог</button>
+            </>
+          ) : (
+            <FormField label="Стоимость">
+              <div className="contractors-inline-field">
+                <input aria-label="Стоимость услуги" />
+                <span>руб.</span>
+              </div>
+            </FormField>
+          )}
+
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">
+              <Save size={17} />
+              <span>Сохранить</span>
+            </button>
+            <button className="secondary-button" type="button" onClick={onClose}>
+              Отмена
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function AddFeePrototypeDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="contractor-fee-title">Добавить сбор</h3>
+            <p>Макет объявления разового или целевого сбора.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Наименование сбора">
+            <input aria-label="Наименование сбора" />
+          </FormField>
+          <FormField label="Цель">
+            <input aria-label="Цель сбора" />
+          </FormField>
+          <FormField label="Сумма взноса">
+            <div className="contractors-inline-field">
+              <input aria-label="Сумма взноса" />
+              <span>руб.</span>
+            </div>
+          </FormField>
+          <label className="contractors-check-row">
+            <input type="checkbox" aria-label="Все гаражи" defaultChecked />
+            <span>Все гаражи</span>
+          </label>
+          <FormField label="Сумма сбора">
+            <input aria-label="Сумма сбора" />
+          </FormField>
+          <FormField label="Дата начала">
+            <div className="contractors-inline-field">
+              <input aria-label="Дата начала" type="date" />
+              <button className="link-button" type="button">Сегодня</button>
+            </div>
+          </FormField>
+          <FormField label="Перенос долга по сбору в просроченный">
+            <input aria-label="Перенос долга по сбору в просроченный" />
+          </FormField>
+
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">
+              Объявить сбор
+            </button>
+            <button className="secondary-button" type="button" onClick={onClose}>
+              Отмена
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   )
 }
 

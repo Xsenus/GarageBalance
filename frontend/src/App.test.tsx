@@ -33,7 +33,7 @@ describe('App', () => {
     }
 
     const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
-    const tileName = name === 'Справочники' ? 'Контрагенты' : name === 'Отчеты' ? 'Отчёты' : name
+    const tileName = name === 'Справочники' ? /Тарифы\s+и\s+сборы/i : name === 'Отчеты' ? 'Отчёты' : name
     await user.click(within(dashboardTiles).getByRole('button', { name: tileName }))
   }
 
@@ -227,6 +227,35 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
+  })
+
+  it('shows contractors prototype page and opens service and fee modals', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
+
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(within(contractorsPanel).getByRole('table', { name: 'Тарифы и сборы контрагентов' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Тариф на воду')).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getAllByRole('button', { name: 'Добавить услугу' })[0])
+    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    expect(within(serviceDialog).getByLabelText('Периодичность')).toHaveValue('12')
+    await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
+    expect(within(serviceDialog).getByLabelText('Стоимость услуги')).toBeInTheDocument()
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(contractorsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
+    const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
+    expect(within(feeDialog).getByLabelText('Сумма взноса')).toBeInTheDocument()
+    expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
   })
 
   it('lets administrator expand the sidebar and remembers the choice', async () => {
@@ -656,14 +685,14 @@ describe('App', () => {
     expect(within(operatorTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeDisabled()
 
     await user.click(within(operatorTiles).getByRole('button', { name: 'Контрагенты' }))
-    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Панель' }))
     const operatorTilesAgain = await screen.findByRole('group', { name: 'Главные разделы' })
     await user.click(within(operatorTilesAgain).getByRole('button', { name: 'Платежи' }))
     expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Контрагенты' })).not.toBeInTheDocument()
 
     expect(screen.queryByText('Панель пользователей не должна загружаться для оператора.')).not.toBeInTheDocument()
     expect(screen.queryByText('Импорт не должен загружаться для оператора.')).not.toBeInTheDocument()

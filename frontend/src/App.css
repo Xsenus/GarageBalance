@@ -549,6 +549,217 @@ h1 {
   opacity: 0.45;
 }
 
+.contractors-page {
+  display: grid;
+  gap: 18px;
+}
+
+.contractors-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.contractors-heading h1 {
+  margin: 0;
+}
+
+.contractors-heading p {
+  margin: 5px 0 0;
+  color: #667085;
+}
+
+.contractors-actions,
+.contractors-action-stack {
+  display: flex;
+  gap: 10px;
+}
+
+.contractors-primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  padding-inline: 14px;
+}
+
+.contractors-sheet {
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.contractors-sheet-header,
+.contractors-sheet-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.7fr) minmax(120px, 0.7fr) minmax(70px, 0.4fr) minmax(160px, 0.8fr) minmax(120px, 0.7fr);
+  min-width: 760px;
+}
+
+.contractors-sheet-header {
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.contractors-sheet-header span,
+.contractors-sheet-row > span {
+  min-width: 0;
+  border-bottom: 1px solid #eaecf0;
+  padding: 10px 12px;
+}
+
+.contractors-sheet-row {
+  color: #344054;
+}
+
+.contractors-sheet-row > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.contractors-sheet-row strong {
+  color: #101828;
+  font-size: 12px;
+}
+
+.contractors-sheet-row--group {
+  background: #fcfcfd;
+}
+
+.contractors-value-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #101828;
+  font-weight: 700;
+}
+
+.contractors-value-cell em {
+  color: #667085;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.contractors-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(240px, 0.7fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.contractors-mini-table {
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.contractors-mini-title {
+  border-bottom: 1px solid #eaecf0;
+  padding: 12px 14px;
+  font-weight: 750;
+}
+
+.contractors-mini-header,
+.contractors-mini-row {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+}
+
+.contractors-mini-header {
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.contractors-mini-header span,
+.contractors-mini-row span {
+  border-bottom: 1px solid #eaecf0;
+  padding: 9px 12px;
+}
+
+.contractors-action-stack {
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px dashed #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.contractors-dialog {
+  width: min(640px, 100%);
+}
+
+.contractors-modal-form {
+  gap: 14px;
+}
+
+.contractors-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #344054;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.contractors-check-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  accent-color: #2563eb;
+}
+
+.contractors-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contractors-inline-field input {
+  flex: 1;
+}
+
+.contractors-inline-field span {
+  color: #475467;
+  font-size: 13px;
+}
+
+.contractors-threshold-grid {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(86px, 1fr) 20px minmax(96px, 1fr) minmax(86px, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: #475467;
+  font-size: 13px;
+}
+
+.link-button {
+  border: 0;
+  background: transparent;
+  color: #1849a9;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+  text-align: left;
+}
+
+.link-button:hover {
+  color: #102a56;
+  text-decoration: underline;
+}
+
 .roadmap-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2135,9 +2346,24 @@ button.operation-row:hover {
   .dictionary-grid,
   .finance-settings-grid,
   .finance-grid,
+  .contractors-bottom-grid,
   .report-table-grid,
   .summary-strip {
     grid-template-columns: 1fr;
+  }
+
+  .contractors-heading {
+    flex-direction: column;
+  }
+
+  .contractors-actions {
+    width: 100%;
+  }
+
+  .contractors-actions .secondary-button,
+  .contractors-actions .primary-button {
+    flex: 1;
+    justify-content: center;
   }
 
   .report-filter--consolidated,
@@ -2274,6 +2500,18 @@ button.operation-row:hover {
   }
 
   .report-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .contractors-sheet {
+    overflow-x: auto;
+  }
+
+  .contractors-actions {
+    flex-direction: column;
+  }
+
+  .contractors-threshold-grid {
     grid-template-columns: 1fr;
   }
 
