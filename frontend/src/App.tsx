@@ -239,7 +239,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
 function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onAuthenticated: (auth: AuthResponse) => void }) {
   const [mode, setMode] = useState<'bootstrap' | 'login'>('bootstrap')
   const [email, setEmail] = useState('admin@example.com')
-  const [displayName, setDisplayName] = useState('Администратор')
+  const [displayName] = useState('Администратор')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
@@ -273,39 +273,21 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
   return (
     <section className="auth-layout" aria-label="Вход в систему">
-      <div className="auth-copy">
-        <p className="eyebrow">Безопасность</p>
-        <h1>Сначала вход и права, потом деньги и импорт</h1>
-        <p className="lead">
-          Система не открывает рабочие разделы без пользователя. Первый запуск создает администратора, дальше вход идет по учетной записи.
-        </p>
-      </div>
-
       <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="auth-tabs" role="tablist" aria-label="Режим входа">
-          <button type="button" className={mode === 'bootstrap' ? 'active' : ''} onClick={() => setMode('bootstrap')}>
-            Первый администратор
-          </button>
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>
-            Вход
-          </button>
+        <div className="auth-card-header">
+          <div className="auth-logo" aria-hidden="true">G</div>
+          <h1>Вход</h1>
+          <p>GarageBalance</p>
         </div>
 
         <label>
           Email
-          <input aria-label="Email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          <input aria-label="Email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="username" placeholder="admin@example.com" required />
         </label>
-
-        {mode === 'bootstrap' ? (
-          <label>
-            Имя пользователя
-            <input aria-label="Имя пользователя" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
-          </label>
-        ) : null}
 
         <label>
           Пароль
-          <input aria-label="Пароль" aria-describedby="auth-password-policy-hint" value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
+          <input aria-label="Пароль" aria-describedby="auth-password-policy-hint" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === 'bootstrap' ? 'new-password' : 'current-password'} minLength={8} required />
         </label>
         <p className="form-hint" id="auth-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
 
@@ -314,6 +296,18 @@ function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onA
 
         <button className="primary-button" type="submit" disabled={loading}>
           {loading ? 'Проверяем...' : mode === 'bootstrap' ? 'Создать администратора' : 'Войти'}
+        </button>
+
+        <button
+          className="auth-mode-link"
+          type="button"
+          onClick={() => {
+            setError(null)
+            setValidationErrors([])
+            setMode(mode === 'bootstrap' ? 'login' : 'bootstrap')
+          }}
+        >
+          {mode === 'bootstrap' ? 'Вход' : 'Первый администратор'}
         </button>
       </form>
     </section>

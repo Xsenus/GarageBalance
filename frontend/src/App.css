@@ -106,7 +106,8 @@
 
 .auth-entry {
   min-height: 100vh;
-  padding: 18px;
+  background: #ffffff;
+  padding: 24px;
 }
 
 .topbar {
@@ -118,11 +119,10 @@
 }
 
 .auth-layout {
-  display: grid;
-  min-height: calc(100vh - 36px);
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 18px;
+  display: flex;
+  min-height: calc(100vh - 48px);
   align-items: center;
+  justify-content: center;
 }
 
 .auth-copy {
@@ -132,62 +132,85 @@
 
 .auth-card {
   display: grid;
-  gap: 14px;
-  border: 1px solid #dce3ee;
-  border-radius: 8px;
+  width: min(100%, 360px);
+  gap: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
   background: #ffffff;
-  padding: 18px;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.04);
+  padding: 28px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
 }
 
-.auth-tabs {
+.auth-card-header {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  border-radius: 8px;
-  background: #f2f4f7;
-  padding: 4px;
+  justify-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
 }
 
-.auth-tabs button,
-.primary-button {
-  border: 0;
-  border-radius: 7px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.auth-tabs button {
-  background: transparent;
-  color: #667085;
-  padding: 9px 10px;
-}
-
-.auth-tabs button.active {
+.auth-logo {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
   background: #ffffff;
-  color: #1849a9;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  color: #111827;
+  font-weight: 760;
+}
+
+.auth-card-header h1 {
+  max-width: none;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.auth-card-header p {
+  color: #6b7280;
+  font-size: 14px;
 }
 
 .auth-card label {
   display: grid;
-  gap: 6px;
-  color: #344054;
+  gap: 7px;
+  color: #374151;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 560;
 }
 
 .auth-card input {
   width: 100%;
-  border: 1px solid #d0d5dd;
+  border: 1px solid #d1d5db;
   border-radius: 8px;
-  color: #101828;
-  padding: 10px 12px;
+  color: #111827;
+  padding: 11px 12px;
+  font: inherit;
 }
 
 .auth-card input:focus {
-  border-color: #2e90fa;
-  outline: 3px solid rgba(46, 144, 250, 0.16);
+  border-color: #111827;
+  outline: 3px solid rgba(17, 24, 39, 0.12);
+}
+
+.auth-mode-link {
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
+.auth-mode-link:hover,
+.auth-mode-link:focus-visible {
+  color: #111827;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .form-error {
@@ -251,10 +274,14 @@
 }
 
 .primary-button {
-  background: #1d4ed8;
+  border: 0;
+  border-radius: 8px;
+  background: #111827;
   color: #ffffff;
+  cursor: pointer;
+  font: inherit;
   padding: 11px 14px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .primary-button:disabled {

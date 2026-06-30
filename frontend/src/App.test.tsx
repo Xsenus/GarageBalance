@@ -75,8 +75,11 @@ describe('App', () => {
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     expect(screen.getByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /сначала вход и права/i })).toBeInTheDocument()
-    expect(screen.queryByText('GarageBalance')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Вход' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+    expect(screen.getByLabelText('Пароль')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /сначала вход и права/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Имя пользователя')).not.toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Панель' })).not.toBeInTheDocument()
