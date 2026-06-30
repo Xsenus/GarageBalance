@@ -174,50 +174,55 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
 
   const activeNavigationItem = navigation.find((entry) => entry.section === activeSection)
   const effectiveActiveSection = activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
+  const showSidebar = hasPermission(auth, permissions.usersManage)
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">G</div>
-          <div>
-            <strong>GarageBalance</strong>
-            <span>учет гаражного кооператива</span>
+    <main className={showSidebar ? 'app-shell' : 'app-shell app-shell--no-sidebar'}>
+      {showSidebar ? (
+        <aside className="sidebar sidebar--collapsed">
+          <div className="brand">
+            <div className="brand-mark">G</div>
+            <div>
+              <strong>GarageBalance</strong>
+              <span>учет гаражного кооператива</span>
+            </div>
           </div>
-        </div>
 
-        <nav className="nav-list" aria-label="Основные разделы">
-          {navigation.map((item) => {
-            const Icon = item.icon
-            const canOpen = hasAnyPermission(auth, item.requiredAny)
-            const isActive = effectiveActiveSection === item.section
-            return (
-              <button
-                className={isActive ? 'nav-item active' : 'nav-item'}
-                type="button"
-                key={item.section}
-                disabled={!canOpen}
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => setActiveSection(item.section)}
-              >
-                <Icon size={18} />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
-        </nav>
+          <nav className="nav-list" aria-label="Основные разделы">
+            {navigation.map((item) => {
+              const Icon = item.icon
+              const canOpen = hasAnyPermission(auth, item.requiredAny)
+              const isActive = effectiveActiveSection === item.section
+              return (
+                <button
+                  className={isActive ? 'nav-item active' : 'nav-item'}
+                  type="button"
+                  key={item.section}
+                  disabled={!canOpen}
+                  aria-label={item.label}
+                  title={item.label}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => setActiveSection(item.section)}
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
 
-        <div className="sidebar-footer">
-          <LockKeyhole size={18} />
-          <div>
-            <strong>Безопасный старт</strong>
-            <span>первый этап начинается с ролей и доступа</span>
+          <div className="sidebar-footer" title="Безопасный старт">
+            <LockKeyhole size={18} />
+            <div>
+              <strong>Безопасный старт</strong>
+              <span>первый этап начинается с ролей и доступа</span>
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
+      ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} showHomeButton={!showSidebar} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -292,6 +297,7 @@ function Workspace({
   reportClient,
   releaseClient,
   userClient,
+  showHomeButton,
   onOpenSection,
   onUserChanged,
   onLogout,
@@ -306,6 +312,7 @@ function Workspace({
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
+  showHomeButton: boolean
   onOpenSection: (section: WorkspaceSection) => void
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
@@ -395,11 +402,19 @@ function Workspace({
 
   return (
     <>
-      <header className="topbar">
-        <div className="search">
-          <Search size={18} />
-          <span>Поиск по гаражу, владельцу или поставщику</span>
-        </div>
+      <header className={activeSection === 'dashboard' ? 'topbar topbar--dashboard' : 'topbar'}>
+        {showHomeButton && activeSection !== 'dashboard' ? (
+          <button className="secondary-button topbar-home-button" type="button" onClick={() => onOpenSection('dashboard')}>
+            <Gauge size={17} />
+            <span>Панель</span>
+          </button>
+        ) : null}
+        {activeSection !== 'dashboard' ? (
+          <div className="search">
+            <Search size={18} />
+            <span>Поиск по гаражу, владельцу или поставщику</span>
+          </div>
+        ) : null}
         <div className="user-panel">
           <div>
             <strong>{auth.user.displayName}</strong>

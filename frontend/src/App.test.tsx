@@ -16,12 +16,24 @@ describe('App', () => {
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
-    const mainNavigation = screen.getByRole('navigation', { name: 'Основные разделы' })
-    const tab = within(mainNavigation).getByRole('button', { name })
+    const mainNavigation = screen.queryByRole('navigation', { name: 'Основные разделы' })
+    if (mainNavigation) {
+      const tab = within(mainNavigation).getByRole('button', { name })
 
-    if (tab.getAttribute('aria-current') !== 'page') {
-      await user.click(tab)
+      if (tab.getAttribute('aria-current') !== 'page') {
+        await user.click(tab)
+      }
+
+      return
     }
+
+    if (!screen.queryByRole('group', { name: 'Главные разделы' })) {
+      await user.click(screen.getByRole('button', { name: 'Панель' }))
+    }
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    const tileName = name === 'Справочники' ? 'Контрагенты' : name === 'Отчеты' ? 'Отчёты' : name
+    await user.click(within(dashboardTiles).getByRole('button', { name: tileName }))
   }
 
   async function openFinanceContextMenuByCellText(panel: HTMLElement, text: string) {
@@ -173,6 +185,7 @@ describe('App', () => {
     expect(within(dashboardTiles).getByRole('button', { name: 'Отчёты' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Панель' })).toBeEnabled()
@@ -614,20 +627,21 @@ describe('App', () => {
 
     expect(await screen.findByText('Оператор')).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
-    const mainNavigation = screen.getByRole('navigation', { name: 'Основные разделы' })
-    expect(within(mainNavigation).getByRole('button', { name: 'Пользователи' })).toBeDisabled()
-    expect(within(mainNavigation).getByRole('button', { name: 'Импорт' })).toBeDisabled()
-    expect(within(mainNavigation).getByRole('button', { name: 'Отчеты' })).toBeDisabled()
-    expect(within(mainNavigation).getByRole('button', { name: 'Audit' })).toBeDisabled()
-    expect(within(mainNavigation).getByRole('button', { name: 'Справочники' })).toBeEnabled()
-    expect(within(mainNavigation).getByRole('button', { name: 'Платежи' })).toBeEnabled()
-    expect(within(mainNavigation).getByRole('button', { name: 'Что нового' })).toBeEnabled()
+    expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
+    const operatorTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    expect(within(operatorTiles).getByRole('button', { name: 'Контрагенты' })).toBeEnabled()
+    expect(within(operatorTiles).getByRole('button', { name: 'Платежи' })).toBeEnabled()
+    expect(within(operatorTiles).getByRole('button', { name: 'Отчёты' })).toBeDisabled()
+    expect(within(operatorTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeDisabled()
 
-    await openSection(user, 'Справочники')
+    await user.click(within(operatorTiles).getByRole('button', { name: 'Контрагенты' }))
     expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
 
-    await openSection(user, 'Платежи')
+    await user.click(screen.getByRole('button', { name: 'Панель' }))
+    const operatorTilesAgain = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(operatorTilesAgain).getByRole('button', { name: 'Платежи' }))
     expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
 
