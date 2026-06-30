@@ -642,6 +642,21 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
 }
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
+type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual'
+
+const paymentPrototypeRows = [
+  { supplier: '', service: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
+  { supplier: '', service: 'Н/о', cost: 4000, paid: 0, balance: '', collected: 15000, difference: 1000, action: true },
+  { supplier: '', service: 'Водоснабжение', cost: 32000, paid: 0, balance: '', collected: 29000, difference: -3000, action: true },
+  { supplier: '', service: 'Вывоз мусора', cost: 15000, paid: 0, balance: '', collected: 13300, difference: -1700, action: true },
+  { supplier: '', service: 'Юридические услуги', cost: 8500, paid: 0, balance: '', collected: '', difference: '', action: true },
+  { supplier: 'Иванов', service: 'Электрик', cost: 20000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { supplier: 'Петрова', service: 'Бухгалтерия', cost: 40000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { supplier: 'Сидоров', service: 'Председатель', cost: 50000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { supplier: '', service: 'Прочие выплаты', cost: 10000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { supplier: '', service: 'Авансовые выплаты', cost: '', paid: 16500, balance: '', collected: '', difference: '', action: true },
+  { supplier: '', service: 'Выплата без чека', cost: 16500, paid: '', balance: '', collected: '', difference: '', action: true },
+]
 
 function FinancePanel({
   auth,
@@ -686,6 +701,7 @@ function FinancePanel({
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
+  const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const [incomeValidationErrors, setIncomeValidationErrors] = useState<string[]>([])
   const [expenseValidationErrors, setExpenseValidationErrors] = useState<string[]>([])
   const [accrualValidationErrors, setAccrualValidationErrors] = useState<string[]>([])
@@ -700,6 +716,7 @@ function FinancePanel({
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
   useRestoreFocusOnClose(Boolean(financeContextMenu))
+  useRestoreFocusOnClose(Boolean(paymentsPrototypeDialog))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
@@ -748,6 +765,7 @@ function FinancePanel({
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   useEscapeKey(Boolean(financeEditor), () => closeFinanceEditor())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
+  useEscapeKey(Boolean(paymentsPrototypeDialog), () => setPaymentsPrototypeDialog(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
   const visibleOperations = operations.slice(0, 8)
   const visibleAccruals = accruals.slice(0, 8)
@@ -1951,6 +1969,8 @@ function FinancePanel({
       {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
+      <PaymentsPrototypePanel onOpenDialog={setPaymentsPrototypeDialog} />
+
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
           <span>{getFinancePanelLabel('incomeTotal')}</span>
@@ -2498,7 +2518,256 @@ function FinancePanel({
           </section>
         </div>
       ) : null}
+      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
+      {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
+      {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
     </section>
+  )
+}
+
+function formatPaymentPrototypeValue(value: number | string) {
+  return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
+}
+
+function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: PaymentsPrototypeDialogKey) => void }) {
+  const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
+
+  return (
+    <section className="payments-prototype" aria-label="Форма платежей">
+      <div className="payments-prototype-toolbar">
+        <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
+          <button type="button" role="tab" aria-selected={activeTab === 'income'} className={activeTab === 'income' ? 'is-active' : undefined} onClick={() => setActiveTab('income')}>
+            Поступления
+          </button>
+          <button type="button" role="tab" aria-selected={activeTab === 'expense'} className={activeTab === 'expense' ? 'is-active' : undefined} onClick={() => setActiveTab('expense')}>
+            Выплаты
+          </button>
+        </div>
+        <div className="payments-prototype-actions">
+          <button className="secondary-button" type="button" onClick={() => onOpenDialog('accrual')}>
+            <Plus size={16} />
+            <span>Добавить начисление</span>
+          </button>
+          <button className="secondary-button" type="button" onClick={() => onOpenDialog('expense')}>
+            <Plus size={16} />
+            <span>Добавить выплату</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="payments-prototype-sheet">
+        <div className="payments-prototype-table-scroll">
+          <table className="payments-prototype-table" aria-label="Форма платежей за июнь 2026">
+            <thead>
+              <tr>
+                <th scope="col">
+                  <label>
+                    <span>Месяц</span>
+                    <select aria-label="Месяц формы платежей" defaultValue="2026-06">
+                      <option value="2026-06">июнь 2026</option>
+                      <option value="2026-05">май 2026</option>
+                      <option value="2026-07">июль 2026</option>
+                    </select>
+                  </label>
+                </th>
+                <th scope="col">Поставщик</th>
+                <th scope="col">Услуга</th>
+                <th scope="col">Стоимость</th>
+                <th scope="col">Оплачено</th>
+                <th scope="col">Остаток</th>
+                <th scope="col">Собрано</th>
+                <th scope="col">Разница</th>
+                <th scope="col">Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentPrototypeRows.map((row, index) => (
+                <tr key={`${row.supplier}-${row.service}-${index}`}>
+                  <td>{index === 0 ? activeTab === 'income' ? 'Поступления' : 'Выплаты' : ''}</td>
+                  <td>{row.supplier}</td>
+                  <td>{row.service}</td>
+                  <td className={row.cost ? 'money-income' : undefined}>{formatPaymentPrototypeValue(row.cost)}</td>
+                  <td>{formatPaymentPrototypeValue(row.paid)}</td>
+                  <td>{formatPaymentPrototypeValue(row.balance)}</td>
+                  {index === 5 ? (
+                    <td className="payments-prototype-merged-total" rowSpan={6}>
+                      156 800
+                    </td>
+                  ) : index < 5 ? (
+                    <td>{formatPaymentPrototypeValue(row.collected)}</td>
+                  ) : null}
+                  <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
+                    {formatPaymentPrototypeValue(row.difference)}
+                  </td>
+                  <td>
+                    {row.action ? (
+                      <button className="link-button" type="button" onClick={() => onOpenDialog('expense')} aria-label={`Оплатить ${row.service}`}>
+                        Оплатить
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              <tr className="payments-prototype-total-row">
+                <td>ИТОГО</td>
+                <td />
+                <td />
+                <td>235 000</td>
+                <td>55 500</td>
+                <td />
+                <td>257 100</td>
+                <td className="money-income">22 100</td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="payments-prototype-footer" aria-label="Итоги кассы и банка">
+        <div>
+          <span>Сумма в банке</span>
+          <strong>234 000</strong>
+        </div>
+        <div>
+          <span>Касса</span>
+          <strong>23 100</strong>
+        </div>
+        <div>
+          <span>ИТОГО</span>
+          <strong className="money-income">257 100</strong>
+        </div>
+        <button className="secondary-button" type="button" onClick={() => onOpenDialog('bank')}>
+          Сдать кассу в банк
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="bank-deposit-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="bank-deposit-title">Учет суммы на счете в банке</h3>
+            <p>Макет формы фиксации суммы, которая переносится из кассы на банковский счет.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть учет суммы в банке" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Сумма">
+            <input aria-label="Сумма в банке" inputMode="decimal" />
+          </FormField>
+          <FormField label="Дата">
+            <input aria-label="Дата учета суммы в банке" type="date" />
+          </FormField>
+          <FormField label="Коммент">
+            <textarea aria-label="Комментарий к сумме в банке" rows={5} />
+          </FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">Ок</button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="new-expense-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="new-expense-title">Новая выплата</h3>
+            <p>Макет формы выплаты поставщику или выдачи без чека.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть новую выплату" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Тип выплаты">
+            <select aria-label="Тип выплаты" defaultValue="advance">
+              <option value="advance">Авансовая выплата</option>
+              <option value="no-receipt">Выплата без чека</option>
+            </select>
+          </FormField>
+          <FormField label="Дата">
+            <input aria-label="Дата выплаты" type="date" />
+          </FormField>
+          <FormField label="Сумма">
+            <input aria-label="Сумма выплаты" inputMode="decimal" />
+          </FormField>
+          <FormField label="Назначение">
+            <input aria-label="Назначение выплаты" />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к выплате" rows={4} />
+          </FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">Провести</button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="new-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="new-accrual-title">Новое начисление</h3>
+            <p>Макет ручного начисления по основанию, сумме и комментарию.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть новое начисление" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Основание">
+            <input aria-label="Основание начисления" />
+          </FormField>
+          <FormField label="Сумма">
+            <input aria-label="Сумма начисления" inputMode="decimal" />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к начислению" rows={5} />
+          </FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">Ок</button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
   )
 }
 

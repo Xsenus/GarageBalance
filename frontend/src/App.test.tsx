@@ -275,6 +275,37 @@ describe('App', () => {
     expect(within(readingsPanel).getByLabelText('Гараж 35, дек, кВт')).toBeInTheDocument()
   })
 
+  it('shows payments prototype and opens payment form modals', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
+
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
+    expect(within(prototype).getByRole('table', { name: 'Форма платежей за июнь 2026' })).toBeInTheDocument()
+    expect(within(prototype).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(within(prototype).getAllByText('257 100')).toHaveLength(2)
+
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить выплату' }))
+    const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    expect(within(expenseDialog).getByLabelText('Тип выплаты')).toHaveValue('advance')
+    await user.click(within(expenseDialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить начисление' }))
+    const accrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
+    expect(within(accrualDialog).getByLabelText('Основание начисления')).toBeInTheDocument()
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(prototype).getByRole('button', { name: 'Сдать кассу в банк' }))
+    const bankDialog = await screen.findByRole('dialog', { name: 'Учет суммы на счете в банке' })
+    expect(within(bankDialog).getByLabelText('Сумма в банке')).toBeInTheDocument()
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
