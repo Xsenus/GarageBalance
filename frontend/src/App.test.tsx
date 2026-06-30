@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { vi } from 'vitest'
 import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
@@ -12,8 +13,14 @@ import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './ser
 
 describe('App', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
     window.sessionStorage.clear()
     window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
