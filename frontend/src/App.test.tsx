@@ -338,7 +338,7 @@ describe('App', () => {
     expect(within(historyTable).getByText('Штраф за это')).toBeInTheDocument()
   })
 
-  it('shows contractors prototype as garages and suppliers directory', async () => {
+  it('shows contractors tabs, section dialogs and change history', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -349,11 +349,61 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
 
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
-    expect(within(contractorsPanel).getByRole('table', { name: 'Гаражи и задолженность' })).toBeInTheDocument()
-    expect(within(contractorsPanel).getByRole('table', { name: 'Поставщики и сотрудники' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('tab', { name: 'Персонал' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByText('Иванов Иван')).toBeInTheDocument()
-    expect(within(contractorsPanel).getByText('Энергосбыт')).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getAllByRole('button', { name: 'Открыть' })[0])
+    const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
+    await user.clear(within(garageDialog).getByLabelText('Владелец гаража'))
+    await user.type(within(garageDialog).getByLabelText('Владелец гаража'), 'Новый владелец')
+    await user.click(within(garageDialog).getByRole('button', { name: /Сохранить/i }))
+    await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    expect(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Энергосбыт')).toBeInTheDocument()
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' }))
+    const supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    await user.type(within(supplierDialog).getByLabelText('Наименование поставщика'), 'Новый подрядчик')
+    await user.type(within(supplierDialog).getByLabelText('Услуга поставщика'), 'Охрана')
+    await user.click(within(supplierDialog).getByRole('button', { name: /Сохранить/i }))
+    await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).getByText('Новый подрядчик')).toBeInTheDocument())
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить услугу' }))
+    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги контрагента'), 'Уборка территории')
+    await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    expect(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).toBeInTheDocument()
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить отдел' }))
+    const departmentDialog = await screen.findByRole('dialog', { name: 'Новый отдел' })
+    await user.type(within(departmentDialog).getByLabelText('Наименование отдела'), 'Охрана')
+    await user.click(within(departmentDialog).getByRole('button', { name: 'Ок' }))
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить сотрудника' }))
+    const employeeDialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
+    await user.type(within(employeeDialog).getByLabelText('ФИО сотрудника'), 'Смирнов Алексей')
+    await user.selectOptions(within(employeeDialog).getByLabelText('Отдел сотрудника'), 'Охрана')
+    await user.type(within(employeeDialog).getByLabelText('Ставка сотрудника'), '25000')
+    await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
+    await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
+
+    const historyTable = within(contractorsPanel).getByRole('table', { name: 'История изменений контрагентов' })
+    expect(within(historyTable).getByText('Новый владелец')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Новый подрядчик')).toBeInTheDocument()
+    expect(within(historyTable).getAllByText('Уборка территории').length).toBeGreaterThan(0)
+    expect(within(historyTable).getByText('Смирнов Алексей')).toBeInTheDocument()
+    expect(within(historyTable).getAllByText('Администратор').length).toBeGreaterThan(0)
+
+    await user.selectOptions(within(contractorsPanel).getByLabelText('Раздел истории контрагентов'), 'staff')
+    expect(within(historyTable).queryByText('Новый подрядчик')).not.toBeInTheDocument()
+    expect(within(historyTable).getByText('Смирнов Алексей')).toBeInTheDocument()
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {

@@ -400,7 +400,7 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel />
+          <ContractorsPrototypePanel actorName={auth.user.displayName} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -4490,83 +4490,646 @@ const contractorOneTimeRows = [
   { id: 'fine-this', name: 'Штраф за это', amount: '', isDeleted: false },
 ]
 
-const contractorGarageRows = [
-  { garage: '12', owner: 'Иванов Иван', debt: '4 000', status: 'Просрочен', contact: '+7 900 000-00-12' },
-  { garage: '27', owner: 'Петров Петр', debt: '—', status: 'Нет долга', contact: '+7 900 000-00-27' },
-  { garage: '35', owner: 'Сидорова Анна', debt: '1 700', status: 'Просрочен', contact: '+7 900 000-00-35' },
+type ContractorSection = 'garages' | 'suppliers' | 'staff'
+
+type ContractorGarageRow = {
+  id: string
+  number: string
+  peopleCount: string
+  floorCount: string
+  owner: string
+  phone: string
+  address: string
+  balance: string
+  overdueDebt: string
+  initialWater: string
+  initialElectricity: string
+  meters: string
+  comment: string
+  isDeleted: boolean
+}
+
+type ContractorSupplierRow = {
+  id: string
+  name: string
+  service: string
+  inn: string
+  legalAddress: string
+  contactPerson: string
+  phone: string
+  email: string
+  debt: string
+  comment: string
+  isDeleted: boolean
+}
+
+type ContractorStaffRow = {
+  id: string
+  fullName: string
+  department: string
+  rate: string
+  isDeleted: boolean
+}
+
+type ContractorDepartmentRow = {
+  id: string
+  name: string
+}
+
+type ContractorHistoryEntry = {
+  id: string
+  section: string
+  objectName: string
+  action: string
+  field: string
+  previousValue: string
+  nextValue: string
+  actorName: string
+  changedAt: string
+}
+
+type ContractorModal =
+  | { type: 'garage'; item?: ContractorGarageRow }
+  | { type: 'supplier'; item?: ContractorSupplierRow }
+  | { type: 'service' }
+  | { type: 'employee'; item?: ContractorStaffRow }
+  | { type: 'department' }
+
+const contractorGarageRows: ContractorGarageRow[] = [
+  { id: 'garage-1', number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-12', number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-27', number: '27', peopleCount: '2', floorCount: '1', owner: 'Сидорова Анна', phone: '+7 900 000-00-27', address: 'ГСК, ряд 4', balance: '1700', overdueDebt: '1700 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
 ]
 
-const contractorSupplierRows = [
-  { name: 'Энергосбыт', group: 'Электроэнергия', contact: 'Орлова Мария', balance: '39 000' },
-  { name: 'Водоканал', group: 'Водоснабжение', contact: 'Смирнов Алексей', balance: '32 000' },
-  { name: 'ЭкоВывоз', group: 'Вывоз мусора', contact: 'Кузнецова Ольга', balance: '15 000' },
+const contractorSupplierRows: ContractorSupplierRow[] = [
+  { id: 'supplier-electricity', name: 'Энергосбыт', service: 'Электроэнергия', inn: '5401000000', legalAddress: '', contactPerson: 'Петров И.А.', phone: '+7 900 100-10-10', email: 'energy@example.test', debt: '39 000', comment: '', isDeleted: false },
+  { id: 'supplier-water', name: 'Водоканал', service: 'Водоснабжение', inn: '5402000000', legalAddress: '', contactPerson: 'Иванов П.В.', phone: '+7 900 200-20-20', email: 'water@example.test', debt: '32 000', comment: '', isDeleted: false },
+  { id: 'supplier-waste', name: 'ЭкоВывоз', service: 'Вывоз мусора', inn: '', legalAddress: '', contactPerson: 'Орлова Мария', phone: '+7 900 300-30-30', email: '', debt: '15 000', comment: '', isDeleted: false },
+  { id: 'supplier-law', name: 'Правовой центр', service: 'Юридические услуги', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', debt: '', comment: '', isDeleted: false },
 ]
 
-function ContractorsPrototypePanel() {
+const contractorStaffRows: ContractorStaffRow[] = [
+  { id: 'staff-electrician', fullName: 'Иванов Сергей', department: 'Электрики', rate: '20000', isDeleted: false },
+  { id: 'staff-accountant', fullName: 'Петрова Ольга', department: 'Бухгалтерия', rate: '40000', isDeleted: false },
+]
+
+const contractorDepartmentRows: ContractorDepartmentRow[] = [
+  { id: 'department-electricians', name: 'Электрики' },
+  { id: 'department-accounting', name: 'Бухгалтерия' },
+  { id: 'department-management', name: 'Руководство' },
+]
+
+const contractorSectionLabels: Record<ContractorSection, string> = {
+  garages: 'Гаражи',
+  suppliers: 'Поставщики',
+  staff: 'Персонал',
+}
+
+function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
+  const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
+  const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
+  const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
+  const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>(contractorSupplierRows)
+  const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
+  const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
+  const [modal, setModal] = useState<ContractorModal | null>(null)
+  const [historyFilter, setHistoryFilter] = useState<'all' | ContractorSection>('all')
+  const [history, setHistory] = useState<ContractorHistoryEntry[]>([])
+
+  const addHistoryEntry = (entry: Omit<ContractorHistoryEntry, 'id' | 'actorName' | 'changedAt'>) => {
+    setHistory((currentHistory) => [
+      {
+        ...entry,
+        id: `contractor-history-${Date.now()}-${currentHistory.length + 1}`,
+        actorName,
+        changedAt: formatPrototypeHistoryDateTime(new Date()),
+      },
+      ...currentHistory,
+    ])
+  }
+
+  const recordFieldChanges = (section: string, objectName: string, labels: Record<string, string>, previous: Record<string, string | boolean | undefined>, next: Record<string, string | boolean | undefined>) => {
+    Object.entries(labels).forEach(([field, label]) => {
+      const previousValue = previous[field]
+      const nextValue = next[field]
+
+      if (normalizeHistoryValue(previousValue) === normalizeHistoryValue(nextValue)) {
+        return
+      }
+
+      addHistoryEntry({
+        section,
+        objectName,
+        action: 'Изменение',
+        field: label,
+        previousValue: normalizeHistoryValue(previousValue),
+        nextValue: normalizeHistoryValue(nextValue),
+      })
+    })
+  }
+
+  const saveGarage = (garage: ContractorGarageRow) => {
+    const currentGarage = garages.find((item) => item.id === garage.id)
+
+    if (currentGarage) {
+      setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? garage : item)))
+      recordFieldChanges('Гаражи', `Гараж ${garage.number}`, garageHistoryLabels, currentGarage, garage)
+      return
+    }
+
+    setGarages((currentGarages) => [...currentGarages, garage])
+    addHistoryEntry({ section: 'Гаражи', objectName: `Гараж ${garage.number}`, action: 'Создание', field: 'Запись', previousValue: 'Пусто', nextValue: 'Создано' })
+  }
+
+  const deleteGarage = (garage: ContractorGarageRow) => {
+    setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? { ...item, isDeleted: true } : item)))
+    addHistoryEntry({ section: 'Гаражи', objectName: `Гараж ${garage.number}`, action: 'Удаление', field: 'Статус', previousValue: 'Активен', nextValue: 'Удален' })
+  }
+
+  const saveSupplier = (supplier: ContractorSupplierRow) => {
+    const currentSupplier = suppliers.find((item) => item.id === supplier.id)
+
+    if (currentSupplier) {
+      setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? supplier : item)))
+      recordFieldChanges('Поставщики', supplier.name, supplierHistoryLabels, currentSupplier, supplier)
+      return
+    }
+
+    setSuppliers((currentSuppliers) => [...currentSuppliers, supplier])
+    addHistoryEntry({ section: 'Поставщики', objectName: supplier.name, action: 'Создание', field: 'Запись', previousValue: 'Пусто', nextValue: 'Создано' })
+  }
+
+  const deleteSupplier = (supplier: ContractorSupplierRow) => {
+    setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? { ...item, isDeleted: true } : item)))
+    addHistoryEntry({ section: 'Поставщики', objectName: supplier.name, action: 'Удаление', field: 'Статус', previousValue: 'Активен', nextValue: 'Удален' })
+  }
+
+  const saveEmployee = (employee: ContractorStaffRow) => {
+    const currentEmployee = staff.find((item) => item.id === employee.id)
+
+    if (currentEmployee) {
+      setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? employee : item)))
+      recordFieldChanges('Персонал', employee.fullName, employeeHistoryLabels, currentEmployee, employee)
+      return
+    }
+
+    setStaff((currentStaff) => [...currentStaff, employee])
+    addHistoryEntry({ section: 'Персонал', objectName: employee.fullName, action: 'Создание', field: 'Запись', previousValue: 'Пусто', nextValue: 'Создано' })
+  }
+
+  const deleteEmployee = (employee: ContractorStaffRow) => {
+    setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
+    addHistoryEntry({ section: 'Персонал', objectName: employee.fullName, action: 'Удаление', field: 'Статус', previousValue: 'Активен', nextValue: 'Удален' })
+  }
+
+  const saveDepartment = (departmentName: string) => {
+    const nextDepartment = { id: `department-${Date.now()}`, name: departmentName }
+    setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
+    addHistoryEntry({ section: 'Персонал', objectName: departmentName, action: 'Создание', field: 'Отдел', previousValue: 'Пусто', nextValue: departmentName })
+  }
+
+  const saveService = (serviceName: string) => {
+    addHistoryEntry({ section: 'Поставщики', objectName: serviceName, action: 'Создание', field: 'Услуга', previousValue: 'Пусто', nextValue: serviceName })
+  }
+
+  const visibleGarages = showDebtorsOnly
+    ? garages.filter((garage) => !garage.isDeleted && garage.overdueDebt.trim())
+    : garages.filter((garage) => !garage.isDeleted)
+  const visibleSuppliers = suppliers.filter((supplier) => !supplier.isDeleted)
+  const visibleStaff = staff.filter((employee) => !employee.isDeleted)
+  const filteredHistory = historyFilter === 'all'
+    ? history
+    : history.filter((entry) => entry.section === contractorSectionLabels[historyFilter])
+
   return (
     <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
       <div className="contractors-heading">
         <div>
           <h1>Контрагенты</h1>
-          <p>Гаражи, владельцы, поставщики и сотрудники для будущих карточек и финансовых отчетов.</p>
         </div>
         <div className="contractors-actions">
-          <button className="secondary-button" type="button">Показать должников</button>
-          <button className="secondary-button" type="button">Добавить контрагента</button>
+          {activeSection === 'garages' ? (
+            <>
+              <button className="secondary-button" type="button" onClick={() => setShowDebtorsOnly((value) => !value)}>{showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'}</button>
+              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'garage' })}>Добавить гараж</button>
+            </>
+          ) : null}
+          {activeSection === 'suppliers' ? (
+            <>
+              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'supplier' })}>Добавить поставщика</button>
+              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'service' })}>Добавить услугу</button>
+            </>
+          ) : null}
+          {activeSection === 'staff' ? (
+            <>
+              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'department' })}>Добавить отдел</button>
+              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'employee' })}>Добавить сотрудника</button>
+            </>
+          ) : null}
         </div>
       </div>
 
-      <div className="contractors-directory-grid">
-        <section className="contractors-directory-card" aria-label="Гаражи">
-          <div className="contractors-directory-card-header">
-            <h2>Гаражи</h2>
-            <button className="link-button" type="button">Открыть фин. отчет</button>
-          </div>
-          <div className="contractors-directory-table" role="table" aria-label="Гаражи и задолженность">
-            <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">Гараж</span>
-              <span role="columnheader">Владелец</span>
-              <span role="columnheader">Просрочка</span>
-              <span role="columnheader">Статус</span>
-            </div>
-            {contractorGarageRows.map((row) => (
-              <div className="contractors-directory-row" role="row" key={row.garage}>
-                <span role="cell">{row.garage}</span>
-                <span role="cell">
-                  <strong>{row.owner}</strong>
-                  <small>{row.contact}</small>
-                </span>
-                <span role="cell" className={row.debt === '—' ? undefined : 'money-expense'}>{row.debt}</span>
-                <span role="cell">{row.status}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="contractors-directory-card" aria-label="Поставщики и сотрудники">
-          <div className="contractors-directory-card-header">
-            <h2>Поставщики и сотрудники</h2>
-            <button className="link-button" type="button">Открыть фин. отчет</button>
-          </div>
-          <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики и сотрудники">
-            <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">Контрагент</span>
-              <span role="columnheader">Группа</span>
-              <span role="columnheader">Контактное лицо</span>
-              <span role="columnheader">Баланс</span>
-            </div>
-            {contractorSupplierRows.map((row) => (
-              <div className="contractors-directory-row" role="row" key={row.name}>
-                <span role="cell">{row.name}</span>
-                <span role="cell">{row.group}</span>
-                <span role="cell">{row.contact}</span>
-                <span role="cell">{row.balance}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+      <div className="contractors-prototype-tabs" role="tablist" aria-label="Разделы контрагентов">
+        {Object.entries(contractorSectionLabels).map(([section, label]) => (
+          <button type="button" role="tab" aria-selected={activeSection === section} className={activeSection === section ? 'is-active' : ''} onClick={() => setActiveSection(section as ContractorSection)} key={section}>
+            {label}
+          </button>
+        ))}
       </div>
+
+      {activeSection === 'garages' ? (
+        <section className="contractors-directory-card" aria-label="Гаражи">
+          <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи">
+            <div className="contractors-directory-row contractors-directory-row--header" role="row">
+              <span role="columnheader">Номер</span>
+              <span role="columnheader">Количество человек</span>
+              <span role="columnheader">Количество этажей</span>
+              <span role="columnheader">Владелец</span>
+              <span role="columnheader">Телефон</span>
+              <span role="columnheader">Просроченная з-ть</span>
+              <span role="columnheader">Действие</span>
+            </div>
+            {visibleGarages.map((row) => (
+              <div className="contractors-directory-row" role="row" key={row.id}>
+                <span role="cell">{row.number}</span>
+                <span role="cell">{row.peopleCount}</span>
+                <span role="cell">{row.floorCount}</span>
+                <span role="cell">{row.owner}</span>
+                <span role="cell">{row.phone}</span>
+                <span role="cell" className={row.overdueDebt ? 'money-expense' : undefined}>{row.overdueDebt || 'Нет'}</span>
+                <span role="cell"><button className="link-button" type="button" onClick={() => setModal({ type: 'garage', item: row })}>Открыть</button></span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'suppliers' ? (
+        <section className="contractors-directory-card" aria-label="Поставщики">
+          <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики">
+            <div className="contractors-directory-row contractors-directory-row--header" role="row">
+              <span role="columnheader">Поставщик</span>
+              <span role="columnheader">Услуга</span>
+              <span role="columnheader">Контактное лицо</span>
+              <span role="columnheader">Телефон</span>
+              <span role="columnheader">Почта</span>
+              <span role="columnheader">Задолженность</span>
+              <span role="columnheader">Действие</span>
+            </div>
+            {visibleSuppliers.map((row) => (
+              <div className="contractors-directory-row" role="row" key={row.id}>
+                <span role="cell">{row.name}</span>
+                <span role="cell">{row.service}</span>
+                <span role="cell">{row.contactPerson}</span>
+                <span role="cell">{row.phone}</span>
+                <span role="cell">{row.email}</span>
+                <span role="cell" className={row.debt ? 'money-expense' : undefined}>{row.debt || 'Нет'}</span>
+                <span role="cell"><button className="link-button" type="button" onClick={() => setModal({ type: 'supplier', item: row })}>Открыть</button></span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'staff' ? (
+        <section className="contractors-directory-card" aria-label="Персонал">
+          <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал">
+            <div className="contractors-directory-row contractors-directory-row--header" role="row">
+              <span role="columnheader">ФИО</span>
+              <span role="columnheader">Отдел</span>
+              <span role="columnheader">Ставка</span>
+              <span role="columnheader">Действие</span>
+            </div>
+            {visibleStaff.map((row) => (
+              <div className="contractors-directory-row" role="row" key={row.id}>
+                <span role="cell">{row.fullName}</span>
+                <span role="cell">{row.department}</span>
+                <span role="cell">{row.rate}</span>
+                <span role="cell"><button className="link-button" type="button" onClick={() => setModal({ type: 'employee', item: row })}>Открыть</button></span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="contractors-history-panel" aria-label="История изменений контрагентов">
+        <label>
+          <span>История по разделу</span>
+          <select aria-label="Раздел истории контрагентов" value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value as 'all' | ContractorSection)}>
+            <option value="all">Все разделы</option>
+            <option value="garages">Гаражи</option>
+            <option value="suppliers">Поставщики</option>
+            <option value="staff">Персонал</option>
+          </select>
+        </label>
+        <div className="contractors-history-table" role="table" aria-label="История изменений контрагентов">
+          <div className="contractors-history-header" role="row">
+            <span role="columnheader">Когда</span>
+            <span role="columnheader">Кто</span>
+            <span role="columnheader">Раздел</span>
+            <span role="columnheader">Объект</span>
+            <span role="columnheader">Поле</span>
+            <span role="columnheader">Было</span>
+            <span role="columnheader">Стало</span>
+            <span role="columnheader">Действие</span>
+          </div>
+          {filteredHistory.length > 0 ? filteredHistory.map((entry) => (
+            <div className="contractors-history-row" role="row" key={entry.id}>
+              <span role="cell">{entry.changedAt}</span>
+              <span role="cell">{entry.actorName}</span>
+              <span role="cell">{entry.section}</span>
+              <span role="cell">{entry.objectName}</span>
+              <span role="cell">{entry.field}</span>
+              <span role="cell">{entry.previousValue}</span>
+              <span role="cell">{entry.nextValue}</span>
+              <span role="cell">{entry.action}</span>
+            </div>
+          )) : (
+            <div className="contractors-history-empty" role="row">
+              <span role="cell">Истории изменений пока нет</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteSupplier} onSave={saveSupplier} /> : null}
+      {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
+      {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onDelete={deleteEmployee} onSave={saveEmployee} /> : null}
+      {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
     </section>
+  )
+}
+
+const garageHistoryLabels: Record<string, string> = {
+  number: 'Номер',
+  peopleCount: 'Количество человек',
+  floorCount: 'Количество этажей',
+  owner: 'Владелец',
+  phone: 'Телефон',
+  address: 'Адрес',
+  balance: 'Баланс',
+  overdueDebt: 'Просроченная задолженность',
+  initialWater: 'Старт. значение счетчика воды',
+  initialElectricity: 'Старт. значение счетчика электроэнергии',
+  meters: 'Счетчики',
+  comment: 'Комментарий',
+}
+
+const supplierHistoryLabels: Record<string, string> = {
+  name: 'Наименование',
+  service: 'Услуга',
+  inn: 'ИНН',
+  legalAddress: 'Юр. адрес',
+  contactPerson: 'Контактное лицо',
+  phone: 'Телефон',
+  email: 'Почта',
+  debt: 'Задолженность',
+  comment: 'Комментарий',
+}
+
+const employeeHistoryLabels: Record<string, string> = {
+  fullName: 'ФИО',
+  department: 'Отдел',
+  rate: 'Ставка',
+}
+
+function createEmptyGaragePrototype(): ContractorGarageRow {
+  return {
+    id: `garage-${Date.now()}`,
+    number: '',
+    peopleCount: '',
+    floorCount: '',
+    owner: '',
+    phone: '',
+    address: '',
+    balance: '',
+    overdueDebt: '',
+    initialWater: '',
+    initialElectricity: '',
+    meters: '',
+    comment: '',
+    isDeleted: false,
+  }
+}
+
+function createEmptySupplierPrototype(): ContractorSupplierRow {
+  return {
+    id: `supplier-${Date.now()}`,
+    name: '',
+    service: '',
+    inn: '',
+    legalAddress: '',
+    contactPerson: '',
+    phone: '',
+    email: '',
+    debt: '',
+    comment: '',
+    isDeleted: false,
+  }
+}
+
+function createEmptyEmployeePrototype(department: string): ContractorStaffRow {
+  return {
+    id: `employee-${Date.now()}`,
+    fullName: '',
+    department,
+    rate: '',
+    isDeleted: false,
+  }
+}
+
+function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+  const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
+          <button className="icon-button" type="button" aria-label="Закрыть форму гаража" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onSave(form)
+          onClose()
+        }}>
+          <div className="contractors-modal-grid">
+            <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
+            <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance} onChange={(event) => setForm({ ...form, balance: event.target.value })} /></FormField>
+            <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
+            <FormField label="Просроченная зад-ть"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt} onChange={(event) => setForm({ ...form, overdueDebt: event.target.value })} /></FormField>
+            <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+            <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
+          </div>
+          <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
+          <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
+          <FormField label="Адрес"><input aria-label="Адрес гаража" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></FormField>
+          <FormField label="Счетчики"><textarea aria-label="Счетчики гаража" value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
+          <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
+          <div className="detail-dialog-actions contractors-dialog-actions">
+            <button className="secondary-button" type="button">Открыть фин. отчет</button>
+            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            {item ? <button className="danger-button" type="button" onClick={() => { onDelete(item); onClose() }}>Удалить гараж</button> : null}
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorSupplierRow; onClose: () => void; onDelete: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
+  const [form, setForm] = useState<ContractorSupplierRow>(item ?? createEmptySupplierPrototype())
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="supplier-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
+          <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onSave(form)
+          onClose()
+        }}>
+          <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
+          <FormField label="Услуга"><input aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })} /></FormField>
+          <div className="contractors-modal-grid">
+            <FormField label="ИНН"><input aria-label="ИНН поставщика" value={form.inn} onChange={(event) => setForm({ ...form, inn: event.target.value })} /></FormField>
+            <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt} onChange={(event) => setForm({ ...form, debt: event.target.value })} /></FormField>
+          </div>
+          <FormField label="Юр. адрес"><input aria-label="Юридический адрес поставщика" value={form.legalAddress} onChange={(event) => setForm({ ...form, legalAddress: event.target.value })} /></FormField>
+          <div className="contractors-contacts-preview" role="table" aria-label="Контакты поставщика">
+            <div className="contractors-contacts-row contractors-contacts-row--header" role="row">
+              <span role="columnheader">ФИО</span>
+              <span role="columnheader">Телефон</span>
+              <span role="columnheader">Почта</span>
+            </div>
+            <div className="contractors-contacts-row" role="row">
+              <span role="cell">{form.contactPerson || 'Пусто'}</span>
+              <span role="cell">{form.phone || 'Пусто'}</span>
+              <span role="cell">{form.email || 'Пусто'}</span>
+            </div>
+          </div>
+          <button className="secondary-button contractors-inline-action" type="button">Добавить контакт</button>
+          <FormField label="Контактное лицо"><input aria-label="Контактное лицо поставщика" value={form.contactPerson} onChange={(event) => setForm({ ...form, contactPerson: event.target.value })} /></FormField>
+          <div className="contractors-modal-grid">
+            <FormField label="Телефон"><input aria-label="Телефон поставщика" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
+            <FormField label="Почта"><input aria-label="Почта поставщика" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
+          </div>
+          <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
+          <div className="detail-dialog-actions contractors-dialog-actions">
+            <button className="secondary-button" type="button">Открыть фин. отчет</button>
+            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            {item ? <button className="danger-button" type="button" onClick={() => { onDelete(item); onClose() }}>Удалить поставщика</button> : null}
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => void; onSave: (serviceName: string) => void }) {
+  const [serviceName, setServiceName] = useState('')
+  const [isRegular, setIsRegular] = useState(true)
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-directory-service-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <h3 id="contractor-directory-service-title">Добавить услугу</h3>
+          <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onSave(serviceName || 'Новая услуга')
+          onClose()
+        }}>
+          <FormField label="Наименование услуги"><input aria-label="Наименование услуги контрагента" value={serviceName} onChange={(event) => setServiceName(event.target.value)} /></FormField>
+          <label className="contractors-check-row"><input type="checkbox" aria-label="Регулярные платежи услуги" checked={isRegular} onChange={(event) => setIsRegular(event.target.checked)} /><span>Регулярные платежи</span></label>
+          <FormField label="Периодичность"><input aria-label="Периодичность услуги" defaultValue="12" /></FormField>
+          <FormField label="Учитывать платеж с"><input aria-label="Учитывать платеж услуги с" defaultValue="Январь" /></FormField>
+          <FormField label="Оплатить до"><input aria-label="Оплатить услугу до" defaultValue="Июль" /></FormField>
+          <FormField label="Перенос долга в просроченный"><input aria-label="Перенос долга услуги в просроченный" defaultValue="30" /></FormField>
+          <label className="contractors-check-row"><input type="checkbox" aria-label="По счетчику услуги" defaultChecked /><span>По счетчику</span></label>
+          <label className="contractors-check-row"><input type="checkbox" aria-label="Пороговая тарификация услуги" defaultChecked /><span>Пороговая тарификация</span></label>
+          <FormField label="Единица измерения"><input aria-label="Единица измерения услуги" /></FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onDelete: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
+  const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(departments[0]?.name ?? ''))
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
+          <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onSave(form)
+          onClose()
+        }}>
+          <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
+          <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{departments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
+          <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
+          <div className="detail-dialog-actions contractors-dialog-actions">
+            <button className="secondary-button" type="button">Открыть фин. отчет</button>
+            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            {item ? <button className="danger-button" type="button" onClick={() => { onDelete(item); onClose() }}>Удалить сотрудника</button> : null}
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function DepartmentPrototypeDialog({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
+  const [name, setName] = useState('')
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="department-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <h3 id="department-dialog-title">Новый отдел</h3>
+          <button className="icon-button" type="button" aria-label="Закрыть форму отдела" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onSave(name || 'Новый отдел')
+          onClose()
+        }}>
+          <FormField label="Наименование"><input aria-label="Наименование отдела" value={name} onChange={(event) => setName(event.target.value)} /></FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">Ок</button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
   )
 }
 

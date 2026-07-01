@@ -863,12 +863,6 @@ h1 {
   padding: 18px;
 }
 
-.contractors-directory-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
 .contractors-directory-card {
   overflow: hidden;
   border: 1px solid #d0d5dd;
@@ -893,7 +887,8 @@ h1 {
 }
 
 .contractors-directory-table {
-  min-width: 560px;
+  overflow: auto;
+  min-width: 0;
 }
 
 .contractors-directory-row {
@@ -901,8 +896,19 @@ h1 {
   grid-template-columns: 80px minmax(170px, 1.3fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr);
 }
 
+.contractors-directory-table--garages .contractors-directory-row {
+  grid-template-columns: 96px minmax(150px, 0.9fr) minmax(140px, 0.9fr) minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(150px, 0.9fr) 96px;
+  min-width: 1080px;
+}
+
 .contractors-directory-table--suppliers .contractors-directory-row {
-  grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.9fr) minmax(150px, 1fr) minmax(90px, 0.6fr);
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(130px, 0.8fr) 96px;
+  min-width: 1060px;
+}
+
+.contractors-directory-table--staff .contractors-directory-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(120px, 0.5fr) 96px;
+  min-width: 620px;
 }
 
 .contractors-directory-row--header {
@@ -938,8 +944,59 @@ h1 {
   width: min(640px, 100%);
 }
 
+.contractors-dialog--wide {
+  width: min(820px, 100%);
+}
+
 .contractors-modal-form {
   gap: 14px;
+}
+
+.contractors-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contractors-dialog-actions {
+  grid-template-columns: repeat(4, minmax(0, max-content));
+}
+
+.contractors-inline-action {
+  justify-self: start;
+}
+
+.contractors-contacts-preview {
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+}
+
+.contractors-contacts-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(160px, 1fr);
+}
+
+.contractors-contacts-row--header {
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.contractors-contacts-row span {
+  min-width: 0;
+  border-bottom: 1px solid #eaecf0;
+  padding: 8px 10px;
+}
+
+.contractors-contacts-row:last-child span {
+  border-bottom: 0;
+}
+
+.contractors-dialog .danger-button {
+  color: #ffffff;
 }
 
 .contractors-check-row {
