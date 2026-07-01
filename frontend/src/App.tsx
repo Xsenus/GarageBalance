@@ -654,20 +654,33 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
 }
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
-type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual'
+type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual' | 'garageAccrual' | 'fullPayment'
 
 const paymentPrototypeRows = [
-  { supplier: '', service: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
-  { supplier: '', service: 'Н/о', cost: 4000, paid: 0, balance: '', collected: 15000, difference: 1000, action: true },
-  { supplier: '', service: 'Водоснабжение', cost: 32000, paid: 0, balance: '', collected: 29000, difference: -3000, action: true },
-  { supplier: '', service: 'Вывоз мусора', cost: 15000, paid: 0, balance: '', collected: 13300, difference: -1700, action: true },
-  { supplier: '', service: 'Юридические услуги', cost: 8500, paid: 0, balance: '', collected: '', difference: '', action: true },
-  { supplier: 'Иванов', service: 'Электрик', cost: 20000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { supplier: 'Петрова', service: 'Бухгалтерия', cost: 40000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { supplier: 'Сидоров', service: 'Председатель', cost: 50000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { supplier: '', service: 'Прочие выплаты', cost: 10000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { supplier: '', service: 'Авансовые выплаты', cost: '', paid: 16500, balance: '', collected: '', difference: '', action: true },
-  { supplier: '', service: 'Выплата без чека', cost: 16500, paid: '', balance: '', collected: '', difference: '', action: true },
+  { item: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
+  { item: 'Н/о', cost: 4000, paid: 0, balance: '', collected: 15000, difference: 1000, action: true },
+  { item: 'Водоснабжение', cost: 32000, paid: 0, balance: '', collected: 29000, difference: -3000, action: true },
+  { item: 'Вывоз мусора', cost: 15000, paid: 0, balance: '', collected: 13300, difference: -1700, action: true },
+  { item: 'Юридические услуги', cost: 8500, paid: 0, balance: '', collected: '', difference: '', action: true },
+  { item: 'Электрик', cost: 20000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { item: 'Бухгалтерия', cost: 40000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { item: 'Председатель', cost: 50000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { item: 'Прочие выплаты', cost: 10000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { item: 'Авансовые выплаты', cost: '', paid: 16500, balance: '', collected: '', difference: '', action: true },
+  { item: 'Выплата без чека', cost: 16500, paid: '', balance: '', collected: '', difference: '', action: true },
+]
+
+const garagePaymentPrototypeRows = [
+  { meter: 88, difference: 18, payable: 5674, payment: 5674, paid: '', debt: 0 },
+  { meter: 59, difference: 4, payable: 3500, payment: '', paid: 1000, debt: 2500 },
+  { meter: 49, difference: 14, payable: '', payment: '', paid: '', debt: '' },
+  { meter: '', difference: 0, payable: '', payment: '', paid: '', debt: '' },
+  { meter: '', difference: '', payable: 500, payment: '', paid: 500, debt: 0 },
+]
+
+const garagePaymentHistoryRows = [
+  { date: '19.06.2026', time: '10:24', amount: 5674, purpose: 'Электроэнергия', debtAfter: 0 },
+  { date: '20.06.2026', time: '16:05', amount: 1000, purpose: 'Частичная оплата', debtAfter: 2500 },
 ]
 
 function FinancePanel({
@@ -2533,6 +2546,8 @@ function FinancePanel({
       {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
       {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
       {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
+      {paymentsPrototypeDialog === 'garageAccrual' ? <GarageAccrualPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
+      {paymentsPrototypeDialog === 'fullPayment' ? <FullPaymentPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
     </section>
   )
 }
@@ -2546,6 +2561,11 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
+      <label className="payments-prototype-search">
+        <Search size={18} aria-hidden="true" />
+        <input aria-label="Поиск платежей по гаражу или владельцу" placeholder="Номер гаража или ФИО владельца" />
+      </label>
+
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
           <button type="button" role="tab" aria-selected={activeTab === 'income'} className={activeTab === 'income' ? 'is-active' : undefined} onClick={() => setActiveTab('income')}>
@@ -2555,16 +2575,108 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
             Выплаты
           </button>
         </div>
-        <div className="payments-prototype-actions">
-          <button className="secondary-button" type="button" onClick={() => onOpenDialog('accrual')}>
-            <Plus size={16} />
-            <span>Добавить начисление</span>
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onOpenDialog('expense')}>
-            <Plus size={16} />
-            <span>Добавить выплату</span>
-          </button>
+      </div>
+
+      <div className="payments-prototype-main-grid">
+        <section className="payments-prototype-card" aria-label="Карточка гаража">
+          <div className="payments-prototype-garage-line">
+            <span>Люди</span>
+            <strong>3</strong>
+            <span>Баланс</span>
+            <strong>5 300</strong>
+          </div>
+          <div className="payments-prototype-garage-line">
+            <span>Этажи</span>
+            <strong>1</strong>
+            <span>Просроченная задолженность</span>
+            <strong className="money-expense">1 300</strong>
+          </div>
+          <div className="payments-prototype-actions payments-prototype-actions--stacked">
+            <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={() => onOpenDialog('garageAccrual')}>
+              <Plus size={16} aria-hidden="true" />
+              <span>Добавить начисление</span>
+            </button>
+            <button className="secondary-button" type="button" onClick={() => onOpenDialog('fullPayment')}>
+              <span>Полная оплата</span>
+            </button>
+          </div>
+        </section>
+
+        <section className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
+          <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
+            <thead>
+              <tr>
+                <th scope="col">Дата</th>
+                <th scope="col">Время</th>
+                <th scope="col">Сумма платежа</th>
+                <th scope="col">Назначение платежа</th>
+                <th scope="col">Остаток долга после платежа</th>
+              </tr>
+            </thead>
+            <tbody>
+              {garagePaymentHistoryRows.map((row) => (
+                <tr key={`${row.date}-${row.time}-${row.purpose}`}>
+                  <td>{row.date}</td>
+                  <td>{row.time}</td>
+                  <td>{formatPaymentPrototypeValue(row.amount)}</td>
+                  <td>{row.purpose}</td>
+                  <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <div className="payments-prototype-sheet">
+        <div className="payments-prototype-table-scroll">
+          <table className="payments-prototype-table payments-prototype-table--garage" aria-label="Платежи гаража за июнь 2026">
+            <thead>
+              <tr>
+                <th scope="col">
+                  <label>
+                    <span>Месяц по</span>
+                    <select aria-label="Месяц платежей гаража" defaultValue="2026-06">
+                      <option value="2026-06">Текущий</option>
+                      <option value="2026-05">май 2026</option>
+                      <option value="2026-04">апрель 2026</option>
+                    </select>
+                  </label>
+                </th>
+                <th scope="col">Счётчик</th>
+                <th scope="col">Разница</th>
+                <th scope="col">К оплате</th>
+                <th scope="col">Платёж</th>
+                <th scope="col">Оплачено</th>
+                <th scope="col">Задолженность</th>
+              </tr>
+            </thead>
+            <tbody>
+              {garagePaymentPrototypeRows.map((row, index) => (
+                <tr key={`garage-payment-${index}`}>
+                  <td>{index === 0 ? activeTab === 'income' ? 'Поступления' : 'Выплаты' : ''}</td>
+                  <td>{formatPaymentPrototypeValue(row.meter)}</td>
+                  <td>{formatPaymentPrototypeValue(row.difference)}</td>
+                  <td>{formatPaymentPrototypeValue(row.payable)}</td>
+                  <td>{formatPaymentPrototypeValue(row.payment)}</td>
+                  <td>{formatPaymentPrototypeValue(row.paid)}</td>
+                  <td className={row.debt ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(row.debt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </div>
+
+      <div className="payments-prototype-actions payments-prototype-actions--sheet">
+        <button className="secondary-button" type="button" onClick={() => onOpenDialog('accrual')}>
+          <Plus size={16} aria-hidden="true" />
+          <span>Добавить начисление</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={() => onOpenDialog('expense')}>
+          <Plus size={16} aria-hidden="true" />
+          <span>Добавить выплату</span>
+        </button>
       </div>
 
       <div className="payments-prototype-sheet">
@@ -2572,18 +2684,7 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
           <table className="payments-prototype-table" aria-label="Форма платежей за июнь 2026">
             <thead>
               <tr>
-                <th scope="col">
-                  <label>
-                    <span>Месяц</span>
-                    <select aria-label="Месяц формы платежей" defaultValue="2026-06">
-                      <option value="2026-06">июнь 2026</option>
-                      <option value="2026-05">май 2026</option>
-                      <option value="2026-07">июль 2026</option>
-                    </select>
-                  </label>
-                </th>
-                <th scope="col">Поставщик</th>
-                <th scope="col">Услуга</th>
+                <th scope="col">Статья</th>
                 <th scope="col">Стоимость</th>
                 <th scope="col">Оплачено</th>
                 <th scope="col">Остаток</th>
@@ -2594,10 +2695,8 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
             </thead>
             <tbody>
               {paymentPrototypeRows.map((row, index) => (
-                <tr key={`${row.supplier}-${row.service}-${index}`}>
-                  <td>{index === 0 ? activeTab === 'income' ? 'Поступления' : 'Выплаты' : ''}</td>
-                  <td>{row.supplier}</td>
-                  <td>{row.service}</td>
+                <tr key={`${row.item}-${index}`}>
+                  <td>{row.item}</td>
                   <td className={row.cost ? 'money-income' : undefined}>{formatPaymentPrototypeValue(row.cost)}</td>
                   <td>{formatPaymentPrototypeValue(row.paid)}</td>
                   <td>{formatPaymentPrototypeValue(row.balance)}</td>
@@ -2613,7 +2712,7 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
                   </td>
                   <td>
                     {row.action ? (
-                      <button className="link-button" type="button" onClick={() => onOpenDialog('expense')} aria-label={`Оплатить ${row.service}`}>
+                      <button className="link-button" type="button" onClick={() => onOpenDialog('expense')} aria-label={`Оплатить ${row.item}`}>
                         Оплатить
                       </button>
                     ) : null}
@@ -2622,8 +2721,6 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
               ))}
               <tr className="payments-prototype-total-row">
                 <td>ИТОГО</td>
-                <td />
-                <td />
                 <td>235 000</td>
                 <td>55 500</td>
                 <td />
@@ -2667,7 +2764,6 @@ function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
         <div className="detail-dialog-header">
           <div>
             <h3 id="bank-deposit-title">Учет суммы на счете в банке</h3>
-            <p>Макет формы фиксации суммы, которая переносится из кассы на банковский счет.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть учет суммы в банке" onClick={onClose}>
             <X size={18} />
@@ -2706,7 +2802,6 @@ function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
         <div className="detail-dialog-header">
           <div>
             <h3 id="new-expense-title">Новая выплата</h3>
-            <p>Макет формы выплаты поставщику или выдачи без чека.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть новую выплату" onClick={onClose}>
             <X size={18} />
@@ -2754,7 +2849,6 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
         <div className="detail-dialog-header">
           <div>
             <h3 id="new-accrual-title">Новое начисление</h3>
-            <p>Макет ручного начисления по основанию, сумме и комментарию.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть новое начисление" onClick={onClose}>
             <X size={18} />
@@ -2775,6 +2869,94 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit">Ок</button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="garage-accrual-title">Новое начисление</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть начисление гаража" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Тип">
+            <select aria-label="Тип начисления гаража" defaultValue="late">
+              <option value="late">Пени</option>
+              <option value="service">Услуга</option>
+              <option value="correction">Корректировка</option>
+            </select>
+          </FormField>
+          <FormField label="Сумма">
+            <input aria-label="Сумма начисления гаража" inputMode="decimal" />
+          </FormField>
+          <FormField label="Дата">
+            <input aria-label="Дата начисления гаража" type="date" />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к начислению гаража" rows={5} />
+          </FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">Ок</button>
+            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="full-payment-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="full-payment-title">Полная оплата</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть полную оплату" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
+          event.preventDefault()
+          onClose()
+        }}>
+          <FormField label="Период">
+            <select aria-label="Период полной оплаты" defaultValue="full">
+              <option value="full">Полный расчет</option>
+              <option value="2026-06">июн.26</option>
+              <option value="2026-05">май.26</option>
+              <option value="2026-04">апр.26</option>
+            </select>
+          </FormField>
+          <FormField label="Сумма">
+            <input aria-label="Сумма полной оплаты" inputMode="decimal" />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к полной оплате" rows={4} />
+          </FormField>
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit">Принять</button>
             <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
           </div>
         </form>

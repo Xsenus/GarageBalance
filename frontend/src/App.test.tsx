@@ -229,7 +229,7 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('1 500,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
-    expect(within(financePanel).getByText('1')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('1').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('19.06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
@@ -482,9 +482,23 @@ describe('App', () => {
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
+    expect(within(prototype).getByLabelText('Поиск платежей по гаражу или владельцу')).toBeInTheDocument()
+    expect(within(prototype).getByRole('region', { name: 'Карточка гаража' })).toBeInTheDocument()
+    expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
+    expect(within(prototype).getByRole('table', { name: 'Платежи гаража за июнь 2026' })).toBeInTheDocument()
     expect(within(prototype).getByRole('table', { name: 'Форма платежей за июнь 2026' })).toBeInTheDocument()
-    expect(within(prototype).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(within(prototype).getAllByText('Электроэнергия').length).toBeGreaterThan(0)
     expect(within(prototype).getAllByText('257 100')).toHaveLength(2)
+
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить начисление гаражу' }))
+    const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
+    expect(within(garageAccrualDialog).getByLabelText('Тип начисления гаража')).toHaveValue('late')
+    await user.click(within(garageAccrualDialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    expect(within(fullPaymentDialog).getByLabelText('Период полной оплаты')).toHaveValue('full')
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Отмена' }))
 
     await user.click(within(prototype).getByRole('button', { name: 'Добавить выплату' }))
     const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
