@@ -358,7 +358,13 @@ describe('App', () => {
 
   it('shows meter readings prototype as a yearly garage table', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [
+        createGarage({ id: 'garage-27', number: '27' }),
+        createGarage({ id: 'garage-12', number: '12' }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -369,8 +375,29 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(within(readingsPanel).getByLabelText('Год показаний')).toHaveValue('2026')
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByLabelText('Гараж 1, янв, показание')).toHaveValue('4654')
-    expect(within(readingsPanel).getByLabelText('Гараж 35, дек, кВт')).toBeInTheDocument()
+    expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварькВт/i })).toBeInTheDocument()
+    expect(await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')).toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 27, Декабрь, показание')).toBeInTheDocument()
+    expect(within(readingsPanel).queryByLabelText('Гараж 35, Декабрь, показание')).not.toBeInTheDocument()
+
+    const yearInput = within(readingsPanel).getByLabelText('Год показаний')
+    await user.clear(yearInput)
+    await user.type(yearInput, '1899')
+    expect(within(readingsPanel).getByRole('alert')).toHaveTextContent('Введите год четырьмя цифрами от 1900 до 9999.')
+
+    await user.clear(yearInput)
+    await user.type(yearInput, '2026')
+    const januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
+    await user.type(januaryInput, '4654{Enter}')
+    expect(januaryInput).toHaveValue('4654')
+
+    await user.click(within(readingsPanel).getByRole('tab', { name: 'История изменений' }))
+    const historyTable = within(readingsPanel).getByRole('table', { name: 'История изменений показаний' })
+    expect(within(historyTable).getByText('Гараж 12')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Январь')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(within(historyTable).getByText('4654')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Администратор')).toBeInTheDocument()
   })
 
   it('shows payments prototype and opens payment form modals', async () => {

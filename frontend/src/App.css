@@ -1026,6 +1026,61 @@ h1 {
   gap: 10px;
 }
 
+.meter-readings-control {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+  padding: 7px 9px;
+}
+
+.meter-readings-control:hover {
+  border-color: #98a2b3;
+}
+
+.meter-readings-control:focus {
+  border-color: #111827;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.meter-readings-control[aria-invalid='true'] {
+  border-color: #f04438;
+  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.08);
+}
+
+.meter-readings-tabs {
+  display: inline-flex;
+  width: fit-content;
+  gap: 4px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 4px;
+}
+
+.meter-readings-tabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
+.meter-readings-tabs button:hover,
+.meter-readings-tabs button:focus-visible,
+.meter-readings-tabs button.is-active {
+  background: #ffffff;
+  color: #101828;
+  outline: 0;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
 .meter-readings-table-shell {
   overflow: auto;
   max-height: calc(100vh - 170px);
@@ -1036,14 +1091,14 @@ h1 {
 }
 
 .meter-readings-table {
-  min-width: 1550px;
+  min-width: 1680px;
 }
 
 .meter-readings-title-row,
 .meter-readings-month-row,
 .meter-readings-data-row {
   display: grid;
-  grid-template-columns: 78px repeat(12, 122px);
+  grid-template-columns: 110px repeat(12, 130px);
 }
 
 .meter-readings-title-row {
@@ -1089,7 +1144,7 @@ h1 {
 
 .meter-readings-month-row span {
   display: grid;
-  grid-template-columns: 1fr 44px;
+  grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
   min-height: 36px;
   padding: 7px 8px;
@@ -1127,8 +1182,7 @@ h1 {
 }
 
 .meter-readings-data-row > span:not(:first-child) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  display: block;
   min-height: 36px;
 }
 
@@ -1136,7 +1190,6 @@ h1 {
   width: 100%;
   min-width: 0;
   border: 0;
-  border-right: 1px solid #f2f4f7;
   background: transparent;
   color: #101828;
   font: inherit;
@@ -1151,12 +1204,59 @@ h1 {
   outline-offset: -2px;
 }
 
+.meter-readings-data-row input:disabled {
+  background: #f2f4f7;
+  color: #667085;
+}
+
 .meter-readings-data-row:nth-child(even) > span {
   background: #fcfcfd;
 }
 
 .meter-readings-data-row:nth-child(even) > span:first-child {
   background: #fcfcfd;
+}
+
+.meter-readings-empty-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-width: 760px;
+}
+
+.meter-readings-empty-row span {
+  border-bottom: 1px solid #eaecf0;
+  color: #667085;
+  padding: 14px 16px;
+}
+
+.meter-readings-history-table {
+  overflow: auto;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.meter-readings-history-header,
+.meter-readings-history-row {
+  display: grid;
+  grid-template-columns: 140px 150px 110px 90px 120px 160px 120px 120px;
+  min-width: 1010px;
+}
+
+.meter-readings-history-header {
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.meter-readings-history-header span,
+.meter-readings-history-row span {
+  min-width: 0;
+  border-bottom: 1px solid #eaecf0;
+  padding: 10px 12px;
 }
 
 .roadmap-grid {

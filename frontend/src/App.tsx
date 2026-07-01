@@ -418,7 +418,7 @@ function Workspace({
         )
       case 'meterReadings':
         return canReadPayments ? (
-          <MeterReadingsPrototypePanel />
+          <MeterReadingsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} />
         ) : (
           <AccessNotice label="Показания недоступны" title="Показания" permission={permissions.paymentsRead} description="Для просмотра показаний счетчиков нужно право на чтение финансовых операций." />
         )
@@ -4613,6 +4613,13 @@ function formatPrototypeHistoryDateTime(value: Date) {
   }).format(value)
 }
 
+function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement>, onCommit: () => void) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    onCommit()
+  }
+}
+
 function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePanelProps) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [activeView, setActiveView] = useState<'values' | 'history'>('values')
@@ -4712,13 +4719,6 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
       previousValue: 'Активен',
       nextValue: 'Удален',
     })
-  }
-
-  const handleEditableInputKeyDown = (event: KeyboardEvent<HTMLInputElement>, onCommit: () => void) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      onCommit()
-    }
   }
 
   const filteredHistory = historySection === 'all'
@@ -5069,87 +5069,243 @@ function AddFeePrototypeDialog({ onClose }: { onClose: () => void }) {
 }
 
 const meterReadingMonths = [
-  'янв',
-  'фев',
-  'мар',
-  'апр',
-  'май',
-  'июн',
-  'июл',
-  'авг',
-  'сен',
-  'окт',
-  'ноя',
-  'дек',
+  { key: 'january', label: 'Январь' },
+  { key: 'february', label: 'Февраль' },
+  { key: 'march', label: 'Март' },
+  { key: 'april', label: 'Апрель' },
+  { key: 'may', label: 'Май' },
+  { key: 'june', label: 'Июнь' },
+  { key: 'july', label: 'Июль' },
+  { key: 'august', label: 'Август' },
+  { key: 'september', label: 'Сентябрь' },
+  { key: 'october', label: 'Октябрь' },
+  { key: 'november', label: 'Ноябрь' },
+  { key: 'december', label: 'Декабрь' },
 ]
 
-const meterReadingGarageRows = Array.from({ length: 35 }, (_, index) => {
-  const garageNumber = index + 1
-  return {
-    garageNumber,
-    readings: meterReadingMonths.map((month, monthIndex) => ({
-      month,
-      value: garageNumber === 1 && monthIndex === 0 ? '4654' : garageNumber === 7 && monthIndex === 5 ? '1280' : '',
-      consumption: garageNumber === 1 && monthIndex === 1 ? '36' : garageNumber === 12 && monthIndex === 8 ? '18' : '',
-    })),
-  }
-})
+const meterReadingTypes = [
+  { id: 'electricity', label: 'Электроэнергия', unit: 'кВт' },
+  { id: 'water', label: 'Вода', unit: 'м3' },
+] as const
 
-function MeterReadingsPrototypePanel() {
+type MeterReadingTypeId = typeof meterReadingTypes[number]['id']
+
+type MeterReadingHistoryEntry = {
+  id: string
+  garageNumber: string
+  year: string
+  month: string
+  meterType: string
+  previousValue: string
+  nextValue: string
+  actorName: string
+  changedAt: string
+}
+
+function createMeterReadingCellKey(year: string, meterType: MeterReadingTypeId, garageId: string, monthKey: string) {
+  return `${year}:${meterType}:${garageId}:${monthKey}`
+}
+
+function isValidMeterReadingYear(value: string) {
+  if (!/^\d{4}$/.test(value)) {
+    return false
+  }
+
+  const year = Number(value)
+  return year >= 1900 && year <= 9999
+}
+
+function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient }) {
   const [year, setYear] = useState('2026')
+  const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
+  const [garages, setGarages] = useState<GarageDto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [activeView, setActiveView] = useState<'readings' | 'history'>('readings')
+  const [savedReadings, setSavedReadings] = useState<Record<string, string>>({})
+  const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
+  const [history, setHistory] = useState<MeterReadingHistoryEntry[]>([])
+
+  const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
+  const yearIsValid = isValidMeterReadingYear(year)
+
+  useEffect(() => {
+    let isMounted = true
+
+    dictionaryClient
+      .getGarages(auth.accessToken, undefined, 500)
+      .then((items) => {
+        if (!isMounted) {
+          return
+        }
+
+        setGarages([...items.filter((item) => !item.isArchived)].sort((left, right) => left.number.localeCompare(right.number, 'ru-RU', { numeric: true })))
+        setLoading(false)
+      })
+      .catch((loadError) => {
+        if (!isMounted) {
+          return
+        }
+
+        setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить гаражи.')
+        setGarages([])
+        setLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [auth.accessToken, dictionaryClient])
+
+  const commitReading = (garage: GarageDto, month: typeof meterReadingMonths[number]) => {
+    if (!yearIsValid) {
+      return
+    }
+
+    const cellKey = createMeterReadingCellKey(year, meterType, garage.id, month.key)
+    const nextValue = draftReadings[cellKey] ?? ''
+    const previousValue = savedReadings[cellKey] ?? ''
+
+    if (nextValue.trim() === previousValue.trim()) {
+      return
+    }
+
+    setSavedReadings((currentReadings) => ({ ...currentReadings, [cellKey]: nextValue }))
+    setHistory((currentHistory) => [
+      {
+        id: `meter-history-${Date.now()}-${currentHistory.length + 1}`,
+        garageNumber: garage.number,
+        year,
+        month: month.label,
+        meterType: selectedMeterType.label,
+        previousValue: normalizeHistoryValue(previousValue),
+        nextValue: normalizeHistoryValue(nextValue),
+        actorName: auth.user.displayName,
+        changedAt: formatPrototypeHistoryDateTime(new Date()),
+      },
+      ...currentHistory,
+    ])
+  }
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
       <div className="meter-readings-heading">
         <div>
           <h1>Показания</h1>
-          <p>Черновой вид годовой таблицы показаний счетчиков по гаражам.</p>
         </div>
         <div className="meter-readings-controls">
           <FormField label="Год">
-            <select aria-label="Год показаний" value={year} onChange={(event) => setYear(event.target.value)}>
-              <option>2026</option>
-              <option>2025</option>
-              <option>2024</option>
-            </select>
+            <input
+              aria-label="Год показаний"
+              aria-invalid={!yearIsValid}
+              className="meter-readings-control"
+              inputMode="numeric"
+              maxLength={4}
+              value={year}
+              onChange={(event) => setYear(event.target.value.replace(/\D/g, '').slice(0, 4))}
+            />
           </FormField>
           <FormField label="Тип">
-            <select aria-label="Тип показаний" defaultValue="electricity">
-              <option value="electricity">Электроэнергия, кВт</option>
-              <option value="water">Вода, м3</option>
+            <select aria-label="Тип показаний" className="meter-readings-control" value={meterType} onChange={(event) => setMeterType(event.target.value as MeterReadingTypeId)}>
+              {meterReadingTypes.map((item) => (
+                <option value={item.id} key={item.id}>{item.label}, {item.unit}</option>
+              ))}
             </select>
           </FormField>
         </div>
       </div>
 
-      <div className="meter-readings-table-shell">
-        <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${year} год`}>
-          <div className="meter-readings-title-row" role="row">
-            <span role="columnheader">Гараж</span>
-            <span role="columnheader">Показания</span>
-          </div>
-          <div className="meter-readings-month-row" role="row">
-            <span role="columnheader">Гараж</span>
-            {meterReadingMonths.map((month) => (
-              <span role="columnheader" key={month}>
-                <strong>{month}</strong>
-                <small>кВт</small>
-              </span>
-            ))}
-          </div>
-          {meterReadingGarageRows.map((row) => (
-            <div className="meter-readings-data-row" role="row" key={row.garageNumber}>
-              <span role="rowheader">{row.garageNumber}</span>
-              {row.readings.map((reading) => (
-                <span role="cell" key={`${row.garageNumber}-${reading.month}`}>
-                  <input aria-label={`Гараж ${row.garageNumber}, ${reading.month}, показание`} defaultValue={reading.value} />
-                  <input aria-label={`Гараж ${row.garageNumber}, ${reading.month}, кВт`} defaultValue={reading.consumption} />
+      <div className="meter-readings-tabs" role="tablist" aria-label="Режим показаний">
+        <button type="button" role="tab" aria-selected={activeView === 'readings'} className={activeView === 'readings' ? 'is-active' : ''} onClick={() => setActiveView('readings')}>
+          Показания
+        </button>
+        <button type="button" role="tab" aria-selected={activeView === 'history'} className={activeView === 'history' ? 'is-active' : ''} onClick={() => setActiveView('history')}>
+          История изменений
+        </button>
+      </div>
+
+      {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
+      {error ? <div className="form-error" role="alert">{error}</div> : null}
+
+      {activeView === 'readings' ? (
+        <div className="meter-readings-table-shell">
+          <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${year} год`}>
+            <div className="meter-readings-title-row" role="row">
+              <span role="columnheader">Гараж</span>
+              <span role="columnheader">Показания</span>
+            </div>
+            <div className="meter-readings-month-row" role="row">
+              <span role="columnheader">Гараж</span>
+              {meterReadingMonths.map((month) => (
+                <span role="columnheader" key={month.key}>
+                  <strong>{month.label}</strong>
+                  <small>{selectedMeterType.unit}</small>
                 </span>
               ))}
             </div>
-          ))}
+            {loading ? (
+              <div className="meter-readings-empty-row" role="row">
+                <span role="cell">Загрузка гаражей...</span>
+              </div>
+            ) : garages.length > 0 ? garages.map((garage) => (
+              <div className="meter-readings-data-row" role="row" key={garage.id}>
+                <span role="rowheader">Гараж {garage.number}</span>
+                {meterReadingMonths.map((month) => {
+                  const cellKey = createMeterReadingCellKey(year, meterType, garage.id, month.key)
+                  return (
+                    <span role="cell" key={cellKey}>
+                      <input
+                        aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
+                        disabled={!yearIsValid}
+                        inputMode="decimal"
+                        value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
+                        onBlur={() => commitReading(garage, month)}
+                        onChange={(event) => setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: event.target.value }))}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitReading(garage, month))}
+                      />
+                    </span>
+                  )
+                })}
+              </div>
+            )) : (
+              <div className="meter-readings-empty-row" role="row">
+                <span role="cell">В справочнике пока нет гаражей</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <section className="meter-readings-history" aria-label="История изменений показаний">
+          <div className="meter-readings-history-table" role="table" aria-label="История изменений показаний">
+            <div className="meter-readings-history-header" role="row">
+              <span role="columnheader">Когда</span>
+              <span role="columnheader">Кто</span>
+              <span role="columnheader">Гараж</span>
+              <span role="columnheader">Год</span>
+              <span role="columnheader">Месяц</span>
+              <span role="columnheader">Тип</span>
+              <span role="columnheader">Было</span>
+              <span role="columnheader">Стало</span>
+            </div>
+            {history.length > 0 ? history.map((entry) => (
+              <div className="meter-readings-history-row" role="row" key={entry.id}>
+                <span role="cell">{entry.changedAt}</span>
+                <span role="cell">{entry.actorName}</span>
+                <span role="cell">Гараж {entry.garageNumber}</span>
+                <span role="cell">{entry.year}</span>
+                <span role="cell">{entry.month}</span>
+                <span role="cell">{entry.meterType}</span>
+                <span role="cell">{entry.previousValue}</span>
+                <span role="cell">{entry.nextValue}</span>
+              </div>
+            )) : (
+              <div className="meter-readings-empty-row" role="row">
+                <span role="cell">Истории изменений пока нет</span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
     </section>
   )
 }
