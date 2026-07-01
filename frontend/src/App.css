@@ -948,6 +948,15 @@ h1 {
   width: min(820px, 100%);
 }
 
+.contractors-tariff-dialog {
+  width: min(560px, 100%);
+}
+
+.contractors-tariff-dialog .detail-dialog-header h3 {
+  flex: 1;
+  text-align: center;
+}
+
 .contractors-modal-form {
   gap: 14px;
 }
@@ -1008,11 +1017,25 @@ h1 {
   font-weight: 700;
 }
 
+.contractors-check-row--compact {
+  justify-content: flex-start;
+}
+
 .contractors-check-row input[type='checkbox'] {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
   accent-color: #2563eb;
+}
+
+.contractors-form-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  color: #344054;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .contractors-inline-field {

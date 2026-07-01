@@ -5466,18 +5466,15 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
 }
 
 function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
-  const [isRegular, setIsRegular] = useState(true)
+  const [isRegular, setIsRegular] = useState(false)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-service-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-service-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
-          <div>
-            <h3 id="contractor-service-title">Добавить услугу</h3>
-            <p>Макет формы для будущего подключения услуги к расчетам.</p>
-          </div>
+          <h3 id="contractor-service-title">Добавить услугу</h3>
           <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
             <X size={18} />
           </button>
@@ -5490,10 +5487,12 @@ function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
           <FormField label="Наименование услуги">
             <input aria-label="Наименование услуги" />
           </FormField>
-          <label className="contractors-check-row">
-            <input type="checkbox" aria-label="Регулярные платежи" checked={isRegular} onChange={(event) => setIsRegular(event.target.checked)} />
+          <div className="contractors-form-row">
             <span>Регулярные платежи</span>
-          </label>
+            <label className="contractors-check-row contractors-check-row--compact">
+              <input type="checkbox" aria-label="Регулярные платежи" checked={isRegular} onChange={(event) => setIsRegular(event.target.checked)} />
+            </label>
+          </div>
           {isRegular ? (
             <>
               <FormField label="Периодичность">
@@ -5573,12 +5572,9 @@ function AddFeePrototypeDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
-          <div>
-            <h3 id="contractor-fee-title">Добавить сбор</h3>
-            <p>Макет объявления разового или целевого сбора.</p>
-          </div>
+          <h3 id="contractor-fee-title">Добавить сбор</h3>
           <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose}>
             <X size={18} />
           </button>
@@ -5600,10 +5596,13 @@ function AddFeePrototypeDialog({ onClose }: { onClose: () => void }) {
               <span>руб.</span>
             </div>
           </FormField>
-          <label className="contractors-check-row">
-            <input type="checkbox" aria-label="Все гаражи" defaultChecked />
-            <span>Все гаражи</span>
-          </label>
+          <div className="contractors-form-row">
+            <span>Участники</span>
+            <label className="contractors-check-row contractors-check-row--compact">
+              <span>все гаражи</span>
+              <input type="checkbox" aria-label="Все гаражи" defaultChecked />
+            </label>
+          </div>
           <FormField label="Сумма сбора">
             <input aria-label="Сумма сбора" />
           </FormField>
