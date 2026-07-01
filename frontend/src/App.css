@@ -658,6 +658,75 @@ h1 {
   font-weight: 500;
 }
 
+.contractors-editable-input,
+.contractors-editable-select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+}
+
+.contractors-editable-input {
+  padding: 7px 9px;
+}
+
+.contractors-editable-input--unit {
+  max-width: 88px;
+}
+
+.contractors-editable-select {
+  padding: 6px 28px 6px 9px;
+}
+
+.contractors-editable-input:hover,
+.contractors-editable-select:hover {
+  border-color: #98a2b3;
+}
+
+.contractors-editable-input:focus,
+.contractors-editable-select:focus {
+  border-color: #111827;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.contractors-editable-input:disabled {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.contractors-prototype-tabs {
+  display: inline-flex;
+  width: fit-content;
+  gap: 4px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 4px;
+}
+
+.contractors-prototype-tabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
+.contractors-prototype-tabs button:hover,
+.contractors-prototype-tabs button:focus-visible,
+.contractors-prototype-tabs button.is-active {
+  background: #ffffff;
+  color: #101828;
+  outline: 0;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
 .contractors-bottom-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.9fr) minmax(240px, 0.7fr);
@@ -684,6 +753,11 @@ h1 {
   grid-template-columns: 1fr 120px;
 }
 
+.contractors-mini-header--editable,
+.contractors-mini-row--editable {
+  grid-template-columns: minmax(190px, 1fr) minmax(110px, 150px) 88px 72px;
+}
+
 .contractors-mini-header {
   background: #f8fafc;
   color: #344054;
@@ -695,6 +769,88 @@ h1 {
 .contractors-mini-row span {
   border-bottom: 1px solid #eaecf0;
   padding: 9px 12px;
+}
+
+.contractors-mini-row--deleted {
+  background: #f8fafc;
+  color: #667085;
+}
+
+.contractors-delete-button {
+  width: 34px;
+  height: 34px;
+  color: #b42318;
+}
+
+.contractors-delete-button:hover:not(:disabled),
+.contractors-delete-button:focus-visible {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #912018;
+}
+
+.contractors-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.contractors-history-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.contractors-history-panel label {
+  display: inline-grid;
+  width: min(260px, 100%);
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.contractors-history-panel select {
+  min-height: 38px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+  padding: 7px 9px;
+}
+
+.contractors-history-table {
+  overflow: auto;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.contractors-history-header,
+.contractors-history-row {
+  display: grid;
+  grid-template-columns: 140px 150px 170px minmax(220px, 1fr) 140px 120px 120px 110px;
+  min-width: 1180px;
+}
+
+.contractors-history-header {
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.contractors-history-header span,
+.contractors-history-row span,
+.contractors-history-empty span {
+  min-width: 0;
+  border-bottom: 1px solid #eaecf0;
+  padding: 10px 12px;
+}
+
+.contractors-history-empty {
+  color: #667085;
 }
 
 .contractors-action-stack {

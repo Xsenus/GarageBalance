@@ -406,7 +406,7 @@ function Workspace({
         )
       case 'tariffsAndFees':
         return canReadDictionaries ? (
-          <TariffsAndFeesPrototypePanel />
+          <TariffsAndFeesPrototypePanel actorName={auth.user.displayName} />
         ) : (
           <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )
@@ -4439,6 +4439,7 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
 }
 
 type ContractorTariffRow = {
+  id: string
   title: string
   amount?: string
   unit?: string
@@ -4446,39 +4447,47 @@ type ContractorTariffRow = {
   byMeter: boolean
   tiered: boolean
   group?: string
+  category: string
 }
 
 const contractorTariffRows: ContractorTariffRow[] = [
-  { group: 'Вода', title: 'Тариф на воду', amount: '', unit: 'руб.', byMeter: true, tiered: false },
-  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: false },
-  { group: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { group: 'Электроэнергия', title: 'От 0 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
-  { title: 'От 1 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
-  { title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
-  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
-  { group: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { title: 'Оплата до', amount: '30 июн', byMeter: false, tiered: false },
-  { title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
-  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { group: 'Целевой взнос', title: 'Сумма целевого взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { title: 'Оплата за год до', amount: '30 июн', byMeter: false, tiered: false },
-  { title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
-  { title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { group: 'Наружное освещение', title: 'Оплата за год до', amount: '31 дек', byMeter: false, tiered: false },
-  { title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
-  { title: 'Перенос долга в просроченный', amount: '0', unit: 'дн.', byMeter: false, tiered: false },
-  { group: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { title: 'Руководство', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'water-rate', group: 'Вода', category: 'Вода', title: 'Тариф на воду', amount: '', unit: 'руб.', byMeter: true, tiered: false },
+  { id: 'water-overdue-days', category: 'Вода', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: false },
+  { id: 'waste-rate', group: 'Мусор', category: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'waste-overdue-days', category: 'Мусор', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
+  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'От 0 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { id: 'electricity-overdue-days', category: 'Электроэнергия', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
+  { id: 'membership-fee', group: 'Членский взнос', category: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'membership-due-date', category: 'Членский взнос', title: 'Оплата до', amount: '30 июн', byMeter: false, tiered: false },
+  { id: 'membership-start-date', category: 'Членский взнос', title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { id: 'membership-overdue-days', category: 'Членский взнос', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
+  { id: 'target-fee', group: 'Целевой взнос', category: 'Целевой взнос', title: 'Сумма целевого взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'target-due-date', category: 'Целевой взнос', title: 'Оплата за год до', amount: '30 июн', byMeter: false, tiered: false },
+  { id: 'target-start-date', category: 'Целевой взнос', title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { id: 'target-overdue-days', category: 'Целевой взнос', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
+  { id: 'lighting-due-date', group: 'Наружное освещение', category: 'Наружное освещение', title: 'Оплата за год до', amount: '31 дек', byMeter: false, tiered: false },
+  { id: 'lighting-start-date', category: 'Наружное освещение', title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { id: 'lighting-overdue-days', category: 'Наружное освещение', title: 'Перенос долга в просроченный', amount: '0', unit: 'дн.', byMeter: false, tiered: false },
+  { id: 'salary-electricians', group: 'Зарплатный фонд', category: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'salary-accounting', category: 'Зарплатный фонд', title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'salary-management', category: 'Зарплатный фонд', title: 'Руководство', amount: '', unit: 'руб.', byMeter: false, tiered: false },
 ]
 
+type ContractorOneTimeRow = {
+  id: string
+  name: string
+  amount: string
+  isDeleted: boolean
+}
+
 const contractorOneTimeRows = [
-  { name: 'Вступительный взнос', amount: '' },
-  { name: 'Подключение канализации', amount: '' },
-  { name: 'Подключение к линии электросети', amount: '' },
-  { name: 'Штраф за то', amount: '' },
-  { name: 'Штраф за это', amount: '' },
+  { id: 'entry-fee', name: 'Вступительный взнос', amount: '', isDeleted: false },
+  { id: 'sewerage-connection', name: 'Подключение канализации', amount: '', isDeleted: false },
+  { id: 'electricity-connection', name: 'Подключение к линии электросети', amount: '', isDeleted: false },
+  { id: 'fine-that', name: 'Штраф за то', amount: '', isDeleted: false },
+  { id: 'fine-this', name: 'Штраф за это', amount: '', isDeleted: false },
 ]
 
 const contractorGarageRows = [
@@ -4561,15 +4570,166 @@ function ContractorsPrototypePanel() {
   )
 }
 
-function TariffsAndFeesPrototypePanel() {
+type TariffHistorySection = 'Тарифы и сборы' | 'Нерегулярные платежи'
+
+type TariffHistoryEntry = {
+  id: string
+  section: TariffHistorySection
+  objectName: string
+  field: string
+  action: string
+  previousValue: string
+  nextValue: string
+  actorName: string
+  changedAt: string
+}
+
+type TariffsAndFeesPrototypePanelProps = {
+  actorName: string
+}
+
+function createEditableDrafts(rows: Array<{ id: string; amount?: string; unit?: string }>) {
+  return rows.reduce<Record<string, { amount: string; unit: string }>>((drafts, row) => {
+    drafts[row.id] = { amount: row.amount ?? '', unit: row.unit ?? '' }
+    return drafts
+  }, {})
+}
+
+function normalizeHistoryValue(value: string | boolean | undefined) {
+  if (typeof value === 'boolean') {
+    return value ? 'Да' : 'Нет'
+  }
+
+  return value?.trim() ? value.trim() : 'Пусто'
+}
+
+function formatPrototypeHistoryDateTime(value: Date) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(value)
+}
+
+function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePanelProps) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
+  const [activeView, setActiveView] = useState<'values' | 'history'>('values')
+  const [historySection, setHistorySection] = useState<'all' | TariffHistorySection>('all')
+  const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
+  const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
+  const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
+  const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
+  const [history, setHistory] = useState<TariffHistoryEntry[]>([])
+
+  const addHistoryEntry = (entry: Omit<TariffHistoryEntry, 'id' | 'actorName' | 'changedAt'>) => {
+    setHistory((currentHistory) => [
+      {
+        ...entry,
+        id: `tariff-history-${Date.now()}-${currentHistory.length + 1}`,
+        actorName,
+        changedAt: formatPrototypeHistoryDateTime(new Date()),
+      },
+      ...currentHistory,
+    ])
+  }
+
+  const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit', fieldLabel: string) => {
+    const nextValue = tariffDrafts[row.id]?.[field] ?? ''
+    const previousValue = row[field] ?? ''
+
+    if (nextValue.trim() === previousValue.trim()) {
+      return
+    }
+
+    setTariffRows((currentRows) => currentRows.map((currentRow) => (
+      currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
+    )))
+    addHistoryEntry({
+      section: 'Тарифы и сборы',
+      objectName: `${row.category}: ${row.title}`,
+      field: fieldLabel,
+      action: 'Изменение',
+      previousValue: normalizeHistoryValue(previousValue),
+      nextValue: normalizeHistoryValue(nextValue),
+    })
+  }
+
+  const commitTariffBooleanChange = (row: ContractorTariffRow, field: 'tiered' | 'byMeter', nextValue: boolean, fieldLabel: string) => {
+    const previousValue = row[field]
+
+    if (previousValue === nextValue) {
+      return
+    }
+
+    setTariffRows((currentRows) => currentRows.map((currentRow) => (
+      currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
+    )))
+    addHistoryEntry({
+      section: 'Тарифы и сборы',
+      objectName: `${row.category}: ${row.title}`,
+      field: fieldLabel,
+      action: 'Изменение',
+      previousValue: normalizeHistoryValue(previousValue),
+      nextValue: normalizeHistoryValue(nextValue),
+    })
+  }
+
+  const commitOneTimeAmountChange = (row: ContractorOneTimeRow) => {
+    const nextValue = oneTimeDrafts[row.id]?.amount ?? ''
+
+    if (nextValue.trim() === row.amount.trim()) {
+      return
+    }
+
+    setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+      currentRow.id === row.id ? { ...currentRow, amount: nextValue } : currentRow
+    )))
+    addHistoryEntry({
+      section: 'Нерегулярные платежи',
+      objectName: row.name,
+      field: 'Сумма',
+      action: 'Изменение',
+      previousValue: normalizeHistoryValue(row.amount),
+      nextValue: normalizeHistoryValue(nextValue),
+    })
+  }
+
+  const markOneTimeDeleted = (row: ContractorOneTimeRow) => {
+    if (row.isDeleted) {
+      return
+    }
+
+    setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+      currentRow.id === row.id ? { ...currentRow, isDeleted: true } : currentRow
+    )))
+    addHistoryEntry({
+      section: 'Нерегулярные платежи',
+      objectName: row.name,
+      field: 'Статус',
+      action: 'Удаление',
+      previousValue: 'Активен',
+      nextValue: 'Удален',
+    })
+  }
+
+  const handleEditableInputKeyDown = (event: KeyboardEvent<HTMLInputElement>, onCommit: () => void) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      onCommit()
+    }
+  }
+
+  const filteredHistory = historySection === 'all'
+    ? history
+    : history.filter((entry) => entry.section === historySection)
 
   return (
     <section className="contractors-page" aria-label="Тарифы и сборы">
       <div className="contractors-heading">
         <div>
           <h1>Тарифы и сборы</h1>
-          <p>Черновой вид страницы услуг, регулярных платежей, порогов и разовых сборов.</p>
         </div>
         <div className="contractors-actions">
           <button className="secondary-button" type="button" onClick={() => setModal('service')}>
@@ -4583,55 +4743,158 @@ function TariffsAndFeesPrototypePanel() {
         </div>
       </div>
 
-      <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
-        <div className="contractors-sheet-header" role="row">
-          <span role="columnheader">Основание</span>
-          <span role="columnheader">Значение</span>
-          <span role="columnheader">Ед.</span>
-          <span role="columnheader">Пороговая тарификация</span>
-          <span role="columnheader">По счетчику</span>
-        </div>
-        {contractorTariffRows.map((row, index) => (
-          <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row" key={`${row.group ?? row.title}-${index}`}>
-            <span role="cell">
-              {row.group ? <strong>{row.group}</strong> : null}
-              <span>{row.title}</span>
-            </span>
-            <span role="cell" className="contractors-value-cell">
-              {row.threshold ? <em>{row.threshold}</em> : null}
-              {row.amount}
-            </span>
-            <span role="cell">{row.unit ?? ''}</span>
-            <span role="cell">{row.tiered ? 'Да' : 'Нет'}</span>
-            <span role="cell">{row.byMeter ? 'Да' : 'Нет'}</span>
-          </div>
-        ))}
+      <div className="contractors-prototype-tabs" role="tablist" aria-label="Режим тарифов и сборов">
+        <button type="button" role="tab" aria-selected={activeView === 'values'} className={activeView === 'values' ? 'is-active' : ''} onClick={() => setActiveView('values')}>
+          Значения
+        </button>
+        <button type="button" role="tab" aria-selected={activeView === 'history'} className={activeView === 'history' ? 'is-active' : ''} onClick={() => setActiveView('history')}>
+          История изменений
+        </button>
       </div>
 
-      <div className="contractors-bottom-grid">
-        <section className="contractors-mini-table" aria-label="Нерегулярные платежи">
-          <div className="contractors-mini-title">Нерегулярные платежи</div>
-          <div className="contractors-mini-header">
-            <span>Основание</span>
-            <span>Сумма, руб.</span>
-          </div>
-          {contractorOneTimeRows.map((row) => (
-            <div className="contractors-mini-row" key={row.name}>
-              <span>{row.name}</span>
-              <span>{row.amount}</span>
+      {activeView === 'values' ? (
+        <>
+          <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
+            <div className="contractors-sheet-header" role="row">
+              <span role="columnheader">Основание</span>
+              <span role="columnheader">Значение</span>
+              <span role="columnheader">Ед.</span>
+              <span role="columnheader">Пороговая тарификация</span>
+              <span role="columnheader">По счетчику</span>
             </div>
-          ))}
-        </section>
+            {tariffRows.map((row) => (
+              <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row" key={row.id}>
+                <span role="cell">
+                  {row.group ? <strong>{row.group}</strong> : null}
+                  <span>{row.title}</span>
+                </span>
+                <span role="cell" className="contractors-value-cell">
+                  {row.threshold ? <em>{row.threshold}</em> : null}
+                  <input
+                    aria-label={`${row.category}: ${row.title}: значение`}
+                    className="contractors-editable-input"
+                    value={tariffDrafts[row.id]?.amount ?? ''}
+                    onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount', 'Значение'))}
+                  />
+                </span>
+                <span role="cell">
+                  <input
+                    aria-label={`${row.category}: ${row.title}: единица`}
+                    className="contractors-editable-input contractors-editable-input--unit"
+                    value={tariffDrafts[row.id]?.unit ?? ''}
+                    onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
+                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit', 'Ед.'))}
+                  />
+                </span>
+                <span role="cell">
+                  <select
+                    aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
+                    className="contractors-editable-select"
+                    value={row.tiered ? 'Да' : 'Нет'}
+                    onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да', 'Пороговая тарификация')}
+                  >
+                    <option>Да</option>
+                    <option>Нет</option>
+                  </select>
+                </span>
+                <span role="cell">
+                  <select
+                    aria-label={`${row.category}: ${row.title}: по счетчику`}
+                    className="contractors-editable-select"
+                    value={row.byMeter ? 'Да' : 'Нет'}
+                    onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да', 'По счетчику')}
+                  >
+                    <option>Да</option>
+                    <option>Нет</option>
+                  </select>
+                </span>
+              </div>
+            ))}
+          </div>
 
-        <div className="contractors-action-stack" aria-label="Действия по тарифам и сборам">
-          <button className="secondary-button" type="button" onClick={() => setModal('service')}>
-            Добавить услугу
-          </button>
-          <button className="secondary-button" type="button" onClick={() => setModal('fee')}>
-            Объявить сбор
-          </button>
-        </div>
-      </div>
+          <div className="contractors-bottom-grid">
+            <section className="contractors-mini-table" aria-label="Нерегулярные платежи">
+              <div className="contractors-mini-title">Нерегулярные платежи</div>
+              <div className="contractors-mini-header contractors-mini-header--editable">
+                <span>Основание</span>
+                <span>Сумма, руб.</span>
+                <span>Статус</span>
+                <span>Действие</span>
+              </div>
+              {oneTimeRows.map((row) => (
+                <div className={row.isDeleted ? 'contractors-mini-row contractors-mini-row--editable contractors-mini-row--deleted' : 'contractors-mini-row contractors-mini-row--editable'} key={row.id}>
+                  <span>{row.name}</span>
+                  <span>
+                    <input
+                      aria-label={`Сумма: ${row.name}`}
+                      className="contractors-editable-input"
+                      disabled={row.isDeleted}
+                      value={oneTimeDrafts[row.id]?.amount ?? ''}
+                      onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
+                    />
+                  </span>
+                  <span>{row.isDeleted ? 'Удален' : 'Активен'}</span>
+                  <span>
+                    <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить нерегулярный платеж ${row.name}`} disabled={row.isDeleted} onClick={() => markOneTimeDeleted(row)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </section>
+
+            <div className="contractors-action-stack" aria-label="Действия по тарифам и сборам">
+              <button className="secondary-button" type="button" onClick={() => setModal('service')}>
+                Добавить услугу
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setModal('fee')}>
+                Объявить сбор
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <section className="contractors-history-panel" aria-label="История изменений тарифов и сборов">
+          <label>
+            <span>Раздел</span>
+            <select aria-label="Раздел истории изменений" value={historySection} onChange={(event) => setHistorySection(event.target.value as 'all' | TariffHistorySection)}>
+              <option value="all">Все разделы</option>
+              <option value="Тарифы и сборы">Тарифы и сборы</option>
+              <option value="Нерегулярные платежи">Нерегулярные платежи</option>
+            </select>
+          </label>
+          <div className="contractors-history-table" role="table" aria-label="История изменений тарифов и сборов">
+            <div className="contractors-history-header" role="row">
+              <span role="columnheader">Когда</span>
+              <span role="columnheader">Кто</span>
+              <span role="columnheader">Раздел</span>
+              <span role="columnheader">Объект</span>
+              <span role="columnheader">Поле</span>
+              <span role="columnheader">Было</span>
+              <span role="columnheader">Стало</span>
+              <span role="columnheader">Действие</span>
+            </div>
+            {filteredHistory.length > 0 ? filteredHistory.map((entry) => (
+              <div className="contractors-history-row" role="row" key={entry.id}>
+                <span role="cell">{entry.changedAt}</span>
+                <span role="cell">{entry.actorName}</span>
+                <span role="cell">{entry.section}</span>
+                <span role="cell">{entry.objectName}</span>
+                <span role="cell">{entry.field}</span>
+                <span role="cell">{entry.previousValue}</span>
+                <span role="cell">{entry.nextValue}</span>
+                <span role="cell">{entry.action}</span>
+              </div>
+            )) : (
+              <div className="contractors-history-empty" role="row">
+                <span role="cell">Истории изменений пока нет</span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {modal === 'service' ? <AddServicePrototypeDialog onClose={() => setModal(null)} /> : null}
       {modal === 'fee' ? <AddFeePrototypeDialog onClose={() => setModal(null)} /> : null}

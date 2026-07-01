@@ -297,6 +297,47 @@ describe('App', () => {
     expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
   })
 
+  it('edits tariffs and one-time payments with visible change history', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i }))
+
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const waterRateInput = within(tariffsPanel).getByLabelText('Вода: Тариф на воду: значение')
+    await user.type(waterRateInput, '1250{Enter}')
+    expect(waterRateInput).toHaveValue('1250')
+
+    const entryFeeInput = within(tariffsPanel).getByLabelText('Сумма: Вступительный взнос')
+    await user.type(entryFeeInput, '5000{Enter}')
+    expect(entryFeeInput).toHaveValue('5000')
+
+    const deleteFineButton = within(tariffsPanel).getByRole('button', { name: 'Удалить нерегулярный платеж Штраф за это' })
+    await user.click(deleteFineButton)
+    expect(deleteFineButton).toBeDisabled()
+    expect(within(tariffsPanel).getByText('Удален')).toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('tab', { name: 'История изменений' }))
+    const historyTable = within(tariffsPanel).getByRole('table', { name: 'История изменений тарифов и сборов' })
+    expect(within(historyTable).getByText('Вода: Тариф на воду')).toBeInTheDocument()
+    expect(within(historyTable).getAllByText('Администратор').length).toBeGreaterThan(0)
+    expect(within(historyTable).getAllByText('Пусто').length).toBeGreaterThan(0)
+    expect(within(historyTable).getByText('1250')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Вступительный взнос')).toBeInTheDocument()
+    expect(within(historyTable).getByText('5000')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Штраф за это')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Удаление')).toBeInTheDocument()
+
+    await user.selectOptions(within(tariffsPanel).getByLabelText('Раздел истории изменений'), 'Нерегулярные платежи')
+    expect(within(historyTable).queryByText('Вода: Тариф на воду')).not.toBeInTheDocument()
+    expect(within(historyTable).getByText('Вступительный взнос')).toBeInTheDocument()
+    expect(within(historyTable).getByText('Штраф за это')).toBeInTheDocument()
+  })
+
   it('shows contractors prototype as garages and suppliers directory', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
