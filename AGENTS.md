@@ -26,8 +26,10 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 
 - clarify only when the missing answer cannot be discovered and guessing would be risky;
 - implement the requested behavior completely, including backend, frontend, data, documentation, and deployment pieces that are in scope;
-- add or update tests so the behavior is protected from regressions;
+- add or update tests for every developed element, workflow, form, dialog, endpoint, permission branch, validation state, and important edge case so the behavior is protected from regressions;
 - run relevant backend/frontend tests, builds, lint, formatting, privacy checks, and encoding checks;
+- after local verification, stop every temporary process you started for testing or development, including frontend dev/preview servers, backend API hosts, database containers, background workers, file watchers, browser automation helpers, and one-off smoke-test servers;
+- clean up temporary artifacts created during the work, such as generated previews, screenshots, scratch exports, copied customer files, temporary reports, migration scripts used only for inspection, logs, caches, and local analysis folders; keep an artifact only when the user explicitly asked for it, it is intentionally part of the deliverable, or it is required for a committed test fixture/documentation example;
 - check local database behavior whenever a local PostgreSQL/database environment is available; if it is unavailable, state that honestly in the roadmap history and final response, and use the closest safe substitute such as migration SQL generation, EF/integration tests, or the VPS test environment when appropriate;
 - update the relevant roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains;
 - add an end-user "Что нового" entry when the change is visible to cooperative staff/admins or changes business rules, permissions, integrations, data handling, reports, imports, or visible defects;
