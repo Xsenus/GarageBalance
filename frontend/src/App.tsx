@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import {
+  ArrowLeft,
   Bell,
   BookOpenCheck,
   DatabaseZap,
@@ -259,7 +260,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} showHomeButton={!showSidebar} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -334,7 +335,6 @@ function Workspace({
   reportClient,
   releaseClient,
   userClient,
-  showHomeButton,
   onOpenSection,
   onUserChanged,
   onLogout,
@@ -349,7 +349,6 @@ function Workspace({
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
-  showHomeButton: boolean
   onOpenSection: (section: WorkspaceSection) => void
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
@@ -464,10 +463,9 @@ function Workspace({
   return (
     <>
       <header className={activeSection === 'dashboard' ? 'topbar topbar--dashboard' : 'topbar'}>
-        {showHomeButton && activeSection !== 'dashboard' ? (
-          <button className="secondary-button topbar-home-button" type="button" onClick={() => onOpenSection('dashboard')}>
-            <Gauge size={17} />
-            <span>Главное меню</span>
+        {activeSection !== 'dashboard' ? (
+          <button className="icon-button topbar-back-button" type="button" aria-label="Назад к выбору раздела" title="Назад к выбору раздела" onClick={() => onOpenSection('dashboard')}>
+            <ArrowLeft size={19} />
           </button>
         ) : null}
         {activeSection !== 'dashboard' ? (

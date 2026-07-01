@@ -36,7 +36,7 @@ describe('App', () => {
     }
 
     if (!screen.queryByRole('group', { name: 'Главные разделы' })) {
-      await user.click(screen.getByRole('button', { name: 'Главное меню' }))
+      await user.click(screen.getByRole('button', { name: 'Назад к выбору раздела' }))
     }
 
     const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
@@ -234,6 +234,38 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('2026-06-19')).not.toBeInTheDocument()
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
+  })
+
+  it('shows icon back button in every dashboard section', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const tileNames: Array<string | RegExp> = [
+      /Тарифы\s+и\s+сборы/i,
+      'Контрагенты',
+      'Счётчики',
+      'Платежи',
+      'Отчёты',
+      'Настройки',
+      /Управление\s+фондами/i,
+    ]
+
+    for (const tileName of tileNames) {
+      const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+      await user.click(within(dashboardTiles).getByRole('button', { name: tileName }))
+
+      const backButton = await screen.findByRole('button', { name: 'Назад к выбору раздела' })
+      expect(backButton).toHaveClass('topbar-back-button')
+      expect(backButton).toHaveAttribute('title', 'Назад к выбору раздела')
+      expect(within(backButton).queryByText('Главное меню')).not.toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Главные разделы' })).not.toBeInTheDocument()
+
+      await user.click(backButton)
+      expect(await screen.findByRole('group', { name: 'Главные разделы' })).toBeInTheDocument()
+    }
   })
 
   it('shows tariffs and fees prototype page and opens service and fee modals', async () => {
@@ -779,7 +811,7 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Главное меню' }))
+    await user.click(screen.getByRole('button', { name: 'Назад к выбору раздела' }))
     const operatorTilesAgain = await screen.findByRole('group', { name: 'Главные разделы' })
     await user.click(within(operatorTilesAgain).getByRole('button', { name: 'Платежи' }))
     expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
