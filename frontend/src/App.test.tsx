@@ -323,6 +323,12 @@ describe('App', () => {
     await user.type(waterRateInput, '1250{Enter}')
     expect(waterRateInput).toHaveValue('1250')
 
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить порог' }))
+    const electricityThresholdInput = within(tariffsPanel).getByLabelText('Электроэнергия: Порог 4: значение')
+    expect(electricityThresholdInput).toBeInTheDocument()
+    await user.type(electricityThresholdInput, '7.5{Enter}')
+    expect(electricityThresholdInput).toHaveValue('7.5')
+
     const entryFeeInput = within(tariffsPanel).getByLabelText('Сумма: Вступительный взнос')
     await user.type(entryFeeInput, '5000{Enter}')
     expect(entryFeeInput).toHaveValue('5000')
@@ -335,6 +341,9 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getByRole('tab', { name: 'История изменений' }))
     const historyTable = within(tariffsPanel).getByRole('table', { name: 'История изменений тарифов и сборов' })
     expect(within(historyTable).getByText('Вода: Тариф на воду')).toBeInTheDocument()
+    expect(within(historyTable).getAllByText('Электроэнергия: Порог 4').length).toBeGreaterThan(0)
+    expect(within(historyTable).getByText('Добавлен порог')).toBeInTheDocument()
+    expect(within(historyTable).getByText('7.5')).toBeInTheDocument()
     expect(within(historyTable).getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(within(historyTable).getAllByText('Пусто').length).toBeGreaterThan(0)
     expect(within(historyTable).getByText('1250')).toBeInTheDocument()

@@ -644,6 +644,14 @@ h1 {
   background: #fcfcfd;
 }
 
+.contractors-sheet-action-row {
+  background: #ffffff;
+}
+
+.contractors-sheet-action-row > span {
+  padding-block: 8px;
+}
+
 .contractors-value-cell {
   display: flex;
   align-items: center;

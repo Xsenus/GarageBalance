@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -5284,9 +5284,49 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     })
   }
 
+  const addElectricityThreshold = () => {
+    const electricityThresholdRows = tariffRows.filter((row) => row.category === 'Электроэнергия' && row.threshold)
+    const nextIndex = electricityThresholdRows.length + 1
+    const nextRow: ContractorTariffRow = {
+      id: `electricity-tier-custom-${Date.now()}`,
+      category: 'Электроэнергия',
+      title: `Порог ${nextIndex}`,
+      threshold: 'x',
+      amount: '',
+      unit: 'руб.',
+      byMeter: true,
+      tiered: true,
+    }
+
+    setTariffRows((currentRows) => {
+      const overdueIndex = currentRows.findIndex((row) => row.id === 'electricity-overdue-days')
+      if (overdueIndex < 0) {
+        return [...currentRows, nextRow]
+      }
+
+      return [
+        ...currentRows.slice(0, overdueIndex),
+        nextRow,
+        ...currentRows.slice(overdueIndex),
+      ]
+    })
+    setTariffDrafts((drafts) => ({ ...drafts, [nextRow.id]: { amount: '', unit: nextRow.unit ?? '' } }))
+    addHistoryEntry({
+      section: 'Тарифы и сборы',
+      objectName: `Электроэнергия: ${nextRow.title}`,
+      field: 'Пороговая тарификация',
+      action: 'Создание',
+      previousValue: 'Пусто',
+      nextValue: 'Добавлен порог',
+    })
+  }
+
   const filteredHistory = historySection === 'all'
     ? history
     : history.filter((entry) => entry.section === historySection)
+  const lastElectricityThresholdRowId = [...tariffRows]
+    .reverse()
+    .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
 
   return (
     <section className="contractors-page" aria-label="Тарифы и сборы">
@@ -5326,53 +5366,68 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
               <span role="columnheader">По счетчику</span>
             </div>
             {tariffRows.map((row) => (
-              <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row" key={row.id}>
-                <span role="cell">
-                  {row.group ? <strong>{row.group}</strong> : null}
-                  <span>{row.title}</span>
-                </span>
-                <span role="cell" className="contractors-value-cell">
-                  {row.threshold ? <em>{row.threshold}</em> : null}
-                  <input
-                    aria-label={`${row.category}: ${row.title}: значение`}
-                    className="contractors-editable-input"
-                    value={tariffDrafts[row.id]?.amount ?? ''}
-                    onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
-                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount', 'Значение'))}
-                  />
-                </span>
-                <span role="cell">
-                  <input
-                    aria-label={`${row.category}: ${row.title}: единица`}
-                    className="contractors-editable-input contractors-editable-input--unit"
-                    value={tariffDrafts[row.id]?.unit ?? ''}
-                    onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit', 'Ед.'))}
-                  />
-                </span>
-                <span role="cell">
-                  <select
-                    aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
-                    className="contractors-editable-select"
-                    value={row.tiered ? 'Да' : 'Нет'}
-                    onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да', 'Пороговая тарификация')}
-                  >
-                    <option>Да</option>
-                    <option>Нет</option>
-                  </select>
-                </span>
-                <span role="cell">
-                  <select
-                    aria-label={`${row.category}: ${row.title}: по счетчику`}
-                    className="contractors-editable-select"
-                    value={row.byMeter ? 'Да' : 'Нет'}
-                    onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да', 'По счетчику')}
-                  >
-                    <option>Да</option>
-                    <option>Нет</option>
-                  </select>
-                </span>
-              </div>
+              <Fragment key={row.id}>
+                <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row">
+                  <span role="cell">
+                    {row.group ? <strong>{row.group}</strong> : null}
+                    <span>{row.title}</span>
+                  </span>
+                  <span role="cell" className="contractors-value-cell">
+                    {row.threshold ? <em>{row.threshold}</em> : null}
+                    <input
+                      aria-label={`${row.category}: ${row.title}: значение`}
+                      className="contractors-editable-input"
+                      value={tariffDrafts[row.id]?.amount ?? ''}
+                      onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount', 'Значение'))}
+                    />
+                  </span>
+                  <span role="cell">
+                    <input
+                      aria-label={`${row.category}: ${row.title}: единица`}
+                      className="contractors-editable-input contractors-editable-input--unit"
+                      value={tariffDrafts[row.id]?.unit ?? ''}
+                      onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
+                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit', 'Ед.'))}
+                    />
+                  </span>
+                  <span role="cell">
+                    <select
+                      aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
+                      className="contractors-editable-select"
+                      value={row.tiered ? 'Да' : 'Нет'}
+                      onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да', 'Пороговая тарификация')}
+                    >
+                      <option>Да</option>
+                      <option>Нет</option>
+                    </select>
+                  </span>
+                  <span role="cell">
+                    <select
+                      aria-label={`${row.category}: ${row.title}: по счетчику`}
+                      className="contractors-editable-select"
+                      value={row.byMeter ? 'Да' : 'Нет'}
+                      onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да', 'По счетчику')}
+                    >
+                      <option>Да</option>
+                      <option>Нет</option>
+                    </select>
+                  </span>
+                </div>
+                {row.id === lastElectricityThresholdRowId ? (
+                  <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
+                    <span role="cell">
+                      <button className="link-button" type="button" onClick={addElectricityThreshold}>
+                        Добавить порог
+                      </button>
+                    </span>
+                    <span role="cell" />
+                    <span role="cell" />
+                    <span role="cell" />
+                    <span role="cell" />
+                  </div>
+                ) : null}
+              </Fragment>
             ))}
           </div>
 
