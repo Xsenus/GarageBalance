@@ -1231,8 +1231,11 @@ describe('App', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
     const dialog = await screen.findByRole('dialog', { name: 'Тарифы' })
     await user.clear(within(dialog).getByLabelText('Дата начала тарифа'))
-    await user.type(within(dialog).getByLabelText('Дата начала тарифа'), '2026-07-01')
+    await user.type(within(dialog).getByLabelText('Дата начала тарифа'), '2026-08-01')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    expect(within(confirmationDialog).getByText('Дата начала')).toBeInTheDocument()
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     const alerts = await screen.findAllByRole('alert')
     expect(alerts.some((alert) => alert.textContent?.includes('Дата начала тарифа не может быть позже уже созданного начисления за 06.2026.'))).toBe(true)
@@ -1829,6 +1832,88 @@ describe('App', () => {
     expect(await screen.findByText('Запись восстановлена и снова доступна в рабочих списках.')).toBeInTheDocument()
     const restoredRow = within(dictionaryPanel).getByText('Петров Петр').closest('tr')!
     expect(within(restoredRow).getByText('Активна')).toBeInTheDocument()
+  })
+
+  it('confirms owner dictionary edits with before and after values', async () => {
+    const user = userEvent.setup()
+    let owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 900' })
+    const updateOwner = vi.fn(async (_token, id, request) => {
+      owner = createOwner({
+        id,
+        lastName: request.lastName,
+        firstName: request.firstName,
+        middleName: request.middleName ?? null,
+        phone: request.phone ?? null,
+        address: request.address ?? null,
+        meterNotes: request.meterNotes ?? null,
+      })
+      return owner
+    })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [owner],
+      getGarages: async () => [],
+      updateOwner,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const ownerRow = within(dictionaryPanel).getByText('Иванов Иван').closest('tr')!
+
+    fireEvent.doubleClick(ownerRow)
+    let editorDialog = await screen.findByRole('dialog', { name: 'Владельцы' })
+    await user.clear(within(editorDialog).getByLabelText('Телефон владельца'))
+    await user.type(within(editorDialog).getByLabelText('Телефон владельца'), '+7 901')
+    await user.click(within(editorDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(updateOwner).not.toHaveBeenCalled()
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    expect(within(confirmationDialog).getByText('Телефон')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('+7 900')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('+7 901')).toBeInTheDocument()
+
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Отмена' }))
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument()
+    expect(updateOwner).not.toHaveBeenCalled()
+
+    editorDialog = screen.getByRole('dialog', { name: 'Владельцы' })
+    await user.click(within(editorDialog).getByRole('button', { name: 'Сохранить' }))
+    const secondConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    await user.click(within(secondConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    await waitFor(() => expect(updateOwner).toHaveBeenCalledTimes(1))
+    expect(updateOwner.mock.calls[0][1]).toBe('owner-1')
+    expect(updateOwner.mock.calls[0][2].phone).toBe('+7 901')
+    expect(await screen.findByText('Изменения сохранены.')).toBeInTheDocument()
+  })
+
+  it('closes owner dictionary editor without api call when nothing changed', async () => {
+    const user = userEvent.setup()
+    const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 900' })
+    const updateOwner = vi.fn(async () => owner)
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [owner],
+      getGarages: async () => [],
+      updateOwner,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const ownerRow = within(dictionaryPanel).getByText('Иванов Иван').closest('tr')!
+
+    fireEvent.doubleClick(ownerRow)
+    const editorDialog = await screen.findByRole('dialog', { name: 'Владельцы' })
+    await user.click(within(editorDialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(updateOwner).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()
+    expect(await screen.findByText('Изменений нет.')).toBeInTheDocument()
   })
 
   it('adds income type, expense type and tariff from dictionaries workspace', async () => {

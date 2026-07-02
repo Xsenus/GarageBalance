@@ -109,6 +109,14 @@ function FormField({ label, hint, children, className }: { label: string; hint?:
   )
 }
 
+type DictionaryEditorState = { section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord }
+
+type DictionaryChangePreview = {
+  field: string
+  before: string
+  after: string
+}
+
 type NavigationItem = {
   section: WorkspaceSection
   label: string
@@ -6162,7 +6170,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ id: number; text: string; kind: 'success' | 'error' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ section: DictionarySectionKey; item: DictionaryRecord; x: number; y: number } | null>(null)
-  const [editor, setEditor] = useState<{ section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord } | null>(null)
+  const [editor, setEditor] = useState<DictionaryEditorState | null>(null)
+  const [pendingEditorConfirmation, setPendingEditorConfirmation] = useState<{ editor: DictionaryEditorState; changes: DictionaryChangePreview[] } | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
   const [balanceHistoryGarage, setBalanceHistoryGarage] = useState<GarageDto | null>(null)
@@ -6180,6 +6189,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
+  const editorConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingEditorConfirmation))
+  const editorConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingEditorConfirmation))
   const archiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(archiveTarget))
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(archiveTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
@@ -6196,7 +6207,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const ownerGarageOptions = getOwnerGarageOptions(garageOptions, editor?.section === 'owners' && editor.item ? editor.item as OwnerDto : undefined)
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
-  useEscapeKey(Boolean(editor), () => closeEditor())
+  useEscapeKey(Boolean(editor) && !pendingEditorConfirmation, () => closeEditor())
+  useEscapeKey(Boolean(pendingEditorConfirmation), () => setPendingEditorConfirmation(null))
   useEscapeKey(Boolean(archiveTarget), () => setArchiveTarget(null))
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(balanceHistoryGarage), () => closeBalanceHistory())
@@ -6399,6 +6411,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   function closeEditor() {
+    setPendingEditorConfirmation(null)
     setEditor(null)
     setValidationErrors([])
   }
@@ -6419,17 +6432,39 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       return
     }
 
+    const validation = getEditorValidationErrors(editor)
+    if (validation.length > 0) {
+      setValidationErrors(validation)
+      return
+    }
+
+    if (editor.mode === 'edit' && editor.item) {
+      const changes = getDictionaryEditorChanges(editor.section, editor.item)
+      if (changes.length === 0) {
+        closeEditor()
+        showToast('Изменений нет.')
+        return
+      }
+
+      setPendingEditorConfirmation({ editor, changes })
+      return
+    }
+
+    await saveConfirmedEditor(editor)
+  }
+
+  async function saveConfirmedEditor(currentEditor: DictionaryEditorState) {
     setSaving('dictionary-editor')
     setError(null)
     try {
-      const saved = await saveEditorRequest(editor)
+      const saved = await saveEditorRequest(currentEditor)
       if (!saved) {
         return
       }
 
       closeEditor()
-      await refreshAfterMutation(editor.section)
-      showToast(editor.mode === 'create' ? 'Запись добавлена.' : 'Изменения сохранены.')
+      await refreshAfterMutation(currentEditor.section)
+      showToast(currentEditor.mode === 'create' ? 'Запись добавлена.' : 'Изменения сохранены.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить запись.'
       setError(message)
@@ -6439,13 +6474,69 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     }
   }
 
-  async function saveEditorRequest(currentEditor: { section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord }) {
+  async function confirmEditorChanges() {
+    if (!pendingEditorConfirmation) {
+      return
+    }
+
+    const currentEditor = pendingEditorConfirmation.editor
+    setPendingEditorConfirmation(null)
+    await saveConfirmedEditor(currentEditor)
+  }
+
+  function getEditorValidationErrors(currentEditor: DictionaryEditorState) {
     if (currentEditor.section === 'owners') {
-      const errors = [...getOwnerValidationErrors(ownerForm), ...getOwnerGarageLinkValidationErrors(ownerGarageLinkForm)]
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
+      return [...getOwnerValidationErrors(ownerForm), ...getOwnerGarageLinkValidationErrors(ownerGarageLinkForm)]
+    }
+
+    if (currentEditor.section === 'garages') {
+      return getGarageValidationErrors(createGarageRequestFromForm())
+    }
+
+    if (currentEditor.section === 'supplierGroups') {
+      return getSupplierGroupValidationErrors({ name: supplierGroupName })
+    }
+
+    if (currentEditor.section === 'suppliers') {
+      return getSupplierValidationErrors(createSupplierRequestFromForm())
+    }
+
+    if (currentEditor.section === 'incomeTypes') {
+      return getAccountingTypeValidationErrors(accountingTypeForm, 'вида поступления')
+    }
+
+    if (currentEditor.section === 'expenseTypes') {
+      return getAccountingTypeValidationErrors(accountingTypeForm, 'вида выплаты')
+    }
+
+    return getTariffValidationErrors(tariffForm)
+  }
+
+  function createGarageRequestFromForm(): UpsertGarageRequest {
+    return {
+      number: garageForm.number,
+      peopleCount: garageForm.peopleCount,
+      floorCount: garageForm.floorCount,
+      ownerId: garageForm.ownerId || null,
+      startingBalance: garageForm.startingBalance,
+      initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
+      initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
+      comment: garageForm.comment.trim() || undefined,
+    }
+  }
+
+  function createSupplierRequestFromForm(): UpsertSupplierRequest {
+    return { ...supplierForm, groupId: supplierForm.groupId || groupOptions[0]?.id || '' }
+  }
+
+  async function saveEditorRequest(currentEditor: DictionaryEditorState) {
+    const errors = getEditorValidationErrors(currentEditor)
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      return false
+    }
+
+    if (currentEditor.section === 'owners') {
       let savedOwner: OwnerDto
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         savedOwner = await dictionaryClient.updateOwner(auth.accessToken, (currentEditor.item as OwnerDto).id, ownerForm)
@@ -6454,21 +6545,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       }
       await saveOwnerGarageLinks(savedOwner.id)
     } else if (currentEditor.section === 'garages') {
-      const request: UpsertGarageRequest = {
-        number: garageForm.number,
-        peopleCount: garageForm.peopleCount,
-        floorCount: garageForm.floorCount,
-        ownerId: garageForm.ownerId || null,
-        startingBalance: garageForm.startingBalance,
-        initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
-        initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
-        comment: garageForm.comment.trim() || undefined,
-      }
-      const errors = getGarageValidationErrors(request)
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
+      const request = createGarageRequestFromForm()
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         await dictionaryClient.updateGarage(auth.accessToken, (currentEditor.item as GarageDto).id, request)
       } else {
@@ -6476,11 +6553,6 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       }
     } else if (currentEditor.section === 'supplierGroups') {
       const request = { name: supplierGroupName }
-      const errors = getSupplierGroupValidationErrors(request)
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         if (!dictionaryClient.updateSupplierGroup) {
           throw new Error('Изменение групп поставщиков недоступно в текущем клиенте.')
@@ -6490,23 +6562,13 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         await dictionaryClient.createSupplierGroup(auth.accessToken, request)
       }
     } else if (currentEditor.section === 'suppliers') {
-      const request: UpsertSupplierRequest = { ...supplierForm, groupId: supplierForm.groupId || groupOptions[0]?.id || '' }
-      const errors = getSupplierValidationErrors(request)
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
+      const request = createSupplierRequestFromForm()
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         await dictionaryClient.updateSupplier(auth.accessToken, (currentEditor.item as SupplierDto).id, request)
       } else {
         await dictionaryClient.createSupplier(auth.accessToken, request)
       }
     } else if (currentEditor.section === 'incomeTypes') {
-      const errors = getAccountingTypeValidationErrors(accountingTypeForm, 'вида поступления')
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         if (!dictionaryClient.updateIncomeType) {
           throw new Error('Изменение видов поступлений недоступно в текущем клиенте.')
@@ -6516,11 +6578,6 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         await dictionaryClient.createIncomeType(auth.accessToken, accountingTypeForm)
       }
     } else if (currentEditor.section === 'expenseTypes') {
-      const errors = getAccountingTypeValidationErrors(accountingTypeForm, 'вида выплаты')
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         if (!dictionaryClient.updateExpenseType) {
           throw new Error('Изменение видов выплат недоступно в текущем клиенте.')
@@ -6530,11 +6587,6 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         await dictionaryClient.createExpenseType(auth.accessToken, accountingTypeForm)
       }
     } else {
-      const errors = getTariffValidationErrors(tariffForm)
-      if (errors.length > 0) {
-        setValidationErrors(errors)
-        return false
-      }
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         await dictionaryClient.updateTariff(auth.accessToken, (currentEditor.item as TariffDto).id, tariffForm)
       } else {
@@ -6739,6 +6791,141 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         <span>Удалить</span>
       </button>
     )
+  }
+
+  function normalizeChangeText(value: string | null | undefined) {
+    return value?.trim() ?? ''
+  }
+
+  function formatChangeText(value: string | null | undefined) {
+    const normalized = normalizeChangeText(value)
+    return normalized || 'пусто'
+  }
+
+  function formatChangeNumber(value: number | null | undefined) {
+    return value == null || Number.isNaN(value) ? 'пусто' : String(value)
+  }
+
+  function formatChangeMoney(value: number | null | undefined) {
+    return value == null || Number.isNaN(value) ? 'пусто' : formatMoney(value)
+  }
+
+  function formatChangeDate(value: string | null | undefined) {
+    return value ? formatDateOnly(value) : 'пусто'
+  }
+
+  function addDictionaryChange(changes: DictionaryChangePreview[], field: string, before: string, after: string) {
+    if (before !== after) {
+      changes.push({ field, before, after })
+    }
+  }
+
+  function formatOwnerLabel(ownerId: string | null | undefined) {
+    if (!ownerId) {
+      return 'Без владельца'
+    }
+
+    return ownerOptions.find((owner) => owner.id === ownerId)?.fullName ?? `ID ${ownerId}`
+  }
+
+  function formatGarageLabel(garageId: string | null | undefined) {
+    if (!garageId) {
+      return 'Не выбран'
+    }
+
+    const garage = garageOptions.find((item) => item.id === garageId)
+    return garage ? `Гараж ${garage.number}` : `ID ${garageId}`
+  }
+
+  function formatSupplierGroupLabel(groupId: string | null | undefined) {
+    if (!groupId) {
+      return 'Без группы'
+    }
+
+    return groupOptions.find((group) => group.id === groupId)?.name ?? `ID ${groupId}`
+  }
+
+  function formatCalculationBaseLabel(value: string) {
+    return getTariffCalculationBaseOptions().find((option) => option.value === value)?.label ?? value
+  }
+
+  function getDictionaryEditorChanges(section: DictionarySectionKey, item: DictionaryRecord): DictionaryChangePreview[] {
+    const changes: DictionaryChangePreview[] = []
+
+    if (section === 'owners') {
+      const owner = item as OwnerDto
+      const currentGarageId = garageOptions.find((garage) => garage.ownerId === owner.id)?.id ?? ''
+
+      addDictionaryChange(changes, 'Фамилия', formatChangeText(owner.lastName), formatChangeText(ownerForm.lastName))
+      addDictionaryChange(changes, 'Имя', formatChangeText(owner.firstName), formatChangeText(ownerForm.firstName))
+      addDictionaryChange(changes, 'Отчество', formatChangeText(owner.middleName), formatChangeText(ownerForm.middleName))
+      addDictionaryChange(changes, 'Телефон', formatChangeText(owner.phone), formatChangeText(ownerForm.phone))
+      addDictionaryChange(changes, 'Адрес', formatChangeText(owner.address), formatChangeText(ownerForm.address))
+      addDictionaryChange(changes, 'Заметки по счетчикам', formatChangeText(owner.meterNotes), formatChangeText(ownerForm.meterNotes))
+      addDictionaryChange(changes, 'Привязанный гараж', formatGarageLabel(currentGarageId), formatGarageLabel(ownerGarageLinkForm.existingGarageId))
+
+      if (ownerGarageLinkForm.newGarageNumber.trim()) {
+        addDictionaryChange(changes, 'Новый гараж', 'пусто', formatChangeText(ownerGarageLinkForm.newGarageNumber))
+      }
+
+      return changes
+    }
+
+    if (section === 'garages') {
+      const garage = item as GarageDto
+      const request = createGarageRequestFromForm()
+
+      addDictionaryChange(changes, 'Номер', formatChangeText(garage.number), formatChangeText(request.number))
+      addDictionaryChange(changes, 'Количество людей', formatChangeNumber(garage.peopleCount), formatChangeNumber(request.peopleCount))
+      addDictionaryChange(changes, 'Количество этажей', formatChangeNumber(garage.floorCount), formatChangeNumber(request.floorCount))
+      addDictionaryChange(changes, 'Владелец', formatOwnerLabel(garage.ownerId), formatOwnerLabel(request.ownerId))
+      addDictionaryChange(changes, 'Стартовый баланс', formatChangeMoney(garage.startingBalance), formatChangeMoney(request.startingBalance))
+      addDictionaryChange(changes, 'Стартовый счетчик воды', formatChangeNumber(garage.initialWaterMeterValue), formatChangeNumber(request.initialWaterMeterValue))
+      addDictionaryChange(changes, 'Стартовый счетчик электроэнергии', formatChangeNumber(garage.initialElectricityMeterValue), formatChangeNumber(request.initialElectricityMeterValue))
+      addDictionaryChange(changes, 'Комментарий', formatChangeText(garage.comment), formatChangeText(request.comment))
+      return changes
+    }
+
+    if (section === 'supplierGroups') {
+      addDictionaryChange(changes, 'Название', formatChangeText((item as SupplierGroupDto).name), formatChangeText(supplierGroupName))
+      return changes
+    }
+
+    if (section === 'suppliers') {
+      const supplier = item as SupplierDto
+      const request = createSupplierRequestFromForm()
+
+      addDictionaryChange(changes, 'Наименование', formatChangeText(supplier.name), formatChangeText(request.name))
+      addDictionaryChange(changes, 'Группа', formatSupplierGroupLabel(supplier.groupId), formatSupplierGroupLabel(request.groupId))
+      addDictionaryChange(changes, 'ИНН', formatChangeText(supplier.inn), formatChangeText(request.inn))
+      addDictionaryChange(changes, 'Юридический адрес', formatChangeText(supplier.legalAddress), formatChangeText(request.legalAddress))
+      addDictionaryChange(changes, 'Контактное лицо', formatChangeText(supplier.contactPerson), formatChangeText(request.contactPerson))
+      addDictionaryChange(changes, 'Телефон', formatChangeText(supplier.phone), formatChangeText(request.phone))
+      addDictionaryChange(changes, 'Почта', formatChangeText(supplier.email), formatChangeText(request.email))
+      addDictionaryChange(changes, 'Стартовый баланс', formatChangeMoney(supplier.startingBalance), formatChangeMoney(request.startingBalance))
+      addDictionaryChange(changes, 'Комментарий', formatChangeText(supplier.comment), formatChangeText(request.comment))
+      return changes
+    }
+
+    if (section === 'incomeTypes' || section === 'expenseTypes') {
+      const type = item as AccountingTypeDto
+      addDictionaryChange(changes, 'Название', formatChangeText(type.name), formatChangeText(accountingTypeForm.name))
+      addDictionaryChange(changes, 'Код', formatChangeText(type.code), formatChangeText(accountingTypeForm.code))
+      return changes
+    }
+
+    const tariff = item as TariffDto
+    addDictionaryChange(changes, 'Название', formatChangeText(tariff.name), formatChangeText(tariffForm.name))
+    addDictionaryChange(changes, 'База расчета', formatCalculationBaseLabel(tariff.calculationBase), formatCalculationBaseLabel(tariffForm.calculationBase))
+    addDictionaryChange(changes, 'Ставка', formatChangeNumber(tariff.rate), formatChangeNumber(tariffForm.rate))
+    addDictionaryChange(changes, 'Дата начала', formatChangeDate(tariff.effectiveFrom), formatChangeDate(tariffForm.effectiveFrom))
+    addDictionaryChange(changes, 'Первый порог электроэнергии', formatChangeNumber(tariff.electricityFirstThreshold), formatChangeNumber(tariffForm.electricityFirstThreshold))
+    addDictionaryChange(changes, 'Второй порог электроэнергии', formatChangeNumber(tariff.electricitySecondThreshold), formatChangeNumber(tariffForm.electricitySecondThreshold))
+    addDictionaryChange(changes, 'Первая ставка электроэнергии', formatChangeNumber(tariff.electricityFirstRate), formatChangeNumber(tariffForm.electricityFirstRate))
+    addDictionaryChange(changes, 'Вторая ставка электроэнергии', formatChangeNumber(tariff.electricitySecondRate), formatChangeNumber(tariffForm.electricitySecondRate))
+    addDictionaryChange(changes, 'Третья ставка электроэнергии', formatChangeNumber(tariff.electricityThirdRate), formatChangeNumber(tariffForm.electricityThirdRate))
+    addDictionaryChange(changes, 'Комментарий', formatChangeText(tariff.comment), formatChangeText(tariffForm.comment))
+    return changes
   }
 
   function renderEditorFields(section: DictionarySectionKey) {
@@ -7095,6 +7282,43 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingEditorConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingEditorConfirmation(null)}>
+          <section ref={editorConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-edit-confirmation-title" aria-describedby="dictionary-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Изменение</p>
+                <h3 id="dictionary-edit-confirmation-title">Подтвердите изменения</h3>
+                <p>{getDictionaryRecordTitle(pendingEditorConfirmation.editor.section, pendingEditorConfirmation.editor.item as DictionaryRecord)}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменений" onClick={() => setPendingEditorConfirmation(null)} disabled={saving === 'dictionary-editor'}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="dictionary-edit-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля">
+              {pendingEditorConfirmation.changes.map((change) => (
+                <li key={`${change.field}-${change.before}-${change.after}`}>
+                  <span className="dictionary-change-field">{change.field}</span>
+                  <span className="dictionary-change-values">
+                    <span className="dictionary-change-value">{change.before}</span>
+                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="detail-dialog-actions">
+              <button ref={editorConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingEditorConfirmation(null)} disabled={saving === 'dictionary-editor'}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmEditorChanges()} disabled={saving === 'dictionary-editor'}>
+                <Save size={16} />
+                <span>{saving === 'dictionary-editor' ? 'Сохраняем...' : 'Сохранить изменения'}</span>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}

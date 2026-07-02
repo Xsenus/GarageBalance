@@ -3321,6 +3321,66 @@ button.operation-row:hover {
   line-height: 1.5;
 }
 
+.dictionary-confirmation-dialog {
+  width: min(680px, 100%);
+}
+
+.dictionary-change-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.dictionary-change-list li {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(0, 2fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 10px 12px;
+}
+
+.dictionary-change-field {
+  min-width: 0;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.dictionary-change-values {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.dictionary-change-value {
+  min-width: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #101828;
+  padding: 7px 9px;
+  overflow-wrap: anywhere;
+}
+
+.dictionary-change-value-after {
+  border-color: #a4bcfd;
+  background: #eef4ff;
+}
+
+.dictionary-change-arrow {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .detail-dialog-actions {
   position: sticky;
   z-index: 2;
@@ -3333,6 +3393,17 @@ button.operation-row:hover {
   border-top: 1px solid #eaecf0;
   background: #ffffff;
   padding: 12px 18px 18px;
+}
+
+@media (max-width: 720px) {
+  .dictionary-change-list li,
+  .dictionary-change-values {
+    grid-template-columns: 1fr;
+  }
+
+  .dictionary-change-arrow {
+    justify-self: start;
+  }
 }
 
 .detail-grid {
