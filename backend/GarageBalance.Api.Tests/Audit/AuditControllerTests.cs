@@ -80,6 +80,42 @@ public sealed class AuditControllerTests
     }
 
     [Fact]
+    public async Task ExportEventsXlsx_ReturnsXlsxFileAndPassesFiltersToService()
+    {
+        var service = new FakeAuditService
+        {
+            XlsxExport = new AuditEventExportDto(
+                "audit-events-20260623-100000.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                [1, 2, 3])
+        };
+        var controller = new AuditController(service);
+        var dateFrom = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
+        var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await controller.ExportEventsXlsx(dateFrom, dateTo, "auth.login_success", "user", "auth", "login", "user", actorUserId, "restores", "12", "2026-06", "supplier-1", "PAY-1", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.ContentType);
+        Assert.Equal("audit-events-20260623-100000.xlsx", file.FileDownloadName);
+        Assert.Equal(service.XlsxExport.Content, file.FileContents);
+        Assert.Equal(dateFrom, service.LastRequest!.DateFrom);
+        Assert.Equal(dateTo, service.LastRequest.DateTo);
+        Assert.Equal("auth.login_success", service.LastRequest.Action);
+        Assert.Equal("user", service.LastRequest.Search);
+        Assert.Equal("auth", service.LastRequest.Section);
+        Assert.Equal("login", service.LastRequest.ActionKind);
+        Assert.Equal("user", service.LastRequest.EntityType);
+        Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
+        Assert.Equal("restores", service.LastRequest.QuickFilter);
+        Assert.Equal("12", service.LastRequest.RelatedGarage);
+        Assert.Equal("2026-06", service.LastRequest.RelatedAccountingMonth);
+        Assert.Equal("supplier-1", service.LastRequest.RelatedCounterparty);
+        Assert.Equal("PAY-1", service.LastRequest.RelatedDocument);
+    }
+
+    [Fact]
     public async Task GetEvent_ReturnsEventFromService()
     {
         var auditEvent = new AuditEventDto(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "dictionary.owner_updated", "owner", "owner-1", "Изменен владелец.");
@@ -153,6 +189,7 @@ public sealed class AuditControllerTests
         public AuditEventPageDto Page { get; init; } = new([], 0, 0, 25);
         public AuditEventDto? Event { get; init; }
         public AuditEventExportDto Export { get; init; } = new("audit-events.csv", "text/csv; charset=utf-8", []);
+        public AuditEventExportDto XlsxExport { get; init; } = new("audit-events.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", []);
 
         public Task<IReadOnlyList<AuditEventDto>> GetEventsAsync(AuditEventListRequest request, CancellationToken cancellationToken)
         {
@@ -176,6 +213,12 @@ public sealed class AuditControllerTests
         {
             LastRequest = request;
             return Task.FromResult(Export);
+        }
+
+        public Task<AuditEventExportDto> ExportEventsXlsxAsync(AuditEventListRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(XlsxExport);
         }
     }
 }

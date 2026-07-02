@@ -12,6 +12,7 @@ describe('shared file export helpers', () => {
     expect(buildReportFileName('consolidated', '2026-01-01', '2026-12-31', 'xlsx')).toBe('garagebalance-consolidated-20260101-20261231.xlsx')
     expect(buildReportFileName('income', '2026-06-01', '2026-06-30', 'pdf')).toBe('garagebalance-income-20260601-20260630.pdf')
     expect(buildAuditExportFileName(new Date('2026-06-25T10:00:00Z'))).toBe('garagebalance-audit-20260625.csv')
+    expect(buildAuditExportFileName(new Date('2026-06-25T10:00:00Z'), 'xlsx')).toBe('garagebalance-audit-20260625.xlsx')
   })
 
   it('builds import dry-run report file names from run metadata', () => {

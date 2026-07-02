@@ -3506,6 +3506,7 @@ describe('App', () => {
     const user = userEvent.setup()
     let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
     let auditExportRequest: Parameters<AuditClient['exportEvents']>[1] = undefined
+    let auditXlsxExportRequest: Parameters<AuditClient['exportEventsXlsx']>[1] = undefined
     const auth = createAuthResponse()
     const authClient = createAuthClient({
       login: async () => ({
@@ -3530,6 +3531,10 @@ describe('App', () => {
       exportEvents: async (_token, params) => {
         auditExportRequest = params
         return new Blob(['createdAtUtc,action\n2026-06-23T10:00:00Z,import.access_dry_run\n'], { type: 'text/csv' })
+      },
+      exportEventsXlsx: async (_token, params) => {
+        auditXlsxExportRequest = params
+        return new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       },
     })
     render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -3556,6 +3561,12 @@ describe('App', () => {
     expect(auditExportRequest?.search).toBe('import')
     expect(auditExportRequest?.limit).toBeUndefined()
     expect(await within(auditPanel).findByText('История изменений CSV готова.')).toHaveAttribute('role', 'status')
+
+    await user.click(within(auditPanel).getByRole('button', { name: /XLSX/ }))
+
+    expect(auditXlsxExportRequest?.search).toBe('import')
+    expect(auditXlsxExportRequest?.limit).toBeUndefined()
+    expect(await within(auditPanel).findByText('История изменений XLSX готова.')).toHaveAttribute('role', 'status')
   })
 
   it('filters audit journal by section action kind entity type actor quick filter and date range', async () => {
@@ -3967,6 +3978,54 @@ describe('App', () => {
 
     expect(await within(auditPanel).findByText('История изменений CSV готова.')).toHaveAttribute('role', 'status')
     expect(within(auditPanel).queryByText('CSV временно недоступен')).not.toBeInTheDocument()
+    expect(exportCount).toBe(2)
+  })
+
+  it('retries audit XLSX export after an error', async () => {
+    const user = userEvent.setup()
+    let exportCount = 0
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEventsPage: async (_token, params) => ({
+        items: [createAuditEvent({ action: 'dictionary.owner_updated', entityType: 'owner', summary: 'Изменен владелец.' })],
+        totalCount: 1,
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      }),
+      exportEventsXlsx: async () => {
+        exportCount += 1
+        if (exportCount === 1) {
+          throw new Error('XLSX временно недоступен')
+        }
+
+        return new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    expect(await within(auditPanel).findByText('Изменен владелец.')).toBeInTheDocument()
+
+    await user.click(within(auditPanel).getByRole('button', { name: 'Скачать XLSX' }))
+    expect(await within(auditPanel).findByText('XLSX временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(auditPanel).queryByRole('button', { name: 'Повторить выгрузку CSV' })).not.toBeInTheDocument()
+
+    await user.click(within(auditPanel).getByRole('button', { name: 'Повторить выгрузку XLSX' }))
+
+    expect(await within(auditPanel).findByText('История изменений XLSX готова.')).toHaveAttribute('role', 'status')
+    expect(within(auditPanel).queryByText('XLSX временно недоступен')).not.toBeInTheDocument()
     expect(exportCount).toBe(2)
   })
 
@@ -4768,6 +4827,7 @@ function createAuditClient(overrides: Partial<AuditClient> = {}): AuditClient {
     getEventsPage,
     getEvent: async (_token, id) => createAuditEvent({ id }),
     exportEvents: async () => new Blob(['createdAtUtc,action\n'], { type: 'text/csv' }),
+    exportEventsXlsx: async () => new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     ...overrides,
   }
 }

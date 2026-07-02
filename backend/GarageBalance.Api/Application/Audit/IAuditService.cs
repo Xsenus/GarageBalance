@@ -9,4 +9,6 @@ public interface IAuditService
     Task<AuditEventDto?> GetEventAsync(Guid id, CancellationToken cancellationToken);
 
     Task<AuditEventExportDto> ExportEventsCsvAsync(AuditEventListRequest request, CancellationToken cancellationToken);
+
+    Task<AuditEventExportDto> ExportEventsXlsxAsync(AuditEventListRequest request, CancellationToken cancellationToken);
 }

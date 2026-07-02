@@ -85,4 +85,26 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         var export = await auditService.ExportEventsCsvAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, null, section, actionKind, entityType, actorUserId, quickFilter, null, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken);
         return File(export.Content, export.ContentType, export.FileName);
     }
+
+    [HttpGet("events/export/xlsx")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ExportEventsXlsx(
+        [FromQuery] DateTimeOffset? dateFrom,
+        [FromQuery] DateTimeOffset? dateTo,
+        [FromQuery] string? action,
+        [FromQuery] string? search,
+        [FromQuery] string? section,
+        [FromQuery] string? actionKind,
+        [FromQuery] string? entityType,
+        [FromQuery] Guid? actorUserId,
+        [FromQuery] string? quickFilter,
+        [FromQuery] string? relatedGarage,
+        [FromQuery] string? relatedAccountingMonth,
+        [FromQuery] string? relatedCounterparty,
+        [FromQuery] string? relatedDocument,
+        CancellationToken cancellationToken)
+    {
+        var export = await auditService.ExportEventsXlsxAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, null, section, actionKind, entityType, actorUserId, quickFilter, null, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken);
+        return File(export.Content, export.ContentType, export.FileName);
+    }
 }

@@ -37,6 +37,7 @@ export type AuditClient = {
   getEventsPage(accessToken: string, params?: AuditEventQuery): Promise<AuditEventPageDto>
   getEvent(accessToken: string, id: string): Promise<AuditEventDto>
   exportEvents(accessToken: string, params?: AuditEventQuery): Promise<Blob>
+  exportEventsXlsx(accessToken: string, params?: AuditEventQuery): Promise<Blob>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -136,5 +137,9 @@ export const auditApi: AuditClient = {
   exportEvents(accessToken, params) {
     const query = buildQuery(params)
     return requestBlob(accessToken, `/api/audit/events/export${query ? `?${query}` : ''}`)
+  },
+  exportEventsXlsx(accessToken, params) {
+    const query = buildQuery(params)
+    return requestBlob(accessToken, `/api/audit/events/export/xlsx${query ? `?${query}` : ''}`)
   },
 }

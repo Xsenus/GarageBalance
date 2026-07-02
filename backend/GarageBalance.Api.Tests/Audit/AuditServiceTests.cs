@@ -3,7 +3,9 @@ using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.IO.Compression;
 using System.Text;
+using System.Xml.Linq;
 
 namespace GarageBalance.Api.Tests.Audit;
 
@@ -524,6 +526,46 @@ public sealed class AuditServiceTests
         Assert.DoesNotContain("Secret123", csv);
     }
 
+    [Fact]
+    public async Task ExportEventsXlsxAsync_UsesFiltersAndMaskedWorksheetValues()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.AddRange(
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 10, 0, 0, TimeSpan.Zero),
+                Action = "auth.login_failed",
+                EntityType = "login_email",
+                EntityId = "owner@example.com",
+                Summary = "Login owner@example.com failed, password=Secret123 \"quoted\""
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 9, 0, 0, TimeSpan.Zero),
+                Action = "finance.income_created",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Поступление по гаражу 12."
+            });
+        await database.Context.SaveChangesAsync();
+
+        var export = await service.ExportEventsXlsxAsync(new AuditEventListRequest(null, null, "auth.login_failed", null), CancellationToken.None);
+        var worksheetText = ExtractWorksheetText(export.Content);
+
+        Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
+        Assert.EndsWith(".xlsx", export.FileName, StringComparison.Ordinal);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", export.ContentType);
+        Assert.Contains("createdAtUtc", worksheetText);
+        Assert.Contains("auth", worksheetText);
+        Assert.Contains("fail", worksheetText);
+        Assert.Contains("auth.login_failed", worksheetText);
+        Assert.Contains("Login [email скрыт] failed, password=[секрет скрыт] \"quoted\"", worksheetText);
+        Assert.DoesNotContain("finance.income_created", worksheetText);
+        Assert.DoesNotContain("owner@example.com", worksheetText);
+        Assert.DoesNotContain("Secret123", worksheetText);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -553,5 +595,18 @@ public sealed class AuditServiceTests
             await Context.DisposeAsync();
             await connection.DisposeAsync();
         }
+    }
+
+    private static string ExtractWorksheetText(byte[] xlsxContent)
+    {
+        using var stream = new MemoryStream(xlsxContent);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var worksheetEntry = archive.GetEntry("xl/worksheets/sheet1.xml");
+        Assert.NotNull(worksheetEntry);
+
+        using var worksheetStream = worksheetEntry.Open();
+        var document = XDocument.Load(worksheetStream);
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        return string.Join('\n', document.Descendants(spreadsheet + "t").Select(element => element.Value));
     }
 }

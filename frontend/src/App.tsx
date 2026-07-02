@@ -3751,7 +3751,7 @@ function getAuditRelatedContext(auditEvent: AuditEventDto) {
 
 type AuditPanelError = {
   message: string
-  recovery: 'load' | 'export'
+  recovery: 'load' | 'exportCsv' | 'exportXlsx'
 }
 
 function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
@@ -3871,18 +3871,36 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     }
   }, [auth.accessToken, auditClient, auditQuery, reloadToken])
 
-  async function exportCurrentEvents() {
+  async function exportCurrentEventsCsv() {
     setExporting(true)
     setError(null)
     setExportMessage(null)
     try {
       const blob = await auditClient.exportEvents(auth.accessToken, auditExportQuery)
-      downloadBlob(blob, buildAuditExportFileName())
+      downloadBlob(blob, buildAuditExportFileName(undefined, 'csv'))
       setExportMessage('История изменений CSV готова.')
     } catch (caught) {
       setError({
         message: caught instanceof Error ? caught.message : 'Не удалось скачать историю изменений.',
-        recovery: 'export',
+        recovery: 'exportCsv',
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function exportCurrentEventsXlsx() {
+    setExporting(true)
+    setError(null)
+    setExportMessage(null)
+    try {
+      const blob = await auditClient.exportEventsXlsx(auth.accessToken, auditExportQuery)
+      downloadBlob(blob, buildAuditExportFileName(undefined, 'xlsx'))
+      setExportMessage('История изменений XLSX готова.')
+    } catch (caught) {
+      setError({
+        message: caught instanceof Error ? caught.message : 'Не удалось скачать XLSX истории изменений.',
+        recovery: 'exportXlsx',
       })
     } finally {
       setExporting(false)
@@ -3894,18 +3912,25 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       return
     }
 
-    if (error.recovery === 'export') {
-      void exportCurrentEvents()
+    if (error.recovery === 'exportCsv') {
+      void exportCurrentEventsCsv()
+      return
+    }
+
+    if (error.recovery === 'exportXlsx') {
+      void exportCurrentEventsXlsx()
       return
     }
 
     setReloadToken((value) => value + 1)
   }
 
-  const retryAuditErrorBusy = error?.recovery === 'export' ? exporting : loading
-  const retryAuditErrorLabel = error?.recovery === 'export'
+  const retryAuditErrorBusy = error?.recovery === 'exportCsv' || error?.recovery === 'exportXlsx' ? exporting : loading
+  const retryAuditErrorLabel = error?.recovery === 'exportCsv'
     ? (exporting ? 'Выгружаем...' : 'Повторить выгрузку CSV')
-    : (loading ? 'Загружаем...' : 'Повторить загрузку')
+    : error?.recovery === 'exportXlsx'
+      ? (exporting ? 'Выгружаем...' : 'Повторить выгрузку XLSX')
+      : (loading ? 'Загружаем...' : 'Повторить загрузку')
   const auditVisibleRange = getPageVisibleRange(page)
   const auditNavigation = getPageNavigation(page)
 
@@ -3918,9 +3943,13 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
         </div>
         <div className="section-actions">
           <span>{loading ? 'Загрузка...' : `${page.totalCount} событий`}</span>
-          <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEvents}>
+          <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEventsCsv}>
             <FileSpreadsheet size={16} />
             Скачать CSV
+          </button>
+          <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEventsXlsx}>
+            <FileSpreadsheet size={16} />
+            Скачать XLSX
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
@@ -12,6 +13,30 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private static readonly string[] ExportHeaders =
+    [
+        "createdAtUtc",
+        "actorUserId",
+        "section",
+        "actionKind",
+        "action",
+        "entityType",
+        "entityId",
+        "entityDisplayName",
+        "relatedGarageId",
+        "relatedGarageNumber",
+        "relatedAccountingMonth",
+        "relatedCounterpartyId",
+        "relatedCounterpartyName",
+        "relatedDocumentId",
+        "relatedDocumentNumber",
+        "fieldName",
+        "oldValue",
+        "newValue",
+        "reason",
+        "metadata",
+        "summary"
+    ];
 
     public async Task<IReadOnlyList<AuditEventDto>> GetEventsAsync(AuditEventListRequest request, CancellationToken cancellationToken)
     {
@@ -174,6 +199,21 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         return new AuditEventExportDto(fileName, "text/csv; charset=utf-8", Encoding.UTF8.GetBytes(csv));
     }
 
+    public async Task<AuditEventExportDto> ExportEventsXlsxAsync(AuditEventListRequest request, CancellationToken cancellationToken)
+    {
+        var events = await GetEventsAsync(request, cancellationToken);
+        var content = XlsxWorkbookBuilder.Build(
+        [
+            new XlsxSheet(
+                "История изменений",
+                ExportHeaders,
+                events.Select(auditEvent => (IReadOnlyList<XlsxCell>)BuildExportCells(auditEvent)).ToList())
+        ]);
+        var fileName = $"audit-events-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.xlsx";
+
+        return new AuditEventExportDto(fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", content);
+    }
+
     public async Task<AuditEventDto?> GetEventAsync(Guid id, CancellationToken cancellationToken)
     {
         var auditEvent = await dbContext.AuditEvents
@@ -186,37 +226,43 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,relatedGarageId,relatedGarageNumber,relatedAccountingMonth,relatedCounterpartyId,relatedCounterpartyName,relatedDocumentId,relatedDocumentNumber,fieldName,oldValue,newValue,reason,metadata,summary");
+        builder.AppendLine(string.Join(',', ExportHeaders));
 
         foreach (var auditEvent in events)
         {
-            builder
-                .Append(EscapeCsv(auditEvent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture))).Append(',')
-                .Append(EscapeCsv(auditEvent.ActorUserId?.ToString())).Append(',')
-                .Append(EscapeCsv(auditEvent.Section)).Append(',')
-                .Append(EscapeCsv(auditEvent.ActionKind)).Append(',')
-                .Append(EscapeCsv(auditEvent.Action)).Append(',')
-                .Append(EscapeCsv(auditEvent.EntityType)).Append(',')
-                .Append(EscapeCsv(auditEvent.EntityId)).Append(',')
-                .Append(EscapeCsv(auditEvent.EntityDisplayName)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedGarageId)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedGarageNumber)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedAccountingMonth)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedCounterpartyId)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedCounterpartyName)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedDocumentId)).Append(',')
-                .Append(EscapeCsv(auditEvent.RelatedDocumentNumber)).Append(',')
-                .Append(EscapeCsv(auditEvent.FieldName)).Append(',')
-                .Append(EscapeCsv(auditEvent.OldValue)).Append(',')
-                .Append(EscapeCsv(auditEvent.NewValue)).Append(',')
-                .Append(EscapeCsv(auditEvent.Reason)).Append(',')
-                .Append(EscapeCsv(FormatMetadata(auditEvent.Metadata))).Append(',')
-                .Append(EscapeCsv(auditEvent.Summary))
-                .AppendLine();
+            builder.AppendLine(string.Join(',', BuildExportValues(auditEvent).Select(EscapeCsv)));
         }
 
         return builder.ToString();
     }
+
+    private static IReadOnlyList<string?> BuildExportValues(AuditEventDto auditEvent) =>
+    [
+        auditEvent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture),
+        auditEvent.ActorUserId?.ToString(),
+        auditEvent.Section,
+        auditEvent.ActionKind,
+        auditEvent.Action,
+        auditEvent.EntityType,
+        auditEvent.EntityId,
+        auditEvent.EntityDisplayName,
+        auditEvent.RelatedGarageId,
+        auditEvent.RelatedGarageNumber,
+        auditEvent.RelatedAccountingMonth,
+        auditEvent.RelatedCounterpartyId,
+        auditEvent.RelatedCounterpartyName,
+        auditEvent.RelatedDocumentId,
+        auditEvent.RelatedDocumentNumber,
+        auditEvent.FieldName,
+        auditEvent.OldValue,
+        auditEvent.NewValue,
+        auditEvent.Reason,
+        FormatMetadata(auditEvent.Metadata),
+        auditEvent.Summary
+    ];
+
+    private static IReadOnlyList<XlsxCell> BuildExportCells(AuditEventDto auditEvent) =>
+        BuildExportValues(auditEvent).Select(XlsxCell.Text).ToList();
 
     private static string EscapeCsv(string? value)
     {

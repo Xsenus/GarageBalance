@@ -10,8 +10,8 @@ export function buildImportReportFileName(run: AccessImportRunDto): string {
   return `garagebalance-access-dry-run-${sourceName}-${startedAt}.json`
 }
 
-export function buildAuditExportFileName(date = new Date()): string {
-  return `garagebalance-audit-${date.toISOString().slice(0, 10).replaceAll('-', '')}.csv`
+export function buildAuditExportFileName(date = new Date(), extension: 'csv' | 'xlsx' = 'csv'): string {
+  return `garagebalance-audit-${date.toISOString().slice(0, 10).replaceAll('-', '')}.${extension}`
 }
 
 export function getFormValues(form: FormData, name: string): string[] {
