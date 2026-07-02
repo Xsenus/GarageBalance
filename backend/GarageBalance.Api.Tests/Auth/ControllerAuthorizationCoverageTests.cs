@@ -71,6 +71,24 @@ public sealed class ControllerAuthorizationCoverageTests
         Assert.NotNull(policy);
     }
 
+    [Theory]
+    [InlineData(nameof(DictionariesController.RestoreOwner))]
+    [InlineData(nameof(DictionariesController.RestoreGarage))]
+    [InlineData(nameof(DictionariesController.RestoreSupplierGroup))]
+    [InlineData(nameof(DictionariesController.RestoreSupplier))]
+    [InlineData(nameof(DictionariesController.RestoreIncomeType))]
+    [InlineData(nameof(DictionariesController.RestoreExpenseType))]
+    public void DictionaryRestoreActionsRequireDictionaryWritePermission(string actionName)
+    {
+        AssertActionRequiresPolicy(actionName, SystemPermissions.DictionariesWrite);
+    }
+
+    [Fact]
+    public void TariffRestoreActionRequiresTariffManagementPermission()
+    {
+        AssertActionRequiresPolicy(nameof(DictionariesController.RestoreTariff), SystemPermissions.TariffsManage);
+    }
+
     [Fact]
     public void ReportActionsRequireReportsReadPermission()
     {
@@ -216,6 +234,17 @@ public sealed class ControllerAuthorizationCoverageTests
     private static bool HasAuthorizationMetadata(MemberInfo member)
     {
         return member.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any();
+    }
+
+    private static void AssertActionRequiresPolicy(string actionName, string expectedPolicy)
+    {
+        var action = typeof(DictionariesController).GetMethod(actionName);
+        Assert.NotNull(action);
+
+        var policy = action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == expectedPolicy);
+
+        Assert.NotNull(policy);
     }
 
     private static bool HasAnonymousMetadata(MemberInfo member)
