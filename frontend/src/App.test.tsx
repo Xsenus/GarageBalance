@@ -490,6 +490,12 @@ describe('App', () => {
     await user.type(yearInput, '2026')
     const januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
     await user.type(januaryInput, '4654{Enter}')
+    const readingConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить показание?' })
+    expect(within(readingConfirmDialog).getByText('Гараж 12, Январь')).toBeInTheDocument()
+    expect(within(readingConfirmDialog).getByText('Электроэнергия, кВт')).toBeInTheDocument()
+    expect(within(readingConfirmDialog).getByText('Стало')).toBeInTheDocument()
+    expect(within(readingConfirmDialog).getByText('4654')).toBeInTheDocument()
+    await user.click(within(readingConfirmDialog).getByRole('button', { name: 'Сохранить показание' }))
     expect(januaryInput).toHaveValue('4654')
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()

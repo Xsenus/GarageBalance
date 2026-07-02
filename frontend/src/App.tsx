@@ -6818,6 +6818,16 @@ function isValidMeterReadingYear(value: string) {
   return year >= 1900 && year <= 9999
 }
 
+type MeterReadingPrototypePendingChange = {
+  cellKey: string
+  garageNumber: string
+  monthLabel: string
+  meterTypeLabel: string
+  unit: string
+  previousValue: string
+  nextValue: string
+}
+
 function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient }) {
   const [year, setYear] = useState('2026')
   const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
@@ -6826,9 +6836,37 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
   const [error, setError] = useState<string | null>(null)
   const [savedReadings, setSavedReadings] = useState<Record<string, string>>({})
   const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
+  const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
 
   const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(year)
+
+  function cancelPendingReadingChange() {
+    if (pendingReadingChange) {
+      setDraftReadings((currentDrafts) => ({
+        ...currentDrafts,
+        [pendingReadingChange.cellKey]: pendingReadingChange.previousValue,
+      }))
+    }
+
+    setPendingReadingChange(null)
+  }
+
+  function confirmPendingReadingChange() {
+    if (!pendingReadingChange) {
+      return
+    }
+
+    setSavedReadings((currentReadings) => ({
+      ...currentReadings,
+      [pendingReadingChange.cellKey]: pendingReadingChange.nextValue,
+    }))
+    setPendingReadingChange(null)
+  }
+
+  const readingChangeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingReadingChange))
+  const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingReadingChange))
+  useEscapeKey(Boolean(pendingReadingChange), () => cancelPendingReadingChange())
 
   useEffect(() => {
     let isMounted = true
@@ -6871,7 +6909,15 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
       return
     }
 
-    setSavedReadings((currentReadings) => ({ ...currentReadings, [cellKey]: nextValue }))
+    setPendingReadingChange({
+      cellKey,
+      garageNumber: garage.number,
+      monthLabel: month.label,
+      meterTypeLabel: selectedMeterType.label,
+      unit: selectedMeterType.unit,
+      previousValue,
+      nextValue,
+    })
   }
 
   return (
@@ -6951,6 +6997,45 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
             )}
         </div>
       </div>
+
+      {pendingReadingChange ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>
+          <section ref={readingChangeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="meter-reading-change-title" aria-describedby="meter-reading-change-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Изменение</p>
+                <h3 id="meter-reading-change-title">Подтвердить показание?</h3>
+                <p>{`Гараж ${pendingReadingChange.garageNumber}, ${pendingReadingChange.monthLabel}`}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение показания" onClick={cancelPendingReadingChange}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="meter-reading-change-description">Проверьте новое показание счетчика. После подключения backend это действие будет записываться в историю изменений по гаражу, месяцу и типу счетчика.</p>
+            <dl className="dictionary-change-list">
+              <div>
+                <dt>Счетчик</dt>
+                <dd>{`${pendingReadingChange.meterTypeLabel}, ${pendingReadingChange.unit}`}</dd>
+              </div>
+              <div>
+                <dt>Было</dt>
+                <dd>{formatPrototypeChangeValue(pendingReadingChange.previousValue)}</dd>
+              </div>
+              <div>
+                <dt>Стало</dt>
+                <dd>{formatPrototypeChangeValue(pendingReadingChange.nextValue)}</dd>
+              </div>
+            </dl>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmPendingReadingChange}>
+                <Save size={16} />
+                <span>Сохранить показание</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }
