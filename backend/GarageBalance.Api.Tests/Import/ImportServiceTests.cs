@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
@@ -12,7 +14,7 @@ public sealed class ImportServiceTests
     public async Task DryRunAccessImportAsync_PersistsReportAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         await using var stream = CreateAccessLikeStream("гараж владелец платеж счетчик");
 
@@ -26,14 +28,27 @@ public sealed class ImportServiceTests
         Assert.Single(database.Context.AccessImportRuns);
         Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.StepCode == "file_received" && item.AccessImportRunId == result.Value.Id);
         Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.StepCode == "dry_run_finished" && item.AccessImportRunId == result.Value.Id);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "import.access_dry_run" && item.ActorUserId == actorUserId);
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.access_dry_run");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal(result.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("import", auditEvent.ActionKind);
+        Assert.Equal("ГСК.accdb", auditEvent.EntityDisplayName);
+        Assert.Equal(result.Value.Id.ToString(), auditEvent.RelatedDocumentId);
+        Assert.Equal("ГСК.accdb", auditEvent.RelatedDocumentNumber);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("dry_run", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal("completed", metadata.RootElement.GetProperty("status").GetString());
+        Assert.Equal(".accdb", metadata.RootElement.GetProperty("fileExtension").GetString());
+        Assert.Equal(result.Value.ContentSha256, metadata.RootElement.GetProperty("contentSha256").GetString());
+        Assert.Equal("0", metadata.RootElement.GetProperty("errorCount").GetString());
     }
 
     [Fact]
     public async Task DryRunAccessImportAsync_RejectsUnsupportedExtension()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         await using var stream = new MemoryStream([1, 2, 3]);
 
         var result = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("data.xlsx", stream), null, CancellationToken.None);
@@ -47,7 +62,7 @@ public sealed class ImportServiceTests
     public async Task GetAccessImportRunsAsync_ReturnsLatestRunsFirst()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("first.accdb", CreateAccessLikeStream("garage")), null, CancellationToken.None);
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("second.accdb", CreateAccessLikeStream("owner")), null, CancellationToken.None);
 
@@ -61,7 +76,7 @@ public sealed class ImportServiceTests
     public async Task GetAccessImportRunsAsync_AppliesLimit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("first.accdb", CreateAccessLikeStream("garage")), null, CancellationToken.None);
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("second.accdb", CreateAccessLikeStream("owner")), null, CancellationToken.None);
         await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("third.accdb", CreateAccessLikeStream("payment")), null, CancellationToken.None);
@@ -76,7 +91,7 @@ public sealed class ImportServiceTests
     public async Task ExportAccessImportRunReportAsync_ReturnsJsonReportFile()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
 
         var result = await service.ExportAccessImportRunReportAsync(dryRun.Value!.Id, CancellationToken.None);
@@ -94,7 +109,7 @@ public sealed class ImportServiceTests
     public async Task GetAccessImportRunLogEntriesAsync_ReturnsRunLogInChronologicalOrderWithoutDetails()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
 
         var result = await service.GetAccessImportRunLogEntriesAsync(dryRun.Value!.Id, new AccessImportRunLogListRequest(), CancellationToken.None);
@@ -115,7 +130,7 @@ public sealed class ImportServiceTests
     public async Task GetAccessImportRunLogEntriesAsync_AppliesLimit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
 
         var result = await service.GetAccessImportRunLogEntriesAsync(dryRun.Value!.Id, new AccessImportRunLogListRequest { Limit = 2 }, CancellationToken.None);
@@ -128,7 +143,7 @@ public sealed class ImportServiceTests
     public async Task ExportAccessImportRunReportAsync_ReturnsNotFoundForMissingRun()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.ExportAccessImportRunReportAsync(Guid.NewGuid(), CancellationToken.None);
 
@@ -140,7 +155,7 @@ public sealed class ImportServiceTests
     public async Task GetAccessImportRunLogEntriesAsync_ReturnsNotFoundForMissingRun()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.GetAccessImportRunLogEntriesAsync(Guid.NewGuid(), new AccessImportRunLogListRequest(), CancellationToken.None);
 
@@ -152,6 +167,11 @@ public sealed class ImportServiceTests
     {
         var oleSignature = new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
         return new MemoryStream([.. oleSignature, .. Encoding.UTF8.GetBytes(text)]);
+    }
+
+    private static ImportService CreateService(GarageBalanceDbContext context)
+    {
+        return new ImportService(context, new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

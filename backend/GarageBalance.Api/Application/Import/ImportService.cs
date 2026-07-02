@@ -1,14 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Import;
 
-public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportService
+public sealed class ImportService(
+    GarageBalanceDbContext dbContext,
+    IAuditEventWriter auditEventWriter) : IImportService
 {
     private const long MaxDryRunFileSizeBytes = 512L * 1024L * 1024L;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -199,14 +201,29 @@ public sealed class ImportService(GarageBalanceDbContext dbContext) : IImportSer
             warnings,
             errors
         });
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = "import.access_dry_run",
-            EntityType = "access_import_run",
-            EntityId = run.Id.ToString(),
-            Summary = $"Dry-run импорта Access: {fileName}, статус {status}, проверок {checks.Count}."
-        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.access_dry_run",
+            "access_import_run",
+            run.Id.ToString(),
+            Summary: $"Dry-run импорта Access: {fileName}, статус {status}, проверок {checks.Count}.",
+            ActionKind: "import",
+            EntityDisplayName: fileName,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: fileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["mode"] = run.Mode,
+                ["status"] = status,
+                ["originalFileName"] = fileName,
+                ["fileExtension"] = extension,
+                ["fileSizeBytes"] = buffer.Length,
+                ["contentSha256"] = run.ContentSha256,
+                ["totalChecks"] = checks.Count,
+                ["passedChecks"] = passed,
+                ["warningCount"] = warnings,
+                ["errorCount"] = errors
+            }));
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
