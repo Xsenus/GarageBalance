@@ -335,6 +335,11 @@ describe('App', () => {
 
     const deleteFineButton = within(tariffsPanel).getByRole('button', { name: 'Удалить нерегулярный платеж Штраф за это' })
     await user.click(deleteFineButton)
+    const deleteFineDialog = await screen.findByRole('dialog', { name: 'Удалить нерегулярный платеж?' })
+    expect(within(deleteFineDialog).getByText('Штраф за это')).toBeInTheDocument()
+    expect(within(deleteFineDialog).getByRole('button', { name: 'Удалить нерегулярный платеж' })).toBeDisabled()
+    await user.type(within(deleteFineDialog).getByLabelText('Причина удаления нерегулярного платежа'), 'Больше не используется')
+    await user.click(within(deleteFineDialog).getByRole('button', { name: 'Удалить нерегулярный платеж' }))
     expect(within(tariffsPanel).getByText('Удален')).toBeInTheDocument()
     const restoreFineButton = within(tariffsPanel).getByRole('button', { name: 'Вернуть нерегулярный платеж Штраф за это' })
     await user.click(restoreFineButton)
