@@ -1949,6 +1949,36 @@ h1 {
   color: #101828;
 }
 
+.fund-operation-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.fund-operation-preview div {
+  min-width: 0;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 10px 12px;
+}
+
+.fund-operation-preview dt {
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.fund-operation-preview dd {
+  margin: 0;
+  color: #101828;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .finance-workbench {
   display: grid;
   gap: 12px;

@@ -3125,17 +3125,97 @@ function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-const fundPrototypeRows = [
-  { name: 'Электроэнергия', amount: '' },
-  { name: 'Водоснабжение', amount: '' },
-  { name: 'Вывоз мусора', amount: '' },
-  { name: 'Наружное освещение', amount: '' },
-  { name: 'Членские взносы', amount: '', actions: false },
-  { name: 'Целевые взносы', amount: '' },
-  { name: 'Прочее', amount: '', actions: false },
+type FundPrototypeRow = {
+  name: string
+  amount: number | null
+  actions?: false
+}
+
+type FundOperationKind = 'withdraw' | 'deposit'
+
+type FundOperationDraft = {
+  kind: FundOperationKind
+  fundName: string
+  amount: string
+  reason: string
+}
+
+const fundPrototypeRows: FundPrototypeRow[] = [
+  { name: 'Электроэнергия', amount: null },
+  { name: 'Водоснабжение', amount: null },
+  { name: 'Вывоз мусора', amount: null },
+  { name: 'Наружное освещение', amount: null },
+  { name: 'Членские взносы', amount: null, actions: false },
+  { name: 'Целевые взносы', amount: null },
+  { name: 'Прочее', amount: null, actions: false },
 ]
 
 function FundsPrototypePanel() {
+  const [rows, setRows] = useState<FundPrototypeRow[]>(() => fundPrototypeRows.map((row) => ({ ...row })))
+  const [operation, setOperation] = useState<FundOperationDraft | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(null)
+  const [operationMessage, setOperationMessage] = useState<string | null>(null)
+  const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
+  const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
+
+  useEscapeKey(Boolean(operation), () => closeFundOperation())
+
+  function openFundOperation(kind: FundOperationKind, fundName: string) {
+    setOperation({ kind, fundName, amount: '', reason: '' })
+    setOperationError(null)
+    setOperationMessage(null)
+  }
+
+  function closeFundOperation() {
+    setOperation(null)
+    setOperationError(null)
+  }
+
+  function parseFundOperationAmount(value: string) {
+    const normalized = value.trim().replace(',', '.')
+    if (!normalized) {
+      return null
+    }
+
+    const amount = Number(normalized)
+    return Number.isFinite(amount) && amount > 0 ? amount : null
+  }
+
+  function submitFundOperation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!operation) {
+      return
+    }
+
+    const amount = parseFundOperationAmount(operation.amount)
+    const reason = operation.reason.trim()
+    if (amount === null) {
+      setOperationError('Укажите сумму больше нуля.')
+      return
+    }
+
+    if (!reason) {
+      setOperationError('Укажите причину операции.')
+      return
+    }
+
+    setRows((currentRows) => currentRows.map((row) => {
+      if (row.name !== operation.fundName) {
+        return row
+      }
+
+      const currentAmount = row.amount ?? 0
+      const nextAmount = operation.kind === 'deposit' ? currentAmount + amount : currentAmount - amount
+      return { ...row, amount: nextAmount }
+    }))
+    setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${operation.fundName}" сохранено в прототипе.`)
+    closeFundOperation()
+  }
+
+  const distributionAmount = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
+  const operationAmount = operation ? parseFundOperationAmount(operation.amount) : null
+  const operationActionLabel = operation?.kind === 'deposit' ? 'Пополнить фонд' : 'Изъять из фонда'
+
   return (
     <section className="funds-page" aria-label="Управление фондами">
       <div className="funds-heading">
@@ -3153,20 +3233,20 @@ function FundsPrototypePanel() {
             </tr>
           </thead>
           <tbody>
-            {fundPrototypeRows.map((row) => (
+            {rows.map((row) => (
               <tr key={row.name}>
                 <td>{row.name}</td>
-                <td>{row.amount || '—'}</td>
+                <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
                 <td>
                   {row.actions === false ? null : (
-                    <button className="link-button" type="button" aria-label={`Изъять из фонда ${row.name}`}>
+                    <button className="link-button" type="button" aria-label={`Изъять из фонда ${row.name}`} onClick={() => openFundOperation('withdraw', row.name)}>
                       Изъять
                     </button>
                   )}
                 </td>
                 <td>
                   {row.actions === false ? null : (
-                    <button className="link-button" type="button" aria-label={`Пополнить фонд ${row.name}`}>
+                    <button className="link-button" type="button" aria-label={`Пополнить фонд ${row.name}`} onClick={() => openFundOperation('deposit', row.name)}>
                       Пополнить
                     </button>
                   )}
@@ -3179,8 +3259,77 @@ function FundsPrototypePanel() {
 
       <div className="funds-distribution" aria-label="Сумма к распределению">
         <span>Сумма к распределению</span>
-        <strong>—</strong>
+        <strong>{distributionAmount === 0 ? '—' : `${formatMoney(distributionAmount)} руб.`}</strong>
       </div>
+
+      {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
+
+      {operation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeFundOperation}>
+          <section ref={operationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-operation-title" aria-describedby="fund-operation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Операция фонда</p>
+                <h3 id="fund-operation-title">{operationActionLabel}</h3>
+                <p>{operation.fundName}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeFundOperation} aria-label="Закрыть операцию фонда">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fund-operation-description">Проверьте сумму и укажите причину. После подключения backend эта операция будет записываться в историю изменений.</p>
+            <form className="dictionary-modal-form" onSubmit={submitFundOperation}>
+              <FormField label="Сумма">
+                <input
+                  aria-label="Сумма операции фонда"
+                  inputMode="decimal"
+                  value={operation.amount}
+                  onChange={(event) => {
+                    setOperation({ ...operation, amount: event.target.value })
+                    if (operationError) {
+                      setOperationError(null)
+                    }
+                  }}
+                  placeholder="0,00"
+                />
+              </FormField>
+              <FormField label="Причина">
+                <textarea
+                  aria-label="Причина операции фонда"
+                  rows={3}
+                  maxLength={1000}
+                  value={operation.reason}
+                  onChange={(event) => {
+                    setOperation({ ...operation, reason: event.target.value })
+                    if (operationError) {
+                      setOperationError(null)
+                    }
+                  }}
+                  placeholder="Например: распределение средств по решению правления"
+                />
+              </FormField>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Действие</dt>
+                  <dd>{operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'}</dd>
+                </div>
+                <div>
+                  <dt>Сумма</dt>
+                  <dd>{operationAmount === null ? '—' : `${formatMoney(operationAmount)} руб.`}</dd>
+                </div>
+              </dl>
+              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button ref={operationCancelRef} className="ghost-button" type="button" onClick={closeFundOperation}>Отмена</button>
+                <button className="secondary-button" type="submit">
+                  <Save size={16} />
+                  <span>Подтвердить операцию</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }
