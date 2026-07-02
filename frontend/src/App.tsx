@@ -6623,6 +6623,7 @@ function TariffsAndFeesPrototypePanel() {
   const changeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingChange))
   const oneTimeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeDeleteTarget))
+  useRestoreFocusOnClose(Boolean(oneTimeRestoreTarget))
   const oneTimeRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeRestoreTarget))
   const oneTimeRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeRestoreTarget))
   useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
