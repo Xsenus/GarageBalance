@@ -3156,6 +3156,7 @@ function FundsPrototypePanel() {
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
+  useRestoreFocusOnClose(Boolean(operation))
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
 
