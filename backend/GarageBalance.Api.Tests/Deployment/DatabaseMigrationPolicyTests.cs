@@ -165,6 +165,80 @@ public sealed class DatabaseMigrationPolicyTests
         Assert.Contains("migrationScriptBytes=", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AuditEventsSchema_KeepsStructuredHistoryColumnsAndIndexes()
+    {
+        var migrationRoot = FindMigrationRoot();
+        var snapshot = File.ReadAllText(Path.Combine(migrationRoot, "GarageBalanceDbContextModelSnapshot.cs"));
+        var migrationSources = string.Join(
+            Environment.NewLine,
+            Directory.EnumerateFiles(migrationRoot, "*.cs", SearchOption.TopDirectoryOnly)
+                .Where(path => !Path.GetFileName(path).EndsWith(".Designer.cs", StringComparison.Ordinal))
+                .Where(path => !Path.GetFileName(path).Equals("GarageBalanceDbContextModelSnapshot.cs", StringComparison.Ordinal))
+                .Select(File.ReadAllText));
+
+        var requiredStringProperties = new[]
+        {
+            "Section",
+            "ActionKind",
+            "EntityDisplayName",
+            "RelatedGarageId",
+            "RelatedGarageNumber",
+            "RelatedAccountingMonth",
+            "RelatedCounterpartyId",
+            "RelatedCounterpartyName",
+            "RelatedDocumentId",
+            "RelatedDocumentNumber"
+        };
+
+        var requiredSnapshotIndexes = new[]
+        {
+            "b.HasIndex(\"ActorUserId\")",
+            "b.HasIndex(\"CreatedAtUtc\")",
+            "b.HasIndex(\"Section\")",
+            "b.HasIndex(\"ActionKind\")",
+            "b.HasIndex(\"EntityType\", \"EntityId\")",
+            "b.HasIndex(\"Section\", \"ActionKind\", \"CreatedAtUtc\")",
+            "b.HasIndex(\"RelatedGarageId\")",
+            "b.HasIndex(\"RelatedGarageNumber\")",
+            "b.HasIndex(\"RelatedAccountingMonth\")",
+            "b.HasIndex(\"RelatedCounterpartyId\")",
+            "b.HasIndex(\"RelatedCounterpartyName\")",
+            "b.HasIndex(\"RelatedDocumentId\")",
+            "b.HasIndex(\"RelatedDocumentNumber\")"
+        };
+
+        var requiredMigrationIndexNames = new[]
+        {
+            "IX_audit_events_ActorUserId",
+            "IX_audit_events_Section",
+            "IX_audit_events_ActionKind",
+            "IX_audit_events_Section_ActionKind_CreatedAtUtc",
+            "IX_audit_events_RelatedGarageId",
+            "IX_audit_events_RelatedGarageNumber",
+            "IX_audit_events_RelatedAccountingMonth",
+            "IX_audit_events_RelatedCounterpartyId",
+            "IX_audit_events_RelatedCounterpartyName",
+            "IX_audit_events_RelatedDocumentId",
+            "IX_audit_events_RelatedDocumentNumber"
+        };
+
+        foreach (var property in requiredStringProperties)
+        {
+            Assert.Contains($"b.Property<string>(\"{property}\")", snapshot, StringComparison.Ordinal);
+        }
+
+        foreach (var index in requiredSnapshotIndexes)
+        {
+            Assert.Contains(index, snapshot, StringComparison.Ordinal);
+        }
+
+        foreach (var indexName in requiredMigrationIndexNames)
+        {
+            Assert.Contains(indexName, migrationSources, StringComparison.Ordinal);
+        }
+    }
+
     private static IEnumerable<string> EnumerateConcreteMigrationNames()
     {
         return Directory.EnumerateFiles(FindMigrationRoot(), "*.cs", SearchOption.TopDirectoryOnly)

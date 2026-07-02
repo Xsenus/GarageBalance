@@ -110,6 +110,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.RelatedDocumentNumber).HasMaxLength(120);
             entity.Property(item => item.Summary).HasMaxLength(1000).IsRequired();
             entity.HasIndex(item => item.CreatedAtUtc);
+            entity.HasIndex(item => item.ActorUserId);
             entity.HasIndex(item => item.Section);
             entity.HasIndex(item => item.ActionKind);
             entity.HasIndex(item => new { item.EntityType, item.EntityId });
@@ -118,7 +119,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.RelatedGarageNumber);
             entity.HasIndex(item => item.RelatedAccountingMonth);
             entity.HasIndex(item => item.RelatedCounterpartyId);
+            entity.HasIndex(item => item.RelatedCounterpartyName);
             entity.HasIndex(item => item.RelatedDocumentId);
+            entity.HasIndex(item => item.RelatedDocumentNumber);
         });
 
         modelBuilder.Entity<Owner>(entity =>
