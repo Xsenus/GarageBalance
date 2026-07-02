@@ -6156,6 +6156,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     tariffs: createEmptyPage<DictionaryRecord>(),
   })
   const [search, setSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -6163,6 +6164,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [contextMenu, setContextMenu] = useState<{ section: DictionarySectionKey; item: DictionaryRecord; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<{ section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord } | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
   const [balanceHistoryGarage, setBalanceHistoryGarage] = useState<GarageDto | null>(null)
   const [balanceHistory, setBalanceHistory] = useState<GarageBalanceHistoryDto | null>(null)
   const [balanceHistoryFilters, setBalanceHistoryFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
@@ -6180,6 +6182,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
   const archiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(archiveTarget))
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(archiveTarget))
+  const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
+  const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const balanceHistoryCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(balanceHistoryGarage))
   const balanceHistoryDialogRef = useFocusTrap<HTMLElement>(Boolean(balanceHistoryGarage))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
@@ -6194,6 +6198,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor), () => closeEditor())
   useEscapeKey(Boolean(archiveTarget), () => setArchiveTarget(null))
+  useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(balanceHistoryGarage), () => closeBalanceHistory())
 
   useEffect(() => {
@@ -6268,45 +6273,45 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     }
     // The loader intentionally captures the current page settings for the active dictionary section.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, auth.accessToken, dictionaryClient, search])
+  }, [activeSection, auth.accessToken, dictionaryClient, search, showArchived])
 
   async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit) {
     const query = supportsDictionarySearch(section) ? search.trim() || undefined : undefined
     let page: PagedResult<DictionaryRecord>
     if (section === 'owners') {
       page = dictionaryClient.getOwnersPage
-        ? await dictionaryClient.getOwnersPage(auth.accessToken, query, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getOwners(auth.accessToken, query, 500), offset, limit)
+        ? await dictionaryClient.getOwnersPage(auth.accessToken, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getOwners(auth.accessToken, query, 500, showArchived), offset, limit)
       setOwners(page.items as OwnerDto[])
     } else if (section === 'garages') {
       page = dictionaryClient.getGaragesPage
-        ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500), offset, limit)
+        ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500, showArchived), offset, limit)
       setGarages(page.items as GarageDto[])
     } else if (section === 'supplierGroups') {
       page = dictionaryClient.getSupplierGroupsPage
-        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, 500), offset, limit)
+        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, 500, showArchived), offset, limit)
       setGroups(page.items as SupplierGroupDto[])
     } else if (section === 'suppliers') {
       page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500), offset, limit)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500, showArchived), offset, limit)
       setSuppliers(page.items as SupplierDto[])
     } else if (section === 'incomeTypes') {
       page = dictionaryClient.getIncomeTypesPage
-        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, 500), offset, limit)
+        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, 500, showArchived), offset, limit)
       setIncomeTypes(page.items as AccountingTypeDto[])
     } else if (section === 'expenseTypes') {
       page = dictionaryClient.getExpenseTypesPage
-        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, 500), offset, limit)
+        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, 500, showArchived), offset, limit)
       setExpenseTypes(page.items as AccountingTypeDto[])
     } else {
       page = dictionaryClient.getTariffsPage
-        ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500), offset, limit)
+        ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived), offset, limit)
       setTariffs(page.items as TariffDto[])
     }
 
@@ -6636,6 +6641,53 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     }
   }
 
+  async function confirmRestore() {
+    if (!restoreTarget) {
+      return
+    }
+
+    if (restoreTarget.section === 'tariffs' && !canManageTariffs) {
+      setError('Для восстановления тарифов нужно право tariffs.manage.')
+      return
+    }
+
+    if (restoreTarget.section !== 'tariffs' && !canWriteDictionaries) {
+      setError('Для восстановления справочников нужно право dictionaries.write.')
+      return
+    }
+
+    setSaving('dictionary-restore')
+    setError(null)
+    try {
+      if (restoreTarget.section === 'owners') {
+        await dictionaryClient.restoreOwner(auth.accessToken, (restoreTarget.item as OwnerDto).id)
+      } else if (restoreTarget.section === 'garages') {
+        await dictionaryClient.restoreGarage(auth.accessToken, (restoreTarget.item as GarageDto).id)
+      } else if (restoreTarget.section === 'supplierGroups') {
+        await dictionaryClient.restoreSupplierGroup(auth.accessToken, (restoreTarget.item as SupplierGroupDto).id)
+      } else if (restoreTarget.section === 'suppliers') {
+        await dictionaryClient.restoreSupplier(auth.accessToken, (restoreTarget.item as SupplierDto).id)
+      } else if (restoreTarget.section === 'incomeTypes') {
+        await dictionaryClient.restoreIncomeType(auth.accessToken, (restoreTarget.item as AccountingTypeDto).id)
+      } else if (restoreTarget.section === 'expenseTypes') {
+        await dictionaryClient.restoreExpenseType(auth.accessToken, (restoreTarget.item as AccountingTypeDto).id)
+      } else {
+        await dictionaryClient.restoreTariff(auth.accessToken, (restoreTarget.item as TariffDto).id)
+      }
+
+      const section = restoreTarget.section
+      setRestoreTarget(null)
+      await refreshAfterMutation(section)
+      showToast('Запись восстановлена и снова доступна в рабочих списках.')
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось восстановить запись.'
+      setError(message)
+      showToast(message, 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   function changePageSize(value: number) {
     setPages((current) => ({ ...current, [activeSection]: { ...current[activeSection], offset: 0, limit: value } }))
     setLoading(true)
@@ -6660,11 +6712,33 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   function renderHeaders() {
-    return getDictionaryTableHeaders(activeSection).map((header) => <th key={header}>{header}</th>)
+    return [...getDictionaryTableHeaders(activeSection), 'Статус', 'Действие'].map((header) => <th key={header}>{header}</th>)
   }
 
   function renderCells(item: DictionaryRecord) {
     return getDictionaryRecordCells(activeSection, item).map((value, index) => <td key={index}>{value}</td>)
+  }
+
+  function isArchivedRecord(item: DictionaryRecord) {
+    return item.isArchived
+  }
+
+  function renderRowAction(item: DictionaryRecord) {
+    if (isArchivedRecord(item)) {
+      return (
+        <button className="ghost-button dictionary-row-action" type="button" disabled={!canWriteActiveSection} onClick={() => setRestoreTarget({ section: activeSection, item })}>
+          <RotateCcw size={15} />
+          <span>Вернуть</span>
+        </button>
+      )
+    }
+
+    return (
+      <button className="ghost-button dictionary-row-action dictionary-row-action-danger" type="button" disabled={!canWriteActiveSection} onClick={() => setArchiveTarget({ section: activeSection, item })}>
+        <Trash2 size={15} />
+        <span>Удалить</span>
+      </button>
+    )
   }
 
   function renderEditorFields(section: DictionarySectionKey) {
@@ -6828,6 +6902,10 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         <div className="dictionary-table-shell">
           <div className="dictionary-toolbar">
             <input aria-label={`Поиск: ${activeOption.label}`} placeholder={searchPlaceholder} value={search} onChange={(event) => setSearch(event.target.value)} disabled={!supportsSearch} />
+            <label className="dictionary-archive-toggle">
+              <input aria-label="Показывать архивные" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+              <span>Показывать архивные</span>
+            </label>
             <button className="secondary-button" type="button" disabled={!canWriteActiveSection} onClick={() => openEditor(activeSection, 'create')}>
               <Plus size={16} />
               <span>Добавить</span>
@@ -6841,8 +6919,18 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
               </thead>
               <tbody>
                 {rows.map((item) => (
-                  <tr tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => openEditor(activeSection, 'edit', item)} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
+                  <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
+                    if (!isArchivedRecord(item)) {
+                      openEditor(activeSection, 'edit', item)
+                    }
+                  }} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
                     {renderCells(item)}
+                    <td>
+                      <span className={isArchivedRecord(item) ? 'dictionary-status-pill dictionary-status-pill-archived' : 'dictionary-status-pill'}>
+                        {isArchivedRecord(item) ? 'Архив' : 'Активна'}
+                      </span>
+                    </td>
+                    <td>{renderRowAction(item)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -6876,17 +6964,29 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
               <span>История баланса</span>
             </button>
           ) : null}
-          <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => openEditor(contextMenu.section, 'edit', contextMenu.item)}>
-            <Save size={15} />
-            <span>Изменить</span>
-          </button>
-          <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
-            setArchiveTarget({ section: contextMenu.section, item: contextMenu.item })
-            setContextMenu(null)
-          }}>
-            <Trash2 size={15} />
-            <span>Удалить</span>
-          </button>
+          {isArchivedRecord(contextMenu.item) ? (
+            <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
+              setRestoreTarget({ section: contextMenu.section, item: contextMenu.item })
+              setContextMenu(null)
+            }}>
+              <RotateCcw size={15} />
+              <span>Вернуть</span>
+            </button>
+          ) : (
+            <>
+              <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => openEditor(contextMenu.section, 'edit', contextMenu.item)}>
+                <Save size={15} />
+                <span>Изменить</span>
+              </button>
+              <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
+                setArchiveTarget({ section: contextMenu.section, item: contextMenu.item })
+                setContextMenu(null)
+              }}>
+                <Trash2 size={15} />
+                <span>Удалить</span>
+              </button>
+            </>
+          )}
         </div>
       ) : null}
 
@@ -7018,6 +7118,31 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
               <button className="secondary-button danger-button" type="button" onClick={() => void confirmArchive()} disabled={saving === 'dictionary-archive'}>
                 <Trash2 size={16} />
                 <span>{saving === 'dictionary-archive' ? 'Удаляем...' : 'Удалить запись'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {restoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
+          <section ref={restoreDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-restore-title" aria-describedby="dictionary-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление</p>
+                <h3 id="dictionary-restore-title">Вернуть запись из архива?</h3>
+                <p>{getDictionaryRecordTitle(restoreTarget.section, restoreTarget.item)}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить восстановление" onClick={() => setRestoreTarget(null)} disabled={saving === 'dictionary-restore'}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="dictionary-restore-description">Запись снова появится в рабочих списках. Действие будет записано в историю изменений.</p>
+            <div className="detail-dialog-actions">
+              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)} disabled={saving === 'dictionary-restore'}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmRestore()} disabled={saving === 'dictionary-restore'}>
+                <RotateCcw size={16} />
+                <span>{saving === 'dictionary-restore' ? 'Возвращаем...' : 'Вернуть запись'}</span>
               </button>
             </div>
           </section>

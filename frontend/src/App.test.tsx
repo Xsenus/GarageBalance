@@ -1790,6 +1790,47 @@ describe('App', () => {
     })
   })
 
+  it('shows archived dictionary records and restores them after confirmation', async () => {
+    const user = userEvent.setup()
+    const activeOwner = createOwner({ id: 'owner-active', lastName: 'Иванов', firstName: 'Иван' })
+    const archivedOwner = createOwner({ id: 'owner-archived', lastName: 'Петров', firstName: 'Петр', isArchived: true })
+    let owners = [activeOwner, archivedOwner]
+    let restoredOwnerId: string | null = null
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async (_token, _search, _limit, includeArchived) => owners.filter((owner) => includeArchived || !owner.isArchived),
+      restoreOwner: async (_token, id) => {
+        restoredOwnerId = id
+        owners = owners.map((owner) => owner.id === id ? { ...owner, isArchived: false } : owner)
+        return owners.find((owner) => owner.id === id)!
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    expect(await within(dictionaryPanel).findByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Петров Петр')).not.toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByLabelText('Показывать архивные'))
+    expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
+    const archivedRow = within(dictionaryPanel).getByText('Петров Петр').closest('tr')!
+    expect(within(archivedRow).getByText('Архив')).toBeInTheDocument()
+
+    await user.click(within(archivedRow).getByRole('button', { name: 'Вернуть' }))
+    expect(restoredOwnerId).toBeNull()
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть запись из архива?' })
+    expect(within(restoreDialog).getByText('Запись снова появится в рабочих списках. Действие будет записано в историю изменений.')).toBeInTheDocument()
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
+
+    expect(restoredOwnerId).toBe('owner-archived')
+    expect(await screen.findByText('Запись восстановлена и снова доступна в рабочих списках.')).toBeInTheDocument()
+    const restoredRow = within(dictionaryPanel).getByText('Петров Петр').closest('tr')!
+    expect(within(restoredRow).getByText('Активна')).toBeInTheDocument()
+  })
+
   it('adds income type, expense type and tariff from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createStatefulDictionaryClient()

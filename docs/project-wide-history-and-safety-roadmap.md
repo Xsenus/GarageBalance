@@ -148,19 +148,19 @@
 
 ## Milestone 5: Frontend Восстановление Удаленных Объектов
 
-- `[ ]` Во всех таблицах справочников добавить режим просмотра архивных/удаленных записей.
-- `[ ]` У удаленных владельцев показать кнопку `Вернуть`.
-- `[ ]` У удаленных гаражей показать кнопку `Вернуть`.
-- `[ ]` У удаленных групп поставщиков показать кнопку `Вернуть`.
-- `[ ]` У удаленных поставщиков показать кнопку `Вернуть`.
-- `[ ]` У удаленных видов поступлений показать кнопку `Вернуть`.
-- `[ ]` У удаленных видов выплат показать кнопку `Вернуть`.
-- `[ ]` У удаленных тарифов показать кнопку `Вернуть`.
+- `[x]` Во всех таблицах справочников добавить режим просмотра архивных/удаленных записей.
+- `[x]` У удаленных владельцев показать кнопку `Вернуть`.
+- `[x]` У удаленных гаражей показать кнопку `Вернуть`.
+- `[x]` У удаленных групп поставщиков показать кнопку `Вернуть`.
+- `[x]` У удаленных поставщиков показать кнопку `Вернуть`.
+- `[x]` У удаленных видов поступлений показать кнопку `Вернуть`.
+- `[x]` У удаленных видов выплат показать кнопку `Вернуть`.
+- `[x]` У удаленных тарифов показать кнопку `Вернуть`.
 - `[ ]` У удаленных сотрудников/отделов показать кнопку `Вернуть` после реализации backend.
 - `[ ]` У удаленных нерегулярных платежей/сборов показать кнопку `Вернуть` после backend-модели.
-- `[ ]` Для restore показать confirmation dialog, если восстановление может повлиять на расчеты или видимость объекта.
-- `[ ]` Для restore конфликтов показать понятную ошибку: что мешает восстановить и что сделать.
-- `[ ]` Добавить React tests для каждой группы restore-кнопок и конфликтных ошибок.
+- `[x]` Для restore показать confirmation dialog, если восстановление может повлиять на расчеты или видимость объекта.
+- `[~]` Для restore конфликтов показать понятную ошибку: backend возвращает конфликт, отдельный UX-текст по каждому типу объекта еще нужно расширить.
+- `[~]` Добавить React tests для каждой группы restore-кнопок и конфликтных ошибок: покрыт общий сценарий архивного владельца в таблице справочников, остальные типы используют тот же общий UI-путь и требуют дополнительных частных тестов.
 
 ## Milestone 6: Frontend Подтверждение Удалений
 
@@ -237,8 +237,8 @@
 
 - `[ ]` Backend unit tests на diff builder, masking, action kinds, no-op update.
 - `[ ]` Backend controller tests на `ChangeHistoryController`.
-- `[~]` Backend controller tests на restore endpoints всех поддержанных объектов.
-- `[~]` Backend service tests на каждое создание/изменение/удаление/восстановление объекта.
+- `[x]` Backend controller tests на restore endpoints всех поддержанных объектов.
+- `[x]` Backend service tests на каждое создание/изменение/удаление/восстановление объекта.
 - `[~]` Backend permission tests: `audit.read`, write permissions для restore/delete/update.
 - `[ ]` Backend migration tests: schema, indexes, UTF-8 no BOM.
 - `[x]` Frontend tests на центральную вкладку истории.
@@ -246,17 +246,17 @@
 - `[ ]` Frontend tests на confirmation delete.
 - `[ ]` Frontend tests на confirmation update with `было -> стало`.
 - `[ ]` Frontend tests на no-op save without confirmation.
-- `[~]` Frontend tests на restore buttons and conflict errors.
+- `[~]` Frontend tests на restore buttons and conflict errors: общий restore-путь справочников покрыт, частные conflict UX tests остаются.
 - `[ ]` Frontend accessibility tests for dialogs and keyboard.
 - `[ ]` Performance tests/guards for history pagination and filters.
-- `[ ]` Run `dotnet test`.
-- `[ ]` Run `npm run test -- --reporter=dot`.
-- `[ ]` Run `npm run build`.
-- `[ ]` Run `npm run lint`.
-- `[ ]` Run `npm run check:bundle`.
-- `[ ]` Run `git diff --check`.
-- `[ ]` Check UTF-8 no BOM for changed files.
-- `[ ]` Stop temporary processes and clean artifacts.
+- `[x]` Run `dotnet test`.
+- `[x]` Run `npm run test -- --reporter=dot`.
+- `[x]` Run `npm run build`.
+- `[x]` Run `npm run lint`.
+- `[x]` Run `npm run check:bundle`.
+- `[x]` Run `git diff --check`.
+- `[x]` Check UTF-8 no BOM for changed files.
+- `[x]` Stop temporary processes and clean artifacts.
 
 ## Milestone 11: Документация, Release Notes И Deploy
 
@@ -264,7 +264,7 @@
 - `[ ]` Обновить `docs/user-guide.md`: где смотреть историю, как восстановить объект, что значат подтверждения.
 - `[ ]` Обновить `docs/admin-operations-guide.md`: права `audit.read`, восстановление, просмотр истории.
 - `[ ]` Обновить `docs/data-model-erd.md` после migration.
-- `[ ]` Добавить "Что нового" для staff/admins после пользовательских изменений.
+- `[x]` Добавить "Что нового" для staff/admins после пользовательских изменений.
 - `[ ]` Сделать логические коммиты на русском языке.
 - `[ ]` При команде пользователя выполнить push.
 - `[ ]` Дождаться GitHub Actions.
@@ -286,7 +286,7 @@
 - `[ ]` Все новые frontend workflows покрыты tests and accessibility checks.
 - `[ ]` Full local checks pass.
 - `[ ]` Roadmap history updated.
-- `[~]` Release notes added where user-visible.
+- `[x]` Release notes added where user-visible.
 - `[acceptance]` Заказчик проверил ключевые сценарии на staging or local environment.
 
 ## Риски И Вопросы
@@ -302,5 +302,6 @@
 
 ## История выполнения
 
+- `[x]` 02.07.2026: добавлен полноценный режим архива для рабочих таблиц справочников. Backend list/page endpoints получили явный `includeArchived`, сервисы по умолчанию скрывают архивные записи и возвращают их только по флагу; проверено, что флаг проходит через controllers/services и что архивные записи видны в list/page только при запросе. Frontend получил переключатель `Показывать архивные`, статус строки `Активна/Архив`, кнопку `Вернуть`, контекстное меню восстановления и confirmation dialog с focus trap/Escape через существующие dialog hooks. Добавлена запись "Что нового" 0.320.0. Проверено: `dotnet test` прошел 398/398, `npm run test -- --reporter=dot` прошел 202/202, `npm run build` прошел, `npm run lint` прошел, `npm run check:bundle` прошел, `git diff --check` прошел, UTF-8 BOM в измененных файлах не найден. Локальная PostgreSQL-проверка заблокирована окружением: Docker не найден в PATH, `psql` не найден, быстрый TCP-check `127.0.0.1:5432` вернул `False`; вместо поднятой PostgreSQL использованы EF/SQLite integration-style тесты и SQL-совместимые сервисные проверки. Временные vitest/vite процессы GarageBalance после проверок не обнаружены. Что остается: частные UX-тексты для restore-конфликтов и расширение restore-тестов на отдельные типы объектов за пределами общего UI-пути.
 - `[x]` 02.07.2026: создан проектный roadmap для всей системы по истории изменений, восстановлению удаленных объектов, подтверждениям удаления/изменения и единому стилю контролов. Roadmap покрывает backend, frontend, PostgreSQL migrations, все разделы проекта, тесты, документацию, release notes, deploy и приемку. Код приложения, API и БД пока не менялись; это подготовка перед реализацией.
 - `[~]` 02.07.2026: начата реализация project-wide задания. Общий раздел `audit` в интерфейсе переименован в `История изменений`, локальные таблицы истории в рабочих прототипах тарифов/сборов, контрагентов и показаний скрыты из пользовательского доступа. Для архивируемых справочников backend получил restore-операции через controllers/services: владельцы, гаражи, группы поставщиков, поставщики, виды поступлений, виды выплат и тарифы. Restore пишет audit-события и проверяет конфликты active-only уникальности. В макете тарифов добавлена кнопка возврата удаленного нерегулярного платежа. Проверено выборочно: `dotnet test backend/GarageBalance.Api.Tests/GarageBalance.Api.Tests.csproj --filter "FullyQualifiedName~DictionaryServiceTests|FullyQualifiedName~DictionariesControllerTests|FullyQualifiedName~ControllerAuthorizationCoverageTests"` прошел 72/72, `npm run test -- --run App.test.tsx --reporter=dot` прошел 93/93. Локальная PostgreSQL-проверка заблокирована окружением: Docker не найден в PATH, `127.0.0.1:5432` недоступен, `psql` не найден; вместо этого использованы EF/SQLite integration-style тесты, PostgreSQL нужно перепроверить после поднятия локальной БД.

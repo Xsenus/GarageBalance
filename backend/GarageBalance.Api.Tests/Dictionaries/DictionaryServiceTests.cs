@@ -88,6 +88,46 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ListMethods_ReturnArchivedRecordsOnlyWhenRequested()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+
+        var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Архивов", "Олег", null, null, null, null), null, CancellationToken.None);
+        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("ARCH-1", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Архивная группа"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Архивный поставщик", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Архивное поступление", "arch_income"), null, CancellationToken.None);
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Архивная выплата", "arch_expense"), null, CancellationToken.None);
+        var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Архивный тариф", "fixed", 10, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
+
+        await service.ArchiveOwnerAsync(owner.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveGarageAsync(garage.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(supplier.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(group.Value.Id, null, CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(incomeType.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(expenseType.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveTariffAsync(tariff.Value!.Id, null, CancellationToken.None);
+
+        Assert.Empty(await service.GetOwnersAsync(null, CancellationToken.None));
+        Assert.Empty(await service.GetGaragesAsync(null, CancellationToken.None));
+        Assert.Empty(await service.GetSupplierGroupsAsync(CancellationToken.None));
+        Assert.Empty(await service.GetSuppliersAsync(null, null, CancellationToken.None));
+        Assert.Empty(await service.GetIncomeTypesAsync(CancellationToken.None));
+        Assert.Empty(await service.GetExpenseTypesAsync(CancellationToken.None));
+        Assert.Empty(await service.GetTariffsAsync(null, CancellationToken.None));
+
+        Assert.Single(await service.GetOwnersAsync(null, CancellationToken.None, includeArchived: true));
+        Assert.Single((await service.GetOwnersPageAsync(null, 0, 10, CancellationToken.None, includeArchived: true)).Items);
+        Assert.Single(await service.GetGaragesAsync(null, CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetSupplierGroupsAsync(CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetSuppliersAsync(null, null, CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetIncomeTypesAsync(CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetExpenseTypesAsync(CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetTariffsAsync(null, CancellationToken.None, includeArchived: true));
+    }
+
+    [Fact]
     public async Task RestoreOwnerAsync_ReturnsOwnerToListAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

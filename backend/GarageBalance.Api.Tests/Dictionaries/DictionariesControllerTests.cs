@@ -15,21 +15,21 @@ public sealed class DictionariesControllerTests
         var controller = CreateController(service);
         var groupId = Guid.NewGuid();
 
-        await controller.GetOwners("ivan", 40, CancellationToken.None);
-        await controller.GetGarages("12", 41, CancellationToken.None);
-        await controller.GetSupplierGroups(42, CancellationToken.None);
-        await controller.GetSuppliers(groupId, "water", 43, CancellationToken.None);
-        await controller.GetIncomeTypes(44, CancellationToken.None);
-        await controller.GetExpenseTypes(45, CancellationToken.None);
-        await controller.GetTariffs("meter", 46, CancellationToken.None);
+        await controller.GetOwners("ivan", 40, true, CancellationToken.None);
+        await controller.GetGarages("12", 41, true, CancellationToken.None);
+        await controller.GetSupplierGroups(42, true, CancellationToken.None);
+        await controller.GetSuppliers(groupId, "water", 43, true, CancellationToken.None);
+        await controller.GetIncomeTypes(44, true, CancellationToken.None);
+        await controller.GetExpenseTypes(45, true, CancellationToken.None);
+        await controller.GetTariffs("meter", 46, true, CancellationToken.None);
 
-        Assert.Equal(("ivan", 40), service.LastOwnerListRequest);
-        Assert.Equal(("12", 41), service.LastGarageListRequest);
-        Assert.Equal(42, service.LastSupplierGroupLimit);
-        Assert.Equal((groupId, "water", 43), service.LastSupplierListRequest);
-        Assert.Equal(44, service.LastIncomeTypeLimit);
-        Assert.Equal(45, service.LastExpenseTypeLimit);
-        Assert.Equal(("meter", 46), service.LastTariffListRequest);
+        Assert.Equal(("ivan", 40, true), service.LastOwnerListRequest);
+        Assert.Equal(("12", 41, true), service.LastGarageListRequest);
+        Assert.Equal((42, true), service.LastSupplierGroupListRequest);
+        Assert.Equal((groupId, "water", 43, true), service.LastSupplierListRequest);
+        Assert.Equal((44, true), service.LastIncomeTypeListRequest);
+        Assert.Equal((45, true), service.LastExpenseTypeListRequest);
+        Assert.Equal(("meter", 46, true), service.LastTariffListRequest);
     }
 
     [Fact]
@@ -232,13 +232,13 @@ public sealed class DictionariesControllerTests
     private sealed class FakeDictionaryService : IDictionaryService
     {
         public Guid? LastActorUserId { get; private set; }
-        public (string? Search, int? Limit) LastOwnerListRequest { get; private set; }
-        public (string? Search, int? Limit) LastGarageListRequest { get; private set; }
-        public int? LastSupplierGroupLimit { get; private set; }
-        public (Guid? GroupId, string? Search, int? Limit) LastSupplierListRequest { get; private set; }
-        public int? LastIncomeTypeLimit { get; private set; }
-        public int? LastExpenseTypeLimit { get; private set; }
-        public (string? Search, int? Limit) LastTariffListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastOwnerListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
+        public (int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
+        public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
+        public (int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
+        public (int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -249,13 +249,13 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> RestoreTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
 
-        public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastOwnerListRequest = (search, limit);
+            LastOwnerListRequest = (search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<OwnerDto>>([]);
         }
 
-        public Task<PagedResult<OwnerDto>> GetOwnersPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<OwnerDto>> GetOwnersPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<OwnerDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -283,13 +283,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreOwnerResult);
         }
 
-        public Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastGarageListRequest = (search, limit);
+            LastGarageListRequest = (search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<GarageDto>>([]);
         }
 
-        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<GarageDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -315,13 +315,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<GarageDto>.Failure("garage_not_found", "Not found."));
         }
 
-        public Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastSupplierGroupLimit = limit;
+            LastSupplierGroupListRequest = (limit, includeArchived);
             return Task.FromResult<IReadOnlyList<SupplierGroupDto>>([]);
         }
 
-        public Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<SupplierGroupDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -346,13 +346,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
         }
 
-        public Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastSupplierListRequest = (groupId, search, limit);
+            LastSupplierListRequest = (groupId, search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<SupplierDto>>([]);
         }
 
-        public Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<SupplierDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -378,13 +378,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Not found."));
         }
 
-        public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastIncomeTypeLimit = limit;
+            LastIncomeTypeListRequest = (limit, includeArchived);
             return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
         }
 
-        public Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<AccountingTypeDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -409,13 +409,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Not found."));
         }
 
-        public Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastExpenseTypeLimit = limit;
+            LastExpenseTypeListRequest = (limit, includeArchived);
             return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
         }
 
-        public Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<AccountingTypeDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -440,13 +440,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
         }
 
-        public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null)
+        public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastTariffListRequest = (search, limit);
+            LastTariffListRequest = (search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<TariffDto>>([]);
         }
 
-        public Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+        public Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<TariffDto>([], 0, offset ?? 0, limit ?? 100));
         }

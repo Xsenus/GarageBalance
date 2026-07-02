@@ -13,9 +13,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
 
-    public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Owners.AsNoTracking().Include(owner => owner.Garages).Where(owner => !owner.IsArchived);
+        var query = dbContext.Owners.AsNoTracking().Include(owner => owner.Garages).Where(owner => includeArchived || !owner.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         if (normalizedSearch is not null)
         {
@@ -34,9 +34,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<OwnerDto>> GetOwnersPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<OwnerDto>> GetOwnersPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Owners.AsNoTracking().Include(owner => owner.Garages).Where(owner => !owner.IsArchived);
+        var query = dbContext.Owners.AsNoTracking().Include(owner => owner.Garages).Where(owner => includeArchived || !owner.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         if (normalizedSearch is not null)
         {
@@ -132,9 +132,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
-    public async Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => !garage.IsArchived);
+        var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => includeArchived || !garage.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         var normalizedLimit = NormalizeListLimit(limit);
         if (normalizedSearch is { } searchValue && IsSqliteProvider())
@@ -167,9 +167,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return garages.Select(garage => ToGarageDto(garage)).ToList();
     }
 
-    public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => !garage.IsArchived);
+        var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => includeArchived || !garage.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
@@ -326,19 +326,19 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
     }
 
-    public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         return await dbContext.SupplierGroups.AsNoTracking()
-            .Where(group => !group.IsArchived)
+            .Where(group => includeArchived || !group.IsArchived)
             .OrderBy(group => group.Name)
             .Take(NormalizeListLimit(limit))
             .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.SupplierGroups.AsNoTracking().Where(group => !group.IsArchived);
+        var query = dbContext.SupplierGroups.AsNoTracking().Where(group => includeArchived || !group.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
         var totalCount = await query.CountAsync(cancellationToken);
@@ -436,9 +436,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
-    public async Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Suppliers.AsNoTracking().Include(supplier => supplier.Group).Where(supplier => !supplier.IsArchived);
+        var query = dbContext.Suppliers.AsNoTracking().Include(supplier => supplier.Group).Where(supplier => includeArchived || !supplier.IsArchived);
         if (groupId is not null)
         {
             query = query.Where(supplier => supplier.GroupId == groupId);
@@ -461,9 +461,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Suppliers.AsNoTracking().Include(supplier => supplier.Group).Where(supplier => !supplier.IsArchived);
+        var query = dbContext.Suppliers.AsNoTracking().Include(supplier => supplier.Group).Where(supplier => includeArchived || !supplier.IsArchived);
         if (groupId is not null)
         {
             query = query.Where(supplier => supplier.GroupId == groupId);
@@ -588,19 +588,19 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
-    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         return await dbContext.IncomeTypes.AsNoTracking()
-            .Where(item => !item.IsArchived)
+            .Where(item => includeArchived || !item.IsArchived)
             .OrderBy(item => item.Name)
             .Take(NormalizeListLimit(limit))
             .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.IncomeTypes.AsNoTracking().Where(item => !item.IsArchived);
+        var query = dbContext.IncomeTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
         var totalCount = await query.CountAsync(cancellationToken);
@@ -704,19 +704,19 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
-    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         return await dbContext.ExpenseTypes.AsNoTracking()
-            .Where(item => !item.IsArchived)
+            .Where(item => includeArchived || !item.IsArchived)
             .OrderBy(item => item.Name)
             .Take(NormalizeListLimit(limit))
             .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.ExpenseTypes.AsNoTracking().Where(item => !item.IsArchived);
+        var query = dbContext.ExpenseTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
         var totalCount = await query.CountAsync(cancellationToken);
@@ -820,9 +820,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
-    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null)
+    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Tariffs.AsNoTracking().Where(item => !item.IsArchived);
+        var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         if (normalizedSearch is not null)
         {
@@ -839,9 +839,9 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken)
+    public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Tariffs.AsNoTracking().Where(item => !item.IsArchived);
+        var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         if (normalizedSearch is not null)
         {

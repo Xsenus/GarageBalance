@@ -2517,7 +2517,8 @@ h1 {
 
 .dictionary-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) max-content;
+  grid-template-columns: minmax(220px, 1fr) max-content max-content;
+  align-items: center;
   gap: 8px;
 }
 
@@ -2547,6 +2548,29 @@ h1 {
 .dictionary-toolbar input:disabled {
   background: #f2f4f7;
   color: #98a2b3;
+}
+
+.dictionary-archive-toggle {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.dictionary-archive-toggle input {
+  width: 16px;
+  min-height: 16px;
+  accent-color: #101828;
+  cursor: pointer;
+  padding: 0;
 }
 
 .dictionary-table-scroll {
@@ -2591,6 +2615,43 @@ h1 {
 .dictionary-data-table tbody tr:focus {
   background: #f9fbff;
   outline: none;
+}
+
+.dictionary-data-row-archived {
+  color: #667085;
+}
+
+.dictionary-data-row-archived td {
+  background: #fcfcfd;
+}
+
+.dictionary-status-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #abefc6;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #067647;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.dictionary-status-pill-archived {
+  border-color: #d0d5dd;
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.dictionary-row-action {
+  min-height: 32px;
+  padding: 6px 9px;
+}
+
+.dictionary-row-action-danger {
+  color: #b42318;
 }
 
 .dictionary-pagination {
