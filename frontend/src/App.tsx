@@ -70,8 +70,8 @@ import { createEmptyPage, createFallbackPage, getPageNavigation, getPageVisibleR
 import type { PagedItems } from './shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
-import type { UserFormState } from './shared/userManagement'
-import { getPrimaryRoleCode, getRoleLabel, getUserEditorValidationErrors } from './shared/userManagement'
+import type { UserEditChange, UserFormState } from './shared/userManagement'
+import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from './shared/userManagement'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters, OwnerGarageLinkForm } from './shared/validation'
 import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseReportValidationErrors, getExpenseValidationErrors, getGarageValidationErrors, getIncomeReportValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getRegularAccrualValidationErrorsForCatalog, getReportMonthRangeValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
 import './App.css'
@@ -4681,6 +4681,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 }
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
+type UserSaveConfirmationState = { user: ManagedUserDto; changes: UserEditChange[]; request: UpdateManagedUserRequest }
 
 function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
@@ -4696,20 +4697,24 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const [toast, setToast] = useState<{ id: number; text: string; kind: 'success' | 'error' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
+  const [saveConfirmation, setSaveConfirmation] = useState<UserSaveConfirmationState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedUserDto | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ManagedUserDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
-  const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
+  const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !saveConfirmation)
+  const saveConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(saveConfirmation))
+  const saveConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(saveConfirmation))
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deleteTarget))
   const deleteDialogRef = useFocusTrap<HTMLElement>(Boolean(deleteTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
-  useEscapeKey(Boolean(editor), () => closeEditor())
+  useEscapeKey(Boolean(editor) && !saveConfirmation, () => closeEditor())
+  useEscapeKey(Boolean(saveConfirmation), () => setSaveConfirmation(null))
   useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
 
@@ -4789,6 +4794,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
 
   function closeEditor() {
     setEditor(null)
+    setSaveConfirmation(null)
     setValidationErrors([])
   }
 
@@ -4805,6 +4811,25 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
     }
 
     setValidationErrors([])
+
+    if (editor.mode === 'edit' && editor.user) {
+      const request: UpdateManagedUserRequest = {
+        displayName: form.displayName.trim(),
+        roleCodes: [form.roleCode],
+        isActive: form.isActive,
+        newPassword: form.password.trim() ? form.password : null,
+        deactivationReason: editor.user.isActive && !form.isActive ? form.deactivationReason.trim() : null,
+      }
+      const changes = getUserEditorChanges(form, editor.user, roles)
+      if (changes.length === 0) {
+        closeEditor()
+        return
+      }
+
+      setSaveConfirmation({ user: editor.user, changes, request })
+      return
+    }
+
     setSaving(editor.mode)
     setError(null)
     try {
@@ -4819,19 +4844,31 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
         await userClient.createUser(auth.accessToken, request)
         setOffset(0)
         showToast('Пользователь добавлен.')
-      } else if (editor.user) {
-        const request: UpdateManagedUserRequest = {
-          displayName: form.displayName,
-          roleCodes: [form.roleCode],
-          isActive: form.isActive,
-          newPassword: form.password.trim() ? form.password : null,
-          deactivationReason: editor.user.isActive && !form.isActive ? form.deactivationReason : null,
-        }
-        await userClient.updateUser(auth.accessToken, editor.user.id, request)
-        showToast('Пользователь изменен.')
       }
 
       closeEditor()
+      await refreshUsers()
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
+      setError(message)
+      showToast(message, 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function confirmSaveUser() {
+    if (!saveConfirmation) {
+      return
+    }
+
+    setSaving('edit')
+    setError(null)
+    try {
+      await userClient.updateUser(auth.accessToken, saveConfirmation.user.id, saveConfirmation.request)
+      setSaveConfirmation(null)
+      closeEditor()
+      showToast('Пользователь изменен.')
       await refreshUsers()
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
@@ -5096,6 +5133,43 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+
+      {saveConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSaveConfirmation(null)}>
+          <section ref={saveConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="user-save-confirmation-title" aria-describedby="user-save-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Изменение</p>
+                <h3 id="user-save-confirmation-title">Подтвердите изменения пользователя</h3>
+                <p>{saveConfirmation.user.displayName}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменений пользователя" onClick={() => setSaveConfirmation(null)} disabled={saving === 'edit'}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="user-save-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля пользователя">
+              {saveConfirmation.changes.map((change) => (
+                <li key={`${change.field}-${change.before}-${change.after}`}>
+                  <span className="dictionary-change-field">{change.field}</span>
+                  <span className="dictionary-change-values">
+                    <span className="dictionary-change-value">{change.before}</span>
+                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="detail-dialog-actions">
+              <button ref={saveConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setSaveConfirmation(null)} disabled={saving === 'edit'}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmSaveUser()} disabled={saving === 'edit'}>
+                <Save size={16} />
+                <span>{saving === 'edit' ? 'Сохраняем...' : 'Сохранить изменения'}</span>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}

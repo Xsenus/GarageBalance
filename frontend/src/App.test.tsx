@@ -785,9 +785,11 @@ describe('App', () => {
     const user = userEvent.setup()
     const statefulUserClient = createStatefulUserClient()
     let deactivationReason: string | null = null
+    let updateCalls = 0
     const userClient: UserManagementClient = {
       ...statefulUserClient,
       updateUser: async (...args) => {
+        updateCalls += 1
         const request = args[2]
         if (!request.isActive) {
           deactivationReason = request.deactivationReason ?? null
@@ -814,12 +816,31 @@ describe('App', () => {
     const row = await within(usersPanel).findByText('operator@example.com')
     fireEvent.contextMenu(row.closest('tr')!)
     await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
+    const noChangeDialog = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
+    await user.click(within(noChangeDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Изменить пользователя' })).not.toBeInTheDocument()
+    })
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
+    expect(updateCalls).toBe(0)
+
+    fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
     await user.clear(within(editDialog).getByLabelText('Имя пользователя'))
     await user.type(within(editDialog).getByLabelText('Имя пользователя'), 'Старший оператор')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
 
+    const saveConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения пользователя' })
+    expect(within(saveConfirmationDialog).getByText('Имя')).toBeInTheDocument()
+    const saveConfirmationChanges = within(saveConfirmationDialog).getByRole('list', { name: 'Изменяемые поля пользователя' })
+    expect(within(saveConfirmationChanges).getByText('Оператор')).toBeInTheDocument()
+    expect(within(saveConfirmationChanges).getByText('Старший оператор')).toBeInTheDocument()
+    expect(updateCalls).toBe(0)
+    await user.click(within(saveConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
     expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
+    expect(updateCalls).toBe(1)
     expect(await screen.findByText('Пользователь изменен.')).toHaveAttribute('role', 'status')
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ManagedRoleDto, ManagedUserDto } from '../services/usersApi'
-import { getPrimaryRoleCode, getRoleLabel, getUserEditorValidationErrors } from './userManagement'
+import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from './userManagement'
 
 const roles: ManagedRoleDto[] = [
   { code: 'administrator', name: 'Администратор', permissions: ['users.manage'] },
@@ -17,6 +17,35 @@ describe('user management helpers', () => {
   it('returns a role label or the code when role metadata is missing', () => {
     expect(getRoleLabel('operator', roles)).toBe('Оператор')
     expect(getRoleLabel('accountant', roles)).toBe('accountant')
+  })
+
+  it('returns no edit changes when the user form keeps the same values', () => {
+    const user = createUser(['operator'])
+    expect(getUserEditorChanges({
+      email: user.email,
+      displayName: `  ${user.displayName}  `,
+      password: '',
+      roleCode: 'operator',
+      isActive: true,
+      deactivationReason: '',
+    }, user, roles)).toEqual([])
+  })
+
+  it('describes editable user changes with human-readable labels', () => {
+    const user = createUser(['operator'])
+    expect(getUserEditorChanges({
+      email: user.email,
+      displayName: 'Старший оператор',
+      password: 'StrongPass123',
+      roleCode: 'administrator',
+      isActive: false,
+      deactivationReason: 'Доступ больше не нужен',
+    }, user, roles)).toEqual([
+      { field: 'Имя', before: 'Оператор', after: 'Старший оператор' },
+      { field: 'Роль', before: 'Оператор', after: 'Администратор' },
+      { field: 'Статус', before: 'Активен', after: 'Отключен' },
+      { field: 'Пароль', before: 'Без изменения', after: 'Будет задан новый пароль' },
+    ])
   })
 
   it('validates user creation through the shared validation rules', () => {
