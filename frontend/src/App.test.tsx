@@ -2044,6 +2044,145 @@ describe('App', () => {
     expect(screen.queryByText('Raw duplicate message from backend.')).not.toBeInTheDocument()
   })
 
+  it.each([
+    {
+      name: 'supplier group duplicate',
+      subgroup: 'Группы поставщиков',
+      rowText: 'Коммунальные услуги',
+      archivedId: 'supplier-group-archived',
+      expectedMessage: 'Группу поставщиков нельзя восстановить: активная группа с таким названием уже есть.',
+      client: () => {
+        const activeGroup = createGroup({ id: 'supplier-group-active', name: 'Коммунальные услуги' })
+        const archivedGroup = createGroup({ id: 'supplier-group-archived', name: 'Коммунальные услуги', isArchived: true })
+        const restoreSupplierGroup = vi.fn(async () => {
+          throw new DictionaryApiError('supplier_group_duplicate', 'Raw duplicate message from backend.', 409)
+        })
+
+        return {
+          dictionaryClient: createDictionaryClient({
+            getSupplierGroups: async (_token, _limit, includeArchived) => [activeGroup, archivedGroup].filter((group) => includeArchived || !group.isArchived),
+            restoreSupplierGroup,
+          }),
+          restore: restoreSupplierGroup,
+        }
+      },
+    },
+    {
+      name: 'supplier archived group',
+      subgroup: 'Поставщики',
+      rowText: 'Водоканал',
+      archivedId: 'supplier-archived',
+      expectedMessage: 'Поставщика нельзя восстановить: сначала верните его группу поставщиков.',
+      client: () => {
+        const group = createGroup({ id: 'supplier-group-1', name: 'Коммунальные услуги' })
+        const activeSupplier = createSupplier({ id: 'supplier-active', name: 'Водоканал', groupId: group.id, groupName: group.name })
+        const archivedSupplier = createSupplier({ id: 'supplier-archived', name: 'Водоканал', groupId: group.id, groupName: group.name, isArchived: true })
+        const restoreSupplier = vi.fn(async () => {
+          throw new DictionaryApiError('supplier_group_not_found', 'Raw duplicate message from backend.', 409)
+        })
+
+        return {
+          dictionaryClient: createDictionaryClient({
+            getSupplierGroups: async () => [group],
+            getSuppliers: async (_token, _groupId, _search, _limit, includeArchived) => [activeSupplier, archivedSupplier].filter((supplier) => includeArchived || !supplier.isArchived),
+            restoreSupplier,
+          }),
+          restore: restoreSupplier,
+        }
+      },
+    },
+    {
+      name: 'income type duplicate',
+      subgroup: 'Виды поступлений',
+      rowText: 'Членский взнос',
+      archivedId: 'income-type-archived',
+      expectedMessage: 'Вид поступления нельзя восстановить: активный вид с таким названием уже есть.',
+      client: () => {
+        const activeType = createAccountingType({ id: 'income-type-active', name: 'Членский взнос', code: 'membership' })
+        const archivedType = createAccountingType({ id: 'income-type-archived', name: 'Членский взнос', code: 'membership_old', isArchived: true })
+        const restoreIncomeType = vi.fn(async () => {
+          throw new DictionaryApiError('income_type_duplicate', 'Raw duplicate message from backend.', 409)
+        })
+
+        return {
+          dictionaryClient: createDictionaryClient({
+            getIncomeTypes: async (_token, _limit, includeArchived) => [activeType, archivedType].filter((type) => includeArchived || !type.isArchived),
+            restoreIncomeType,
+          }),
+          restore: restoreIncomeType,
+        }
+      },
+    },
+    {
+      name: 'expense type duplicate',
+      subgroup: 'Виды выплат',
+      rowText: 'Электроэнергия',
+      archivedId: 'expense-type-archived',
+      expectedMessage: 'Вид выплаты нельзя восстановить: активный вид с таким названием уже есть.',
+      client: () => {
+        const activeType = createAccountingType({ id: 'expense-type-active', name: 'Электроэнергия', code: 'electricity' })
+        const archivedType = createAccountingType({ id: 'expense-type-archived', name: 'Электроэнергия', code: 'electricity_old', isArchived: true })
+        const restoreExpenseType = vi.fn(async () => {
+          throw new DictionaryApiError('expense_type_duplicate', 'Raw duplicate message from backend.', 409)
+        })
+
+        return {
+          dictionaryClient: createDictionaryClient({
+            getExpenseTypes: async (_token, _limit, includeArchived) => [activeType, archivedType].filter((type) => includeArchived || !type.isArchived),
+            restoreExpenseType,
+          }),
+          restore: restoreExpenseType,
+        }
+      },
+    },
+    {
+      name: 'tariff duplicate',
+      subgroup: 'Тарифы',
+      rowText: 'Тариф воды',
+      archivedId: 'tariff-archived',
+      expectedMessage: 'Тариф нельзя восстановить: активный тариф с таким названием и датой начала уже есть.',
+      client: () => {
+        const activeTariff = createTariff({ id: 'tariff-active', name: 'Тариф воды', calculationBase: 'meter_water', rate: 50, effectiveFrom: '2026-07-01' })
+        const archivedTariff = createTariff({ id: 'tariff-archived', name: 'Тариф воды', calculationBase: 'meter_water', rate: 45, effectiveFrom: '2026-07-01', isArchived: true })
+        const restoreTariff = vi.fn(async () => {
+          throw new DictionaryApiError('tariff_duplicate', 'Raw duplicate message from backend.', 409)
+        })
+
+        return {
+          dictionaryClient: createDictionaryClient({
+            getTariffs: async (_token, _search, _limit, includeArchived) => [activeTariff, archivedTariff].filter((tariff) => includeArchived || !tariff.isArchived),
+            restoreTariff,
+          }),
+          restore: restoreTariff,
+        }
+      },
+    },
+  ])('shows clear conflict message for $name restore conflicts', async ({ subgroup, rowText, archivedId, expectedMessage, client }) => {
+    const user = userEvent.setup()
+    const { dictionaryClient, restore } = client()
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, subgroup)
+
+    await user.click(within(dictionaryPanel).getByLabelText('Показывать архивные'))
+    const archivedRow = (await within(dictionaryPanel).findAllByText(rowText))
+      .map((node) => node.closest('tr'))
+      .find((row): row is HTMLTableRowElement => row !== null && within(row).queryByText('Архив') !== null)
+    expect(archivedRow).toBeTruthy()
+
+    await user.click(within(archivedRow!).getByRole('button', { name: 'Вернуть' }))
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть запись из архива?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
+
+    expect(restore).toHaveBeenCalledWith(expect.any(String), archivedId)
+    expect(await screen.findAllByText(expectedMessage)).not.toHaveLength(0)
+    expect(screen.queryByText('Raw duplicate message from backend.')).not.toBeInTheDocument()
+  })
+
   it('confirms owner dictionary edits with before and after values', async () => {
     const user = userEvent.setup()
     let owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 900' })
