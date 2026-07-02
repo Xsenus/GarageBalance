@@ -31,4 +31,5 @@ public sealed record UpdateManagedUserRequest(
     [Required, MaxLength(200)] string DisplayName,
     [MinLength(1)] IReadOnlyList<string> RoleCodes,
     bool IsActive,
-    [MinLength(8), MaxLength(200)] string? NewPassword);
+    [MinLength(8), MaxLength(200)] string? NewPassword,
+    [MaxLength(1000)] string? DeactivationReason = null);

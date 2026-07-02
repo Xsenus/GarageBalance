@@ -783,7 +783,19 @@ describe('App', () => {
 
   it('opens user edit and delete operations from context menu modals', async () => {
     const user = userEvent.setup()
-    const userClient = createStatefulUserClient()
+    const statefulUserClient = createStatefulUserClient()
+    let deactivationReason: string | null = null
+    const userClient: UserManagementClient = {
+      ...statefulUserClient,
+      updateUser: async (...args) => {
+        const request = args[2]
+        if (!request.isActive) {
+          deactivationReason = request.deactivationReason ?? null
+        }
+
+        return statefulUserClient.updateUser(...args)
+      },
+    }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -813,9 +825,13 @@ describe('App', () => {
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
     await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
     const deleteDialog = await screen.findByRole('dialog', { name: 'Удалить пользователя' })
-    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить' }))
+    const deleteButton = within(deleteDialog).getByRole('button', { name: 'Удалить' })
+    expect(deleteButton).toBeDisabled()
+    await user.type(within(deleteDialog).getByLabelText('Причина отключения пользователя'), 'Access no longer needed')
+    await user.click(deleteButton)
 
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
+    expect(deactivationReason).toBe('Access no longer needed')
     expect(await screen.findByText('Пользователь отключен.')).toHaveAttribute('role', 'status')
   })
 

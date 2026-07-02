@@ -165,6 +165,53 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task UpdateUserAsync_RequiresReasonWhenDeactivatingUser()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator]),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateUserAsync(
+            created.Value!.Id,
+            new UpdateManagedUserRequest("User", [SystemRoles.Operator], false, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("user_deactivation_reason_required", result.ErrorCode);
+        Assert.True(database.Context.Users.Single().IsActive);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "users.user_updated");
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WritesDeactivationReasonToAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator]),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateUserAsync(
+            created.Value!.Id,
+            new UpdateManagedUserRequest("User", [SystemRoles.Operator], false, null, "Access no longer needed"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsActive);
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_updated");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Contains("Access no longer needed", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.Contains("Access no longer needed", auditEvent.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UpdateUserAsync_RejectsWeakNewPasswordWithoutChangingHash()
     {
         await using var database = await TestDatabase.CreateAsync();

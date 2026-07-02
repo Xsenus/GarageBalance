@@ -7,6 +7,7 @@ export type UserFormState = {
   password: string
   roleCode: string
   isActive: boolean
+  deactivationReason: string
 }
 
 export function getPrimaryRoleCode(user: ManagedUserDto | undefined, roles: ManagedRoleDto[]) {
@@ -17,7 +18,7 @@ export function getRoleLabel(roleCode: string, roles: ManagedRoleDto[]) {
   return roles.find((role) => role.code === roleCode)?.name ?? roleCode
 }
 
-export function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'edit') {
+export function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'edit', user?: ManagedUserDto) {
   if (mode === 'create') {
     return getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCode)
   }
@@ -33,6 +34,10 @@ export function getUserEditorValidationErrors(form: UserFormState, mode: 'create
 
   if (form.password.trim()) {
     errors.push(...getPasswordPolicyErrors(form.password, 'Укажите новый пароль или оставьте поле пустым.'))
+  }
+
+  if (user?.isActive && !form.isActive && !form.deactivationReason.trim()) {
+    errors.push('Укажите причину отключения пользователя.')
   }
 
   return errors

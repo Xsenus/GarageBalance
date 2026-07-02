@@ -35,6 +35,7 @@ export type UpdateManagedUserRequest = {
   roleCodes: string[]
   isActive: boolean
   newPassword?: string | null
+  deactivationReason?: string | null
 }
 
 export type UserManagementClient = {

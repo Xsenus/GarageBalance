@@ -26,6 +26,7 @@ describe('user management helpers', () => {
       password: 'weak',
       roleCode: '',
       isActive: true,
+      deactivationReason: '',
     }, 'create')).toEqual([
       'Укажите email пользователя.',
       'Укажите имя пользователя.',
@@ -43,6 +44,7 @@ describe('user management helpers', () => {
       password: '',
       roleCode: 'operator',
       isActive: true,
+      deactivationReason: '',
     }, 'edit')).toEqual([])
 
     expect(getUserEditorValidationErrors({
@@ -51,6 +53,7 @@ describe('user management helpers', () => {
       password: 'weak',
       roleCode: '',
       isActive: true,
+      deactivationReason: '',
     }, 'edit')).toEqual([
       'Укажите имя пользователя.',
       'Выберите роль пользователя.',
@@ -58,6 +61,27 @@ describe('user management helpers', () => {
       'Добавьте заглавную букву в пароль.',
       'Добавьте хотя бы одну цифру в пароль.',
     ])
+  })
+
+  it('requires a reason when an active user is disabled from the edit form', () => {
+    const activeUser = createUser(['operator'])
+    expect(getUserEditorValidationErrors({
+      email: activeUser.email,
+      displayName: activeUser.displayName,
+      password: '',
+      roleCode: 'operator',
+      isActive: false,
+      deactivationReason: '',
+    }, 'edit', activeUser)).toContain('Укажите причину отключения пользователя.')
+
+    expect(getUserEditorValidationErrors({
+      email: activeUser.email,
+      displayName: activeUser.displayName,
+      password: '',
+      roleCode: 'operator',
+      isActive: false,
+      deactivationReason: 'Уволился',
+    }, 'edit', activeUser)).toEqual([])
   })
 })
 

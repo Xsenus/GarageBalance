@@ -4697,7 +4697,9 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedUserDto | null>(null)
-  const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', roleCode: 'operator', isActive: true })
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
+  const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deleteTarget))
@@ -4705,7 +4707,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor), () => closeEditor())
-  useEscapeKey(Boolean(deleteTarget), () => setDeleteTarget(null))
+  useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
 
   function showToast(text: string, kind: 'success' | 'error' = 'success') {
     const id = Date.now()
@@ -4777,6 +4779,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
       password: '',
       roleCode: getPrimaryRoleCode(user, roles),
       isActive: user?.isActive ?? true,
+      deactivationReason: '',
     })
   }
 
@@ -4791,7 +4794,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
       return
     }
 
-    const errors = getUserEditorValidationErrors(form, editor.mode)
+    const errors = getUserEditorValidationErrors(form, editor.mode, editor.user)
     if (errors.length > 0) {
       setValidationErrors(errors)
       return
@@ -4818,6 +4821,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
           roleCodes: [form.roleCode],
           isActive: form.isActive,
           newPassword: form.password.trim() ? form.password : null,
+          deactivationReason: editor.user.isActive && !form.isActive ? form.deactivationReason : null,
         }
         await userClient.updateUser(auth.accessToken, editor.user.id, request)
         showToast('Пользователь изменен.')
@@ -4839,16 +4843,24 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
       return
     }
 
+    const reason = deleteReason.trim()
+    if (!reason) {
+      setDeleteReasonError('Укажите причину отключения пользователя.')
+      return
+    }
+
     setSaving('delete')
     setError(null)
+    setDeleteReasonError(null)
     try {
       await userClient.updateUser(auth.accessToken, deleteTarget.id, {
         displayName: deleteTarget.displayName,
         roleCodes: [getPrimaryRoleCode(deleteTarget, roles)],
         isActive: false,
         newPassword: null,
+        deactivationReason: reason,
       })
-      setDeleteTarget(null)
+      closeDeleteDialog()
       showToast('Пользователь отключен.')
       await refreshUsers()
     } catch (caught) {
@@ -4858,6 +4870,18 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
     } finally {
       setSaving(null)
     }
+  }
+
+  function openDeleteDialog(user: ManagedUserDto) {
+    setDeleteReason('')
+    setDeleteReasonError(null)
+    setDeleteTarget(user)
+  }
+
+  function closeDeleteDialog() {
+    setDeleteTarget(null)
+    setDeleteReason('')
+    setDeleteReasonError(null)
   }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -4966,7 +4990,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <Save size={15} />
             <span>Изменить</span>
           </button>
-          <button type="button" role="menuitem" onClick={() => { setDeleteTarget(contextMenu.user); setContextMenu(null) }} disabled={!contextMenu.user.isActive}>
+          <button type="button" role="menuitem" onClick={() => { openDeleteDialog(contextMenu.user); setContextMenu(null) }} disabled={!contextMenu.user.isActive}>
             <Trash2 size={15} />
             <span>Удалить</span>
           </button>
@@ -5011,6 +5035,18 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
                   <option value="inactive">Отключен</option>
                 </select>
               </FormField>
+              {editor.user?.isActive && !form.isActive ? (
+                <FormField label="Причина отключения">
+                  <textarea
+                    aria-label="Причина отключения пользователя"
+                    placeholder="Например: сотрудник больше не работает или доступ выдан ошибочно"
+                    maxLength={1000}
+                    value={form.deactivationReason}
+                    onChange={(event) => setForm({ ...form, deactivationReason: event.target.value })}
+                    required
+                  />
+                </FormField>
+              ) : null}
               <FormField label={editor.mode === 'create' ? 'Пароль' : 'Новый пароль'}>
                 <input
                   aria-label="Пароль пользователя"
@@ -5038,20 +5074,39 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
       ) : null}
 
       {deleteTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setDeleteTarget(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => closeDeleteDialog()}>
           <section ref={deleteDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <h3 id="user-delete-title">Удалить пользователя</h3>
-                <p>{deleteTarget.displayName} будет отключен и не сможет входить в систему. Audit-история сохранится.</p>
+                <p>{deleteTarget.displayName} будет отключен и не сможет входить в систему. История изменений сохранится.</p>
               </div>
-              <button ref={deleteCancelRef} className="icon-button" type="button" onClick={() => setDeleteTarget(null)} aria-label="Закрыть подтверждение удаления">
+              <button ref={deleteCancelRef} className="icon-button" type="button" onClick={() => closeDeleteDialog()} aria-label="Закрыть подтверждение удаления">
                 <X size={18} />
               </button>
             </div>
+            <label className="field-label" htmlFor="user-delete-reason">Причина отключения</label>
+            <textarea
+              id="user-delete-reason"
+              aria-label="Причина отключения пользователя"
+              aria-invalid={Boolean(deleteReasonError)}
+              aria-describedby={deleteReasonError ? 'user-delete-reason-error' : undefined}
+              maxLength={1000}
+              value={deleteReason}
+              onChange={(event) => {
+                setDeleteReason(event.target.value)
+                if (deleteReasonError && event.target.value.trim()) {
+                  setDeleteReasonError(null)
+                }
+              }}
+              placeholder="Например: сотрудник больше не работает или доступ выдан ошибочно"
+              disabled={saving === 'delete'}
+              required
+            />
+            {deleteReasonError ? <p className="form-error" id="user-delete-reason-error">{deleteReasonError}</p> : null}
             <div className="detail-dialog-actions">
-              <button className="ghost-button" type="button" onClick={() => setDeleteTarget(null)}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete'}>
+              <button className="ghost-button" type="button" onClick={() => closeDeleteDialog()}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete' || !deleteReason.trim()}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
               </button>
