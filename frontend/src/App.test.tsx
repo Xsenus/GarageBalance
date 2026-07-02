@@ -400,6 +400,18 @@ describe('App', () => {
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
 
+    const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
+    const employeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
+    await user.click(within(employeeRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
+    const editEmployeeDialog = await screen.findByRole('dialog', { name: 'Смирнов Алексей' })
+    await user.click(within(editEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' }))
+    const deleteEmployeeDialog = await screen.findByRole('dialog', { name: 'Удалить сотрудника?' })
+    expect(within(deleteEmployeeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
+    expect(within(deleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' })).toBeDisabled()
+    await user.type(within(deleteEmployeeDialog).getByLabelText('Причина удаления сотрудника'), 'Больше не работает')
+    await user.click(within(deleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' }))
+    await waitFor(() => expect(within(staffTable).queryByText('Смирнов Алексей')).not.toBeInTheDocument())
+
     expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов', hidden: true })).not.toBeInTheDocument()
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   })

@@ -5938,33 +5938,90 @@ function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => 
 
 function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onDelete: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
   const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(departments[0]?.name ?? ''))
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
+  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen)
+  const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
+  const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
+  useEscapeKey(!deleteConfirmationOpen, onClose)
+  useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+
+  function closeDeleteConfirmation() {
+    setDeleteConfirmationOpen(false)
+    setDeleteReason('')
+  }
+
+  function confirmEmployeeDelete() {
+    if (!item || !deleteReason.trim()) {
+      return
+    }
+
+    onDelete(item)
+    closeDeleteConfirmation()
+    onClose()
+  }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" onClick={onClose}><X size={18} /></button>
-        </div>
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onSave(form)
-          onClose()
-        }}>
-          <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
-          <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{departments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
-          <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
-          <div className="detail-dialog-actions contractors-dialog-actions">
-            <button className="secondary-button" type="button">Открыть фин. отчет</button>
-            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
-            {item ? <button className="danger-button" type="button" onClick={() => { onDelete(item); onClose() }}>Удалить сотрудника</button> : null}
+    <>
+      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-dialog-header">
+            <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
+            <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" onClick={onClose}><X size={18} /></button>
           </div>
-        </form>
-      </section>
-    </div>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+            event.preventDefault()
+            onSave(form)
+            onClose()
+          }}>
+            <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
+            <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{departments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
+            <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button" type="button">Открыть фин. отчет</button>
+              <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+              <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+              {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить сотрудника</button> : null}
+            </div>
+          </form>
+        </section>
+      </div>
+
+      {item && deleteConfirmationOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
+          <section ref={deleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-delete-title" aria-describedby="employee-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="employee-delete-title">Удалить сотрудника?</h3>
+                <p>{item.fullName}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления сотрудника" onClick={closeDeleteConfirmation}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="employee-delete-description">Сотрудник будет скрыт из рабочего списка персонала. Укажите причину, чтобы действие можно было проверить позже.</p>
+            <label className="field-label" htmlFor="employee-delete-reason">Причина удаления</label>
+            <textarea
+              id="employee-delete-reason"
+              aria-label="Причина удаления сотрудника"
+              maxLength={1000}
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              placeholder="Например: сотрудник больше не работает"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmEmployeeDelete} disabled={!deleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить сотрудника</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   )
 }
 
