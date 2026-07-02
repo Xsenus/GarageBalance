@@ -3638,6 +3638,7 @@ describe('App', () => {
     expect(within(auditTable).getAllByText('Владелец')).toHaveLength(2)
     expect(within(auditTable).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(auditTable).getByText('Петров Петр')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Смена собственника')).toBeInTheDocument()
 
     await user.click(within(auditPanel).getByRole('button', { name: /CSV/ }))
 

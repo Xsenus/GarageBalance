@@ -2881,8 +2881,8 @@ h1 {
 
 .audit-event-row {
   display: grid;
-  grid-template-columns: 150px 120px 140px minmax(150px, 1fr) minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr) 120px;
-  min-width: 1410px;
+  grid-template-columns: 150px 120px 140px minmax(150px, 1fr) minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) 120px;
+  min-width: 1580px;
   gap: 10px;
   align-items: start;
   border-top: 1px solid #e4e7ec;

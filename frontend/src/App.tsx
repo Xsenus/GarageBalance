@@ -3955,6 +3955,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Поле</span>
           <span role="columnheader">Было</span>
           <span role="columnheader">Стало</span>
+          <span role="columnheader">Причина</span>
           <span role="columnheader">Карточка</span>
         </div>
         {!loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
@@ -3977,6 +3978,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               <span role="cell">{auditEvent.fieldName ?? 'не указано'}</span>
               <span role="cell">{beforeAfter.before}</span>
               <span role="cell">{beforeAfter.after}</span>
+              <span role="cell">{auditEvent.reason ?? 'не указано'}</span>
               <span role="cell">
                 <button className="ghost-button audit-detail-button" type="button" onClick={() => void openAuditEventDetail(auditEvent)}>
                   <FileText size={15} aria-hidden="true" />
