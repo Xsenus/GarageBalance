@@ -3353,12 +3353,15 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    expect(await within(auditPanel).findByText('auth.login_success')).toBeInTheDocument()
-    expect(within(auditPanel).getByText('finance.income_created')).toBeInTheDocument()
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+    expect(await within(auditTable).findByText('Вход и безопасность')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Финансы')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Платеж или выплата')).toBeInTheDocument()
 
     await user.type(within(auditPanel).getByLabelText('Поиск в истории изменений'), 'import')
 
-    expect(await within(auditPanel).findByText('import.access_dry_run')).toBeInTheDocument()
+    const filteredAuditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+    expect(await within(filteredAuditTable).findByText('Импорт Access')).toBeInTheDocument()
     expect(auditRequest?.search).toBe('import')
     expect(auditRequest?.limit).toBe(50)
 
@@ -3367,6 +3370,76 @@ describe('App', () => {
     expect(auditExportRequest?.search).toBe('import')
     expect(auditExportRequest?.limit).toBeUndefined()
     expect(await within(auditPanel).findByText('История изменений CSV готова.')).toHaveAttribute('role', 'status')
+  })
+
+  it('filters audit journal by section action kind entity type and date range', async () => {
+    const user = userEvent.setup()
+    let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
+    let auditExportRequest: Parameters<AuditClient['exportEvents']>[1] = undefined
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEvents: async (_token, params) => {
+        auditRequest = params
+        return [
+          createAuditEvent({
+            action: 'dictionary.owner_updated',
+            entityType: 'owner',
+            entityId: 'owner-1',
+            summary: 'Изменен владелец: было Иванов Иван; стало Петров Петр.',
+          }),
+        ]
+      },
+      exportEvents: async (_token, params) => {
+        auditExportRequest = params
+        return new Blob(['createdAtUtc,action\n2026-06-23T10:00:00Z,dictionary.owner_updated\n'], { type: 'text/csv' })
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    await user.selectOptions(within(auditPanel).getByLabelText('Раздел истории изменений'), 'dictionary')
+    await user.selectOptions(within(auditPanel).getByLabelText('Тип действия истории изменений'), 'update')
+    await user.selectOptions(within(auditPanel).getByLabelText('Тип объекта истории изменений'), 'owner')
+    await user.type(within(auditPanel).getByLabelText('Начало периода истории изменений'), '2026-06-01')
+    await user.type(within(auditPanel).getByLabelText('Конец периода истории изменений'), '2026-06-30')
+
+    await waitFor(() => {
+      expect(auditRequest?.section).toBe('dictionary')
+      expect(auditRequest?.actionKind).toBe('update')
+      expect(auditRequest?.entityType).toBe('owner')
+      expect(auditRequest?.dateFrom).toBe('2026-06-01')
+      expect(auditRequest?.dateTo).toBe('2026-06-30')
+      expect(auditRequest?.limit).toBe(50)
+    })
+
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+    expect(await within(auditTable).findByText('Справочники')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Изменение')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Владелец')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Петров Петр')).toBeInTheDocument()
+
+    await user.click(within(auditPanel).getByRole('button', { name: /CSV/ }))
+
+    expect(auditExportRequest?.section).toBe('dictionary')
+    expect(auditExportRequest?.actionKind).toBe('update')
+    expect(auditExportRequest?.entityType).toBe('owner')
+    expect(auditExportRequest?.dateFrom).toBe('2026-06-01')
+    expect(auditExportRequest?.dateTo).toBe('2026-06-30')
+    expect(auditExportRequest?.limit).toBeUndefined()
   })
 
   it('shows visible audit event counter when audit log is compacted', async () => {

@@ -8,7 +8,7 @@ export type AuditEventDto = {
   summary: string
 }
 
-export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; limit?: number }
+export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; limit?: number; section?: string; actionKind?: string; entityType?: string }
 
 export type AuditClient = {
   getEvents(accessToken: string, params?: AuditEventQuery): Promise<AuditEventDto[]>
@@ -63,6 +63,15 @@ function buildQuery(params: AuditEventQuery = {}) {
   }
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
+  }
+  if (params.section) {
+    searchParams.set('section', params.section)
+  }
+  if (params.actionKind) {
+    searchParams.set('actionKind', params.actionKind)
+  }
+  if (params.entityType) {
+    searchParams.set('entityType', params.entityType)
   }
   return searchParams.toString()
 }

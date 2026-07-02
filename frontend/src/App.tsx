@@ -99,6 +99,43 @@ const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
 const importQuarantineScreenRequestLimit = 50
 
+const auditSectionOptions = [
+  { value: '', label: 'Все разделы' },
+  { value: 'dictionary', label: 'Справочники' },
+  { value: 'finance', label: 'Финансы' },
+  { value: 'users', label: 'Пользователи' },
+  { value: 'auth', label: 'Вход и безопасность' },
+  { value: 'import', label: 'Импорт' },
+  { value: 'app_releases', label: 'Что нового' },
+]
+
+const auditActionKindOptions = [
+  { value: '', label: 'Все действия' },
+  { value: 'create', label: 'Создание' },
+  { value: 'update', label: 'Изменение' },
+  { value: 'archive', label: 'Архивирование' },
+  { value: 'restore', label: 'Восстановление' },
+  { value: 'cancel', label: 'Отмена' },
+  { value: 'login', label: 'Вход' },
+  { value: 'fail', label: 'Ошибки и отказы' },
+  { value: 'generate', label: 'Формирование' },
+  { value: 'import', label: 'Импорт' },
+]
+
+const auditEntityTypeOptions = [
+  { value: '', label: 'Все объекты' },
+  { value: 'owner', label: 'Владелец' },
+  { value: 'garage', label: 'Гараж' },
+  { value: 'supplier', label: 'Поставщик' },
+  { value: 'tariff', label: 'Тариф' },
+  { value: 'financial_operation', label: 'Платеж или выплата' },
+  { value: 'accrual', label: 'Начисление' },
+  { value: 'supplier_accrual', label: 'Начисление поставщику' },
+  { value: 'meter_reading', label: 'Показание счетчика' },
+  { value: 'app_user', label: 'Пользователь' },
+  { value: 'access_import_run', label: 'Импорт Access' },
+]
+
 function FormField({ label, hint, children, className }: { label: string; hint?: string; children: ReactNode; className?: string }) {
   return (
     <label className={`form-field${className ? ` ${className}` : ''}`}>
@@ -3372,13 +3409,78 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   )
 }
 
+function getAuditEventSectionLabel(auditEvent: AuditEventDto) {
+  const sectionCode = auditEvent.action.split('.')[0] ?? ''
+  return auditSectionOptions.find((option) => option.value === sectionCode)?.label ?? (sectionCode || 'Система')
+}
+
+function getAuditEventActionKindLabel(auditEvent: AuditEventDto) {
+  const action = auditEvent.action.toLowerCase()
+  if (action.includes('_created')) return 'Создание'
+  if (action.includes('_updated') || action.includes('password_changed')) return 'Изменение'
+  if (action.includes('_archived')) return 'Архивирование'
+  if (action.includes('_restored')) return 'Восстановление'
+  if (action.includes('_canceled') || action.includes('_cancelled')) return 'Отмена'
+  if (action.includes('_failed') || action.includes('_rate_limited') || action.includes('_inactive')) return 'Ошибка'
+  if (action.includes('_generated')) return 'Формирование'
+  if (action.startsWith('auth.login')) return 'Вход'
+  if (action.startsWith('import.')) return 'Импорт'
+  return auditEvent.action
+}
+
+function getAuditEntityTypeLabel(entityType: string) {
+  return auditEntityTypeOptions.find((option) => option.value === entityType)?.label ?? entityType
+}
+
+function formatAuditActor(actorUserId: string | null) {
+  if (!actorUserId) {
+    return 'Система'
+  }
+
+  return `ID ${actorUserId.slice(0, 8)}`
+}
+
+function parseAuditBeforeAfter(summary: string) {
+  const match = summary.match(/было\s+(.+?);?\s+стало\s+(.+?)(?:\.|$)/i)
+  if (!match) {
+    return { before: 'не указано', after: 'не указано' }
+  }
+
+  return {
+    before: match[1].trim(),
+    after: match[2].trim(),
+  }
+}
+
 function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
   const [events, setEvents] = useState<AuditEventDto[]>([])
   const [search, setSearch] = useState('')
+  const [section, setSection] = useState('')
+  const [actionKind, setActionKind] = useState('')
+  const [entityType, setEntityType] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const auditQuery = useMemo(() => ({
+    search: search.trim() || undefined,
+    section: section || undefined,
+    actionKind: actionKind || undefined,
+    entityType: entityType || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    limit: auditScreenRequestLimit,
+  }), [actionKind, dateFrom, dateTo, entityType, search, section])
+  const auditExportQuery = useMemo(() => ({
+    search: auditQuery.search,
+    section: auditQuery.section,
+    actionKind: auditQuery.actionKind,
+    entityType: auditQuery.entityType,
+    dateFrom: auditQuery.dateFrom,
+    dateTo: auditQuery.dateTo,
+  }), [auditQuery])
 
   useEffect(() => {
     let ignore = false
@@ -3387,7 +3489,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       setLoading(true)
       setError(null)
       try {
-        const loadedEvents = await auditClient.getEvents(auth.accessToken, { search, limit: auditScreenRequestLimit })
+        const loadedEvents = await auditClient.getEvents(auth.accessToken, auditQuery)
         if (!ignore) {
           setEvents(loadedEvents)
         }
@@ -3406,14 +3508,14 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, auditClient, search])
+  }, [auth.accessToken, auditClient, auditQuery])
 
   async function exportCurrentEvents() {
     setExporting(true)
     setError(null)
     setExportMessage(null)
     try {
-      const blob = await auditClient.exportEvents(auth.accessToken, { search })
+      const blob = await auditClient.exportEvents(auth.accessToken, auditExportQuery)
       downloadBlob(blob, buildAuditExportFileName())
       setExportMessage('История изменений CSV готова.')
     } catch (caught) {
@@ -3444,30 +3546,64 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       {error ? <FormError>{error}</FormError> : null}
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
-      <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
-        <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
+      <form className="audit-filter-grid" onSubmit={(event) => event.preventDefault()} aria-label="Фильтры истории изменений">
+        <FormField label="Поиск">
+          <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </FormField>
+        <FormField label="Раздел">
+          <select aria-label="Раздел истории изменений" value={section} onChange={(event) => setSection(event.target.value)}>
+            {auditSectionOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Действие">
+          <select aria-label="Тип действия истории изменений" value={actionKind} onChange={(event) => setActionKind(event.target.value)}>
+            {auditActionKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Объект">
+          <select aria-label="Тип объекта истории изменений" value={entityType} onChange={(event) => setEntityType(event.target.value)}>
+            {auditEntityTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        </FormField>
+        <FormField label="С даты">
+          <input aria-label="Начало периода истории изменений" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </FormField>
+        <FormField label="По дату">
+          <input aria-label="Конец периода истории изменений" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </FormField>
       </form>
 
-      <div className="operation-list" role="table" aria-label="События истории изменений">
-        <div className="operation-row header" role="row">
-          <span role="columnheader">Дата</span>
-          <span role="columnheader">Событие</span>
-          <span role="columnheader">Сущность</span>
+      <div className="operation-list audit-event-table" role="table" aria-label="События истории изменений">
+        <div className="audit-event-row header" role="row">
+          <span role="columnheader">Время</span>
+          <span role="columnheader">Кто</span>
+          <span role="columnheader">Раздел</span>
+          <span role="columnheader">Объект</span>
+          <span role="columnheader">Действие</span>
+          <span role="columnheader">Было</span>
+          <span role="columnheader">Стало</span>
         </div>
         {!loading && events.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
-        {visibleEvents.map((auditEvent) => (
-          <div className="operation-row" role="row" key={auditEvent.id}>
-            <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
-            <span role="cell">
-              <strong>{auditEvent.action}</strong>
-              <small>{auditEvent.summary}</small>
-            </span>
-            <span role="cell">
-              <strong>{auditEvent.entityType}</strong>
-              <small>{auditEvent.entityId ?? 'без идентификатора'}</small>
-            </span>
-          </div>
-        ))}
+        {visibleEvents.map((auditEvent) => {
+          const beforeAfter = parseAuditBeforeAfter(auditEvent.summary)
+          return (
+            <div className="audit-event-row" role="row" key={auditEvent.id}>
+              <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
+              <span role="cell">{formatAuditActor(auditEvent.actorUserId)}</span>
+              <span role="cell">{getAuditEventSectionLabel(auditEvent)}</span>
+              <span role="cell">
+                <strong>{getAuditEntityTypeLabel(auditEvent.entityType)}</strong>
+                <small>{auditEvent.entityId ?? 'без идентификатора'}</small>
+              </span>
+              <span role="cell">
+                <strong>{getAuditEventActionKindLabel(auditEvent)}</strong>
+                <small>{auditEvent.summary}</small>
+              </span>
+              <span role="cell">{beforeAfter.before}</span>
+              <span role="cell">{beforeAfter.after}</span>
+            </div>
+          )
+        })}
         {events.length > visibleEvents.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleEvents.length} из {events.length} событий</p> : null}
       </div>
     </section>

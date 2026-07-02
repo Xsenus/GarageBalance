@@ -77,6 +77,47 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_FiltersBySectionActionKindAndEntityType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.AddRange(
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 20, 10, 0, 0, TimeSpan.Zero),
+                Action = "dictionary.owner_updated",
+                EntityType = "owner",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Изменен владелец: было Иванов; стало Петров."
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero),
+                Action = "dictionary.owner_created",
+                EntityType = "owner",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Создан владелец."
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 22, 10, 0, 0, TimeSpan.Zero),
+                Action = "finance.income_updated",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Изменено поступление."
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(
+            new AuditEventListRequest(null, null, null, null, null, "dictionary", "update", "owner"),
+            CancellationToken.None);
+
+        var auditEvent = Assert.Single(result);
+        Assert.Equal("dictionary.owner_updated", auditEvent.Action);
+        Assert.Equal("owner", auditEvent.EntityType);
+    }
+
+    [Fact]
     public async Task GetEventsAsync_AppliesLimit()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -14,7 +14,10 @@ public sealed record AuditEventListRequest(
     DateTimeOffset? DateTo,
     string? Action,
     string? Search,
-    int? Limit = null);
+    int? Limit = null,
+    string? Section = null,
+    string? ActionKind = null,
+    string? EntityType = null);
 
 public sealed record AuditEventExportDto(
     string FileName,

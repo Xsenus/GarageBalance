@@ -2294,6 +2294,14 @@ h1 {
   grid-template-columns: 1fr 40px;
 }
 
+.audit-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
 .compact-stack {
   display: grid;
   gap: 8px;
@@ -2826,6 +2834,38 @@ h1 {
   border: 1px solid #e4e7ec;
   border-radius: 8px;
   background: #fcfcfd;
+}
+
+.audit-event-table {
+  overflow-x: auto;
+}
+
+.audit-event-row {
+  display: grid;
+  grid-template-columns: 150px 120px 140px minmax(150px, 1fr) minmax(220px, 1.6fr) minmax(160px, 1fr) minmax(160px, 1fr);
+  min-width: 1180px;
+  gap: 10px;
+  align-items: start;
+  border-top: 1px solid #e4e7ec;
+  padding: 10px 12px;
+  color: #344054;
+  font-size: 13px;
+}
+
+.audit-event-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-event-row strong,
+.audit-event-row small {
+  display: block;
+}
+
+.audit-event-row small {
+  margin-top: 3px;
+  color: #667085;
+  line-height: 1.35;
 }
 
 .operation-row {
@@ -3634,11 +3674,13 @@ button.operation-row:hover {
 
   .finance-tabs,
   .finance-period-filter,
+  .audit-filter-grid,
   .finance-toolbar-actions {
     grid-template-columns: 1fr;
   }
 
   .finance-period-filter,
+  .audit-filter-grid,
   .finance-toolbar-actions {
     display: grid;
   }

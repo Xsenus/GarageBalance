@@ -37,6 +37,23 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             query = query.Where(auditEvent => auditEvent.Action == action);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.Section))
+        {
+            var sectionPrefix = request.Section.Trim().ToLowerInvariant() + ".";
+            query = query.Where(auditEvent => auditEvent.Action.ToLower().StartsWith(sectionPrefix));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ActionKind))
+        {
+            query = ApplyActionKindFilter(query, request.ActionKind);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.EntityType))
+        {
+            var entityType = request.EntityType.Trim();
+            query = query.Where(auditEvent => auditEvent.EntityType == entityType);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
@@ -76,6 +93,23 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         {
             var action = request.Action.Trim();
             query = query.Where(auditEvent => auditEvent.Action == action);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Section))
+        {
+            var sectionPrefix = request.Section.Trim().ToLowerInvariant() + ".";
+            query = query.Where(auditEvent => auditEvent.Action.ToLower().StartsWith(sectionPrefix));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ActionKind))
+        {
+            query = ApplyActionKindFilter(query, request.ActionKind);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.EntityType))
+        {
+            var entityType = request.EntityType.Trim();
+            query = query.Where(auditEvent => auditEvent.EntityType == entityType);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -159,5 +193,39 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         }
 
         return Math.Min(limit.Value, MaxListLimit);
+    }
+
+    private static IReadOnlyList<string> GetActionKindNeedles(string actionKind)
+    {
+        return actionKind.Trim().ToLowerInvariant() switch
+        {
+            "create" => ["_created"],
+            "update" => ["_updated", "password_changed"],
+            "archive" => ["_archived"],
+            "restore" => ["_restored"],
+            "cancel" => ["_canceled", "_cancelled"],
+            "delete" => ["_deleted"],
+            "login" => ["login_"],
+            "fail" => ["_failed", "_rate_limited", "_inactive"],
+            "generate" => ["_generated"],
+            "import" => ["import."],
+            "export" => ["_exported", ".export"],
+            _ => []
+        };
+    }
+
+    private static IQueryable<AuditEvent> ApplyActionKindFilter(IQueryable<AuditEvent> query, string actionKind)
+    {
+        var needles = GetActionKindNeedles(actionKind);
+        return needles.Count switch
+        {
+            1 => query.Where(auditEvent => auditEvent.Action.ToLower().Contains(needles[0])),
+            2 => query.Where(auditEvent => auditEvent.Action.ToLower().Contains(needles[0]) || auditEvent.Action.ToLower().Contains(needles[1])),
+            3 => query.Where(auditEvent =>
+                auditEvent.Action.ToLower().Contains(needles[0]) ||
+                auditEvent.Action.ToLower().Contains(needles[1]) ||
+                auditEvent.Action.ToLower().Contains(needles[2])),
+            _ => query
+        };
     }
 }
