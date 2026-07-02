@@ -62,6 +62,8 @@ Every roadmap must include:
 - open risks and questions;
 - a bottom section named `История выполнения`.
 
+When the user asks to create or prepare a roadmap, make it a full execution roadmap, not a short plan. It must be checkable by the same status markers, broken into backend, frontend, data/migrations, tests, documentation, deployment, and acceptance work where relevant. If the roadmap is large or spans several modules, create a separate `docs/*-roadmap.md` file and add a reference or history entry in the main project roadmap. Future agents must be able to open the roadmap, continue from the current statuses, and update each item as work is completed.
+
 Always update `История выполнения` when you complete, verify, defer, or unblock meaningful work. Each entry must explain what was done, why it was done, how it was checked, and what remains.
 
 Do not mark a roadmap item as `[x]` until the related code, tests, encoding checks, database checks, and documentation updates required by that item are complete.
