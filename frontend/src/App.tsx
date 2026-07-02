@@ -67,6 +67,7 @@ import {
 } from './shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
 import { createEmptyPage, createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from './shared/pagination'
+import type { PagedItems } from './shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { UserFormState } from './shared/userManagement'
@@ -94,7 +95,6 @@ const authSessionStorageKey = 'garagebalance.auth.session'
 const sidebarExpandedStorageKey = 'garagebalance.sidebar.expanded'
 const garageReportScreenRowLimit = 12
 const reportScreenRowLimit = 16
-const auditScreenRequestLimit = 50
 const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
 const importQuarantineScreenRequestLimit = 50
@@ -3460,7 +3460,7 @@ function parseAuditBeforeAfter(summary: string) {
 }
 
 function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
-  const [events, setEvents] = useState<AuditEventDto[]>([])
+  const [page, setPage] = useState<PagedItems<AuditEventDto>>(() => createEmptyPage<AuditEventDto>(25))
   const [search, setSearch] = useState('')
   const [section, setSection] = useState('')
   const [actionKind, setActionKind] = useState('')
@@ -3478,6 +3478,9 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   useRestoreFocusOnClose(Boolean(detailState))
   const detailCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(detailState))
   const detailDialogRef = useFocusTrap<HTMLElement>(Boolean(detailState))
+  const resetAuditPageOffset = useCallback(() => {
+    setPage((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+  }, [])
   const auditQuery = useMemo(() => ({
     search: search.trim() || undefined,
     section: section || undefined,
@@ -3487,8 +3490,9 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     quickFilter: quickFilter || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
-    limit: auditScreenRequestLimit,
-  }), [actionKind, actorUserId, dateFrom, dateTo, entityType, quickFilter, search, section])
+    offset: page.offset,
+    limit: page.limit,
+  }), [actionKind, actorUserId, dateFrom, dateTo, entityType, page.limit, page.offset, quickFilter, search, section])
   const auditExportQuery = useMemo(() => ({
     search: auditQuery.search,
     section: auditQuery.section,
@@ -3534,9 +3538,9 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       setLoading(true)
       setError(null)
       try {
-        const loadedEvents = await auditClient.getEvents(auth.accessToken, auditQuery)
+        const loadedPage = await auditClient.getEventsPage(auth.accessToken, auditQuery)
         if (!ignore) {
-          setEvents(loadedEvents)
+          setPage(loadedPage)
         }
       } catch (caught) {
         if (!ignore) {
@@ -3570,7 +3574,8 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     }
   }
 
-  const visibleEvents = events.slice(0, 12)
+  const auditVisibleRange = getPageVisibleRange(page)
+  const auditNavigation = getPageNavigation(page)
 
   return (
     <section className="dictionary-panel" aria-label="История изменений">
@@ -3580,7 +3585,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <h2>История изменений объектов и действий системы</h2>
         </div>
         <div className="section-actions">
-          <span>{loading ? 'Загрузка...' : `${events.length} событий`}</span>
+          <span>{loading ? 'Загрузка...' : `${page.totalCount} событий`}</span>
           <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEvents}>
             <FileSpreadsheet size={16} />
             Скачать CSV
@@ -3593,36 +3598,36 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
 
       <form className="audit-filter-grid" onSubmit={(event) => event.preventDefault()} aria-label="Фильтры истории изменений">
         <FormField label="Поиск">
-          <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => { setSearch(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Раздел">
-          <select aria-label="Раздел истории изменений" value={section} onChange={(event) => setSection(event.target.value)}>
+          <select aria-label="Раздел истории изменений" value={section} onChange={(event) => { setSection(event.target.value); resetAuditPageOffset() }}>
             {auditSectionOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </FormField>
         <FormField label="Действие">
-          <select aria-label="Тип действия истории изменений" value={actionKind} onChange={(event) => setActionKind(event.target.value)}>
+          <select aria-label="Тип действия истории изменений" value={actionKind} onChange={(event) => { setActionKind(event.target.value); resetAuditPageOffset() }}>
             {auditActionKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </FormField>
         <FormField label="Объект">
-          <select aria-label="Тип объекта истории изменений" value={entityType} onChange={(event) => setEntityType(event.target.value)}>
+          <select aria-label="Тип объекта истории изменений" value={entityType} onChange={(event) => { setEntityType(event.target.value); resetAuditPageOffset() }}>
             {auditEntityTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </FormField>
         <FormField label="Пользователь">
-          <input aria-label="ID пользователя истории изменений" placeholder="ID пользователя" value={actorUserId} onChange={(event) => setActorUserId(event.target.value)} />
+          <input aria-label="ID пользователя истории изменений" placeholder="ID пользователя" value={actorUserId} onChange={(event) => { setActorUserId(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Быстрый фильтр">
-          <select aria-label="Быстрый фильтр истории изменений" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
+          <select aria-label="Быстрый фильтр истории изменений" value={quickFilter} onChange={(event) => { setQuickFilter(event.target.value); resetAuditPageOffset() }}>
             {auditQuickFilterOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </FormField>
         <FormField label="С даты">
-          <input aria-label="Начало периода истории изменений" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          <input aria-label="Начало периода истории изменений" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="По дату">
-          <input aria-label="Конец периода истории изменений" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          <input aria-label="Конец периода истории изменений" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); resetAuditPageOffset() }} />
         </FormField>
       </form>
 
@@ -3637,8 +3642,8 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Стало</span>
           <span role="columnheader">Карточка</span>
         </div>
-        {!loading && events.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
-        {visibleEvents.map((auditEvent) => {
+        {!loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
+        {page.items.map((auditEvent) => {
           const beforeAfter = parseAuditBeforeAfter(auditEvent.summary)
           return (
             <div className="audit-event-row" role="row" key={auditEvent.id}>
@@ -3664,7 +3669,17 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
             </div>
           )
         })}
-        {events.length > visibleEvents.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleEvents.length} из {events.length} событий</p> : null}
+      </div>
+      <div className="dictionary-pagination audit-pagination" role="navigation" aria-label="Пагинация истории изменений">
+        <span role="status" aria-live="polite">Показано {auditVisibleRange.from}-{auditVisibleRange.to} из {page.totalCount}</span>
+        <label>
+          Строк
+          <select aria-label="Количество строк истории изменений" value={page.limit} onChange={(event) => setPage(createEmptyPage<AuditEventDto>(Number(event.target.value)))}>
+            {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+          </select>
+        </label>
+        <button className="ghost-button" type="button" disabled={loading || !auditNavigation.canGoPrevious} onClick={() => setPage((current) => ({ ...current, offset: auditNavigation.previousOffset }))}>Назад</button>
+        <button className="ghost-button" type="button" disabled={loading || !auditNavigation.canGoNext} onClick={() => setPage((current) => ({ ...current, offset: auditNavigation.nextOffset }))}>Вперед</button>
       </div>
       {detailState ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeAuditEventDetail}>

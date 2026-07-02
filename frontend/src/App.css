@@ -2903,6 +2903,10 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.audit-pagination {
+  margin-top: 12px;
+}
+
 .operation-row {
   grid-template-columns: 110px minmax(170px, 1fr) 130px;
 }

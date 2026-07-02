@@ -196,6 +196,35 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsPageAsync_ReturnsTotalCountAndRequestedPage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        for (var index = 0; index < 5; index++)
+        {
+            database.Context.AuditEvents.Add(new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 20 + index, 10, 0, 0, TimeSpan.Zero),
+                Action = $"finance.income_created_{index + 1}",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = $"Поступление {index + 1}."
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+
+        var page = await service.GetEventsPageAsync(new AuditEventListRequest(null, null, null, null, 2, "finance", null, null, null, null, 2), CancellationToken.None);
+
+        Assert.Equal(5, page.TotalCount);
+        Assert.Equal(2, page.Offset);
+        Assert.Equal(2, page.Limit);
+        Assert.Equal(2, page.Items.Count);
+        Assert.Equal("finance.income_created_3", page.Items[0].Action);
+        Assert.Equal("finance.income_created_2", page.Items[1].Action);
+    }
+
+    [Fact]
     public async Task GetEventsAsync_MasksSensitiveValuesInSummaryAndEntityId()
     {
         await using var database = await TestDatabase.CreateAsync();

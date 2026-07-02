@@ -98,11 +98,47 @@ public sealed class AuditControllerTests
         Assert.Equal(id, service.LastEventId);
     }
 
+    [Fact]
+    public async Task GetEventsPage_PassesPagingAndFiltersToService()
+    {
+        var service = new FakeAuditService
+        {
+            Page = new AuditEventPageDto(
+                [new AuditEventDto(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "finance.income_created", "financial_operation", "operation-1", "Поступление создано.")],
+                12,
+                10,
+                10)
+        };
+        var controller = new AuditController(service);
+        var dateFrom = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
+        var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await controller.GetEventsPage(dateFrom, dateTo, null, "garage", 10, 10, "finance", "create", "financial_operation", actorUserId, "financial", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var page = Assert.IsType<AuditEventPageDto>(ok.Value);
+        Assert.Equal(12, page.TotalCount);
+        Assert.Equal(10, page.Offset);
+        Assert.Equal(10, page.Limit);
+        Assert.Equal(dateFrom, service.LastRequest!.DateFrom);
+        Assert.Equal(dateTo, service.LastRequest.DateTo);
+        Assert.Equal("garage", service.LastRequest.Search);
+        Assert.Equal(10, service.LastRequest.Offset);
+        Assert.Equal(10, service.LastRequest.Limit);
+        Assert.Equal("finance", service.LastRequest.Section);
+        Assert.Equal("create", service.LastRequest.ActionKind);
+        Assert.Equal("financial_operation", service.LastRequest.EntityType);
+        Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
+        Assert.Equal("financial", service.LastRequest.QuickFilter);
+    }
+
     private sealed class FakeAuditService : IAuditService
     {
         public AuditEventListRequest? LastRequest { get; private set; }
         public Guid? LastEventId { get; private set; }
         public IReadOnlyList<AuditEventDto> Events { get; init; } = [];
+        public AuditEventPageDto Page { get; init; } = new([], 0, 0, 25);
         public AuditEventDto? Event { get; init; }
         public AuditEventExportDto Export { get; init; } = new("audit-events.csv", "text/csv; charset=utf-8", []);
 
@@ -110,6 +146,12 @@ public sealed class AuditControllerTests
         {
             LastRequest = request;
             return Task.FromResult(Events);
+        }
+
+        public Task<AuditEventPageDto> GetEventsPageAsync(AuditEventListRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(Page);
         }
 
         public Task<AuditEventDto?> GetEventAsync(Guid id, CancellationToken cancellationToken)

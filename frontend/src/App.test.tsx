@@ -3363,7 +3363,7 @@ describe('App', () => {
     const filteredAuditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
     expect(await within(filteredAuditTable).findByText('Импорт Access')).toBeInTheDocument()
     expect(auditRequest?.search).toBe('import')
-    expect(auditRequest?.limit).toBe(50)
+    expect(auditRequest?.limit).toBe(25)
 
     await user.click(within(auditPanel).getByRole('button', { name: /CSV/ }))
 
@@ -3427,7 +3427,7 @@ describe('App', () => {
       expect(auditRequest?.quickFilter).toBe('restores')
       expect(auditRequest?.dateFrom).toBe('2026-06-01')
       expect(auditRequest?.dateTo).toBe('2026-06-30')
-      expect(auditRequest?.limit).toBe(50)
+      expect(auditRequest?.limit).toBe(25)
     })
 
     const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
@@ -3506,7 +3506,7 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
   })
 
-  it('shows visible audit event counter when audit log is compacted', async () => {
+  it('paginates audit journal on the server', async () => {
     const user = userEvent.setup()
     const auth = createAuthResponse()
     const authClient = createAuthClient({
@@ -3518,7 +3518,7 @@ describe('App', () => {
         },
       }),
     })
-    const auditEvents = Array.from({ length: 13 }, (_item, index) =>
+    const auditEvents = Array.from({ length: 30 }, (_item, index) =>
       createAuditEvent({
         id: `audit-event-${index + 1}`,
         action: `audit.event_${index + 1}`,
@@ -3537,9 +3537,15 @@ describe('App', () => {
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
 
-    expect(await within(auditTable).findByText('Показано 12 из 13 событий')).toHaveAttribute('role', 'status')
-    expect(within(auditTable).getByText('audit.event_12')).toBeInTheDocument()
-    expect(within(auditTable).queryByText('audit.event_13')).not.toBeInTheDocument()
+    expect(await within(auditPanel).findByText('Показано 1-25 из 30')).toHaveAttribute('role', 'status')
+    expect(within(auditTable).getByText('audit.event_25')).toBeInTheDocument()
+    expect(within(auditTable).queryByText('audit.event_26')).not.toBeInTheDocument()
+
+    await user.click(within(auditPanel).getByRole('button', { name: 'Вперед' }))
+
+    expect(await within(auditPanel).findByText('Показано 26-30 из 30')).toHaveAttribute('role', 'status')
+    expect(within(auditTable).getByText('audit.event_30')).toBeInTheDocument()
+    expect(within(auditTable).queryByText('audit.event_25')).not.toBeInTheDocument()
   })
 
   it('announces empty audit journal for users with audit permission', async () => {
@@ -4348,8 +4354,22 @@ function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseCli
 }
 
 function createAuditClient(overrides: Partial<AuditClient> = {}): AuditClient {
+  const getEvents = overrides.getEvents ?? (async () => [createAuditEvent({})])
+  const getEventsPage = overrides.getEventsPage ?? (async (accessToken, params) => {
+    const events = await getEvents(accessToken, params)
+    const offset = params?.offset ?? 0
+    const limit = params?.limit ?? 25
+    return {
+      items: events.slice(offset, offset + limit),
+      totalCount: events.length,
+      offset,
+      limit,
+    }
+  })
+
   return {
-    getEvents: async () => [createAuditEvent({})],
+    getEvents,
+    getEventsPage,
     getEvent: async (_token, id) => createAuditEvent({ id }),
     exportEvents: async () => new Blob(['createdAtUtc,action\n'], { type: 'text/csv' }),
     ...overrides,

@@ -9,6 +9,12 @@ public sealed record AuditEventDto(
     string? EntityId,
     string Summary);
 
+public sealed record AuditEventPageDto(
+    IReadOnlyList<AuditEventDto> Items,
+    int TotalCount,
+    int Offset,
+    int Limit);
+
 public sealed record AuditEventListRequest(
     DateTimeOffset? DateFrom,
     DateTimeOffset? DateTo,
@@ -19,7 +25,8 @@ public sealed record AuditEventListRequest(
     string? ActionKind = null,
     string? EntityType = null,
     Guid? ActorUserId = null,
-    string? QuickFilter = null);
+    string? QuickFilter = null,
+    int? Offset = null);
 
 public sealed record AuditEventExportDto(
     string FileName,

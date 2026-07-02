@@ -28,6 +28,25 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter), cancellationToken));
     }
 
+    [HttpGet("events/page")]
+    [ProducesResponseType<AuditEventPageDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<AuditEventPageDto>> GetEventsPage(
+        [FromQuery] DateTimeOffset? dateFrom,
+        [FromQuery] DateTimeOffset? dateTo,
+        [FromQuery] string? action,
+        [FromQuery] string? search,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        [FromQuery] string? section,
+        [FromQuery] string? actionKind,
+        [FromQuery] string? entityType,
+        [FromQuery] Guid? actorUserId,
+        [FromQuery] string? quickFilter,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await auditService.GetEventsPageAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter, offset), cancellationToken));
+    }
+
     [HttpGet("events/{id:guid}")]
     [ProducesResponseType<AuditEventDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

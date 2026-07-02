@@ -8,10 +8,18 @@ export type AuditEventDto = {
   summary: string
 }
 
-export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; limit?: number; section?: string; actionKind?: string; entityType?: string; actorUserId?: string; quickFilter?: string }
+export type AuditEventPageDto = {
+  items: AuditEventDto[]
+  totalCount: number
+  offset: number
+  limit: number
+}
+
+export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; offset?: number; limit?: number; section?: string; actionKind?: string; entityType?: string; actorUserId?: string; quickFilter?: string }
 
 export type AuditClient = {
   getEvents(accessToken: string, params?: AuditEventQuery): Promise<AuditEventDto[]>
+  getEventsPage(accessToken: string, params?: AuditEventQuery): Promise<AuditEventPageDto>
   getEvent(accessToken: string, id: string): Promise<AuditEventDto>
   exportEvents(accessToken: string, params?: AuditEventQuery): Promise<Blob>
 }
@@ -62,6 +70,9 @@ function buildQuery(params: AuditEventQuery = {}) {
   if (params.search) {
     searchParams.set('search', params.search)
   }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
+  }
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
@@ -87,6 +98,10 @@ export const auditApi: AuditClient = {
   getEvents(accessToken, params) {
     const query = buildQuery(params)
     return requestJson(accessToken, `/api/audit/events${query ? `?${query}` : ''}`)
+  },
+  getEventsPage(accessToken, params) {
+    const query = buildQuery(params)
+    return requestJson(accessToken, `/api/audit/events/page${query ? `?${query}` : ''}`)
   },
   getEvent(accessToken, id) {
     return requestJson(accessToken, `/api/audit/events/${encodeURIComponent(id)}`)

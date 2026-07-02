@@ -81,6 +81,40 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<AuditEventPageDto> GetEventsPageAsync(AuditEventListRequest request, CancellationToken cancellationToken)
+    {
+        var limit = NormalizeLimit(request.Limit);
+        var offset = NormalizeOffset(request.Offset);
+        var query = dbContext.AuditEvents.AsNoTracking();
+
+        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
+        {
+            return await GetEventsPageForSqliteAsync(query, request, offset, limit, cancellationToken);
+        }
+
+        if (request.DateFrom is not null)
+        {
+            query = query.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value);
+        }
+
+        if (request.DateTo is not null)
+        {
+            query = query.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value);
+        }
+
+        query = ApplyNonDateFilters(query, request);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
+            .Skip(offset)
+            .Take(limit)
+            .Select(auditEvent => ToDto(auditEvent))
+            .ToListAsync(cancellationToken);
+
+        return new AuditEventPageDto(items, totalCount, offset, limit);
+    }
+
     private static AuditEventDto ToDto(AuditEvent auditEvent)
     {
         return new AuditEventDto(
@@ -99,48 +133,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         int limit,
         CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.Action))
-        {
-            var action = request.Action.Trim();
-            query = query.Where(auditEvent => auditEvent.Action == action);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Section))
-        {
-            var sectionPrefix = request.Section.Trim().ToLowerInvariant() + ".";
-            query = query.Where(auditEvent => auditEvent.Action.ToLower().StartsWith(sectionPrefix));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.ActionKind))
-        {
-            query = ApplyActionKindFilter(query, request.ActionKind);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.EntityType))
-        {
-            var entityType = request.EntityType.Trim();
-            query = query.Where(auditEvent => auditEvent.EntityType == entityType);
-        }
-
-        if (request.ActorUserId is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.ActorUserId == request.ActorUserId.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.QuickFilter))
-        {
-            query = ApplyQuickFilter(query, request.QuickFilter);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                auditEvent.Action.ToLower().Contains(search) ||
-                auditEvent.EntityType.ToLower().Contains(search) ||
-                (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
-                auditEvent.Summary.ToLower().Contains(search));
-        }
+        query = ApplyNonDateFilters(query, request);
 
         var events = await query.ToListAsync(cancellationToken);
 
@@ -159,6 +152,37 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             .Take(limit)
             .Select(ToDto)
             .ToList();
+    }
+
+    private static async Task<AuditEventPageDto> GetEventsPageForSqliteAsync(
+        IQueryable<AuditEvent> query,
+        AuditEventListRequest request,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        query = ApplyNonDateFilters(query, request);
+        var events = await query.ToListAsync(cancellationToken);
+
+        if (request.DateFrom is not null)
+        {
+            events = events.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value).ToList();
+        }
+
+        if (request.DateTo is not null)
+        {
+            events = events.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value).ToList();
+        }
+
+        var totalCount = events.Count;
+        var items = events
+            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
+            .Skip(offset)
+            .Take(limit)
+            .Select(ToDto)
+            .ToList();
+
+        return new AuditEventPageDto(items, totalCount, offset, limit);
     }
 
     public async Task<AuditEventExportDto> ExportEventsCsvAsync(AuditEventListRequest request, CancellationToken cancellationToken)
@@ -222,6 +246,59 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         }
 
         return Math.Min(limit.Value, MaxListLimit);
+    }
+
+    private static int NormalizeOffset(int? offset)
+    {
+        return offset is null or < 0 ? 0 : offset.Value;
+    }
+
+    private static IQueryable<AuditEvent> ApplyNonDateFilters(IQueryable<AuditEvent> query, AuditEventListRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Action))
+        {
+            var action = request.Action.Trim();
+            query = query.Where(auditEvent => auditEvent.Action == action);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Section))
+        {
+            var sectionPrefix = request.Section.Trim().ToLowerInvariant() + ".";
+            query = query.Where(auditEvent => auditEvent.Action.ToLower().StartsWith(sectionPrefix));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ActionKind))
+        {
+            query = ApplyActionKindFilter(query, request.ActionKind);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.EntityType))
+        {
+            var entityType = request.EntityType.Trim();
+            query = query.Where(auditEvent => auditEvent.EntityType == entityType);
+        }
+
+        if (request.ActorUserId is not null)
+        {
+            query = query.Where(auditEvent => auditEvent.ActorUserId == request.ActorUserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.QuickFilter))
+        {
+            query = ApplyQuickFilter(query, request.QuickFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLowerInvariant();
+            query = query.Where(auditEvent =>
+                auditEvent.Action.ToLower().Contains(search) ||
+                auditEvent.EntityType.ToLower().Contains(search) ||
+                (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
+                auditEvent.Summary.ToLower().Contains(search));
+        }
+
+        return query;
     }
 
     private static IReadOnlyList<string> GetActionKindNeedles(string actionKind)
