@@ -4935,6 +4935,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const saveConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(saveConfirmation))
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deleteTarget))
   const deleteDialogRef = useFocusTrap<HTMLElement>(Boolean(deleteTarget))
+  useRestoreFocusOnClose(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
 
@@ -5672,6 +5673,7 @@ function ContractorsPrototypePanel() {
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
+  useRestoreFocusOnClose(Boolean(restoreTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
@@ -7505,6 +7507,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const editorConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingEditorConfirmation))
   const archiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(archiveTarget))
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(archiveTarget))
+  useRestoreFocusOnClose(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const balanceHistoryCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(balanceHistoryGarage))
