@@ -342,7 +342,7 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('button', { name: 'Удалить нерегулярный платеж Штраф за это' })).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
-    expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   })
 
   it('shows contractors tabs and section dialogs without local history access', async () => {
@@ -400,8 +400,8 @@ describe('App', () => {
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
 
-    expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов' })).not.toBeInTheDocument()
-    expect(within(contractorsPanel).getByLabelText('Раздел истории контрагентов')).not.toBeVisible()
+    expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов', hidden: true })).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
@@ -440,7 +440,7 @@ describe('App', () => {
     expect(januaryInput).toHaveValue('4654')
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
-    expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний' })).not.toBeInTheDocument()
+    expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
   })
 
   it('shows payments prototype and opens payment form modals', async () => {

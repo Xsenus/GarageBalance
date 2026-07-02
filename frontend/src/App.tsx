@@ -453,13 +453,13 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel actorName={auth.user.displayName} />
+          <ContractorsPrototypePanel />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
       case 'tariffsAndFees':
         return canReadDictionaries ? (
-          <TariffsAndFeesPrototypePanel actorName={auth.user.displayName} />
+          <TariffsAndFeesPrototypePanel />
         ) : (
           <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )
@@ -4997,18 +4997,6 @@ type ContractorDepartmentRow = {
   name: string
 }
 
-type ContractorHistoryEntry = {
-  id: string
-  section: string
-  objectName: string
-  action: string
-  field: string
-  previousValue: string
-  nextValue: string
-  actorName: string
-  changedAt: string
-}
-
 type ContractorModal =
   | { type: 'garage'; item?: ContractorGarageRow }
   | { type: 'supplier'; item?: ContractorSupplierRow }
@@ -5046,7 +5034,7 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
   staff: 'Персонал',
 }
 
-function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
+function ContractorsPrototypePanel() {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
   const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
@@ -5054,57 +5042,20 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
   const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
   const [modal, setModal] = useState<ContractorModal | null>(null)
-  const [historyFilter, setHistoryFilter] = useState<'all' | ContractorSection>('all')
-  const [history, setHistory] = useState<ContractorHistoryEntry[]>([])
-
-  const addHistoryEntry = (entry: Omit<ContractorHistoryEntry, 'id' | 'actorName' | 'changedAt'>) => {
-    setHistory((currentHistory) => [
-      {
-        ...entry,
-        id: `contractor-history-${Date.now()}-${currentHistory.length + 1}`,
-        actorName,
-        changedAt: formatPrototypeHistoryDateTime(new Date()),
-      },
-      ...currentHistory,
-    ])
-  }
-
-  const recordFieldChanges = (section: string, objectName: string, labels: Record<string, string>, previous: Record<string, string | boolean | undefined>, next: Record<string, string | boolean | undefined>) => {
-    Object.entries(labels).forEach(([field, label]) => {
-      const previousValue = previous[field]
-      const nextValue = next[field]
-
-      if (normalizeHistoryValue(previousValue) === normalizeHistoryValue(nextValue)) {
-        return
-      }
-
-      addHistoryEntry({
-        section,
-        objectName,
-        action: 'Изменение',
-        field: label,
-        previousValue: normalizeHistoryValue(previousValue),
-        nextValue: normalizeHistoryValue(nextValue),
-      })
-    })
-  }
 
   const saveGarage = (garage: ContractorGarageRow) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
 
     if (currentGarage) {
       setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? garage : item)))
-      recordFieldChanges('Гаражи', `Гараж ${garage.number}`, garageHistoryLabels, currentGarage, garage)
       return
     }
 
     setGarages((currentGarages) => [...currentGarages, garage])
-    addHistoryEntry({ section: 'Гаражи', objectName: `Гараж ${garage.number}`, action: 'Создание', field: 'Запись', previousValue: 'Пусто', nextValue: 'Создано' })
   }
 
   const deleteGarage = (garage: ContractorGarageRow) => {
     setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? { ...item, isDeleted: true } : item)))
-    addHistoryEntry({ section: 'Гаражи', objectName: `Гараж ${garage.number}`, action: 'Удаление', field: 'Статус', previousValue: 'Активен', nextValue: 'Удален' })
   }
 
   const saveSupplier = (supplier: ContractorSupplierRow) => {
@@ -5112,17 +5063,14 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
 
     if (currentSupplier) {
       setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? supplier : item)))
-      recordFieldChanges('Поставщики', supplier.name, supplierHistoryLabels, currentSupplier, supplier)
       return
     }
 
     setSuppliers((currentSuppliers) => [...currentSuppliers, supplier])
-    addHistoryEntry({ section: 'Поставщики', objectName: supplier.name, action: 'Создание', field: 'Запись', previousValue: 'Пусто', nextValue: 'Создано' })
   }
 
   const deleteSupplier = (supplier: ContractorSupplierRow) => {
     setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? { ...item, isDeleted: true } : item)))
-    addHistoryEntry({ section: 'Поставщики', objectName: supplier.name, action: 'Удаление', field: 'Статус', previousValue: 'Активен', nextValue: 'Удален' })
   }
 
   const saveEmployee = (employee: ContractorStaffRow) => {
@@ -5130,27 +5078,22 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
 
     if (currentEmployee) {
       setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? employee : item)))
-      recordFieldChanges('Персонал', employee.fullName, employeeHistoryLabels, currentEmployee, employee)
       return
     }
 
     setStaff((currentStaff) => [...currentStaff, employee])
-    addHistoryEntry({ section: 'Персонал', objectName: employee.fullName, action: 'Создание', field: 'Запись', previousValue: 'Пусто', nextValue: 'Создано' })
   }
 
   const deleteEmployee = (employee: ContractorStaffRow) => {
     setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
-    addHistoryEntry({ section: 'Персонал', objectName: employee.fullName, action: 'Удаление', field: 'Статус', previousValue: 'Активен', nextValue: 'Удален' })
   }
 
   const saveDepartment = (departmentName: string) => {
     const nextDepartment = { id: `department-${Date.now()}`, name: departmentName }
     setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
-    addHistoryEntry({ section: 'Персонал', objectName: departmentName, action: 'Создание', field: 'Отдел', previousValue: 'Пусто', nextValue: departmentName })
   }
 
-  const saveService = (serviceName: string) => {
-    addHistoryEntry({ section: 'Поставщики', objectName: serviceName, action: 'Создание', field: 'Услуга', previousValue: 'Пусто', nextValue: serviceName })
+  const saveService = () => {
   }
 
   const visibleGarages = showDebtorsOnly
@@ -5158,9 +5101,6 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
     : garages.filter((garage) => !garage.isDeleted)
   const visibleSuppliers = suppliers.filter((supplier) => !supplier.isDeleted)
   const visibleStaff = staff.filter((employee) => !employee.isDeleted)
-  const filteredHistory = historyFilter === 'all'
-    ? history
-    : history.filter((entry) => entry.section === contractorSectionLabels[historyFilter])
 
   return (
     <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
@@ -5273,46 +5213,6 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
         </section>
       ) : null}
 
-      <section hidden className="contractors-history-panel" aria-label="История изменений контрагентов">
-        <label>
-          <span>История по разделу</span>
-          <select aria-label="Раздел истории контрагентов" value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value as 'all' | ContractorSection)}>
-            <option value="all">Все разделы</option>
-            <option value="garages">Гаражи</option>
-            <option value="suppliers">Поставщики</option>
-            <option value="staff">Персонал</option>
-          </select>
-        </label>
-        <div className="contractors-history-table" role="table" aria-label="История изменений контрагентов">
-          <div className="contractors-history-header" role="row">
-            <span role="columnheader">Когда</span>
-            <span role="columnheader">Кто</span>
-            <span role="columnheader">Раздел</span>
-            <span role="columnheader">Объект</span>
-            <span role="columnheader">Поле</span>
-            <span role="columnheader">Было</span>
-            <span role="columnheader">Стало</span>
-            <span role="columnheader">Действие</span>
-          </div>
-          {filteredHistory.length > 0 ? filteredHistory.map((entry) => (
-            <div className="contractors-history-row" role="row" key={entry.id}>
-              <span role="cell">{entry.changedAt}</span>
-              <span role="cell">{entry.actorName}</span>
-              <span role="cell">{entry.section}</span>
-              <span role="cell">{entry.objectName}</span>
-              <span role="cell">{entry.field}</span>
-              <span role="cell">{entry.previousValue}</span>
-              <span role="cell">{entry.nextValue}</span>
-              <span role="cell">{entry.action}</span>
-            </div>
-          )) : (
-            <div className="contractors-history-empty" role="row">
-              <span role="cell">Истории изменений пока нет</span>
-            </div>
-          )}
-        </div>
-      </section>
-
       {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteSupplier} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
@@ -5320,39 +5220,6 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
       {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
     </section>
   )
-}
-
-const garageHistoryLabels: Record<string, string> = {
-  number: 'Номер',
-  peopleCount: 'Количество человек',
-  floorCount: 'Количество этажей',
-  owner: 'Владелец',
-  phone: 'Телефон',
-  address: 'Адрес',
-  balance: 'Баланс',
-  overdueDebt: 'Просроченная задолженность',
-  initialWater: 'Старт. значение счетчика воды',
-  initialElectricity: 'Старт. значение счетчика электроэнергии',
-  meters: 'Счетчики',
-  comment: 'Комментарий',
-}
-
-const supplierHistoryLabels: Record<string, string> = {
-  name: 'Наименование',
-  service: 'Услуга',
-  inn: 'ИНН',
-  legalAddress: 'Юр. адрес',
-  contactPerson: 'Контактное лицо',
-  phone: 'Телефон',
-  email: 'Почта',
-  debt: 'Задолженность',
-  comment: 'Комментарий',
-}
-
-const employeeHistoryLabels: Record<string, string> = {
-  fullName: 'ФИО',
-  department: 'Отдел',
-  rate: 'Ставка',
 }
 
 function createEmptyGaragePrototype(): ContractorGarageRow {
@@ -5594,47 +5461,11 @@ function DepartmentPrototypeDialog({ onClose, onSave }: { onClose: () => void; o
   )
 }
 
-type TariffHistorySection = 'Тарифы и сборы' | 'Нерегулярные платежи'
-
-type TariffHistoryEntry = {
-  id: string
-  section: TariffHistorySection
-  objectName: string
-  field: string
-  action: string
-  previousValue: string
-  nextValue: string
-  actorName: string
-  changedAt: string
-}
-
-type TariffsAndFeesPrototypePanelProps = {
-  actorName: string
-}
-
 function createEditableDrafts(rows: Array<{ id: string; amount?: string; unit?: string }>) {
   return rows.reduce<Record<string, { amount: string; unit: string }>>((drafts, row) => {
     drafts[row.id] = { amount: row.amount ?? '', unit: row.unit ?? '' }
     return drafts
   }, {})
-}
-
-function normalizeHistoryValue(value: string | boolean | undefined) {
-  if (typeof value === 'boolean') {
-    return value ? 'Да' : 'Нет'
-  }
-
-  return value?.trim() ? value.trim() : 'Пусто'
-}
-
-function formatPrototypeHistoryDateTime(value: Date) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(value)
 }
 
 function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement>, onCommit: () => void) {
@@ -5644,29 +5475,14 @@ function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement>, onCo
   }
 }
 
-function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePanelProps) {
+function TariffsAndFeesPrototypePanel() {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
-  const [activeView, setActiveView] = useState<'values' | 'history'>('values')
-  const [historySection, setHistorySection] = useState<'all' | TariffHistorySection>('all')
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
   const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
   const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
-  const [history, setHistory] = useState<TariffHistoryEntry[]>([])
 
-  const addHistoryEntry = (entry: Omit<TariffHistoryEntry, 'id' | 'actorName' | 'changedAt'>) => {
-    setHistory((currentHistory) => [
-      {
-        ...entry,
-        id: `tariff-history-${Date.now()}-${currentHistory.length + 1}`,
-        actorName,
-        changedAt: formatPrototypeHistoryDateTime(new Date()),
-      },
-      ...currentHistory,
-    ])
-  }
-
-  const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit', fieldLabel: string) => {
+  const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit') => {
     const nextValue = tariffDrafts[row.id]?.[field] ?? ''
     const previousValue = row[field] ?? ''
 
@@ -5677,17 +5493,9 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     setTariffRows((currentRows) => currentRows.map((currentRow) => (
       currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
     )))
-    addHistoryEntry({
-      section: 'Тарифы и сборы',
-      objectName: `${row.category}: ${row.title}`,
-      field: fieldLabel,
-      action: 'Изменение',
-      previousValue: normalizeHistoryValue(previousValue),
-      nextValue: normalizeHistoryValue(nextValue),
-    })
   }
 
-  const commitTariffBooleanChange = (row: ContractorTariffRow, field: 'tiered' | 'byMeter', nextValue: boolean, fieldLabel: string) => {
+  const commitTariffBooleanChange = (row: ContractorTariffRow, field: 'tiered' | 'byMeter', nextValue: boolean) => {
     const previousValue = row[field]
 
     if (previousValue === nextValue) {
@@ -5697,14 +5505,6 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     setTariffRows((currentRows) => currentRows.map((currentRow) => (
       currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
     )))
-    addHistoryEntry({
-      section: 'Тарифы и сборы',
-      objectName: `${row.category}: ${row.title}`,
-      field: fieldLabel,
-      action: 'Изменение',
-      previousValue: normalizeHistoryValue(previousValue),
-      nextValue: normalizeHistoryValue(nextValue),
-    })
   }
 
   const commitOneTimeAmountChange = (row: ContractorOneTimeRow) => {
@@ -5717,14 +5517,6 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
       currentRow.id === row.id ? { ...currentRow, amount: nextValue } : currentRow
     )))
-    addHistoryEntry({
-      section: 'Нерегулярные платежи',
-      objectName: row.name,
-      field: 'Сумма',
-      action: 'Изменение',
-      previousValue: normalizeHistoryValue(row.amount),
-      nextValue: normalizeHistoryValue(nextValue),
-    })
   }
 
   const markOneTimeDeleted = (row: ContractorOneTimeRow) => {
@@ -5735,14 +5527,6 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
       currentRow.id === row.id ? { ...currentRow, isDeleted: true } : currentRow
     )))
-    addHistoryEntry({
-      section: 'Нерегулярные платежи',
-      objectName: row.name,
-      field: 'Статус',
-      action: 'Удаление',
-      previousValue: 'Активен',
-      nextValue: 'Удален',
-    })
   }
 
   const restoreOneTimePayment = (row: ContractorOneTimeRow) => {
@@ -5753,14 +5537,6 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
       currentRow.id === row.id ? { ...currentRow, isDeleted: false } : currentRow
     )))
-    addHistoryEntry({
-      section: 'Нерегулярные платежи',
-      objectName: row.name,
-      field: 'Статус',
-      action: 'Восстановление',
-      previousValue: 'Удален',
-      nextValue: 'Активен',
-    })
   }
 
   const addElectricityThreshold = () => {
@@ -5790,19 +5566,8 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
       ]
     })
     setTariffDrafts((drafts) => ({ ...drafts, [nextRow.id]: { amount: '', unit: nextRow.unit ?? '' } }))
-    addHistoryEntry({
-      section: 'Тарифы и сборы',
-      objectName: `Электроэнергия: ${nextRow.title}`,
-      field: 'Пороговая тарификация',
-      action: 'Создание',
-      previousValue: 'Пусто',
-      nextValue: 'Добавлен порог',
-    })
   }
 
-  const filteredHistory = historySection === 'all'
-    ? history
-    : history.filter((entry) => entry.section === historySection)
   const lastElectricityThresholdRowId = [...tariffRows]
     .reverse()
     .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
@@ -5825,18 +5590,8 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
         </div>
       </div>
 
-      <div hidden className="contractors-prototype-tabs" role="tablist" aria-label="Режим тарифов и сборов">
-        <button type="button" role="tab" aria-selected={activeView === 'values'} className={activeView === 'values' ? 'is-active' : ''} onClick={() => setActiveView('values')}>
-          Значения
-        </button>
-        <button type="button" role="tab" aria-selected={activeView === 'history'} className={activeView === 'history' ? 'is-active' : ''} onClick={() => setActiveView('history')}>
-          История изменений
-        </button>
-      </div>
-
-      {activeView === 'values' ? (
-        <>
-          <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
+      <>
+        <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
             <div className="contractors-sheet-header" role="row">
               <span role="columnheader">Основание</span>
               <span role="columnheader">Значение</span>
@@ -5858,7 +5613,7 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
                       className="contractors-editable-input"
                       value={tariffDrafts[row.id]?.amount ?? ''}
                       onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
-                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount', 'Значение'))}
+                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
                     />
                   </span>
                   <span role="cell">
@@ -5867,7 +5622,7 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
                       className="contractors-editable-input contractors-editable-input--unit"
                       value={tariffDrafts[row.id]?.unit ?? ''}
                       onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit', 'Ед.'))}
+                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
                     />
                   </span>
                   <span role="cell">
@@ -5875,7 +5630,7 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
                       aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
                       className="contractors-editable-select"
                       value={row.tiered ? 'Да' : 'Нет'}
-                      onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да', 'Пороговая тарификация')}
+                    onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да')}
                     >
                       <option>Да</option>
                       <option>Нет</option>
@@ -5886,7 +5641,7 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
                       aria-label={`${row.category}: ${row.title}: по счетчику`}
                       className="contractors-editable-select"
                       value={row.byMeter ? 'Да' : 'Нет'}
-                      onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да', 'По счетчику')}
+                    onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да')}
                     >
                       <option>Да</option>
                       <option>Нет</option>
@@ -5957,47 +5712,7 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
               </button>
             </div>
           </div>
-        </>
-      ) : (
-        <section className="contractors-history-panel" aria-label="История изменений тарифов и сборов">
-          <label>
-            <span>Раздел</span>
-            <select aria-label="Раздел истории изменений" value={historySection} onChange={(event) => setHistorySection(event.target.value as 'all' | TariffHistorySection)}>
-              <option value="all">Все разделы</option>
-              <option value="Тарифы и сборы">Тарифы и сборы</option>
-              <option value="Нерегулярные платежи">Нерегулярные платежи</option>
-            </select>
-          </label>
-          <div className="contractors-history-table" role="table" aria-label="История изменений тарифов и сборов">
-            <div className="contractors-history-header" role="row">
-              <span role="columnheader">Когда</span>
-              <span role="columnheader">Кто</span>
-              <span role="columnheader">Раздел</span>
-              <span role="columnheader">Объект</span>
-              <span role="columnheader">Поле</span>
-              <span role="columnheader">Было</span>
-              <span role="columnheader">Стало</span>
-              <span role="columnheader">Действие</span>
-            </div>
-            {filteredHistory.length > 0 ? filteredHistory.map((entry) => (
-              <div className="contractors-history-row" role="row" key={entry.id}>
-                <span role="cell">{entry.changedAt}</span>
-                <span role="cell">{entry.actorName}</span>
-                <span role="cell">{entry.section}</span>
-                <span role="cell">{entry.objectName}</span>
-                <span role="cell">{entry.field}</span>
-                <span role="cell">{entry.previousValue}</span>
-                <span role="cell">{entry.nextValue}</span>
-                <span role="cell">{entry.action}</span>
-              </div>
-            )) : (
-              <div className="contractors-history-empty" role="row">
-                <span role="cell">Истории изменений пока нет</span>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      </>
 
       {modal === 'service' ? <AddServicePrototypeDialog onClose={() => setModal(null)} /> : null}
       {modal === 'fee' ? <AddFeePrototypeDialog onClose={() => setModal(null)} /> : null}
@@ -6192,18 +5907,6 @@ const meterReadingTypes = [
 
 type MeterReadingTypeId = typeof meterReadingTypes[number]['id']
 
-type MeterReadingHistoryEntry = {
-  id: string
-  garageNumber: string
-  year: string
-  month: string
-  meterType: string
-  previousValue: string
-  nextValue: string
-  actorName: string
-  changedAt: string
-}
-
 function createMeterReadingCellKey(year: string, meterType: MeterReadingTypeId, garageId: string, monthKey: string) {
   return `${year}:${meterType}:${garageId}:${monthKey}`
 }
@@ -6223,10 +5926,8 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<'readings' | 'history'>('readings')
   const [savedReadings, setSavedReadings] = useState<Record<string, string>>({})
   const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
-  const [history, setHistory] = useState<MeterReadingHistoryEntry[]>([])
 
   const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(year)
@@ -6273,20 +5974,6 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
     }
 
     setSavedReadings((currentReadings) => ({ ...currentReadings, [cellKey]: nextValue }))
-    setHistory((currentHistory) => [
-      {
-        id: `meter-history-${Date.now()}-${currentHistory.length + 1}`,
-        garageNumber: garage.number,
-        year,
-        month: month.label,
-        meterType: selectedMeterType.label,
-        previousValue: normalizeHistoryValue(previousValue),
-        nextValue: normalizeHistoryValue(nextValue),
-        actorName: auth.user.displayName,
-        changedAt: formatPrototypeHistoryDateTime(new Date()),
-      },
-      ...currentHistory,
-    ])
   }
 
   return (
@@ -6317,21 +6004,11 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
         </div>
       </div>
 
-      <div hidden className="meter-readings-tabs" role="tablist" aria-label="Режим показаний">
-        <button type="button" role="tab" aria-selected={activeView === 'readings'} className={activeView === 'readings' ? 'is-active' : ''} onClick={() => setActiveView('readings')}>
-          Показания
-        </button>
-        <button type="button" role="tab" aria-selected={activeView === 'history'} className={activeView === 'history' ? 'is-active' : ''} onClick={() => setActiveView('history')}>
-          История изменений
-        </button>
-      </div>
-
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
       {error ? <div className="form-error" role="alert">{error}</div> : null}
 
-      {activeView === 'readings' ? (
-        <div className="meter-readings-table-shell">
-          <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${year} год`}>
+      <div className="meter-readings-table-shell">
+        <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${year} год`}>
             <div className="meter-readings-title-row" role="row">
               <span role="columnheader">Гараж</span>
               <span role="columnheader">Показания</span>
@@ -6374,40 +6051,8 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
                 <span role="cell">В справочнике пока нет гаражей</span>
               </div>
             )}
-          </div>
         </div>
-      ) : (
-        <section className="meter-readings-history" aria-label="История изменений показаний">
-          <div className="meter-readings-history-table" role="table" aria-label="История изменений показаний">
-            <div className="meter-readings-history-header" role="row">
-              <span role="columnheader">Когда</span>
-              <span role="columnheader">Кто</span>
-              <span role="columnheader">Гараж</span>
-              <span role="columnheader">Год</span>
-              <span role="columnheader">Месяц</span>
-              <span role="columnheader">Тип</span>
-              <span role="columnheader">Было</span>
-              <span role="columnheader">Стало</span>
-            </div>
-            {history.length > 0 ? history.map((entry) => (
-              <div className="meter-readings-history-row" role="row" key={entry.id}>
-                <span role="cell">{entry.changedAt}</span>
-                <span role="cell">{entry.actorName}</span>
-                <span role="cell">Гараж {entry.garageNumber}</span>
-                <span role="cell">{entry.year}</span>
-                <span role="cell">{entry.month}</span>
-                <span role="cell">{entry.meterType}</span>
-                <span role="cell">{entry.previousValue}</span>
-                <span role="cell">{entry.nextValue}</span>
-              </div>
-            )) : (
-              <div className="meter-readings-empty-row" role="row">
-                <span role="cell">Истории изменений пока нет</span>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      </div>
     </section>
   )
 }
