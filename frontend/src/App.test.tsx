@@ -3922,6 +3922,54 @@ describe('App', () => {
     expect(loadCount).toBe(2)
   })
 
+  it('retries audit CSV export after an error', async () => {
+    const user = userEvent.setup()
+    let exportCount = 0
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEventsPage: async (_token, params) => ({
+        items: [createAuditEvent({ action: 'dictionary.owner_updated', entityType: 'owner', summary: 'Изменен владелец.' })],
+        totalCount: 1,
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      }),
+      exportEvents: async () => {
+        exportCount += 1
+        if (exportCount === 1) {
+          throw new Error('CSV временно недоступен')
+        }
+
+        return new Blob(['createdAtUtc,action\n'], { type: 'text/csv' })
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    expect(await within(auditPanel).findByText('Изменен владелец.')).toBeInTheDocument()
+
+    await user.click(within(auditPanel).getByRole('button', { name: 'Скачать CSV' }))
+    expect(await within(auditPanel).findByText('CSV временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(auditPanel).queryByRole('button', { name: 'Повторить загрузку' })).not.toBeInTheDocument()
+
+    await user.click(within(auditPanel).getByRole('button', { name: 'Повторить выгрузку CSV' }))
+
+    expect(await within(auditPanel).findByText('История изменений CSV готова.')).toHaveAttribute('role', 'status')
+    expect(within(auditPanel).queryByText('CSV временно недоступен')).not.toBeInTheDocument()
+    expect(exportCount).toBe(2)
+  })
+
   it('shows consolidated report and applies garage search', async () => {
     const user = userEvent.setup()
     const reportClient = createReportClient()

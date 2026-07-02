@@ -3749,6 +3749,11 @@ function getAuditRelatedContext(auditEvent: AuditEventDto) {
   ].filter((item): item is [string, string] => Boolean(item))
 }
 
+type AuditPanelError = {
+  message: string
+  recovery: 'load' | 'export'
+}
+
 function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
   const [page, setPage] = useState<PagedItems<AuditEventDto>>(() => createEmptyPage<AuditEventDto>(25))
   const [search, setSearch] = useState('')
@@ -3765,7 +3770,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const [relatedDocument, setRelatedDocument] = useState('')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AuditPanelError | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [detailState, setDetailState] = useState<{ event: AuditEventDto; loading: boolean; error: string | null } | null>(null)
@@ -3848,7 +3853,10 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
         }
       } catch (caught) {
         if (!ignore) {
-          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить историю изменений.')
+          setError({
+            message: caught instanceof Error ? caught.message : 'Не удалось загрузить историю изменений.',
+            recovery: 'load',
+          })
         }
       } finally {
         if (!ignore) {
@@ -3872,12 +3880,32 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       downloadBlob(blob, buildAuditExportFileName())
       setExportMessage('История изменений CSV готова.')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось скачать историю изменений.')
+      setError({
+        message: caught instanceof Error ? caught.message : 'Не удалось скачать историю изменений.',
+        recovery: 'export',
+      })
     } finally {
       setExporting(false)
     }
   }
 
+  function retryAuditError() {
+    if (!error) {
+      return
+    }
+
+    if (error.recovery === 'export') {
+      void exportCurrentEvents()
+      return
+    }
+
+    setReloadToken((value) => value + 1)
+  }
+
+  const retryAuditErrorBusy = error?.recovery === 'export' ? exporting : loading
+  const retryAuditErrorLabel = error?.recovery === 'export'
+    ? (exporting ? 'Выгружаем...' : 'Повторить выгрузку CSV')
+    : (loading ? 'Загружаем...' : 'Повторить загрузку')
   const auditVisibleRange = getPageVisibleRange(page)
   const auditNavigation = getPageNavigation(page)
 
@@ -3899,10 +3927,10 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
 
       {error ? (
         <div className="audit-error-state">
-          <FormError>{error}</FormError>
-          <button className="ghost-button" type="button" onClick={() => setReloadToken((value) => value + 1)} disabled={loading}>
+          <FormError>{error.message}</FormError>
+          <button className="ghost-button" type="button" onClick={retryAuditError} disabled={retryAuditErrorBusy}>
             <RefreshCw size={16} aria-hidden="true" />
-            <span>{loading ? 'Загружаем...' : 'Повторить загрузку'}</span>
+            <span>{retryAuditErrorLabel}</span>
           </button>
         </div>
       ) : null}
