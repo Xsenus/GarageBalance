@@ -6181,12 +6181,45 @@ function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement>, onCo
   }
 }
 
+type TariffPrototypePendingChange =
+  | {
+    kind: 'tariff-text'
+    rowId: string
+    field: 'amount' | 'unit'
+    objectName: string
+    fieldLabel: string
+    previousValue: string
+    nextValue: string
+  }
+  | {
+    kind: 'tariff-boolean'
+    rowId: string
+    field: 'tiered' | 'byMeter'
+    objectName: string
+    fieldLabel: string
+    previousValue: string
+    nextValue: string
+  }
+  | {
+    kind: 'one-time-amount'
+    rowId: string
+    objectName: string
+    fieldLabel: string
+    previousValue: string
+    nextValue: string
+  }
+
+function formatPrototypeChangeValue(value: string) {
+  return value.trim() || 'Пусто'
+}
+
 function TariffsAndFeesPrototypePanel() {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
   const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
   const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
+  const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
 
@@ -6195,8 +6228,55 @@ function TariffsAndFeesPrototypePanel() {
     setOneTimeDeleteReason('')
   }
 
+  function cancelPendingChange() {
+    if (pendingChange?.kind === 'tariff-text') {
+      setTariffDrafts((drafts) => ({
+        ...drafts,
+        [pendingChange.rowId]: {
+          ...drafts[pendingChange.rowId],
+          [pendingChange.field]: pendingChange.previousValue,
+        },
+      }))
+    } else if (pendingChange?.kind === 'one-time-amount') {
+      setOneTimeDrafts((drafts) => ({
+        ...drafts,
+        [pendingChange.rowId]: {
+          ...drafts[pendingChange.rowId],
+          amount: pendingChange.previousValue,
+        },
+      }))
+    }
+
+    setPendingChange(null)
+  }
+
+  function confirmPendingChange() {
+    if (!pendingChange) {
+      return
+    }
+
+    if (pendingChange.kind === 'tariff-text') {
+      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue } : currentRow
+      )))
+    } else if (pendingChange.kind === 'tariff-boolean') {
+      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue === 'Да' } : currentRow
+      )))
+    } else {
+      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === pendingChange.rowId ? { ...currentRow, amount: pendingChange.nextValue } : currentRow
+      )))
+    }
+
+    setPendingChange(null)
+  }
+
+  const changeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingChange))
+  const changeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingChange))
   const oneTimeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeDeleteTarget))
+  useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
 
   const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit') => {
@@ -6207,9 +6287,15 @@ function TariffsAndFeesPrototypePanel() {
       return
     }
 
-    setTariffRows((currentRows) => currentRows.map((currentRow) => (
-      currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
-    )))
+    setPendingChange({
+      kind: 'tariff-text',
+      rowId: row.id,
+      field,
+      objectName: `${row.category}: ${row.title}`,
+      fieldLabel: field === 'amount' ? 'Значение' : 'Единица',
+      previousValue,
+      nextValue,
+    })
   }
 
   const commitTariffBooleanChange = (row: ContractorTariffRow, field: 'tiered' | 'byMeter', nextValue: boolean) => {
@@ -6219,9 +6305,15 @@ function TariffsAndFeesPrototypePanel() {
       return
     }
 
-    setTariffRows((currentRows) => currentRows.map((currentRow) => (
-      currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
-    )))
+    setPendingChange({
+      kind: 'tariff-boolean',
+      rowId: row.id,
+      field,
+      objectName: `${row.category}: ${row.title}`,
+      fieldLabel: field === 'tiered' ? 'Пороговая тарификация' : 'По счетчику',
+      previousValue: previousValue ? 'Да' : 'Нет',
+      nextValue: nextValue ? 'Да' : 'Нет',
+    })
   }
 
   const commitOneTimeAmountChange = (row: ContractorOneTimeRow) => {
@@ -6231,9 +6323,14 @@ function TariffsAndFeesPrototypePanel() {
       return
     }
 
-    setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
-      currentRow.id === row.id ? { ...currentRow, amount: nextValue } : currentRow
-    )))
+    setPendingChange({
+      kind: 'one-time-amount',
+      rowId: row.id,
+      objectName: row.name,
+      fieldLabel: 'Сумма, руб.',
+      previousValue: row.amount,
+      nextValue,
+    })
   }
 
   const openOneTimeDeleteDialog = (row: ContractorOneTimeRow) => {
@@ -6440,6 +6537,45 @@ function TariffsAndFeesPrototypePanel() {
             </div>
           </div>
       </>
+
+      {pendingChange ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingChange}>
+          <section ref={changeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="tariff-prototype-change-title" aria-describedby="tariff-prototype-change-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Изменение</p>
+                <h3 id="tariff-prototype-change-title">Подтвердить изменение?</h3>
+                <p>{pendingChange.objectName}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение изменения тарифа" onClick={cancelPendingChange}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="tariff-prototype-change-description">Проверьте, что именно изменится. После подключения backend это действие будет записываться в историю изменений.</p>
+            <dl className="dictionary-change-list">
+              <div>
+                <dt>Поле</dt>
+                <dd>{pendingChange.fieldLabel}</dd>
+              </div>
+              <div>
+                <dt>Было</dt>
+                <dd>{formatPrototypeChangeValue(pendingChange.previousValue)}</dd>
+              </div>
+              <div>
+                <dt>Стало</dt>
+                <dd>{formatPrototypeChangeValue(pendingChange.nextValue)}</dd>
+              </div>
+            </dl>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmPendingChange}>
+                <Save size={16} />
+                <span>Сохранить изменение</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {oneTimeDeleteTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeOneTimeDeleteDialog}>
