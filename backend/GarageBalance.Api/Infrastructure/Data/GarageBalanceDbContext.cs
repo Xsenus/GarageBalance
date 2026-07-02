@@ -33,6 +33,18 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AccessImportQuarantineItem> AccessImportQuarantineItems => Set<AccessImportQuarantineItem>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeAuditEventRelatedFields();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeAuditEventRelatedFields();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -86,9 +98,22 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.Action).HasMaxLength(120).IsRequired();
             entity.Property(item => item.EntityType).HasMaxLength(120).IsRequired();
             entity.Property(item => item.EntityId).HasMaxLength(120);
+            entity.Property(item => item.EntityDisplayName).HasMaxLength(256);
+            entity.Property(item => item.RelatedGarageId).HasMaxLength(120);
+            entity.Property(item => item.RelatedGarageNumber).HasMaxLength(80);
+            entity.Property(item => item.RelatedAccountingMonth).HasMaxLength(32);
+            entity.Property(item => item.RelatedCounterpartyId).HasMaxLength(120);
+            entity.Property(item => item.RelatedCounterpartyName).HasMaxLength(256);
+            entity.Property(item => item.RelatedDocumentId).HasMaxLength(120);
+            entity.Property(item => item.RelatedDocumentNumber).HasMaxLength(120);
             entity.Property(item => item.Summary).HasMaxLength(1000).IsRequired();
             entity.HasIndex(item => item.CreatedAtUtc);
             entity.HasIndex(item => new { item.EntityType, item.EntityId });
+            entity.HasIndex(item => item.RelatedGarageId);
+            entity.HasIndex(item => item.RelatedGarageNumber);
+            entity.HasIndex(item => item.RelatedAccountingMonth);
+            entity.HasIndex(item => item.RelatedCounterpartyId);
+            entity.HasIndex(item => item.RelatedDocumentId);
         });
 
         modelBuilder.Entity<Owner>(entity =>
@@ -380,5 +405,104 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(setting => setting.Provider);
             entity.HasIndex(setting => setting.UpdatedAtUtc);
         });
+    }
+
+    private void NormalizeAuditEventRelatedFields()
+    {
+        foreach (var entry in ChangeTracker.Entries<AuditEvent>())
+        {
+            if (entry.State is not EntityState.Added and not EntityState.Modified)
+            {
+                continue;
+            }
+
+            var auditEvent = entry.Entity;
+            var metadata = ParseAuditMetadata(auditEvent.MetadataJson);
+
+            auditEvent.EntityDisplayName ??= ExtractAuditMetadataValue(metadata, 256, "entityDisplayName", "displayName", "name", "title");
+            auditEvent.RelatedGarageId ??= ExtractAuditMetadataValue(metadata, 120, "relatedGarageId", "garageId");
+            auditEvent.RelatedGarageNumber ??= ExtractAuditMetadataValue(metadata, 80, "relatedGarageNumber", "garageNumber");
+            auditEvent.RelatedAccountingMonth ??= ExtractAuditMetadataValue(metadata, 32, "relatedAccountingMonth", "accountingMonth", "period", "month");
+            auditEvent.RelatedCounterpartyId ??= ExtractAuditMetadataValue(metadata, 120, "relatedCounterpartyId", "counterpartyId", "supplierId", "ownerId", "employeeId");
+            auditEvent.RelatedCounterpartyName ??= ExtractAuditMetadataValue(metadata, 256, "relatedCounterpartyName", "counterpartyName", "supplierName", "ownerName", "employeeName");
+            auditEvent.RelatedDocumentId ??= ExtractAuditMetadataValue(metadata, 120, "relatedDocumentId", "documentId", "operationId", "paymentId", "accrualId", "invoiceId", "receiptId");
+            auditEvent.RelatedDocumentNumber ??= ExtractAuditMetadataValue(metadata, 120, "relatedDocumentNumber", "documentNumber", "operationNumber", "paymentNumber", "invoiceNumber", "receiptNumber");
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseAuditMetadata(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadataJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (IsSensitiveAuditMetadataKey(property.Name))
+                {
+                    continue;
+                }
+
+                var value = property.Value.ValueKind switch
+                {
+                    JsonValueKind.String => property.Value.GetString(),
+                    JsonValueKind.Number => property.Value.GetRawText(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    _ => null
+                };
+
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    metadata[property.Name] = value.Trim();
+                }
+            }
+
+            return metadata;
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static string? ExtractAuditMetadataValue(IReadOnlyDictionary<string, string> metadata, int maxLength, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (!metadata.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            return value.Length <= maxLength ? value : value[..maxLength];
+        }
+
+        return null;
+    }
+
+    private static bool IsSensitiveAuditMetadataKey(string key)
+    {
+        return key.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("key", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("email", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("phone", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("passport", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("card", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("bankAccount", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("accountNumber", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("address", StringComparison.OrdinalIgnoreCase);
     }
 }

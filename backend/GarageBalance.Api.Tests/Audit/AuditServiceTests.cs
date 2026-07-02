@@ -310,6 +310,16 @@ public sealed class AuditServiceTests
         });
         await database.Context.SaveChangesAsync();
 
+        var storedEvent = await database.Context.AuditEvents.AsNoTracking().SingleAsync();
+        Assert.Equal("Garage 12", storedEvent.EntityDisplayName);
+        Assert.Equal("garage-12", storedEvent.RelatedGarageId);
+        Assert.Equal("12", storedEvent.RelatedGarageNumber);
+        Assert.Equal("2026-06", storedEvent.RelatedAccountingMonth);
+        Assert.Equal("supplier-1", storedEvent.RelatedCounterpartyId);
+        Assert.Equal("Energy Supplier", storedEvent.RelatedCounterpartyName);
+        Assert.Equal("payment-1", storedEvent.RelatedDocumentId);
+        Assert.Equal("PAY-2026-06-12", storedEvent.RelatedDocumentNumber);
+
         var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
 
         var auditEvent = Assert.Single(result);
@@ -328,6 +338,54 @@ public sealed class AuditServiceTests
         Assert.Equal("[секрет скрыт]", auditEvent.Metadata["apiToken"]);
         Assert.DoesNotContain("owner@example.com", auditEvent.Metadata.Values);
         Assert.DoesNotContain("secret-token-value", auditEvent.Metadata.Values);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_PrefersStoredRelatedFieldsOverMetadataFallback()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 12, 0, 0, TimeSpan.Zero),
+            Action = "finance.payment_updated",
+            EntityType = "financial_operation",
+            EntityId = Guid.NewGuid().ToString(),
+            EntityDisplayName = "Stored operation",
+            RelatedGarageId = "stored-garage",
+            RelatedGarageNumber = "101",
+            RelatedAccountingMonth = "2026-07",
+            RelatedCounterpartyId = "stored-counterparty",
+            RelatedCounterpartyName = "Stored counterparty",
+            RelatedDocumentId = "stored-payment",
+            RelatedDocumentNumber = "PAY-STORED",
+            Summary = "Operation updated.",
+            MetadataJson = """
+            {
+              "entityDisplayName": "Metadata operation",
+              "garageId": "metadata-garage",
+              "garageNumber": "12",
+              "accountingMonth": "2026-06",
+              "supplierId": "metadata-counterparty",
+              "supplierName": "Metadata counterparty",
+              "paymentId": "metadata-payment",
+              "paymentNumber": "PAY-METADATA"
+            }
+            """
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
+
+        var auditEvent = Assert.Single(result);
+        Assert.Equal("Stored operation", auditEvent.EntityDisplayName);
+        Assert.Equal("stored-garage", auditEvent.RelatedGarageId);
+        Assert.Equal("101", auditEvent.RelatedGarageNumber);
+        Assert.Equal("2026-07", auditEvent.RelatedAccountingMonth);
+        Assert.Equal("stored-counterparty", auditEvent.RelatedCounterpartyId);
+        Assert.Equal("Stored counterparty", auditEvent.RelatedCounterpartyName);
+        Assert.Equal("stored-payment", auditEvent.RelatedDocumentId);
+        Assert.Equal("PAY-STORED", auditEvent.RelatedDocumentNumber);
     }
 
     [Fact]

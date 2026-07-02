@@ -138,14 +138,14 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             beforeAfter.NewValue,
             ExtractReason(maskedSummary),
             metadata,
-            ExtractEntityDisplayName(metadata),
-            ExtractMetadataValue(metadata, "relatedGarageId", "garageId"),
-            ExtractMetadataValue(metadata, "relatedGarageNumber", "garageNumber"),
-            ExtractMetadataValue(metadata, "relatedAccountingMonth", "accountingMonth", "period", "month"),
-            ExtractMetadataValue(metadata, "relatedCounterpartyId", "counterpartyId", "supplierId", "ownerId", "employeeId"),
-            ExtractMetadataValue(metadata, "relatedCounterpartyName", "counterpartyName", "supplierName", "ownerName", "employeeName"),
-            ExtractMetadataValue(metadata, "relatedDocumentId", "documentId", "operationId", "paymentId", "accrualId", "invoiceId", "receiptId"),
-            ExtractMetadataValue(metadata, "relatedDocumentNumber", "documentNumber", "operationNumber", "paymentNumber", "invoiceNumber", "receiptNumber"));
+            MaskStoredValue(auditEvent.EntityDisplayName) ?? ExtractEntityDisplayName(metadata),
+            MaskStoredValue(auditEvent.RelatedGarageId) ?? ExtractMetadataValue(metadata, "relatedGarageId", "garageId"),
+            MaskStoredValue(auditEvent.RelatedGarageNumber) ?? ExtractMetadataValue(metadata, "relatedGarageNumber", "garageNumber"),
+            MaskStoredValue(auditEvent.RelatedAccountingMonth) ?? ExtractMetadataValue(metadata, "relatedAccountingMonth", "accountingMonth", "period", "month"),
+            MaskStoredValue(auditEvent.RelatedCounterpartyId) ?? ExtractMetadataValue(metadata, "relatedCounterpartyId", "counterpartyId", "supplierId", "ownerId", "employeeId"),
+            MaskStoredValue(auditEvent.RelatedCounterpartyName) ?? ExtractMetadataValue(metadata, "relatedCounterpartyName", "counterpartyName", "supplierName", "ownerName", "employeeName"),
+            MaskStoredValue(auditEvent.RelatedDocumentId) ?? ExtractMetadataValue(metadata, "relatedDocumentId", "documentId", "operationId", "paymentId", "accrualId", "invoiceId", "receiptId"),
+            MaskStoredValue(auditEvent.RelatedDocumentNumber) ?? ExtractMetadataValue(metadata, "relatedDocumentNumber", "operationNumber", "documentNumber", "paymentNumber", "invoiceNumber", "receiptNumber"));
     }
 
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
@@ -522,6 +522,13 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         return metadata is null || metadata.Count == 0
             ? null
             : string.Join("; ", metadata.Select(item => $"{item.Key}={item.Value}"));
+    }
+
+    private static string? MaskStoredValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? null
+            : AuditTextMasker.Mask(value);
     }
 
     private static string? ExtractEntityDisplayName(IReadOnlyDictionary<string, string>? metadata)
