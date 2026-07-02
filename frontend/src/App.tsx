@@ -7287,6 +7287,7 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
     setPendingReadingChange(null)
   }
 
+  useRestoreFocusOnClose(Boolean(pendingReadingChange))
   const readingChangeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingReadingChange))
   const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingReadingChange))
   useEscapeKey(Boolean(pendingReadingChange), () => cancelPendingReadingChange())
