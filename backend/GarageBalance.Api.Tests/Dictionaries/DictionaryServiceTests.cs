@@ -194,6 +194,72 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task RestoreMethods_RejectAlreadyActiveRecordsAndDoNotWriteDuplicateAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        const string archiveReason = "Duplicate restore guard";
+
+        var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Owner", "Active", null, null, null, null), null, CancellationToken.None);
+        await service.ArchiveOwnerAsync(owner.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreOwnerAsync(owner.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var ownerAgain = await service.RestoreOwnerAsync(owner.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(ownerAgain.Succeeded);
+        Assert.Equal("owner_not_found", ownerAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.owner_restored"));
+
+        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("ACTIVE-1", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+        await service.ArchiveGarageAsync(garage.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreGarageAsync(garage.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var garageAgain = await service.RestoreGarageAsync(garage.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(garageAgain.Succeeded);
+        Assert.Equal("garage_not_found", garageAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.garage_restored"));
+
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Active group"), null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(group.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreSupplierGroupAsync(group.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var groupAgain = await service.RestoreSupplierGroupAsync(group.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(groupAgain.Succeeded);
+        Assert.Equal("supplier_group_not_found", groupAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.supplier_group_restored"));
+
+        var supplierGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Supplier group"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Active supplier", supplierGroup.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(supplier.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreSupplierAsync(supplier.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var supplierAgain = await service.RestoreSupplierAsync(supplier.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(supplierAgain.Succeeded);
+        Assert.Equal("supplier_not_found", supplierAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.supplier_restored"));
+
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Active income", "active_income"), null, CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(incomeType.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreIncomeTypeAsync(incomeType.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var incomeAgain = await service.RestoreIncomeTypeAsync(incomeType.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(incomeAgain.Succeeded);
+        Assert.Equal("income_type_not_found", incomeAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.income_type_restored"));
+
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Active expense", "active_expense"), null, CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(expenseType.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreExpenseTypeAsync(expenseType.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var expenseAgain = await service.RestoreExpenseTypeAsync(expenseType.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(expenseAgain.Succeeded);
+        Assert.Equal("expense_type_not_found", expenseAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.expense_type_restored"));
+
+        var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Active tariff", "fixed", 100m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
+        await service.ArchiveTariffAsync(tariff.Value!.Id, archiveReason, null, CancellationToken.None);
+        Assert.True((await service.RestoreTariffAsync(tariff.Value.Id, actorUserId, CancellationToken.None)).Succeeded);
+        var tariffAgain = await service.RestoreTariffAsync(tariff.Value.Id, actorUserId, CancellationToken.None);
+        Assert.False(tariffAgain.Succeeded);
+        Assert.Equal("tariff_not_found", tariffAgain.ErrorCode);
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.tariff_restored"));
+    }
+
+    [Fact]
     public async Task UpdateOwnerAsync_ReturnsNotFoundForMissingOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
