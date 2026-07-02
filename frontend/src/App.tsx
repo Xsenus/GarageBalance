@@ -3417,11 +3417,18 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
 }
 
 function getAuditEventSectionLabel(auditEvent: AuditEventDto) {
-  const sectionCode = auditEvent.action.split('.')[0] ?? ''
+  const sectionCode = auditEvent.section || auditEvent.action.split('.')[0] || ''
   return auditSectionOptions.find((option) => option.value === sectionCode)?.label ?? (sectionCode || 'Система')
 }
 
 function getAuditEventActionKindLabel(auditEvent: AuditEventDto) {
+  if (auditEvent.actionKind) {
+    const option = auditActionKindOptions.find((item) => item.value === auditEvent.actionKind)
+    if (option && option.value) {
+      return option.label
+    }
+  }
+
   const action = auditEvent.action.toLowerCase()
   if (action.includes('_created')) return 'Создание'
   if (action.includes('_updated') || action.includes('password_changed')) return 'Изменение'
@@ -3457,6 +3464,17 @@ function parseAuditBeforeAfter(summary: string) {
     before: match[1].trim(),
     after: match[2].trim(),
   }
+}
+
+function getAuditBeforeAfter(auditEvent: AuditEventDto) {
+  if (auditEvent.oldValue || auditEvent.newValue) {
+    return {
+      before: auditEvent.oldValue ?? 'не указано',
+      after: auditEvent.newValue ?? 'не указано',
+    }
+  }
+
+  return parseAuditBeforeAfter(auditEvent.summary)
 }
 
 function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
@@ -3638,13 +3656,14 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Раздел</span>
           <span role="columnheader">Объект</span>
           <span role="columnheader">Действие</span>
+          <span role="columnheader">Поле</span>
           <span role="columnheader">Было</span>
           <span role="columnheader">Стало</span>
           <span role="columnheader">Карточка</span>
         </div>
         {!loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
         {page.items.map((auditEvent) => {
-          const beforeAfter = parseAuditBeforeAfter(auditEvent.summary)
+          const beforeAfter = getAuditBeforeAfter(auditEvent)
           return (
             <div className="audit-event-row" role="row" key={auditEvent.id}>
               <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
@@ -3658,6 +3677,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
                 <strong>{getAuditEventActionKindLabel(auditEvent)}</strong>
                 <small>{auditEvent.summary}</small>
               </span>
+              <span role="cell">{auditEvent.fieldName ?? 'не указано'}</span>
               <span role="cell">{beforeAfter.before}</span>
               <span role="cell">{beforeAfter.after}</span>
               <span role="cell">
@@ -3722,12 +3742,20 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
                 <dd>{detailState.event.action}</dd>
               </div>
               <div>
+                <dt>Поле</dt>
+                <dd>{detailState.event.fieldName ?? 'не указано'}</dd>
+              </div>
+              <div>
                 <dt>Было</dt>
-                <dd>{parseAuditBeforeAfter(detailState.event.summary).before}</dd>
+                <dd>{getAuditBeforeAfter(detailState.event).before}</dd>
               </div>
               <div>
                 <dt>Стало</dt>
-                <dd>{parseAuditBeforeAfter(detailState.event.summary).after}</dd>
+                <dd>{getAuditBeforeAfter(detailState.event).after}</dd>
+              </div>
+              <div>
+                <dt>Причина/комментарий</dt>
+                <dd>{detailState.event.reason ?? 'не указано'}</dd>
               </div>
             </dl>
             <div className="audit-detail-summary">

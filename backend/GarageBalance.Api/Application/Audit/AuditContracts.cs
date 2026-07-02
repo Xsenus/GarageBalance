@@ -7,7 +7,13 @@ public sealed record AuditEventDto(
     string Action,
     string EntityType,
     string? EntityId,
-    string Summary);
+    string Summary,
+    string? Section = null,
+    string? ActionKind = null,
+    string? FieldName = null,
+    string? OldValue = null,
+    string? NewValue = null,
+    string? Reason = null);
 
 public sealed record AuditEventPageDto(
     IReadOnlyList<AuditEventDto> Items,

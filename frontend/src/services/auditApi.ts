@@ -6,6 +6,12 @@ export type AuditEventDto = {
   entityType: string
   entityId: string | null
   summary: string
+  section?: string | null
+  actionKind?: string | null
+  fieldName?: string | null
+  oldValue?: string | null
+  newValue?: string | null
+  reason?: string | null
 }
 
 export type AuditEventPageDto = {

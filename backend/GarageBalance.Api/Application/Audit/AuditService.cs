@@ -3,6 +3,7 @@ using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GarageBalance.Api.Application.Audit;
 
@@ -117,6 +118,9 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
     private static AuditEventDto ToDto(AuditEvent auditEvent)
     {
+        var maskedSummary = AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty;
+        var beforeAfter = ExtractBeforeAfter(maskedSummary);
+
         return new AuditEventDto(
             auditEvent.Id,
             auditEvent.CreatedAtUtc,
@@ -124,7 +128,13 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             auditEvent.Action,
             auditEvent.EntityType,
             AuditTextMasker.Mask(auditEvent.EntityId),
-            AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty);
+            maskedSummary,
+            GetSection(auditEvent.Action),
+            GetActionKind(auditEvent.Action),
+            ExtractFieldName(maskedSummary),
+            beforeAfter.OldValue,
+            beforeAfter.NewValue,
+            ExtractReason(maskedSummary));
     }
 
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
@@ -206,16 +216,22 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("createdAtUtc,actorUserId,action,entityType,entityId,summary");
+        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,summary");
 
         foreach (var auditEvent in events)
         {
             builder
                 .Append(EscapeCsv(auditEvent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture))).Append(',')
                 .Append(EscapeCsv(auditEvent.ActorUserId?.ToString())).Append(',')
+                .Append(EscapeCsv(auditEvent.Section)).Append(',')
+                .Append(EscapeCsv(auditEvent.ActionKind)).Append(',')
                 .Append(EscapeCsv(auditEvent.Action)).Append(',')
                 .Append(EscapeCsv(auditEvent.EntityType)).Append(',')
                 .Append(EscapeCsv(auditEvent.EntityId)).Append(',')
+                .Append(EscapeCsv(auditEvent.FieldName)).Append(',')
+                .Append(EscapeCsv(auditEvent.OldValue)).Append(',')
+                .Append(EscapeCsv(auditEvent.NewValue)).Append(',')
+                .Append(EscapeCsv(auditEvent.Reason)).Append(',')
                 .Append(EscapeCsv(auditEvent.Summary))
                 .AppendLine();
         }
@@ -318,6 +334,100 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             "export" => ["_exported", ".export"],
             _ => []
         };
+    }
+
+    private static string GetSection(string action)
+    {
+        var separatorIndex = action.IndexOf('.', StringComparison.Ordinal);
+        return separatorIndex > 0 ? action[..separatorIndex] : "system";
+    }
+
+    private static string GetActionKind(string action)
+    {
+        var normalized = action.ToLowerInvariant();
+
+        if (normalized.Contains("_created", StringComparison.Ordinal))
+        {
+            return "create";
+        }
+
+        if (normalized.Contains("_updated", StringComparison.Ordinal) || normalized.Contains("password_changed", StringComparison.Ordinal))
+        {
+            return "update";
+        }
+
+        if (normalized.Contains("_archived", StringComparison.Ordinal))
+        {
+            return "archive";
+        }
+
+        if (normalized.Contains("_restored", StringComparison.Ordinal))
+        {
+            return "restore";
+        }
+
+        if (normalized.Contains("_canceled", StringComparison.Ordinal) || normalized.Contains("_cancelled", StringComparison.Ordinal))
+        {
+            return "cancel";
+        }
+
+        if (normalized.Contains("_deleted", StringComparison.Ordinal))
+        {
+            return "delete";
+        }
+
+        if (normalized.Contains("_failed", StringComparison.Ordinal) || normalized.Contains("_rate_limited", StringComparison.Ordinal) || normalized.Contains("_inactive", StringComparison.Ordinal))
+        {
+            return "fail";
+        }
+
+        if (normalized.Contains("_generated", StringComparison.Ordinal))
+        {
+            return "generate";
+        }
+
+        if (normalized.StartsWith("auth.login", StringComparison.Ordinal))
+        {
+            return "login";
+        }
+
+        if (normalized.StartsWith("import.", StringComparison.Ordinal))
+        {
+            return "import";
+        }
+
+        if (normalized.Contains("_exported", StringComparison.Ordinal) || normalized.Contains(".export", StringComparison.Ordinal))
+        {
+            return "export";
+        }
+
+        return "other";
+    }
+
+    private static string? ExtractFieldName(string summary)
+    {
+        var match = Regex.Match(summary, @"поле\s+(?<field>.+?):\s+было", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? NormalizeExtractedValue(match.Groups["field"].Value) : null;
+    }
+
+    private static (string? OldValue, string? NewValue) ExtractBeforeAfter(string summary)
+    {
+        var match = Regex.Match(summary, @"было\s+(?<old>.+?);?\s+стало\s+(?<new>.+?)(?:\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? (NormalizeExtractedValue(match.Groups["old"].Value), NormalizeExtractedValue(match.Groups["new"].Value))
+            : (null, null);
+    }
+
+    private static string? ExtractReason(string summary)
+    {
+        var match = Regex.Match(summary, @"(?:Причина|Комментарий):\s*(?<reason>.+?)(?:\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? NormalizeExtractedValue(match.Groups["reason"].Value) : null;
+    }
+
+    private static string? NormalizeExtractedValue(string value)
+    {
+        var normalized = value.Trim().TrimEnd(';', '.').Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
     private static IQueryable<AuditEvent> ApplyActionKindFilter(IQueryable<AuditEvent> query, string actionKind)

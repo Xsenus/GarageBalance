@@ -3395,7 +3395,13 @@ describe('App', () => {
             action: 'dictionary.owner_updated',
             entityType: 'owner',
             entityId: 'owner-1',
-            summary: 'Изменен владелец: было Иванов Иван; стало Петров Петр.',
+            summary: 'Изменен владелец.',
+            section: 'dictionary',
+            actionKind: 'update',
+            fieldName: 'Владелец',
+            oldValue: 'Иванов Иван',
+            newValue: 'Петров Петр',
+            reason: 'Смена собственника',
           }),
         ]
       },
@@ -3433,7 +3439,7 @@ describe('App', () => {
     const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
     expect(await within(auditTable).findByText('Справочники')).toBeInTheDocument()
     expect(within(auditTable).getByText('Изменение')).toBeInTheDocument()
-    expect(within(auditTable).getByText('Владелец')).toBeInTheDocument()
+    expect(within(auditTable).getAllByText('Владелец')).toHaveLength(2)
     expect(within(auditTable).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(auditTable).getByText('Петров Петр')).toBeInTheDocument()
 
@@ -3470,6 +3476,8 @@ describe('App', () => {
           entityType: 'owner',
           entityId: 'owner-1',
           summary: 'Изменен владелец.',
+          section: 'dictionary',
+          actionKind: 'update',
         }),
       ],
       getEvent: async (_token, id) => {
@@ -3479,7 +3487,13 @@ describe('App', () => {
           action: 'dictionary.owner_updated',
           entityType: 'owner',
           entityId: 'owner-1',
-          summary: 'Изменен владелец: было Иванов Иван; стало Петров Петр.',
+          summary: 'Изменен владелец.',
+          section: 'dictionary',
+          actionKind: 'update',
+          fieldName: 'Владелец',
+          oldValue: 'Иванов Иван',
+          newValue: 'Петров Петр',
+          reason: 'Смена собственника',
         })
       },
     })
@@ -3497,8 +3511,10 @@ describe('App', () => {
     expect(within(detailDialog).getByText('Карточка события')).toBeInTheDocument()
     expect(within(detailDialog).getByText('dictionary.owner_updated')).toBeInTheDocument()
     expect(within(detailDialog).getByText('owner-1')).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText('Владелец')).toHaveLength(2)
     expect(within(detailDialog).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Петров Петр')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Смена собственника')).toBeInTheDocument()
     expect(detailDialog).toHaveAttribute('aria-modal', 'true')
 
     await user.click(within(detailDialog).getByRole('button', { name: 'Закрыть' }))

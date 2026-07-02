@@ -254,6 +254,32 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_ReturnsStructuredAuditFieldsFromMaskedSummary()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 10, 0, 0, TimeSpan.Zero),
+            Action = "finance.income_updated",
+            EntityType = "financial_operation",
+            EntityId = Guid.NewGuid().ToString(),
+            Summary = "Изменено поступление: поле Сумма: было 300,00; стало 450,00. Причина: Исправлена сумма."
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
+
+        var auditEvent = Assert.Single(result);
+        Assert.Equal("finance", auditEvent.Section);
+        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Equal("Сумма", auditEvent.FieldName);
+        Assert.Equal("300,00", auditEvent.OldValue);
+        Assert.Equal("450,00", auditEvent.NewValue);
+        Assert.Equal("Исправлена сумма", auditEvent.Reason);
+    }
+
+    [Fact]
     public async Task GetEventAsync_ReturnsMaskedEventById()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -321,7 +347,8 @@ public sealed class AuditServiceTests
         Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
         Assert.EndsWith(".csv", export.FileName, StringComparison.Ordinal);
         Assert.Equal("text/csv; charset=utf-8", export.ContentType);
-        Assert.Contains("createdAtUtc,actorUserId,action,entityType,entityId,summary", csv);
+        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,summary", csv);
+        Assert.Contains("auth,fail,auth.login_failed", csv);
         Assert.Contains("auth.login_failed", csv);
         Assert.Contains("\"Login [email скрыт] failed, password=[секрет скрыт] \"\"quoted\"\"\"", csv);
         Assert.DoesNotContain("finance.income_created", csv);
