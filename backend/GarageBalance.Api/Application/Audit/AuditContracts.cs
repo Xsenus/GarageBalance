@@ -41,7 +41,11 @@ public sealed record AuditEventListRequest(
     string? EntityType = null,
     Guid? ActorUserId = null,
     string? QuickFilter = null,
-    int? Offset = null);
+    int? Offset = null,
+    string? RelatedGarage = null,
+    string? RelatedAccountingMonth = null,
+    string? RelatedCounterparty = null,
+    string? RelatedDocument = null);
 
 public sealed record AuditEventExportDto(
     string FileName,

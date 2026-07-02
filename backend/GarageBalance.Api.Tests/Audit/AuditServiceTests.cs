@@ -397,6 +397,57 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_FiltersByRelatedContext()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.AddRange(
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 12, 0, 0, TimeSpan.Zero),
+                Action = "finance.payment_updated",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                RelatedGarageNumber = "12",
+                RelatedAccountingMonth = "2026-06",
+                RelatedCounterpartyName = "Energy Supplier",
+                RelatedDocumentNumber = "PAY-2026-06-12",
+                Summary = "Payment updated."
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 13, 0, 0, TimeSpan.Zero),
+                Action = "finance.payment_updated",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                RelatedGarageNumber = "42",
+                RelatedAccountingMonth = "2026-07",
+                RelatedCounterpartyName = "Water Supplier",
+                RelatedDocumentNumber = "PAY-2026-07-42",
+                Summary = "Another payment updated."
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(
+            new AuditEventListRequest(
+                null,
+                null,
+                null,
+                null,
+                RelatedGarage: "12",
+                RelatedAccountingMonth: "2026-06",
+                RelatedCounterparty: "energy",
+                RelatedDocument: "PAY-2026-06"),
+            CancellationToken.None);
+
+        var auditEvent = Assert.Single(result);
+        Assert.Equal("12", auditEvent.RelatedGarageNumber);
+        Assert.Equal("2026-06", auditEvent.RelatedAccountingMonth);
+        Assert.Equal("Energy Supplier", auditEvent.RelatedCounterpartyName);
+        Assert.Equal("PAY-2026-06-12", auditEvent.RelatedDocumentNumber);
+    }
+
+    [Fact]
     public async Task GetEventAsync_ReturnsMaskedEventById()
     {
         await using var database = await TestDatabase.CreateAsync();

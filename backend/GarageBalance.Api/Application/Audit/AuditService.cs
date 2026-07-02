@@ -33,47 +33,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             query = query.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Action))
-        {
-            var action = request.Action.Trim();
-            query = query.Where(auditEvent => auditEvent.Action == action);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Section))
-        {
-            query = ApplySectionFilter(query, request.Section);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.ActionKind))
-        {
-            query = ApplyActionKindFilter(query, request.ActionKind);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.EntityType))
-        {
-            var entityType = request.EntityType.Trim();
-            query = query.Where(auditEvent => auditEvent.EntityType == entityType);
-        }
-
-        if (request.ActorUserId is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.ActorUserId == request.ActorUserId.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.QuickFilter))
-        {
-            query = ApplyQuickFilter(query, request.QuickFilter);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                auditEvent.Action.ToLower().Contains(search) ||
-                auditEvent.EntityType.ToLower().Contains(search) ||
-                (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
-                auditEvent.Summary.ToLower().Contains(search));
-        }
+        query = ApplyNonDateFilters(query, request);
 
         return await query
             .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
@@ -322,6 +282,8 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             query = ApplyQuickFilter(query, request.QuickFilter);
         }
 
+        query = ApplyRelatedFilters(query, request);
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
@@ -329,7 +291,52 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
                 auditEvent.Action.ToLower().Contains(search) ||
                 auditEvent.EntityType.ToLower().Contains(search) ||
                 (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
+                (auditEvent.EntityDisplayName != null && auditEvent.EntityDisplayName.ToLower().Contains(search)) ||
+                (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(search)) ||
+                (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(search)) ||
+                (auditEvent.RelatedAccountingMonth != null && auditEvent.RelatedAccountingMonth.ToLower().Contains(search)) ||
+                (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(search)) ||
+                (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(search)) ||
+                (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(search)) ||
+                (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(search)) ||
                 auditEvent.Summary.ToLower().Contains(search));
+        }
+
+        return query;
+    }
+
+    private static IQueryable<AuditEvent> ApplyRelatedFilters(IQueryable<AuditEvent> query, AuditEventListRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.RelatedGarage))
+        {
+            var garage = request.RelatedGarage.Trim().ToLowerInvariant();
+            query = query.Where(auditEvent =>
+                (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(garage)) ||
+                (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(garage)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.RelatedAccountingMonth))
+        {
+            var accountingMonth = request.RelatedAccountingMonth.Trim().ToLowerInvariant();
+            query = query.Where(auditEvent =>
+                auditEvent.RelatedAccountingMonth != null &&
+                auditEvent.RelatedAccountingMonth.ToLower() == accountingMonth);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.RelatedCounterparty))
+        {
+            var counterparty = request.RelatedCounterparty.Trim().ToLowerInvariant();
+            query = query.Where(auditEvent =>
+                (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(counterparty)) ||
+                (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(counterparty)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.RelatedDocument))
+        {
+            var document = request.RelatedDocument.Trim().ToLowerInvariant();
+            query = query.Where(auditEvent =>
+                (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(document)) ||
+                (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(document)));
         }
 
         return query;

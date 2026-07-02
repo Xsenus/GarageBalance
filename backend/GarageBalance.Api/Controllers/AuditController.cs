@@ -23,9 +23,13 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         [FromQuery] string? entityType,
         [FromQuery] Guid? actorUserId,
         [FromQuery] string? quickFilter,
+        [FromQuery] string? relatedGarage,
+        [FromQuery] string? relatedAccountingMonth,
+        [FromQuery] string? relatedCounterparty,
+        [FromQuery] string? relatedDocument,
         CancellationToken cancellationToken)
     {
-        return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter), cancellationToken));
+        return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter, null, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken));
     }
 
     [HttpGet("events/page")]
@@ -42,9 +46,13 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         [FromQuery] string? entityType,
         [FromQuery] Guid? actorUserId,
         [FromQuery] string? quickFilter,
+        [FromQuery] string? relatedGarage,
+        [FromQuery] string? relatedAccountingMonth,
+        [FromQuery] string? relatedCounterparty,
+        [FromQuery] string? relatedDocument,
         CancellationToken cancellationToken)
     {
-        return Ok(await auditService.GetEventsPageAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter, offset), cancellationToken));
+        return Ok(await auditService.GetEventsPageAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter, offset, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken));
     }
 
     [HttpGet("events/{id:guid}")]
@@ -68,9 +76,13 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         [FromQuery] string? entityType,
         [FromQuery] Guid? actorUserId,
         [FromQuery] string? quickFilter,
+        [FromQuery] string? relatedGarage,
+        [FromQuery] string? relatedAccountingMonth,
+        [FromQuery] string? relatedCounterparty,
+        [FromQuery] string? relatedDocument,
         CancellationToken cancellationToken)
     {
-        var export = await auditService.ExportEventsCsvAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, null, section, actionKind, entityType, actorUserId, quickFilter), cancellationToken);
+        var export = await auditService.ExportEventsCsvAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, null, section, actionKind, entityType, actorUserId, quickFilter, null, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken);
         return File(export.Content, export.ContentType, export.FileName);
     }
 }

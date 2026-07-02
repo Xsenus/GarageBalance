@@ -3502,6 +3502,10 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const [quickFilter, setQuickFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [relatedGarage, setRelatedGarage] = useState('')
+  const [relatedAccountingMonth, setRelatedAccountingMonth] = useState('')
+  const [relatedCounterparty, setRelatedCounterparty] = useState('')
+  const [relatedDocument, setRelatedDocument] = useState('')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -3524,9 +3528,13 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     quickFilter: quickFilter || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    relatedGarage: relatedGarage.trim() || undefined,
+    relatedAccountingMonth: relatedAccountingMonth || undefined,
+    relatedCounterparty: relatedCounterparty.trim() || undefined,
+    relatedDocument: relatedDocument.trim() || undefined,
     offset: page.offset,
     limit: page.limit,
-  }), [actionKind, actorUserId, dateFrom, dateTo, entityType, page.limit, page.offset, quickFilter, search, section])
+  }), [actionKind, actorUserId, dateFrom, dateTo, entityType, page.limit, page.offset, quickFilter, relatedAccountingMonth, relatedCounterparty, relatedDocument, relatedGarage, search, section])
   const auditExportQuery = useMemo(() => ({
     search: auditQuery.search,
     section: auditQuery.section,
@@ -3536,6 +3544,10 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     quickFilter: auditQuery.quickFilter,
     dateFrom: auditQuery.dateFrom,
     dateTo: auditQuery.dateTo,
+    relatedGarage: auditQuery.relatedGarage,
+    relatedAccountingMonth: auditQuery.relatedAccountingMonth,
+    relatedCounterparty: auditQuery.relatedCounterparty,
+    relatedDocument: auditQuery.relatedDocument,
   }), [auditQuery])
 
   function closeAuditEventDetail() {
@@ -3656,6 +3668,18 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <select aria-label="Быстрый фильтр истории изменений" value={quickFilter} onChange={(event) => { setQuickFilter(event.target.value); resetAuditPageOffset() }}>
             {auditQuickFilterOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
+        </FormField>
+        <FormField label="Гараж">
+          <input aria-label="Связанный гараж истории изменений" placeholder="Номер или ID гаража" value={relatedGarage} onChange={(event) => { setRelatedGarage(event.target.value); resetAuditPageOffset() }} />
+        </FormField>
+        <FormField label="Месяц">
+          <input aria-label="Связанный месяц истории изменений" type="month" value={relatedAccountingMonth} onChange={(event) => { setRelatedAccountingMonth(event.target.value); resetAuditPageOffset() }} />
+        </FormField>
+        <FormField label="Контрагент">
+          <input aria-label="Связанный контрагент истории изменений" placeholder="Название или ID" value={relatedCounterparty} onChange={(event) => { setRelatedCounterparty(event.target.value); resetAuditPageOffset() }} />
+        </FormField>
+        <FormField label="Документ">
+          <input aria-label="Связанный документ истории изменений" placeholder="Номер или ID документа" value={relatedDocument} onChange={(event) => { setRelatedDocument(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="С даты">
           <input aria-label="Начало периода истории изменений" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); resetAuditPageOffset() }} />

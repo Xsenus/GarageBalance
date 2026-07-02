@@ -22,7 +22,7 @@ public sealed class AuditControllerTests
         var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
         var actorUserId = Guid.NewGuid();
 
-        var result = await controller.GetEvents(dateFrom, dateTo, "auth.login_success", "user", 50, "auth", "login", "user", actorUserId, "restores", CancellationToken.None);
+        var result = await controller.GetEvents(dateFrom, dateTo, "auth.login_success", "user", 50, "auth", "login", "user", actorUserId, "restores", "12", "2026-06", "supplier-1", "PAY-1", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var events = Assert.IsAssignableFrom<IReadOnlyList<AuditEventDto>>(ok.Value);
@@ -37,6 +37,10 @@ public sealed class AuditControllerTests
         Assert.Equal("user", service.LastRequest.EntityType);
         Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
         Assert.Equal("restores", service.LastRequest.QuickFilter);
+        Assert.Equal("12", service.LastRequest.RelatedGarage);
+        Assert.Equal("2026-06", service.LastRequest.RelatedAccountingMonth);
+        Assert.Equal("supplier-1", service.LastRequest.RelatedCounterparty);
+        Assert.Equal("PAY-1", service.LastRequest.RelatedDocument);
     }
 
     [Fact]
@@ -54,7 +58,7 @@ public sealed class AuditControllerTests
         var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
         var actorUserId = Guid.NewGuid();
 
-        var result = await controller.ExportEvents(dateFrom, dateTo, "auth.login_success", "user", "auth", "login", "user", actorUserId, "restores", CancellationToken.None);
+        var result = await controller.ExportEvents(dateFrom, dateTo, "auth.login_success", "user", "auth", "login", "user", actorUserId, "restores", "12", "2026-06", "supplier-1", "PAY-1", CancellationToken.None);
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal("text/csv; charset=utf-8", file.ContentType);
@@ -69,6 +73,10 @@ public sealed class AuditControllerTests
         Assert.Equal("user", service.LastRequest.EntityType);
         Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
         Assert.Equal("restores", service.LastRequest.QuickFilter);
+        Assert.Equal("12", service.LastRequest.RelatedGarage);
+        Assert.Equal("2026-06", service.LastRequest.RelatedAccountingMonth);
+        Assert.Equal("supplier-1", service.LastRequest.RelatedCounterparty);
+        Assert.Equal("PAY-1", service.LastRequest.RelatedDocument);
     }
 
     [Fact]
@@ -114,7 +122,7 @@ public sealed class AuditControllerTests
         var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
         var actorUserId = Guid.NewGuid();
 
-        var result = await controller.GetEventsPage(dateFrom, dateTo, null, "garage", 10, 10, "finance", "create", "financial_operation", actorUserId, "financial", CancellationToken.None);
+        var result = await controller.GetEventsPage(dateFrom, dateTo, null, "garage", 10, 10, "finance", "create", "financial_operation", actorUserId, "financial", "12", "2026-06", "supplier-1", "PAY-1", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var page = Assert.IsType<AuditEventPageDto>(ok.Value);
@@ -131,6 +139,10 @@ public sealed class AuditControllerTests
         Assert.Equal("financial_operation", service.LastRequest.EntityType);
         Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
         Assert.Equal("financial", service.LastRequest.QuickFilter);
+        Assert.Equal("12", service.LastRequest.RelatedGarage);
+        Assert.Equal("2026-06", service.LastRequest.RelatedAccountingMonth);
+        Assert.Equal("supplier-1", service.LastRequest.RelatedCounterparty);
+        Assert.Equal("PAY-1", service.LastRequest.RelatedDocument);
     }
 
     private sealed class FakeAuditService : IAuditService

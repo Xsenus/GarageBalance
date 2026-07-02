@@ -30,7 +30,7 @@ export type AuditEventPageDto = {
   limit: number
 }
 
-export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; offset?: number; limit?: number; section?: string; actionKind?: string; entityType?: string; actorUserId?: string; quickFilter?: string }
+export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; offset?: number; limit?: number; section?: string; actionKind?: string; entityType?: string; actorUserId?: string; quickFilter?: string; relatedGarage?: string; relatedAccountingMonth?: string; relatedCounterparty?: string; relatedDocument?: string }
 
 export type AuditClient = {
   getEvents(accessToken: string, params?: AuditEventQuery): Promise<AuditEventDto[]>
@@ -105,6 +105,18 @@ function buildQuery(params: AuditEventQuery = {}) {
   }
   if (params.quickFilter) {
     searchParams.set('quickFilter', params.quickFilter)
+  }
+  if (params.relatedGarage) {
+    searchParams.set('relatedGarage', params.relatedGarage)
+  }
+  if (params.relatedAccountingMonth) {
+    searchParams.set('relatedAccountingMonth', params.relatedAccountingMonth)
+  }
+  if (params.relatedCounterparty) {
+    searchParams.set('relatedCounterparty', params.relatedCounterparty)
+  }
+  if (params.relatedDocument) {
+    searchParams.set('relatedDocument', params.relatedDocument)
   }
   return searchParams.toString()
 }
