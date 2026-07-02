@@ -133,6 +133,28 @@ public sealed class DictionariesControllerTests
         Assert.Equal(actorUserId, service.LastActorUserId);
     }
 
+    [Theory]
+    [InlineData("garage")]
+    [InlineData("supplierGroup")]
+    [InlineData("supplier")]
+    [InlineData("incomeType")]
+    [InlineData("expenseType")]
+    [InlineData("tariff")]
+    public async Task RestoreEndpoints_ReturnOkActiveRecordAndPassActorUserId(string dictionaryKind)
+    {
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var service = CreateRestoreService(dictionaryKind, id);
+        var controller = CreateController(service, actorUserId);
+
+        var result = await RestoreDictionaryRecord(controller, dictionaryKind, id);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        AssertDictionaryRecordIsActive(dictionaryKind, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(id, service.LastRestoreId);
+    }
+
     [Fact]
     public async Task RestoreTariff_ReturnsConflictForDuplicateTariff()
     {
@@ -244,9 +266,82 @@ public sealed class DictionariesControllerTests
         return controller;
     }
 
+    private static FakeDictionaryService CreateRestoreService(string dictionaryKind, Guid id)
+    {
+        var groupId = Guid.NewGuid();
+        return dictionaryKind switch
+        {
+            "garage" => new FakeDictionaryService
+            {
+                RestoreGarageResult = DictionaryResult<GarageDto>.Success(new GarageDto(id, "12", 1, 1, null, null, 0, null, null, null, false))
+            },
+            "supplierGroup" => new FakeDictionaryService
+            {
+                RestoreSupplierGroupResult = DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(id, "Коммунальные услуги", false, false))
+            },
+            "supplier" => new FakeDictionaryService
+            {
+                RestoreSupplierResult = DictionaryResult<SupplierDto>.Success(new SupplierDto(id, "Водоканал", groupId, "Коммунальные услуги", null, null, null, null, null, 0, null, false))
+            },
+            "incomeType" => new FakeDictionaryService
+            {
+                RestoreIncomeTypeResult = DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(id, "Членский взнос", null, false, false))
+            },
+            "expenseType" => new FakeDictionaryService
+            {
+                RestoreExpenseTypeResult = DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(id, "Электроэнергия", null, false, false))
+            },
+            "tariff" => new FakeDictionaryService
+            {
+                RestoreTariffResult = DictionaryResult<TariffDto>.Success(new TariffDto(id, "Электроэнергия", "meter_electricity", 3.5m, new DateOnly(2026, 1, 1), null, false))
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.")
+        };
+    }
+
+    private static async Task<IActionResult> RestoreDictionaryRecord(DictionariesController controller, string dictionaryKind, Guid id)
+    {
+        return dictionaryKind switch
+        {
+            "garage" => (await controller.RestoreGarage(id, CancellationToken.None)).Result!,
+            "supplierGroup" => (await controller.RestoreSupplierGroup(id, CancellationToken.None)).Result!,
+            "supplier" => (await controller.RestoreSupplier(id, CancellationToken.None)).Result!,
+            "incomeType" => (await controller.RestoreIncomeType(id, CancellationToken.None)).Result!,
+            "expenseType" => (await controller.RestoreExpenseType(id, CancellationToken.None)).Result!,
+            "tariff" => (await controller.RestoreTariff(id, CancellationToken.None)).Result!,
+            _ => throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.")
+        };
+    }
+
+    private static void AssertDictionaryRecordIsActive(string dictionaryKind, object? value)
+    {
+        switch (dictionaryKind)
+        {
+            case "garage":
+                Assert.False(Assert.IsType<GarageDto>(value).IsArchived);
+                break;
+            case "supplierGroup":
+                Assert.False(Assert.IsType<SupplierGroupDto>(value).IsArchived);
+                break;
+            case "supplier":
+                Assert.False(Assert.IsType<SupplierDto>(value).IsArchived);
+                break;
+            case "incomeType":
+            case "expenseType":
+                Assert.False(Assert.IsType<AccountingTypeDto>(value).IsArchived);
+                break;
+            case "tariff":
+                Assert.False(Assert.IsType<TariffDto>(value).IsArchived);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.");
+        }
+    }
+
     private sealed class FakeDictionaryService : IDictionaryService
     {
         public Guid? LastActorUserId { get; private set; }
+        public Guid? LastRestoreId { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastOwnerListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
@@ -259,7 +354,12 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> CreateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<GarageDto> RestoreGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierGroupDto> RestoreSupplierGroupResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierDto> RestoreSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> ArchiveIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<AccountingTypeDto> RestoreIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<AccountingTypeDto> RestoreExpenseTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> UpdateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
@@ -296,6 +396,7 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<OwnerDto>> RestoreOwnerAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastRestoreId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreOwnerResult);
         }
@@ -330,7 +431,9 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<GarageDto>> RestoreGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<GarageDto>.Failure("garage_not_found", "Not found."));
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreGarageResult);
         }
 
         public Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -362,7 +465,9 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<SupplierGroupDto>> RestoreSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreSupplierGroupResult);
         }
 
         public Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -395,7 +500,9 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<SupplierDto>> RestoreSupplierAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Not found."));
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreSupplierResult);
         }
 
         public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -427,7 +534,9 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<AccountingTypeDto>> RestoreIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Not found."));
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreIncomeTypeResult);
         }
 
         public Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -459,7 +568,9 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<AccountingTypeDto>> RestoreExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreExpenseTypeResult);
         }
 
         public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -493,6 +604,8 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<TariffDto>> RestoreTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
             return Task.FromResult(RestoreTariffResult);
         }
     }
