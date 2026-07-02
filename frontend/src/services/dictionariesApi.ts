@@ -136,43 +136,43 @@ export type DictionaryClient = {
   getOwnersPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<OwnerDto>>
   createOwner(accessToken: string, request: UpsertOwnerRequest): Promise<OwnerDto>
   updateOwner(accessToken: string, id: string, request: UpsertOwnerRequest): Promise<OwnerDto>
-  archiveOwner(accessToken: string, id: string): Promise<void>
+  archiveOwner(accessToken: string, id: string, reason: string): Promise<void>
   restoreOwner(accessToken: string, id: string): Promise<OwnerDto>
   getGarages(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<GarageDto[]>
   getGaragesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<GarageDto>>
   createGarage(accessToken: string, request: UpsertGarageRequest): Promise<GarageDto>
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
-  archiveGarage(accessToken: string, id: string): Promise<void>
+  archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
   getSupplierGroups(accessToken: string, limit?: number, includeArchived?: boolean): Promise<SupplierGroupDto[]>
   getSupplierGroupsPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<SupplierGroupDto>>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   updateSupplierGroup?(accessToken: string, id: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
-  archiveSupplierGroup(accessToken: string, id: string): Promise<void>
+  archiveSupplierGroup(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplierGroup(accessToken: string, id: string): Promise<SupplierGroupDto>
   getSuppliers(accessToken: string, groupId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierDto[]>
   getSuppliersPage?(accessToken: string, groupId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<SupplierDto>>
   createSupplier(accessToken: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   updateSupplier(accessToken: string, id: string, request: UpsertSupplierRequest): Promise<SupplierDto>
-  archiveSupplier(accessToken: string, id: string): Promise<void>
+  archiveSupplier(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplier(accessToken: string, id: string): Promise<SupplierDto>
   getIncomeTypes(accessToken: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
   getIncomeTypesPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
   createIncomeType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   updateIncomeType?(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
-  archiveIncomeType(accessToken: string, id: string): Promise<void>
+  archiveIncomeType(accessToken: string, id: string, reason: string): Promise<void>
   restoreIncomeType(accessToken: string, id: string): Promise<AccountingTypeDto>
   getExpenseTypes(accessToken: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
   getExpenseTypesPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
   createExpenseType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   updateExpenseType?(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
-  archiveExpenseType(accessToken: string, id: string): Promise<void>
+  archiveExpenseType(accessToken: string, id: string, reason: string): Promise<void>
   restoreExpenseType(accessToken: string, id: string): Promise<AccountingTypeDto>
   getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<TariffDto[]>
   getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<TariffDto>>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
-  archiveTariff(accessToken: string, id: string): Promise<void>
+  archiveTariff(accessToken: string, id: string, reason: string): Promise<void>
   restoreTariff(accessToken: string, id: string): Promise<TariffDto>
 }
 
@@ -226,8 +226,8 @@ export const dictionariesApi: DictionaryClient = {
   updateOwner(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/owners/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveOwner(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/owners/${id}`, { method: 'DELETE' })
+  archiveOwner(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/owners/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreOwner(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/owners/${id}/restore`, { method: 'POST' })
@@ -244,8 +244,8 @@ export const dictionariesApi: DictionaryClient = {
   updateGarage(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveGarage(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'DELETE' })
+  archiveGarage(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreGarage(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}/restore`, { method: 'POST' })
@@ -262,8 +262,8 @@ export const dictionariesApi: DictionaryClient = {
   updateSupplierGroup(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/supplier-groups/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveSupplierGroup(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/supplier-groups/${id}`, { method: 'DELETE' })
+  archiveSupplierGroup(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/supplier-groups/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreSupplierGroup(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/supplier-groups/${id}/restore`, { method: 'POST' })
@@ -280,8 +280,8 @@ export const dictionariesApi: DictionaryClient = {
   updateSupplier(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveSupplier(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/suppliers/${id}`, { method: 'DELETE' })
+  archiveSupplier(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/suppliers/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreSupplier(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/suppliers/${id}/restore`, { method: 'POST' })
@@ -298,8 +298,8 @@ export const dictionariesApi: DictionaryClient = {
   updateIncomeType(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/income-types/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveIncomeType(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/income-types/${id}`, { method: 'DELETE' })
+  archiveIncomeType(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/income-types/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreIncomeType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/income-types/${id}/restore`, { method: 'POST' })
@@ -316,8 +316,8 @@ export const dictionariesApi: DictionaryClient = {
   updateExpenseType(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/expense-types/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveExpenseType(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/expense-types/${id}`, { method: 'DELETE' })
+  archiveExpenseType(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/expense-types/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreExpenseType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/expense-types/${id}/restore`, { method: 'POST' })
@@ -334,8 +334,8 @@ export const dictionariesApi: DictionaryClient = {
   updateTariff(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  archiveTariff(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'DELETE' })
+  archiveTariff(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
   restoreTariff(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}/restore`, { method: 'POST' })

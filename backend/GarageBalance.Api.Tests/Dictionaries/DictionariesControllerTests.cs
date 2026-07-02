@@ -93,10 +93,25 @@ public sealed class DictionariesControllerTests
         };
         var controller = CreateController(service, actorUserId);
 
-        var result = await controller.ArchiveOwner(ownerId, CancellationToken.None);
+        var result = await controller.ArchiveOwner(ownerId, new ArchiveDictionaryEntryRequest("Дубликат"), CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal("Дубликат", service.LastArchiveReason);
+    }
+
+    [Fact]
+    public async Task ArchiveOwner_ReturnsBadRequestWhenReasonIsEmpty()
+    {
+        var service = new FakeDictionaryService();
+        var controller = CreateController(service);
+
+        var result = await controller.ArchiveOwner(Guid.NewGuid(), new ArchiveDictionaryEntryRequest("   "), CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("dictionary_archive_reason_required", problem.Title);
+        Assert.Null(service.LastArchiveReason);
     }
 
     [Fact]
@@ -141,7 +156,7 @@ public sealed class DictionariesControllerTests
             ArchiveIncomeTypeResult = DictionaryResult<AccountingTypeDto>.Failure("income_type_system", "Системный вид поступления нельзя архивировать.")
         });
 
-        var result = await controller.ArchiveIncomeType(Guid.NewGuid(), CancellationToken.None);
+        var result = await controller.ArchiveIncomeType(Guid.NewGuid(), new ArchiveDictionaryEntryRequest("Дубль"), CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
@@ -239,6 +254,7 @@ public sealed class DictionariesControllerTests
         public (int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
+        public string? LastArchiveReason { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -271,9 +287,10 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<OwnerDto>.Failure("owner_not_found", "Not found."));
         }
 
-        public Task<DictionaryResult<OwnerDto>> ArchiveOwnerAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<OwnerDto>> ArchiveOwnerAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
             return Task.FromResult(ArchiveOwnerResult);
         }
 
@@ -305,8 +322,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<GarageDto>.Failure("garage_not_found", "Not found."));
         }
 
-        public Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastArchiveReason = reason;
             return Task.FromResult(DictionaryResult<GarageDto>.Failure("garage_not_found", "Not found."));
         }
 
@@ -336,8 +354,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
         }
 
-        public Task<DictionaryResult<SupplierGroupDto>> ArchiveSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<SupplierGroupDto>> ArchiveSupplierGroupAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastArchiveReason = reason;
             return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
         }
 
@@ -368,8 +387,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(UpdateSupplierResult);
         }
 
-        public Task<DictionaryResult<SupplierDto>> ArchiveSupplierAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<SupplierDto>> ArchiveSupplierAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastArchiveReason = reason;
             return Task.FromResult(DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Not found."));
         }
 
@@ -399,8 +419,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Not found."));
         }
 
-        public Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastArchiveReason = reason;
             return Task.FromResult(ArchiveIncomeTypeResult);
         }
 
@@ -430,8 +451,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
         }
 
-        public Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastArchiveReason = reason;
             return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
         }
 
@@ -463,8 +485,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(UpdateTariffResult);
         }
 
-        public Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        public Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastArchiveReason = reason;
             return Task.FromResult(DictionaryResult<TariffDto>.Failure("tariff_not_found", "Not found."));
         }
 

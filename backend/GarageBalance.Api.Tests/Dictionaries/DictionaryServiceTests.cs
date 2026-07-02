@@ -39,7 +39,7 @@ public sealed class DictionaryServiceTests
             new UpsertOwnerRequest("Ivanov", "Ivan", null, "+7 900", "Private address", null),
             actorUserId,
             CancellationToken.None);
-        var archived = await service.ArchiveOwnerAsync(created.Value!.Id, actorUserId, CancellationToken.None);
+        var archived = await service.ArchiveOwnerAsync(created.Value!.Id, "Дубликат карточки", actorUserId, CancellationToken.None);
 
         Assert.True(archived.Succeeded);
         var createAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_created");
@@ -54,10 +54,10 @@ public sealed class DictionaryServiceTests
         var archiveAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived");
         Assert.Equal("dictionary", archiveAudit.Section);
         Assert.Equal("archive", archiveAudit.ActionKind);
-        Assert.Contains("Архивирование записи справочника.", archiveAudit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Архивирован владелец Ivanov Ivan.", archiveAudit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(archiveAudit.MetadataJson!);
         Assert.Equal("owner", metadata.RootElement.GetProperty("dictionaryEntityType").GetString());
-        Assert.Equal("Архивирование записи справочника.", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("Дубликат карточки", metadata.RootElement.GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -111,13 +111,28 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
 
-        var result = await service.ArchiveOwnerAsync(ownerResult.Value!.Id, actorUserId, CancellationToken.None);
+        var result = await service.ArchiveOwnerAsync(ownerResult.Value!.Id, "Закрытие карточки", actorUserId, CancellationToken.None);
         var owners = await service.GetOwnersAsync(null, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.True(result.Value!.IsArchived);
         Assert.Empty(owners);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task ArchiveOwnerAsync_RejectsEmptyReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
+
+        var result = await service.ArchiveOwnerAsync(ownerResult.Value!.Id, "   ", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("dictionary_archive_reason_required", result.ErrorCode);
+        Assert.False(database.Context.Owners.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived");
     }
 
     [Fact]
@@ -134,13 +149,13 @@ public sealed class DictionaryServiceTests
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Архивная выплата", "arch_expense"), null, CancellationToken.None);
         var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Архивный тариф", "fixed", 10, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
 
-        await service.ArchiveOwnerAsync(owner.Value!.Id, null, CancellationToken.None);
-        await service.ArchiveGarageAsync(garage.Value!.Id, null, CancellationToken.None);
-        await service.ArchiveSupplierAsync(supplier.Value!.Id, null, CancellationToken.None);
-        await service.ArchiveSupplierGroupAsync(group.Value.Id, null, CancellationToken.None);
-        await service.ArchiveIncomeTypeAsync(incomeType.Value!.Id, null, CancellationToken.None);
-        await service.ArchiveExpenseTypeAsync(expenseType.Value!.Id, null, CancellationToken.None);
-        await service.ArchiveTariffAsync(tariff.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveOwnerAsync(owner.Value!.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveGarageAsync(garage.Value!.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(supplier.Value!.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(group.Value.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(incomeType.Value!.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(expenseType.Value!.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveTariffAsync(tariff.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         Assert.Empty(await service.GetOwnersAsync(null, CancellationToken.None));
         Assert.Empty(await service.GetGaragesAsync(null, CancellationToken.None));
@@ -167,7 +182,7 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var actorUserId = Guid.NewGuid();
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
-        await service.ArchiveOwnerAsync(ownerResult.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveOwnerAsync(ownerResult.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.RestoreOwnerAsync(ownerResult.Value.Id, actorUserId, CancellationToken.None);
         var owners = await service.GetOwnersAsync(null, CancellationToken.None);
@@ -228,7 +243,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
-        await service.ArchiveGarageAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveGarageAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
         var result = await service.RestoreGarageAsync(archived.Value.Id, Guid.NewGuid(), CancellationToken.None);
@@ -243,7 +258,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archivedGarage = await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, "old import row"), null, CancellationToken.None);
-        await service.ArchiveGarageAsync(archivedGarage.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveGarageAsync(archivedGarage.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, null, 100m, null, null, "new active row"), null, CancellationToken.None);
 
@@ -317,7 +332,7 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
-        var result = await service.ArchiveGarageAsync(garageResult.Value!.Id, null, CancellationToken.None);
+        var result = await service.ArchiveGarageAsync(garageResult.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         var garages = await service.GetGaragesAsync(null, CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -393,7 +408,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
-        await service.ArchiveSupplierGroupAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
 
@@ -423,7 +438,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
-        await service.ArchiveSupplierGroupAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
 
         var result = await service.RestoreSupplierGroupAsync(archived.Value.Id, Guid.NewGuid(), CancellationToken.None);
@@ -456,8 +471,8 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
-        await service.ArchiveSupplierAsync(supplier.Value!.Id, null, CancellationToken.None);
-        await service.ArchiveSupplierGroupAsync(group.Value.Id, null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(supplier.Value!.Id, "Тестовая причина", null, CancellationToken.None);
+        await service.ArchiveSupplierGroupAsync(group.Value.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.RestoreSupplierAsync(supplier.Value.Id, Guid.NewGuid(), CancellationToken.None);
 
@@ -484,7 +499,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_old"), null, CancellationToken.None);
-        await service.ArchiveIncomeTypeAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_new"), null, CancellationToken.None);
 
@@ -500,7 +515,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_old"), null, CancellationToken.None);
-        await service.ArchiveIncomeTypeAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_new"), null, CancellationToken.None);
 
         var result = await service.RestoreIncomeTypeAsync(archived.Value.Id, Guid.NewGuid(), CancellationToken.None);
@@ -523,7 +538,7 @@ public sealed class DictionaryServiceTests
         await database.Context.SaveChangesAsync();
         var service = new DictionaryService(database.Context);
 
-        var result = await service.ArchiveIncomeTypeAsync(systemType.Id, null, CancellationToken.None);
+        var result = await service.ArchiveIncomeTypeAsync(systemType.Id, "Тестовая причина", null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("income_type_system", result.ErrorCode);
@@ -593,7 +608,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_old"), null, CancellationToken.None);
-        await service.ArchiveExpenseTypeAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_new"), null, CancellationToken.None);
 
@@ -609,7 +624,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = new DictionaryService(database.Context);
         var archived = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_old"), null, CancellationToken.None);
-        await service.ArchiveExpenseTypeAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_new"), null, CancellationToken.None);
 
         var result = await service.RestoreExpenseTypeAsync(archived.Value.Id, Guid.NewGuid(), CancellationToken.None);
@@ -639,7 +654,7 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var effectiveFrom = new DateOnly(2026, 7, 1);
         var archived = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50m, effectiveFrom, null), null, CancellationToken.None);
-        await service.ArchiveTariffAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveTariffAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 60m, effectiveFrom, "Новая редакция"), null, CancellationToken.None);
 
@@ -907,7 +922,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100.5m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
 
-        var result = await service.ArchiveTariffAsync(created.Value!.Id, actorUserId, CancellationToken.None);
+        var result = await service.ArchiveTariffAsync(created.Value!.Id, "Тариф заменен новым", actorUserId, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_archived");
@@ -924,7 +939,7 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100.5m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
-        await service.ArchiveTariffAsync(created.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveTariffAsync(created.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
         var result = await service.RestoreTariffAsync(created.Value.Id, actorUserId, CancellationToken.None);
         var tariffs = await service.GetTariffsAsync("people", CancellationToken.None);
@@ -942,7 +957,7 @@ public sealed class DictionaryServiceTests
         var service = new DictionaryService(database.Context);
         var effectiveFrom = new DateOnly(2026, 7, 1);
         var archived = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100m, effectiveFrom, null), null, CancellationToken.None);
-        await service.ArchiveTariffAsync(archived.Value!.Id, null, CancellationToken.None);
+        await service.ArchiveTariffAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 120m, effectiveFrom, null), null, CancellationToken.None);
 
         var result = await service.RestoreTariffAsync(archived.Value.Id, Guid.NewGuid(), CancellationToken.None);

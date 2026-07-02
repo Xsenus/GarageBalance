@@ -6294,6 +6294,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [editor, setEditor] = useState<DictionaryEditorState | null>(null)
   const [pendingEditorConfirmation, setPendingEditorConfirmation] = useState<{ editor: DictionaryEditorState; changes: DictionaryChangePreview[] } | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
+  const [archiveReason, setArchiveReason] = useState('')
+  const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<{ section: DictionarySectionKey; item: DictionaryRecord } | null>(null)
   const [balanceHistoryGarage, setBalanceHistoryGarage] = useState<GarageDto | null>(null)
   const [balanceHistory, setBalanceHistory] = useState<GarageBalanceHistoryDto | null>(null)
@@ -6330,7 +6332,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor) && !pendingEditorConfirmation, () => closeEditor())
   useEscapeKey(Boolean(pendingEditorConfirmation), () => setPendingEditorConfirmation(null))
-  useEscapeKey(Boolean(archiveTarget), () => setArchiveTarget(null))
+  useEscapeKey(Boolean(archiveTarget), () => closeArchiveTarget())
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(balanceHistoryGarage), () => closeBalanceHistory())
 
@@ -6458,6 +6460,18 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   function openContextMenu(event: MouseEvent, section: DictionarySectionKey, item: DictionaryRecord) {
     event.preventDefault()
     setContextMenu({ section, item, x: event.clientX, y: event.clientY })
+  }
+
+  function openArchiveTarget(section: DictionarySectionKey, item: DictionaryRecord) {
+    setArchiveReason('')
+    setArchiveReasonError(null)
+    setArchiveTarget({ section, item })
+  }
+
+  function closeArchiveTarget() {
+    setArchiveTarget(null)
+    setArchiveReason('')
+    setArchiveReasonError(null)
   }
 
   async function openBalanceHistory(garage: GarageDto) {
@@ -6782,27 +6796,34 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       return
     }
 
+    const reason = archiveReason.trim()
+    if (!reason) {
+      setArchiveReasonError('Укажите причину удаления записи.')
+      return
+    }
+
     setSaving('dictionary-archive')
     setError(null)
+    setArchiveReasonError(null)
     try {
       if (archiveTarget.section === 'owners') {
-        await dictionaryClient.archiveOwner(auth.accessToken, (archiveTarget.item as OwnerDto).id)
+        await dictionaryClient.archiveOwner(auth.accessToken, (archiveTarget.item as OwnerDto).id, reason)
       } else if (archiveTarget.section === 'garages') {
-        await dictionaryClient.archiveGarage(auth.accessToken, (archiveTarget.item as GarageDto).id)
+        await dictionaryClient.archiveGarage(auth.accessToken, (archiveTarget.item as GarageDto).id, reason)
       } else if (archiveTarget.section === 'supplierGroups') {
-        await dictionaryClient.archiveSupplierGroup(auth.accessToken, (archiveTarget.item as SupplierGroupDto).id)
+        await dictionaryClient.archiveSupplierGroup(auth.accessToken, (archiveTarget.item as SupplierGroupDto).id, reason)
       } else if (archiveTarget.section === 'suppliers') {
-        await dictionaryClient.archiveSupplier(auth.accessToken, (archiveTarget.item as SupplierDto).id)
+        await dictionaryClient.archiveSupplier(auth.accessToken, (archiveTarget.item as SupplierDto).id, reason)
       } else if (archiveTarget.section === 'incomeTypes') {
-        await dictionaryClient.archiveIncomeType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id)
+        await dictionaryClient.archiveIncomeType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id, reason)
       } else if (archiveTarget.section === 'expenseTypes') {
-        await dictionaryClient.archiveExpenseType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id)
+        await dictionaryClient.archiveExpenseType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id, reason)
       } else {
-        await dictionaryClient.archiveTariff(auth.accessToken, (archiveTarget.item as TariffDto).id)
+        await dictionaryClient.archiveTariff(auth.accessToken, (archiveTarget.item as TariffDto).id, reason)
       }
 
       const section = archiveTarget.section
-      setArchiveTarget(null)
+      closeArchiveTarget()
       await refreshAfterMutation(section)
       showToast('Запись удалена из рабочего списка.')
     } catch (caught) {
@@ -6907,7 +6928,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     }
 
     return (
-      <button className="ghost-button dictionary-row-action dictionary-row-action-danger" type="button" disabled={!canWriteActiveSection} onClick={() => setArchiveTarget({ section: activeSection, item })}>
+      <button className="ghost-button dictionary-row-action dictionary-row-action-danger" type="button" disabled={!canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
         <Trash2 size={15} />
         <span>Удалить</span>
       </button>
@@ -7287,7 +7308,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
                 <span>Изменить</span>
               </button>
               <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
-                setArchiveTarget({ section: contextMenu.section, item: contextMenu.item })
+                openArchiveTarget(contextMenu.section, contextMenu.item)
                 setContextMenu(null)
               }}>
                 <Trash2 size={15} />
@@ -7445,7 +7466,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       ) : null}
 
       {archiveTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setArchiveTarget(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => closeArchiveTarget()}>
           <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-archive-title" aria-describedby="dictionary-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -7453,14 +7474,33 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
                 <h3 id="dictionary-archive-title">Подтвердите удаление</h3>
                 <p>{getDictionaryRecordTitle(archiveTarget.section, archiveTarget.item)}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить удаление" onClick={() => setArchiveTarget(null)} disabled={saving === 'dictionary-archive'}>
+              <button className="icon-button" type="button" aria-label="Отменить удаление" onClick={() => closeArchiveTarget()} disabled={saving === 'dictionary-archive'}>
                 <X size={18} />
               </button>
             </div>
             <p className="confirmation-text" id="dictionary-archive-description">Запись будет скрыта из рабочих таблиц, но останется в audit-журнале и связанной финансовой истории.</p>
+            <label className="field-label" htmlFor="dictionary-archive-reason">Причина удаления</label>
+            <textarea
+              id="dictionary-archive-reason"
+              aria-label="Причина удаления"
+              aria-invalid={Boolean(archiveReasonError)}
+              aria-describedby={archiveReasonError ? 'dictionary-archive-reason-error' : undefined}
+              maxLength={1000}
+              value={archiveReason}
+              onChange={(event) => {
+                setArchiveReason(event.target.value)
+                if (archiveReasonError && event.target.value.trim()) {
+                  setArchiveReasonError(null)
+                }
+              }}
+              placeholder="Например: дубль, ошибочная карточка, услуга больше не используется"
+              disabled={saving === 'dictionary-archive'}
+              required
+            />
+            {archiveReasonError ? <p className="form-error" id="dictionary-archive-reason-error">{archiveReasonError}</p> : null}
             <div className="detail-dialog-actions">
-              <button ref={archiveCancelRef} className="ghost-button" type="button" onClick={() => setArchiveTarget(null)} disabled={saving === 'dictionary-archive'}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={() => void confirmArchive()} disabled={saving === 'dictionary-archive'}>
+              <button ref={archiveCancelRef} className="ghost-button" type="button" onClick={() => closeArchiveTarget()} disabled={saving === 'dictionary-archive'}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={() => void confirmArchive()} disabled={saving === 'dictionary-archive' || !archiveReason.trim()}>
                 <Trash2 size={16} />
                 <span>{saving === 'dictionary-archive' ? 'Удаляем...' : 'Удалить запись'}</span>
               </button>
@@ -7940,7 +7980,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     action()
   }
 
-  async function archiveDictionaryItem(scope: string, action: () => Promise<void>) {
+  async function archiveDictionaryItem(scope: string, reason: string, action: (reason: string) => Promise<void>) {
     if (scope === 'tariff' && !canManageTariffs) {
       setError('Для архивирования тарифов нужно право tariffs.manage.')
       return
@@ -7951,7 +7991,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
       return
     }
 
-    await runSaving(`archive-${scope}`, action)
+    await runSaving(`archive-${scope}`, () => action(reason))
   }
 
   async function runSaving(scope: string, action: () => Promise<void>) {
@@ -7997,8 +8037,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               title: owner.fullName,
               meta: owner.phone ?? 'телефон не указан',
               archiveLabel: canWriteDictionaries ? `Архивировать владельца ${owner.fullName}` : undefined,
-              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('owner', async () => {
-                await dictionaryClient.archiveOwner(auth.accessToken, owner.id)
+              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('owner', reason, async (archiveReason) => {
+                await dictionaryClient.archiveOwner(auth.accessToken, owner.id, archiveReason)
                 setOwners((items) => items.filter((item) => item.id !== owner.id))
               }) : undefined,
             }))}
@@ -8058,8 +8098,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               openLabel: `Открыть карточку гаража ${garage.number}`,
               onOpen: () => setSelectedGarage(garage),
               archiveLabel: canWriteDictionaries ? `Архивировать гараж ${garage.number}` : undefined,
-              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('garage', async () => {
-                await dictionaryClient.archiveGarage(auth.accessToken, garage.id)
+              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('garage', reason, async (archiveReason) => {
+                await dictionaryClient.archiveGarage(auth.accessToken, garage.id, archiveReason)
                 setGarages((items) => items.filter((item) => item.id !== garage.id))
               }) : undefined,
             }))}
@@ -8120,8 +8160,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               title: supplier.name,
               meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''} · старт ${formatMoney(supplier.startingBalance)}`,
               archiveLabel: canWriteDictionaries ? `Архивировать поставщика ${supplier.name}` : undefined,
-              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('supplier', async () => {
-                await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id)
+              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('supplier', reason, async (archiveReason) => {
+                await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id, archiveReason)
                 setSuppliers((items) => items.filter((item) => item.id !== supplier.id))
               }) : undefined,
             }))}
@@ -8146,8 +8186,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               title: item.name,
               meta: item.code ?? 'код не указан',
               archiveLabel: canWriteDictionaries ? `Архивировать вид поступления ${item.name}` : undefined,
-              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('income-type', async () => {
-                await dictionaryClient.archiveIncomeType(auth.accessToken, item.id)
+              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('income-type', reason, async (archiveReason) => {
+                await dictionaryClient.archiveIncomeType(auth.accessToken, item.id, archiveReason)
                 setIncomeTypes((items) => items.filter((incomeType) => incomeType.id !== item.id))
               }) : undefined,
             }))}
@@ -8170,8 +8210,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               title: item.name,
               meta: item.code ?? 'код не указан',
               archiveLabel: canWriteDictionaries ? `Архивировать вид выплаты ${item.name}` : undefined,
-              onArchive: canWriteDictionaries ? () => archiveDictionaryItem('expense-type', async () => {
-                await dictionaryClient.archiveExpenseType(auth.accessToken, item.id)
+              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('expense-type', reason, async (archiveReason) => {
+                await dictionaryClient.archiveExpenseType(auth.accessToken, item.id, archiveReason)
                 setExpenseTypes((items) => items.filter((expenseType) => expenseType.id !== item.id))
               }) : undefined,
             }))}
@@ -8222,8 +8262,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               openLabel: canManageTariffs ? `Изменить тариф ${item.name}` : undefined,
               onOpen: canManageTariffs ? () => editTariff(item) : undefined,
               archiveLabel: canManageTariffs ? `Архивировать тариф ${item.name}` : undefined,
-              onArchive: canManageTariffs ? () => archiveDictionaryItem('tariff', async () => {
-                await dictionaryClient.archiveTariff(auth.accessToken, item.id)
+              onArchive: canManageTariffs ? (reason) => archiveDictionaryItem('tariff', reason, async (archiveReason) => {
+                await dictionaryClient.archiveTariff(auth.accessToken, item.id, archiveReason)
                 setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
                 if (editingTariffId === item.id) {
                   resetTariffForm({ skipConfirmation: true })
@@ -8319,12 +8359,14 @@ type DictionaryListItem = {
   openLabel?: string
   onOpen?: () => void
   archiveLabel?: string
-  onArchive?: () => Promise<void> | void
+  onArchive?: (reason: string) => Promise<void> | void
 }
 
 function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emptyText: string }) {
   const [pendingArchive, setPendingArchive] = useState<DictionaryListItem | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+  const [archiveReason, setArchiveReason] = useState('')
+  const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null)
   const [showAllItems, setShowAllItems] = useState(false)
   const listId = useId()
   const compactLimit = 5
@@ -8334,17 +8376,35 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
   const archiveCancelButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingArchive) && !confirmingArchive)
   const archiveDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingArchive))
 
-  useEscapeKey(Boolean(pendingArchive) && !confirmingArchive, () => setPendingArchive(null))
+  useEscapeKey(Boolean(pendingArchive) && !confirmingArchive, () => closeArchiveDialog())
+
+  function openArchiveDialog(item: DictionaryListItem) {
+    setArchiveReason('')
+    setArchiveReasonError(null)
+    setPendingArchive(item)
+  }
+
+  function closeArchiveDialog() {
+    setPendingArchive(null)
+    setArchiveReason('')
+    setArchiveReasonError(null)
+  }
 
   async function confirmArchive() {
     if (!pendingArchive?.onArchive) {
       return
     }
 
+    const reason = archiveReason.trim()
+    if (!reason) {
+      setArchiveReasonError('Укажите причину архивирования записи.')
+      return
+    }
+
     setConfirmingArchive(true)
     try {
-      await pendingArchive.onArchive()
-      setPendingArchive(null)
+      await pendingArchive.onArchive(reason)
+      closeArchiveDialog()
     } finally {
       setConfirmingArchive(false)
     }
@@ -8373,7 +8433,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
                 </button>
               ) : null}
               {item.onArchive ? (
-                <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={() => setPendingArchive(item)}>
+                <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={() => openArchiveDialog(item)}>
                   <Trash2 size={16} />
                 </button>
               ) : null}
@@ -8392,7 +8452,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
       {pendingArchive ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
           if (!confirmingArchive) {
-            setPendingArchive(null)
+            closeArchiveDialog()
           }
         }}>
           <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`archive-confirmation-${pendingArchive.id}`} aria-describedby={`archive-confirmation-description-${pendingArchive.id}`} onMouseDown={(event) => event.stopPropagation()}>
@@ -8402,16 +8462,35 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
                 <h3 id={`archive-confirmation-${pendingArchive.id}`}>Подтвердите архивирование</h3>
                 <p>{pendingArchive.title}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить архивирование" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
+              <button className="icon-button" type="button" aria-label="Отменить архивирование" onClick={() => closeArchiveDialog()} disabled={confirmingArchive}>
                 <X size={18} />
               </button>
             </div>
             <p className="confirmation-text" id={`archive-confirmation-description-${pendingArchive.id}`}>Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.</p>
+            <label className="field-label" htmlFor={`archive-reason-${pendingArchive.id}`}>Причина архивирования</label>
+            <textarea
+              id={`archive-reason-${pendingArchive.id}`}
+              aria-label="Причина архивирования"
+              aria-invalid={Boolean(archiveReasonError)}
+              aria-describedby={archiveReasonError ? `archive-reason-error-${pendingArchive.id}` : undefined}
+              maxLength={1000}
+              value={archiveReason}
+              onChange={(event) => {
+                setArchiveReason(event.target.value)
+                if (archiveReasonError && event.target.value.trim()) {
+                  setArchiveReasonError(null)
+                }
+              }}
+              placeholder="Например: дубль, ошибочная запись, больше не используется"
+              disabled={confirmingArchive}
+              required
+            />
+            {archiveReasonError ? <p className="form-error" id={`archive-reason-error-${pendingArchive.id}`}>{archiveReasonError}</p> : null}
             <div className="detail-dialog-actions">
-              <button ref={archiveCancelButtonRef} className="ghost-button" type="button" onClick={() => setPendingArchive(null)} disabled={confirmingArchive}>
+              <button ref={archiveCancelButtonRef} className="ghost-button" type="button" onClick={() => closeArchiveDialog()} disabled={confirmingArchive}>
                 Отменить
               </button>
-              <button className="secondary-button" type="button" onClick={() => void confirmArchive()} disabled={confirmingArchive}>
+              <button className="secondary-button" type="button" onClick={() => void confirmArchive()} disabled={confirmingArchive || !archiveReason.trim()}>
                 <Trash2 size={16} />
                 <span>{confirmingArchive ? 'Архивируем...' : 'Архивировать запись'}</span>
               </button>

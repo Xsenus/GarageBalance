@@ -1728,9 +1728,11 @@ describe('App', () => {
   it('archives owner from dictionaries workspace', async () => {
     const user = userEvent.setup()
     let archivedOwnerId: string | null = null
+    let archiveReason: string | null = null
     const dictionaryClient = createDictionaryClient({
-      archiveOwner: async (_token, id) => {
+      archiveOwner: async (_token, id, reason) => {
         archivedOwnerId = id
+        archiveReason = reason
       },
     })
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -1746,8 +1748,11 @@ describe('App', () => {
     expect(archivedOwnerId).toBeNull()
     const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
     expect(within(deleteDialog).getByText('Запись будет скрыта из рабочих таблиц, но останется в audit-журнале и связанной финансовой истории.')).toBeInTheDocument()
+    expect(within(deleteDialog).getByRole('button', { name: 'Удалить запись' })).toBeDisabled()
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления'), 'Дубликат владельца')
     await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
     expect(archivedOwnerId).toBe('owner-1')
+    expect(archiveReason).toBe('Дубликат владельца')
     expect(await screen.findByText('Запись удалена из рабочего списка.')).toBeInTheDocument()
     return
 

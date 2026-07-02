@@ -26,6 +26,9 @@ public sealed record UpsertOwnerRequest(
     [MaxLength(500)] string? Address,
     [MaxLength(1000)] string? MeterNotes);
 
+public sealed record ArchiveDictionaryEntryRequest(
+    [Required, MaxLength(1000)] string Reason);
+
 public sealed record GarageDto(
     Guid Id,
     string Number,

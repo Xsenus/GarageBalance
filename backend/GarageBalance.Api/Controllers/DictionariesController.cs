@@ -53,10 +53,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("owners/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ArchiveOwner(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveOwner(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveOwnerAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveOwnerAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -114,10 +120,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("garages/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ArchiveGarage(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveGarage(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveGarageAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveGarageAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -175,11 +187,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("supplier-groups/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> ArchiveSupplierGroup(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveSupplierGroup(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveSupplierGroupAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveSupplierGroupAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -236,10 +254,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("suppliers/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ArchiveSupplier(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveSupplier(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveSupplierAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveSupplierAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -296,11 +320,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("income-types/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> ArchiveIncomeType(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveIncomeType(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveIncomeTypeAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveIncomeTypeAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -358,11 +388,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("expense-types/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> ArchiveExpenseType(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveExpenseType(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveExpenseTypeAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveExpenseTypeAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -420,10 +456,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpDelete("tariffs/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ArchiveTariff(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ArchiveTariff(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
     {
-        var result = await dictionaryService.ArchiveTariffAsync(id, GetActorUserId(), cancellationToken);
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveTariffAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
@@ -441,6 +483,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
+    }
+
+    private ActionResult? ValidateArchiveRequest(ArchiveDictionaryEntryRequest? request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+        {
+            return BadRequest(ApiProblemDetails.Create("dictionary_archive_reason_required", "Укажите причину удаления записи.", StatusCodes.Status400BadRequest));
+        }
+
+        return null;
     }
 
     private ActionResult<T> ToError<T>(DictionaryResult<T> result)

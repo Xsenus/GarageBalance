@@ -107,8 +107,13 @@ public sealed class DictionaryService(
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
-    public async Task<DictionaryResult<OwnerDto>> ArchiveOwnerAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<OwnerDto>> ArchiveOwnerAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<OwnerDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var owner = await dbContext.Owners.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (owner is null)
         {
@@ -118,7 +123,7 @@ public sealed class DictionaryService(
         owner.IsArchived = true;
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.owner_archived", "owner", owner.Id, $"Архивирован владелец {owner.FullName}.");
+        AddAudit(actorUserId, "dictionary.owner_archived", "owner", owner.Id, $"Архивирован владелец {owner.FullName}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
@@ -296,8 +301,13 @@ public sealed class DictionaryService(
         return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
     }
 
-    public async Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<GarageDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (garage is null)
         {
@@ -307,7 +317,7 @@ public sealed class DictionaryService(
         garage.IsArchived = true;
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.garage_archived", "garage", garage.Id, $"Архивирован гараж N {garage.Number}.");
+        AddAudit(actorUserId, "dictionary.garage_archived", "garage", garage.Id, $"Архивирован гараж N {garage.Number}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
     }
@@ -401,8 +411,13 @@ public sealed class DictionaryService(
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
-    public async Task<DictionaryResult<SupplierGroupDto>> ArchiveSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<SupplierGroupDto>> ArchiveSupplierGroupAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<SupplierGroupDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var group = await dbContext.SupplierGroups.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (group is null)
         {
@@ -417,7 +432,7 @@ public sealed class DictionaryService(
         group.IsArchived = true;
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.supplier_group_archived", "supplier_group", group.Id, $"Архивирована группа поставщиков {group.Name}.");
+        AddAudit(actorUserId, "dictionary.supplier_group_archived", "supplier_group", group.Id, $"Архивирована группа поставщиков {group.Name}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
@@ -558,8 +573,13 @@ public sealed class DictionaryService(
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
-    public async Task<DictionaryResult<SupplierDto>> ArchiveSupplierAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<SupplierDto>> ArchiveSupplierAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<SupplierDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var supplier = await dbContext.Suppliers.Include(item => item.Group).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (supplier is null)
         {
@@ -569,7 +589,7 @@ public sealed class DictionaryService(
         supplier.IsArchived = true;
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.supplier_archived", "supplier", supplier.Id, $"Архивирован поставщик {supplier.Name}.");
+        AddAudit(actorUserId, "dictionary.supplier_archived", "supplier", supplier.Id, $"Архивирован поставщик {supplier.Name}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
@@ -669,8 +689,13 @@ public sealed class DictionaryService(
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
-    public async Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<AccountingTypeDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (incomeType is null)
         {
@@ -685,7 +710,7 @@ public sealed class DictionaryService(
         incomeType.IsArchived = true;
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.income_type_archived", "income_type", incomeType.Id, $"Архивирован вид поступления {incomeType.Name}.");
+        AddAudit(actorUserId, "dictionary.income_type_archived", "income_type", incomeType.Id, $"Архивирован вид поступления {incomeType.Name}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
@@ -785,8 +810,13 @@ public sealed class DictionaryService(
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
-    public async Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<AccountingTypeDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (expenseType is null)
         {
@@ -801,7 +831,7 @@ public sealed class DictionaryService(
         expenseType.IsArchived = true;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.expense_type_archived", "expense_type", expenseType.Id, $"Архивирован вид выплаты {expenseType.Name}.");
+        AddAudit(actorUserId, "dictionary.expense_type_archived", "expense_type", expenseType.Id, $"Архивирован вид выплаты {expenseType.Name}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
@@ -979,8 +1009,13 @@ public sealed class DictionaryService(
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
-    public async Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    public async Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateArchiveReason<TariffDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
         var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (tariff is null)
         {
@@ -990,7 +1025,7 @@ public sealed class DictionaryService(
         tariff.IsArchived = true;
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.tariff_archived", "tariff", tariff.Id, $"Архивирован тариф {FormatTariffAuditDetails(tariff)}.");
+        AddAudit(actorUserId, "dictionary.tariff_archived", "tariff", tariff.Id, $"Архивирован тариф {FormatTariffAuditDetails(tariff)}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
@@ -1023,7 +1058,23 @@ public sealed class DictionaryService(
             : await dbContext.Owners.SingleOrDefaultAsync(owner => owner.Id == ownerId && !owner.IsArchived, cancellationToken);
     }
 
-    private void AddAudit(Guid? actorUserId, string action, string entityType, Guid entityId, string summary)
+    private static DictionaryResult<T>? ValidateArchiveReason<T>(string? reason, out string normalizedReason)
+    {
+        normalizedReason = reason?.Trim() ?? string.Empty;
+        if (normalizedReason.Length == 0)
+        {
+            return DictionaryResult<T>.Failure("dictionary_archive_reason_required", "Укажите причину удаления записи.");
+        }
+
+        if (normalizedReason.Length > 1000)
+        {
+            return DictionaryResult<T>.Failure("dictionary_archive_reason_too_long", "Причина удаления не должна быть длиннее 1000 символов.");
+        }
+
+        return null;
+    }
+
+    private void AddAudit(Guid? actorUserId, string action, string entityType, Guid entityId, string summary, string? reason = null)
     {
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -1032,7 +1083,7 @@ public sealed class DictionaryService(
             entityId.ToString(),
             Summary: summary,
             EntityDisplayName: NormalizeAuditDisplayName(summary),
-            Reason: action.Contains("_archived", StringComparison.Ordinal) ? "Архивирование записи справочника." : null,
+            Reason: reason,
             Metadata: new Dictionary<string, object?>
             {
                 ["dictionaryEntityType"] = entityType
