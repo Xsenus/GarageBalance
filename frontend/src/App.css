@@ -927,6 +927,15 @@ h1 {
   text-transform: uppercase;
 }
 
+.contractors-directory-row--deleted {
+  background: #f9fafb;
+  color: #667085;
+}
+
+.contractors-directory-row--deleted > span:not(:last-child) {
+  opacity: 0.72;
+}
+
 .contractors-directory-row > span {
   min-width: 0;
   border-bottom: 1px solid #eaecf0;

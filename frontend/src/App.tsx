@@ -5539,6 +5539,11 @@ type ContractorModal =
   | { type: 'employee'; item?: ContractorStaffRow }
   | { type: 'department' }
 
+type ContractorRestoreTarget =
+  | { type: 'garage'; item: ContractorGarageRow }
+  | { type: 'supplier'; item: ContractorSupplierRow }
+  | { type: 'employee'; item: ContractorStaffRow }
+
 const contractorGarageRows: ContractorGarageRow[] = [
   { id: 'garage-1', number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
   { id: 'garage-12', number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
@@ -5569,6 +5574,18 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
   staff: 'Персонал',
 }
 
+function getContractorRestoreTitle(target: ContractorRestoreTarget) {
+  if (target.type === 'garage') {
+    return `Гараж ${target.item.number || 'без номера'}`
+  }
+
+  if (target.type === 'supplier') {
+    return target.item.name || 'Поставщик без названия'
+  }
+
+  return target.item.fullName || 'Сотрудник без имени'
+}
+
 function ContractorsPrototypePanel() {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
@@ -5577,6 +5594,10 @@ function ContractorsPrototypePanel() {
   const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
   const [modal, setModal] = useState<ContractorModal | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
+  const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
+  const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
+  useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
 
   const saveGarage = (garage: ContractorGarageRow) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
@@ -5623,6 +5644,22 @@ function ContractorsPrototypePanel() {
     setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
   }
 
+  const confirmRestore = () => {
+    if (!restoreTarget) {
+      return
+    }
+
+    if (restoreTarget.type === 'garage') {
+      setGarages((currentGarages) => currentGarages.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+    } else if (restoreTarget.type === 'supplier') {
+      setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+    } else {
+      setStaff((currentStaff) => currentStaff.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+    }
+
+    setRestoreTarget(null)
+  }
+
   const saveDepartment = (departmentName: string) => {
     const nextDepartment = { id: `department-${Date.now()}`, name: departmentName }
     setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
@@ -5633,9 +5670,9 @@ function ContractorsPrototypePanel() {
 
   const visibleGarages = showDebtorsOnly
     ? garages.filter((garage) => !garage.isDeleted && garage.overdueDebt.trim())
-    : garages.filter((garage) => !garage.isDeleted)
-  const visibleSuppliers = suppliers.filter((supplier) => !supplier.isDeleted)
-  const visibleStaff = staff.filter((employee) => !employee.isDeleted)
+    : garages
+  const visibleSuppliers = suppliers
+  const visibleStaff = staff
 
   return (
     <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
@@ -5686,14 +5723,22 @@ function ContractorsPrototypePanel() {
               <span role="columnheader">Действие</span>
             </div>
             {visibleGarages.map((row) => (
-              <div className="contractors-directory-row" role="row" key={row.id}>
+              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id}>
                 <span role="cell">{row.number}</span>
                 <span role="cell">{row.peopleCount}</span>
                 <span role="cell">{row.floorCount}</span>
                 <span role="cell">{row.owner}</span>
                 <span role="cell">{row.phone}</span>
-                <span role="cell" className={row.overdueDebt ? 'money-expense' : undefined}>{row.overdueDebt || 'Нет'}</span>
-                <span role="cell"><button className="link-button" type="button" onClick={() => setModal({ type: 'garage', item: row })}>Открыть</button></span>
+                <span role="cell" className={row.overdueDebt ? 'money-expense' : undefined}>
+                  {row.isDeleted ? 'Удален' : row.overdueDebt || 'Нет'}
+                </span>
+                <span role="cell">
+                  {row.isDeleted ? (
+                    <button className="link-button" type="button" onClick={() => setRestoreTarget({ type: 'garage', item: row })}>Вернуть</button>
+                  ) : (
+                    <button className="link-button" type="button" onClick={() => setModal({ type: 'garage', item: row })}>Открыть</button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -5713,14 +5758,22 @@ function ContractorsPrototypePanel() {
               <span role="columnheader">Действие</span>
             </div>
             {visibleSuppliers.map((row) => (
-              <div className="contractors-directory-row" role="row" key={row.id}>
+              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id}>
                 <span role="cell">{row.name}</span>
                 <span role="cell">{row.service}</span>
                 <span role="cell">{row.contactPerson}</span>
                 <span role="cell">{row.phone}</span>
                 <span role="cell">{row.email}</span>
-                <span role="cell" className={row.debt ? 'money-expense' : undefined}>{row.debt || 'Нет'}</span>
-                <span role="cell"><button className="link-button" type="button" onClick={() => setModal({ type: 'supplier', item: row })}>Открыть</button></span>
+                <span role="cell" className={row.debt ? 'money-expense' : undefined}>
+                  {row.isDeleted ? 'Удален' : row.debt || 'Нет'}
+                </span>
+                <span role="cell">
+                  {row.isDeleted ? (
+                    <button className="link-button" type="button" onClick={() => setRestoreTarget({ type: 'supplier', item: row })}>Вернуть</button>
+                  ) : (
+                    <button className="link-button" type="button" onClick={() => setModal({ type: 'supplier', item: row })}>Открыть</button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -5737,11 +5790,17 @@ function ContractorsPrototypePanel() {
               <span role="columnheader">Действие</span>
             </div>
             {visibleStaff.map((row) => (
-              <div className="contractors-directory-row" role="row" key={row.id}>
+              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id}>
                 <span role="cell">{row.fullName}</span>
                 <span role="cell">{row.department}</span>
-                <span role="cell">{row.rate}</span>
-                <span role="cell"><button className="link-button" type="button" onClick={() => setModal({ type: 'employee', item: row })}>Открыть</button></span>
+                <span role="cell">{row.isDeleted ? 'Удален' : row.rate}</span>
+                <span role="cell">
+                  {row.isDeleted ? (
+                    <button className="link-button" type="button" onClick={() => setRestoreTarget({ type: 'employee', item: row })}>Вернуть</button>
+                  ) : (
+                    <button className="link-button" type="button" onClick={() => setModal({ type: 'employee', item: row })}>Открыть</button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -5753,6 +5812,31 @@ function ContractorsPrototypePanel() {
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onDelete={deleteEmployee} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
+
+      {restoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
+          <section ref={restoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-restore-title" aria-describedby="contractor-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление</p>
+                <h3 id="contractor-restore-title">Вернуть запись?</h3>
+                <p>{getContractorRestoreTitle(restoreTarget)}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления контрагента" onClick={() => setRestoreTarget(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="contractor-restore-description">Запись снова появится как активная в рабочем списке. После подключения backend это действие будет записываться в историю изменений.</p>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmRestore}>
+                <RotateCcw size={16} />
+                <span>Вернуть запись</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }
