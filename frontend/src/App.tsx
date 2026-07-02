@@ -780,6 +780,7 @@ function FinancePanel({
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
+  const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
   const [incomeValidationErrors, setIncomeValidationErrors] = useState<string[]>([])
   const [expenseValidationErrors, setExpenseValidationErrors] = useState<string[]>([])
   const [accrualValidationErrors, setAccrualValidationErrors] = useState<string[]>([])
@@ -795,10 +796,13 @@ function FinancePanel({
   useRestoreFocusOnClose(Boolean(financeEditor))
   useRestoreFocusOnClose(Boolean(financeContextMenu))
   useRestoreFocusOnClose(Boolean(paymentsPrototypeDialog))
+  useRestoreFocusOnClose(Boolean(financeEditorCloseConfirmation))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
   const financeEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditor))
+  const financeEditorCloseConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditorCloseConfirmation))
+  const financeEditorCloseConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditorCloseConfirmation))
   const financeContextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeContextMenu))
 
   function getFinanceEditorFormSnapshot(section: FinanceEditorKey) {
@@ -832,16 +836,23 @@ function FinancePanel({
       return
     }
 
-    if (!options?.skipConfirmation && hasUnsavedFinanceEditorChanges() && !window.confirm(getFinanceEditorUiLabel('unsavedConfirm'))) {
+    if (!options?.skipConfirmation && hasUnsavedFinanceEditorChanges()) {
+      setFinanceEditorCloseConfirmation(true)
       return
     }
 
+    setFinanceEditorCloseConfirmation(false)
     setFinanceEditorInitialSnapshot('')
     setFinanceEditor(null)
   }
 
+  function confirmCloseFinanceEditor() {
+    closeFinanceEditor({ skipConfirmation: true })
+  }
+
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
-  useEscapeKey(Boolean(financeEditor), () => closeFinanceEditor())
+  useEscapeKey(Boolean(financeEditor) && !financeEditorCloseConfirmation, () => closeFinanceEditor())
+  useEscapeKey(Boolean(financeEditorCloseConfirmation), () => setFinanceEditorCloseConfirmation(false))
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
   useEscapeKey(Boolean(paymentsPrototypeDialog), () => setPaymentsPrototypeDialog(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
@@ -2521,6 +2532,32 @@ function FinancePanel({
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {financeEditorCloseConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setFinanceEditorCloseConfirmation(false)}>
+          <section ref={financeEditorCloseConfirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-editor-close-confirmation-title" aria-describedby="finance-editor-close-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Черновик</p>
+                <h3 id="finance-editor-close-confirmation-title">Закрыть форму без сохранения?</h3>
+                <p>{financeEditor ? getFinanceEditorTitle(financeEditor.section) : getFinancePanelLabel('section')}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Остаться в форме платежа" onClick={() => setFinanceEditorCloseConfirmation(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="finance-editor-close-confirmation-description">{getFinanceEditorUiLabel('unsavedConfirm')}</p>
+            <div className="detail-dialog-actions">
+              <button ref={financeEditorCloseConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setFinanceEditorCloseConfirmation(false)}>
+                Остаться
+              </button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmCloseFinanceEditor}>
+                <X size={16} aria-hidden="true" />
+                <span>Закрыть без сохранения</span>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
@@ -7416,6 +7453,12 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
   const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
   const [editingTariffBaseline, setEditingTariffBaseline] = useState<typeof tariffForm | null>(null)
+  const [tariffDraftConfirmation, setTariffDraftConfirmation] = useState<{
+    title: string
+    description: string
+    confirmLabel: string
+    action: () => void
+  } | null>(null)
   const [ownerValidationErrors, setOwnerValidationErrors] = useState<string[]>([])
   const [garageValidationErrors, setGarageValidationErrors] = useState<string[]>([])
   const [supplierGroupValidationErrors, setSupplierGroupValidationErrors] = useState<string[]>([])
@@ -7427,10 +7470,14 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   useRestoreFocusOnClose(Boolean(selectedGarage))
+  useRestoreFocusOnClose(Boolean(tariffDraftConfirmation))
   const selectedGarageCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(selectedGarage))
   const selectedGarageDialogRef = useFocusTrap<HTMLElement>(Boolean(selectedGarage))
+  const tariffDraftConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(tariffDraftConfirmation))
+  const tariffDraftConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(tariffDraftConfirmation))
 
   useEscapeKey(Boolean(selectedGarage), () => setSelectedGarage(null))
+  useEscapeKey(Boolean(tariffDraftConfirmation), () => setTariffDraftConfirmation(null))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
 
@@ -7750,21 +7797,31 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     })
   }
 
-  function editTariff(tariff: TariffDto) {
-    if (editingTariffId === tariff.id) {
-      return
-    }
-
-    if (editingTariffId && hasUnsavedTariffChanges() && !window.confirm('Перейти к другому тарифу без сохранения изменений?')) {
-      return
-    }
-
+  function applyEditTariff(tariff: TariffDto) {
     const nextForm = createTariffFormFromDto(tariff)
 
     setEditingTariffId(tariff.id)
     setTariffValidationErrors([])
     setTariffForm(nextForm)
     setEditingTariffBaseline(nextForm)
+  }
+
+  function editTariff(tariff: TariffDto) {
+    if (editingTariffId === tariff.id) {
+      return
+    }
+
+    if (editingTariffId && hasUnsavedTariffChanges()) {
+      setTariffDraftConfirmation({
+        title: 'Перейти к другому тарифу?',
+        description: 'Несохраненные изменения текущего тарифа будут потеряны.',
+        confirmLabel: 'Перейти без сохранения',
+        action: () => applyEditTariff(tariff),
+      })
+      return
+    }
+
+    applyEditTariff(tariff)
   }
 
   function hasUnsavedTariffChanges() {
@@ -7786,14 +7843,31 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
   }
 
   function resetTariffForm(options?: { skipConfirmation?: boolean }) {
-    if (editingTariffId && !options?.skipConfirmation && hasUnsavedTariffChanges() && !window.confirm('Отменить редактирование тарифа без сохранения изменений?')) {
+    if (editingTariffId && !options?.skipConfirmation && hasUnsavedTariffChanges()) {
+      setTariffDraftConfirmation({
+        title: 'Отменить редактирование тарифа?',
+        description: 'Несохраненные изменения текущего тарифа будут потеряны.',
+        confirmLabel: 'Отменить без сохранения',
+        action: () => resetTariffForm({ skipConfirmation: true }),
+      })
       return
     }
 
+    setTariffDraftConfirmation(null)
     setEditingTariffId(null)
     setEditingTariffBaseline(null)
     setTariffValidationErrors([])
     setTariffForm((value) => withoutElectricityTierFields({ ...value, name: '', rate: 1, comment: '' }))
+  }
+
+  function confirmTariffDraftAction() {
+    if (!tariffDraftConfirmation) {
+      return
+    }
+
+    const action = tariffDraftConfirmation.action
+    setTariffDraftConfirmation(null)
+    action()
   }
 
   async function archiveDictionaryItem(scope: string, action: () => Promise<void>) {
@@ -8090,6 +8164,32 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           />
         </form>
       </div>
+      {tariffDraftConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setTariffDraftConfirmation(null)}>
+          <section ref={tariffDraftConfirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="tariff-draft-confirmation-title" aria-describedby="tariff-draft-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Черновик тарифа</p>
+                <h3 id="tariff-draft-confirmation-title">{tariffDraftConfirmation.title}</h3>
+                <p>{editingTariffBaseline?.name || 'Тариф'}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Остаться в редактировании тарифа" onClick={() => setTariffDraftConfirmation(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="tariff-draft-confirmation-description">{tariffDraftConfirmation.description}</p>
+            <div className="detail-dialog-actions">
+              <button ref={tariffDraftConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setTariffDraftConfirmation(null)}>
+                Остаться
+              </button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmTariffDraftAction}>
+                <X size={16} />
+                <span>{tariffDraftConfirmation.confirmLabel}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {selectedGarage ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedGarage(null)}>
           <section ref={selectedGarageDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" aria-describedby="garage-card-owner" onMouseDown={(event) => event.stopPropagation()}>
