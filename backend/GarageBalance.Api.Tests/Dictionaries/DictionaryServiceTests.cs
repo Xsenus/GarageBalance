@@ -1,3 +1,4 @@
+using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -25,6 +26,38 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Иванов Иван Иванович", result.Value!.FullName);
         Assert.Equal("+7 900", result.Value.Phone);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.owner_created" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task OwnerAudit_UsesWriterStructuredFieldsAndArchiveReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var created = await service.CreateOwnerAsync(
+            new UpsertOwnerRequest("Ivanov", "Ivan", null, "+7 900", "Private address", null),
+            actorUserId,
+            CancellationToken.None);
+        var archived = await service.ArchiveOwnerAsync(created.Value!.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(archived.Succeeded);
+        var createAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_created");
+        Assert.Equal(actorUserId, createAudit.ActorUserId);
+        Assert.Equal(created.Value.Id.ToString(), createAudit.EntityId);
+        Assert.Equal("dictionary", createAudit.Section);
+        Assert.Equal("create", createAudit.ActionKind);
+        Assert.Equal("Создан владелец Ivanov Ivan", createAudit.EntityDisplayName);
+        Assert.DoesNotContain("+7 900", createAudit.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Private address", createAudit.MetadataJson, StringComparison.Ordinal);
+
+        var archiveAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived");
+        Assert.Equal("dictionary", archiveAudit.Section);
+        Assert.Equal("archive", archiveAudit.ActionKind);
+        Assert.Contains("Архивирование записи справочника.", archiveAudit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(archiveAudit.MetadataJson!);
+        Assert.Equal("owner", metadata.RootElement.GetProperty("dictionaryEntityType").GetString());
+        Assert.Equal("Архивирование записи справочника.", metadata.RootElement.GetProperty("reason").GetString());
     }
 
     [Fact]

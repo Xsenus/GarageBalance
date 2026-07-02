@@ -1,6 +1,6 @@
 using System.Globalization;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
-using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -8,10 +8,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Dictionaries;
 
-public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDictionaryService
+public sealed class DictionaryService(
+    GarageBalanceDbContext dbContext,
+    IAuditEventWriter auditEventWriter) : IDictionaryService
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+
+    public DictionaryService(GarageBalanceDbContext dbContext)
+        : this(dbContext, new AuditEventWriter(dbContext))
+    {
+    }
 
     public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
@@ -1018,14 +1025,23 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
 
     private void AddAudit(Guid? actorUserId, string action, string entityType, Guid entityId, string summary)
     {
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = action,
-            EntityType = entityType,
-            EntityId = entityId.ToString(),
-            Summary = summary
-        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            action,
+            entityType,
+            entityId.ToString(),
+            Summary: summary,
+            EntityDisplayName: NormalizeAuditDisplayName(summary),
+            Reason: action.Contains("_archived", StringComparison.Ordinal) ? "Архивирование записи справочника." : null,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["dictionaryEntityType"] = entityType
+            }));
+    }
+
+    private static string NormalizeAuditDisplayName(string summary)
+    {
+        return summary.Trim().TrimEnd('.');
     }
 
     private static string FormatTariffAuditDetails(Tariff tariff)
