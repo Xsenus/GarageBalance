@@ -1,11 +1,13 @@
-using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Import;
 
-public sealed class ImportFingerprintService(GarageBalanceDbContext dbContext) : IImportFingerprintService
+public sealed class ImportFingerprintService(
+    GarageBalanceDbContext dbContext,
+    IAuditEventWriter auditEventWriter) : IImportFingerprintService
 {
     public async Task<ImportResult<RegisterImportRowFingerprintDto>> RegisterAsync(
         RegisterImportRowFingerprintRequest request,
@@ -47,14 +49,26 @@ public sealed class ImportFingerprintService(GarageBalanceDbContext dbContext) :
         };
 
         dbContext.AccessImportRowFingerprints.Add(fingerprint);
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = "import.row_fingerprint_registered",
-            EntityType = "access_import_row_fingerprint",
-            EntityId = fingerprintKey,
-            Summary = $"Import fingerprint registered: {sourceSystem}/{entityType}."
-        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.row_fingerprint_registered",
+            "access_import_row_fingerprint",
+            fingerprintKey,
+            Summary: $"Import fingerprint registered: {sourceSystem}/{entityType}.",
+            ActionKind: "import",
+            EntityDisplayName: $"{sourceSystem}/{entityType}",
+            RelatedDocumentId: request.AccessImportRunId?.ToString(),
+            RelatedDocumentNumber: externalId,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["sourceSystem"] = sourceSystem,
+                ["importEntityType"] = entityType,
+                ["externalId"] = externalId,
+                ["rowHash"] = rowHash,
+                ["accessImportRunId"] = request.AccessImportRunId,
+                ["targetEntityType"] = fingerprint.TargetEntityType,
+                ["targetEntityId"] = fingerprint.TargetEntityId
+            }));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<RegisterImportRowFingerprintDto>.Success(new RegisterImportRowFingerprintDto(true, ToDto(fingerprint)));

@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
@@ -14,7 +15,7 @@ public sealed class ImportFingerprintServiceTests
     public async Task RegisterAsync_CreatesFingerprintAndAuditEvent()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportFingerprintService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var importRunId = Guid.NewGuid();
 
@@ -31,17 +32,27 @@ public sealed class ImportFingerprintServiceTests
         Assert.Equal(importRunId, result.Value.Fingerprint.AccessImportRunId);
         Assert.True(await service.ExistsAsync("access", "garage", "42", AnotherRowHash, CancellationToken.None));
         Assert.Single(database.Context.AccessImportRowFingerprints);
-        Assert.Contains(database.Context.AuditEvents, item =>
-            item.Action == "import.row_fingerprint_registered" &&
-            item.ActorUserId == actorUserId &&
-            item.EntityId == "ACCESS|GARAGE|external:42");
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.row_fingerprint_registered");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("ACCESS|GARAGE|external:42", auditEvent.EntityId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("import", auditEvent.ActionKind);
+        Assert.Equal("Access/Garage", auditEvent.EntityDisplayName);
+        Assert.Equal(importRunId.ToString(), auditEvent.RelatedDocumentId);
+        Assert.Equal("42", auditEvent.RelatedDocumentNumber);
+        Assert.Contains("\"sourceSystem\":\"Access\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"importEntityType\":\"Garage\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"externalId\":\"42\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"accessImportRunId\":\"" + importRunId, auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"targetEntityType\":\"garage\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"targetEntityId\":\"target-42\"", auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task RegisterAsync_ReturnsExistingForDuplicateExternalIdWithoutSecondAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportFingerprintService(database.Context);
+        var service = CreateService(database.Context);
         var first = await service.RegisterAsync(
             new RegisterImportRowFingerprintRequest("Access", "Payment", "pay-7", RowHash, null, "financial_operation", "operation-7"),
             null,
@@ -63,7 +74,7 @@ public sealed class ImportFingerprintServiceTests
     public async Task RegisterAsync_UsesRowHashWhenExternalIdIsMissing()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportFingerprintService(database.Context);
+        var service = CreateService(database.Context);
 
         var first = await service.RegisterAsync(
             new RegisterImportRowFingerprintRequest("Access", "MeterReading", null, RowHash, null, "meter_reading", "reading-1"),
@@ -92,7 +103,7 @@ public sealed class ImportFingerprintServiceTests
     public async Task RegisterAsync_ValidatesRequiredFieldsAndRowHash(string source, string entityType, string rowHash, string expectedCode)
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportFingerprintService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.RegisterAsync(
             new RegisterImportRowFingerprintRequest(source, entityType, "1", rowHash, null, null, null),
@@ -103,6 +114,11 @@ public sealed class ImportFingerprintServiceTests
         Assert.Equal(expectedCode, result.ErrorCode);
         Assert.Empty(database.Context.AccessImportRowFingerprints);
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    private static ImportFingerprintService CreateService(GarageBalanceDbContext context)
+    {
+        return new ImportFingerprintService(context, new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable
