@@ -786,6 +786,7 @@ function FinancePanel({
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
+  const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
   const [cancelFinanceTarget, setCancelFinanceTarget] = useState<CancelFinanceTarget | null>(null)
   const [cancelFinanceReasonError, setCancelFinanceReasonError] = useState<string | null>(null)
@@ -803,7 +804,6 @@ function FinancePanel({
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
   useRestoreFocusOnClose(Boolean(financeContextMenu))
-  useRestoreFocusOnClose(Boolean(paymentsPrototypeDialog))
   useRestoreFocusOnClose(Boolean(financeEditorCloseConfirmation))
   useRestoreFocusOnClose(Boolean(cancelFinanceTarget))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
@@ -861,12 +861,28 @@ function FinancePanel({
     closeFinanceEditor({ skipConfirmation: true })
   }
 
+  function openPaymentsPrototypeDialog(dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) {
+    paymentsPrototypeTriggerRef.current = trigger ?? null
+    setPaymentsPrototypeDialog(dialog)
+  }
+
+  function closePaymentsPrototypeDialog() {
+    const trigger = paymentsPrototypeTriggerRef.current
+    setPaymentsPrototypeDialog(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      paymentsPrototypeTriggerRef.current = null
+    }, 0)
+  }
+
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   useEscapeKey(Boolean(financeEditor) && !financeEditorCloseConfirmation, () => closeFinanceEditor())
   useEscapeKey(Boolean(financeEditorCloseConfirmation), () => setFinanceEditorCloseConfirmation(false))
   useEscapeKey(Boolean(cancelFinanceTarget) && !saving?.startsWith('cancel'), () => closeCancelFinanceDialog())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
-  useEscapeKey(Boolean(paymentsPrototypeDialog), () => setPaymentsPrototypeDialog(null))
+  useEscapeKey(Boolean(paymentsPrototypeDialog), () => closePaymentsPrototypeDialog())
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
   const visibleOperations = operations.slice(0, 8)
   const visibleAccruals = accruals.slice(0, 8)
@@ -2085,7 +2101,7 @@ function FinancePanel({
       {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
-      <PaymentsPrototypePanel onOpenDialog={setPaymentsPrototypeDialog} />
+      <PaymentsPrototypePanel onOpenDialog={openPaymentsPrototypeDialog} />
 
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
@@ -2704,11 +2720,11 @@ function FinancePanel({
           </section>
         </div>
       ) : null}
-      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
-      {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
-      {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
-      {paymentsPrototypeDialog === 'garageAccrual' ? <GarageAccrualPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
-      {paymentsPrototypeDialog === 'fullPayment' ? <FullPaymentPrototypeDialog onClose={() => setPaymentsPrototypeDialog(null)} /> : null}
+      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'garageAccrual' ? <GarageAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'fullPayment' ? <FullPaymentPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
 }
@@ -2717,8 +2733,13 @@ function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
 }
 
-function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: PaymentsPrototypeDialogKey) => void }) {
+function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
+
+  function openDialogFromButton(event: MouseEvent<HTMLButtonElement>, dialog: PaymentsPrototypeDialogKey) {
+    event.currentTarget.focus()
+    onOpenDialog(dialog, event.currentTarget)
+  }
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -2753,11 +2774,11 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
             <strong className="money-expense">1 300</strong>
           </div>
           <div className="payments-prototype-actions payments-prototype-actions--stacked">
-            <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={() => onOpenDialog('garageAccrual')}>
+            <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={(event) => openDialogFromButton(event, 'garageAccrual')}>
               <Plus size={16} aria-hidden="true" />
               <span>Добавить начисление</span>
             </button>
-            <button className="secondary-button" type="button" onClick={() => onOpenDialog('fullPayment')}>
+            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'fullPayment')}>
               <span>Полная оплата</span>
             </button>
           </div>
@@ -2830,11 +2851,11 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
       </div>
 
       <div className="payments-prototype-actions payments-prototype-actions--sheet">
-        <button className="secondary-button" type="button" onClick={() => onOpenDialog('accrual')}>
+        <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'accrual')}>
           <Plus size={16} aria-hidden="true" />
           <span>Добавить начисление</span>
         </button>
-        <button className="secondary-button" type="button" onClick={() => onOpenDialog('expense')}>
+        <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')}>
           <Plus size={16} aria-hidden="true" />
           <span>Добавить выплату</span>
         </button>
@@ -2873,7 +2894,7 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
                   </td>
                   <td>
                     {row.action ? (
-                      <button className="link-button" type="button" onClick={() => onOpenDialog('expense')} aria-label={`Оплатить ${row.item}`}>
+                      <button className="link-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')} aria-label={`Оплатить ${row.item}`}>
                         Оплатить
                       </button>
                     ) : null}
@@ -2907,7 +2928,7 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
           <span>ИТОГО</span>
           <strong className="money-income">257 100</strong>
         </div>
-        <button className="secondary-button" type="button" onClick={() => onOpenDialog('bank')}>
+        <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
           Сдать кассу в банк
         </button>
       </div>
@@ -2917,6 +2938,7 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
 
 function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   useEscapeKey(true, onClose)
 
   return (
@@ -2945,7 +2967,7 @@ function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit">Ок</button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
           </div>
         </form>
       </section>
@@ -2955,6 +2977,7 @@ function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
 
 function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   useEscapeKey(true, onClose)
 
   return (
@@ -2992,7 +3015,7 @@ function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit">Провести</button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
           </div>
         </form>
       </section>
@@ -3002,6 +3025,7 @@ function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
 
 function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   useEscapeKey(true, onClose)
 
   return (
@@ -3030,7 +3054,7 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit">Ок</button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
           </div>
         </form>
       </section>
@@ -3040,6 +3064,7 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
 
 function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   useEscapeKey(true, onClose)
 
   return (
@@ -3075,7 +3100,7 @@ function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit">Ок</button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
           </div>
         </form>
       </section>
@@ -3085,6 +3110,7 @@ function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
 
 function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   useEscapeKey(true, onClose)
 
   return (
@@ -3118,7 +3144,7 @@ function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit">Принять</button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
           </div>
         </form>
       </section>
