@@ -4,6 +4,7 @@ import { vi } from 'vitest'
 import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
+import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -2007,6 +2008,40 @@ describe('App', () => {
     expect(await screen.findByText('Запись восстановлена и снова доступна в рабочих списках.')).toBeInTheDocument()
     const restoredRow = within(dictionaryPanel).getByText('Петров Петр').closest('tr')!
     expect(within(restoredRow).getByText('Активна')).toBeInTheDocument()
+  })
+
+  it('shows a clear conflict message when archived garage restore collides with an active number', async () => {
+    const user = userEvent.setup()
+    const activeGarage = createGarage({ id: 'garage-active', number: '12' })
+    const archivedGarage = createGarage({ id: 'garage-archived', number: '12', isArchived: true })
+    const restoreGarage = vi.fn(async () => {
+      throw new DictionaryApiError('garage_number_duplicate', 'Raw duplicate message from backend.', 409)
+    })
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async (_token, _search, _limit, includeArchived) => [activeGarage, archivedGarage].filter((garage) => includeArchived || !garage.isArchived),
+      restoreGarage,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+
+    await user.click(within(dictionaryPanel).getByLabelText('Показывать архивные'))
+    const archivedRow = (await within(dictionaryPanel).findAllByText('12'))
+      .map((node) => node.closest('tr'))
+      .find((row): row is HTMLTableRowElement => row !== null && within(row).queryByText('Архив') !== null)
+    expect(archivedRow).toBeTruthy()
+
+    await user.click(within(archivedRow!).getByRole('button', { name: 'Вернуть' }))
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть запись из архива?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
+
+    expect(restoreGarage).toHaveBeenCalledWith(expect.any(String), 'garage-archived')
+    expect(await screen.findAllByText('Гараж нельзя восстановить: активный гараж с таким номером уже есть. Проверьте рабочий список и архив.')).not.toHaveLength(0)
+    expect(screen.queryByText('Raw duplicate message from backend.')).not.toBeInTheDocument()
   })
 
   it('confirms owner dictionary edits with before and after values', async () => {

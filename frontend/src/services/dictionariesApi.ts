@@ -179,6 +179,18 @@ export type DictionaryClient = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const defaultDictionaryListLimit = 100
 
+export class DictionaryApiError extends Error {
+  readonly code: string | null
+  readonly status: number
+
+  constructor(code: string | null, message: string, status: number) {
+    super(message)
+    this.name = 'DictionaryApiError'
+    this.code = code
+    this.status = status
+  }
+}
+
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
@@ -191,7 +203,8 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 
   if (!response.ok) {
     const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить запрос.')
+    const code = typeof problem?.code === 'string' ? problem.code : typeof problem?.title === 'string' ? problem.title : null
+    throw new DictionaryApiError(code, problem?.detail ?? 'Не удалось выполнить запрос.', response.status)
   }
 
   if (response.status === 204) {

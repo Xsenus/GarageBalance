@@ -27,7 +27,7 @@ import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authApi'
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
-import { dictionariesApi } from './services/dictionariesApi'
+import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
@@ -7422,6 +7422,36 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
   )
 }
 
+function getDictionaryRestoreErrorMessage(section: DictionarySectionKey, caught: unknown) {
+  if (caught instanceof DictionaryApiError) {
+    if (caught.code === 'garage_number_duplicate') {
+      return 'Гараж нельзя восстановить: активный гараж с таким номером уже есть. Проверьте рабочий список и архив.'
+    }
+
+    if (caught.code === 'supplier_group_duplicate') {
+      return 'Группу поставщиков нельзя восстановить: активная группа с таким названием уже есть.'
+    }
+
+    if (caught.code === 'supplier_group_not_found' && section === 'suppliers') {
+      return 'Поставщика нельзя восстановить: сначала верните его группу поставщиков.'
+    }
+
+    if (caught.code === 'income_type_duplicate') {
+      return 'Вид поступления нельзя восстановить: активный вид с таким названием уже есть.'
+    }
+
+    if (caught.code === 'expense_type_duplicate') {
+      return 'Вид выплаты нельзя восстановить: активный вид с таким названием уже есть.'
+    }
+
+    if (caught.code === 'tariff_duplicate') {
+      return 'Тариф нельзя восстановить: активный тариф с таким названием и датой начала уже есть.'
+    }
+  }
+
+  return caught instanceof Error ? caught.message : 'Не удалось восстановить запись.'
+}
+
 function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; initialSection: DictionarySectionKey }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
@@ -8033,7 +8063,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       await refreshAfterMutation(section)
       showToast('Запись восстановлена и снова доступна в рабочих списках.')
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Не удалось восстановить запись.'
+      const message = getDictionaryRestoreErrorMessage(restoreTarget.section, caught)
       setError(message)
       showToast(message, 'error')
     } finally {
