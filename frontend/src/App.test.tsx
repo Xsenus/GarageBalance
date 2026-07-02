@@ -3478,6 +3478,10 @@ describe('App', () => {
           entityType: 'owner',
           entityId: 'owner-1',
           entityDisplayName: 'Garage 12',
+          relatedGarageNumber: '12',
+          relatedAccountingMonth: '2026-06',
+          relatedCounterpartyName: 'Иванов Иван',
+          relatedDocumentNumber: 'PAY-2026-06-12',
           summary: 'Изменен владелец.',
           section: 'dictionary',
           actionKind: 'update',
@@ -3491,6 +3495,10 @@ describe('App', () => {
           entityType: 'owner',
           entityId: 'owner-1',
           entityDisplayName: 'Garage 12',
+          relatedGarageNumber: '12',
+          relatedAccountingMonth: '2026-06',
+          relatedCounterpartyName: 'Иванов Иван',
+          relatedDocumentNumber: 'PAY-2026-06-12',
           summary: 'Изменен владелец.',
           section: 'dictionary',
           actionKind: 'update',
@@ -3521,8 +3529,12 @@ describe('App', () => {
     expect(within(detailDialog).getByText('dictionary.owner_updated')).toBeInTheDocument()
     expect(within(detailDialog).getByText('owner-1')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Связанные данные')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('№ 12')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('2026-06')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('PAY-2026-06-12')).toBeInTheDocument()
     expect(within(detailDialog).getAllByText('Владелец')).toHaveLength(2)
-    expect(within(detailDialog).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText('Иванов Иван')).toHaveLength(2)
     expect(within(detailDialog).getByText('Петров Петр')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Смена собственника')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Служебные данные')).toBeInTheDocument()

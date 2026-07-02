@@ -6,6 +6,13 @@ export type AuditEventDto = {
   entityType: string
   entityId: string | null
   entityDisplayName?: string | null
+  relatedGarageId?: string | null
+  relatedGarageNumber?: string | null
+  relatedAccountingMonth?: string | null
+  relatedCounterpartyId?: string | null
+  relatedCounterpartyName?: string | null
+  relatedDocumentId?: string | null
+  relatedDocumentNumber?: string | null
   summary: string
   section?: string | null
   actionKind?: string | null

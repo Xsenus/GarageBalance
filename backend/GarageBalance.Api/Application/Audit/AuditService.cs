@@ -138,7 +138,14 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             beforeAfter.NewValue,
             ExtractReason(maskedSummary),
             metadata,
-            ExtractEntityDisplayName(metadata));
+            ExtractEntityDisplayName(metadata),
+            ExtractMetadataValue(metadata, "relatedGarageId", "garageId"),
+            ExtractMetadataValue(metadata, "relatedGarageNumber", "garageNumber"),
+            ExtractMetadataValue(metadata, "relatedAccountingMonth", "accountingMonth", "period", "month"),
+            ExtractMetadataValue(metadata, "relatedCounterpartyId", "counterpartyId", "supplierId", "ownerId", "employeeId"),
+            ExtractMetadataValue(metadata, "relatedCounterpartyName", "counterpartyName", "supplierName", "ownerName", "employeeName"),
+            ExtractMetadataValue(metadata, "relatedDocumentId", "documentId", "operationId", "paymentId", "accrualId", "invoiceId", "receiptId"),
+            ExtractMetadataValue(metadata, "relatedDocumentNumber", "documentNumber", "operationNumber", "paymentNumber", "invoiceNumber", "receiptNumber"));
     }
 
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
@@ -220,7 +227,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,fieldName,oldValue,newValue,reason,metadata,summary");
+        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,relatedGarageId,relatedGarageNumber,relatedAccountingMonth,relatedCounterpartyId,relatedCounterpartyName,relatedDocumentId,relatedDocumentNumber,fieldName,oldValue,newValue,reason,metadata,summary");
 
         foreach (var auditEvent in events)
         {
@@ -233,6 +240,13 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
                 .Append(EscapeCsv(auditEvent.EntityType)).Append(',')
                 .Append(EscapeCsv(auditEvent.EntityId)).Append(',')
                 .Append(EscapeCsv(auditEvent.EntityDisplayName)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedGarageId)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedGarageNumber)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedAccountingMonth)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedCounterpartyId)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedCounterpartyName)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedDocumentId)).Append(',')
+                .Append(EscapeCsv(auditEvent.RelatedDocumentNumber)).Append(',')
                 .Append(EscapeCsv(auditEvent.FieldName)).Append(',')
                 .Append(EscapeCsv(auditEvent.OldValue)).Append(',')
                 .Append(EscapeCsv(auditEvent.NewValue)).Append(',')
@@ -517,31 +531,45 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             return null;
         }
 
-        var explicitName = GetMetadataValue(metadata, "entityDisplayName")
-            ?? GetMetadataValue(metadata, "displayName")
-            ?? GetMetadataValue(metadata, "objectName")
-            ?? GetMetadataValue(metadata, "name")
-            ?? GetMetadataValue(metadata, "title");
+        var explicitName = ExtractMetadataValue(metadata, "entityDisplayName", "displayName", "objectName", "name", "title");
 
         if (!string.IsNullOrWhiteSpace(explicitName))
         {
             return explicitName;
         }
 
-        var garageNumber = GetMetadataValue(metadata, "garageNumber");
+        var garageNumber = ExtractMetadataValue(metadata, "garageNumber", "relatedGarageNumber");
         if (!string.IsNullOrWhiteSpace(garageNumber))
         {
             return $"Гараж {garageNumber}";
         }
 
-        var documentNumber = GetMetadataValue(metadata, "documentNumber");
+        var documentNumber = ExtractMetadataValue(metadata, "documentNumber", "relatedDocumentNumber");
         if (!string.IsNullOrWhiteSpace(documentNumber))
         {
             return $"Документ {documentNumber}";
         }
 
-        return GetMetadataValue(metadata, "period")
-            ?? GetMetadataValue(metadata, "month");
+        return ExtractMetadataValue(metadata, "period", "month", "relatedAccountingMonth", "accountingMonth");
+    }
+
+    private static string? ExtractMetadataValue(IReadOnlyDictionary<string, string>? metadata, params string[] keys)
+    {
+        if (metadata is null || metadata.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var key in keys)
+        {
+            var value = GetMetadataValue(metadata, key);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static string? GetMetadataValue(IReadOnlyDictionary<string, string> metadata, string key)

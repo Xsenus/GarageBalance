@@ -295,6 +295,13 @@ public sealed class AuditServiceTests
             {
               "reason": "invalid_password",
               "entityDisplayName": "Garage 12",
+              "garageId": "garage-12",
+              "garageNumber": "12",
+              "accountingMonth": "2026-06",
+              "supplierId": "supplier-1",
+              "supplierName": "Energy Supplier",
+              "paymentId": "payment-1",
+              "paymentNumber": "PAY-2026-06-12",
               "email": "owner@example.com",
               "failedAttempts": 3,
               "apiToken": "secret-token-value"
@@ -308,6 +315,13 @@ public sealed class AuditServiceTests
         var auditEvent = Assert.Single(result);
         Assert.NotNull(auditEvent.Metadata);
         Assert.Equal("Garage 12", auditEvent.EntityDisplayName);
+        Assert.Equal("garage-12", auditEvent.RelatedGarageId);
+        Assert.Equal("12", auditEvent.RelatedGarageNumber);
+        Assert.Equal("2026-06", auditEvent.RelatedAccountingMonth);
+        Assert.Equal("supplier-1", auditEvent.RelatedCounterpartyId);
+        Assert.Equal("Energy Supplier", auditEvent.RelatedCounterpartyName);
+        Assert.Equal("payment-1", auditEvent.RelatedDocumentId);
+        Assert.Equal("PAY-2026-06-12", auditEvent.RelatedDocumentNumber);
         Assert.Equal("invalid_password", auditEvent.Metadata["reason"]);
         Assert.Equal("[email скрыт]", auditEvent.Metadata["email"]);
         Assert.Equal("3", auditEvent.Metadata["failedAttempts"]);
@@ -384,7 +398,7 @@ public sealed class AuditServiceTests
         Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
         Assert.EndsWith(".csv", export.FileName, StringComparison.Ordinal);
         Assert.Equal("text/csv; charset=utf-8", export.ContentType);
-        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,fieldName,oldValue,newValue,reason,metadata,summary", csv);
+        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,relatedGarageId,relatedGarageNumber,relatedAccountingMonth,relatedCounterpartyId,relatedCounterpartyName,relatedDocumentId,relatedDocumentNumber,fieldName,oldValue,newValue,reason,metadata,summary", csv);
         Assert.Contains("auth,fail,auth.login_failed", csv);
         Assert.Contains("auth.login_failed", csv);
         Assert.Contains("\"Login [email скрыт] failed, password=[секрет скрыт] \"\"quoted\"\"\"", csv);

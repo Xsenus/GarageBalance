@@ -3477,6 +3477,21 @@ function getAuditBeforeAfter(auditEvent: AuditEventDto) {
   return parseAuditBeforeAfter(auditEvent.summary)
 }
 
+function getAuditRelatedContext(auditEvent: AuditEventDto) {
+  return [
+    auditEvent.relatedGarageNumber || auditEvent.relatedGarageId
+      ? ['Гараж', auditEvent.relatedGarageNumber ? `№ ${auditEvent.relatedGarageNumber}` : auditEvent.relatedGarageId]
+      : null,
+    auditEvent.relatedAccountingMonth ? ['Месяц', auditEvent.relatedAccountingMonth] : null,
+    auditEvent.relatedCounterpartyName || auditEvent.relatedCounterpartyId
+      ? ['Контрагент', auditEvent.relatedCounterpartyName ?? auditEvent.relatedCounterpartyId]
+      : null,
+    auditEvent.relatedDocumentNumber || auditEvent.relatedDocumentId
+      ? ['Документ', auditEvent.relatedDocumentNumber ?? auditEvent.relatedDocumentId]
+      : null,
+  ].filter((item): item is [string, string] => Boolean(item))
+}
+
 function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
   const [page, setPage] = useState<PagedItems<AuditEventDto>>(() => createEmptyPage<AuditEventDto>(25))
   const [search, setSearch] = useState('')
@@ -3496,6 +3511,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   useRestoreFocusOnClose(Boolean(detailState))
   const detailCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(detailState))
   const detailDialogRef = useFocusTrap<HTMLElement>(Boolean(detailState))
+  const detailRelatedContext = detailState ? getAuditRelatedContext(detailState.event) : []
   const resetAuditPageOffset = useCallback(() => {
     setPage((current) => current.offset === 0 ? current : { ...current, offset: 0 })
   }, [])
@@ -3767,6 +3783,19 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               <span>Описание события</span>
               <p>{detailState.event.summary}</p>
             </div>
+            {detailRelatedContext.length > 0 ? (
+              <div className="audit-detail-summary audit-detail-metadata">
+                <span>Связанные данные</span>
+                <dl>
+                  {detailRelatedContext.map(([label, value]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null}
             {detailState.event.metadata && Object.keys(detailState.event.metadata).length > 0 ? (
               <div className="audit-detail-summary audit-detail-metadata">
                 <span>Служебные данные</span>
