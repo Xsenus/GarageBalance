@@ -3815,6 +3815,50 @@ describe('App', () => {
     expect(await within(auditTable).findByText('Событий пока нет')).toHaveAttribute('role', 'status')
   })
 
+  it('retries audit journal loading after an error', async () => {
+    const user = userEvent.setup()
+    let loadCount = 0
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEventsPage: async (_token, params) => {
+        loadCount += 1
+        if (loadCount === 1) {
+          throw new Error('Журнал временно недоступен')
+        }
+
+        return {
+          items: [createAuditEvent({ action: 'dictionary.owner_restored', entityType: 'owner', summary: 'Владелец восстановлен.' })],
+          totalCount: 1,
+          offset: params?.offset ?? 0,
+          limit: params?.limit ?? 25,
+        }
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    expect(await within(auditPanel).findByText('Журнал временно недоступен')).toHaveAttribute('role', 'alert')
+    await user.click(within(auditPanel).getByRole('button', { name: 'Повторить загрузку' }))
+
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+    expect(await within(auditTable).findByText('Владелец восстановлен.')).toBeInTheDocument()
+    expect(within(auditPanel).queryByText('Журнал временно недоступен')).not.toBeInTheDocument()
+    expect(loadCount).toBe(2)
+  })
+
   it('shows consolidated report and applies garage search', async () => {
     const user = userEvent.setup()
     const reportClient = createReportClient()

@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   Search,
@@ -3765,6 +3766,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [detailState, setDetailState] = useState<{ event: AuditEventDto; loading: boolean; error: string | null } | null>(null)
   const detailRequestIdRef = useRef(0)
@@ -3859,7 +3861,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, auditClient, auditQuery])
+  }, [auth.accessToken, auditClient, auditQuery, reloadToken])
 
   async function exportCurrentEvents() {
     setExporting(true)
@@ -3895,7 +3897,15 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
         </div>
       </div>
 
-      {error ? <FormError>{error}</FormError> : null}
+      {error ? (
+        <div className="audit-error-state">
+          <FormError>{error}</FormError>
+          <button className="ghost-button" type="button" onClick={() => setReloadToken((value) => value + 1)} disabled={loading}>
+            <RefreshCw size={16} aria-hidden="true" />
+            <span>{loading ? 'Загружаем...' : 'Повторить загрузку'}</span>
+          </button>
+        </div>
+      ) : null}
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
       <form className="audit-filter-grid" onSubmit={(event) => event.preventDefault()} aria-label="Фильтры истории изменений">

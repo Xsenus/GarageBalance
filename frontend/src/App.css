@@ -2879,6 +2879,17 @@ h1 {
   overflow-x: auto;
 }
 
+.audit-error-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.audit-error-state .form-error {
+  margin: 0;
+}
+
 .audit-event-row {
   display: grid;
   grid-template-columns: 150px 120px 140px minmax(150px, 1fr) minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) 120px;
