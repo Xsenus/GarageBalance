@@ -54,6 +54,16 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             query = query.Where(auditEvent => auditEvent.EntityType == entityType);
         }
 
+        if (request.ActorUserId is not null)
+        {
+            query = query.Where(auditEvent => auditEvent.ActorUserId == request.ActorUserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.QuickFilter))
+        {
+            query = ApplyQuickFilter(query, request.QuickFilter);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
@@ -110,6 +120,16 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         {
             var entityType = request.EntityType.Trim();
             query = query.Where(auditEvent => auditEvent.EntityType == entityType);
+        }
+
+        if (request.ActorUserId is not null)
+        {
+            query = query.Where(auditEvent => auditEvent.ActorUserId == request.ActorUserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.QuickFilter))
+        {
+            query = ApplyQuickFilter(query, request.QuickFilter);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -225,6 +245,27 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
                 auditEvent.Action.ToLower().Contains(needles[0]) ||
                 auditEvent.Action.ToLower().Contains(needles[1]) ||
                 auditEvent.Action.ToLower().Contains(needles[2])),
+            _ => query
+        };
+    }
+
+    private static IQueryable<AuditEvent> ApplyQuickFilter(IQueryable<AuditEvent> query, string quickFilter)
+    {
+        return quickFilter.Trim().ToLowerInvariant() switch
+        {
+            "deletions" => query.Where(auditEvent =>
+                auditEvent.Action.ToLower().Contains("_archived") ||
+                auditEvent.Action.ToLower().Contains("_deleted") ||
+                auditEvent.Action.ToLower().Contains("_canceled") ||
+                auditEvent.Action.ToLower().Contains("_cancelled")),
+            "restores" => query.Where(auditEvent => auditEvent.Action.ToLower().Contains("_restored")),
+            "financial" => query.Where(auditEvent =>
+                auditEvent.Action.ToLower().StartsWith("finance.") ||
+                auditEvent.Action.ToLower().Contains("fund") ||
+                auditEvent.EntityType == "financial_operation" ||
+                auditEvent.EntityType == "accrual" ||
+                auditEvent.EntityType == "supplier_accrual" ||
+                auditEvent.EntityType == "fund_operation"),
             _ => query
         };
     }

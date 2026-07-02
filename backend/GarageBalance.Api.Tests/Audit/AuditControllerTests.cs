@@ -20,8 +20,9 @@ public sealed class AuditControllerTests
         var controller = new AuditController(service);
         var dateFrom = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
         var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var actorUserId = Guid.NewGuid();
 
-        var result = await controller.GetEvents(dateFrom, dateTo, "auth.login_success", "user", 50, "auth", "login", "user", CancellationToken.None);
+        var result = await controller.GetEvents(dateFrom, dateTo, "auth.login_success", "user", 50, "auth", "login", "user", actorUserId, "restores", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var events = Assert.IsAssignableFrom<IReadOnlyList<AuditEventDto>>(ok.Value);
@@ -34,6 +35,8 @@ public sealed class AuditControllerTests
         Assert.Equal("auth", service.LastRequest.Section);
         Assert.Equal("login", service.LastRequest.ActionKind);
         Assert.Equal("user", service.LastRequest.EntityType);
+        Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
+        Assert.Equal("restores", service.LastRequest.QuickFilter);
     }
 
     [Fact]
@@ -49,8 +52,9 @@ public sealed class AuditControllerTests
         var controller = new AuditController(service);
         var dateFrom = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
         var dateTo = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var actorUserId = Guid.NewGuid();
 
-        var result = await controller.ExportEvents(dateFrom, dateTo, "auth.login_success", "user", "auth", "login", "user", CancellationToken.None);
+        var result = await controller.ExportEvents(dateFrom, dateTo, "auth.login_success", "user", "auth", "login", "user", actorUserId, "restores", CancellationToken.None);
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal("text/csv; charset=utf-8", file.ContentType);
@@ -63,6 +67,8 @@ public sealed class AuditControllerTests
         Assert.Equal("auth", service.LastRequest.Section);
         Assert.Equal("login", service.LastRequest.ActionKind);
         Assert.Equal("user", service.LastRequest.EntityType);
+        Assert.Equal(actorUserId, service.LastRequest.ActorUserId);
+        Assert.Equal("restores", service.LastRequest.QuickFilter);
     }
 
     private sealed class FakeAuditService : IAuditService

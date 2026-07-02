@@ -118,6 +118,58 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_FiltersByActorAndQuickFilter()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        var targetActorId = Guid.NewGuid();
+        var anotherActorId = Guid.NewGuid();
+        database.Context.AuditEvents.AddRange(
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 20, 10, 0, 0, TimeSpan.Zero),
+                ActorUserId = targetActorId,
+                Action = "dictionary.owner_archived",
+                EntityType = "owner",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Владелец архивирован."
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero),
+                ActorUserId = anotherActorId,
+                Action = "dictionary.owner_archived",
+                EntityType = "owner",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Владелец архивирован другим пользователем."
+            },
+            new AuditEvent
+            {
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 22, 10, 0, 0, TimeSpan.Zero),
+                ActorUserId = targetActorId,
+                Action = "finance.income_created",
+                EntityType = "financial_operation",
+                EntityId = Guid.NewGuid().ToString(),
+                Summary = "Поступление создано."
+            });
+        await database.Context.SaveChangesAsync();
+
+        var deletedEvents = await service.GetEventsAsync(
+            new AuditEventListRequest(null, null, null, null, null, null, null, null, targetActorId, "deletions"),
+            CancellationToken.None);
+        var financialEvents = await service.GetEventsAsync(
+            new AuditEventListRequest(null, null, null, null, null, null, null, null, targetActorId, "financial"),
+            CancellationToken.None);
+
+        var deletedEvent = Assert.Single(deletedEvents);
+        Assert.Equal("dictionary.owner_archived", deletedEvent.Action);
+        Assert.Equal(targetActorId, deletedEvent.ActorUserId);
+        var financialEvent = Assert.Single(financialEvents);
+        Assert.Equal("finance.income_created", financialEvent.Action);
+        Assert.Equal(targetActorId, financialEvent.ActorUserId);
+    }
+
+    [Fact]
     public async Task GetEventsAsync_AppliesLimit()
     {
         await using var database = await TestDatabase.CreateAsync();

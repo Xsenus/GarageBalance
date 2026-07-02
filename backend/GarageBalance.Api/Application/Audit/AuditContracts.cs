@@ -17,7 +17,9 @@ public sealed record AuditEventListRequest(
     int? Limit = null,
     string? Section = null,
     string? ActionKind = null,
-    string? EntityType = null);
+    string? EntityType = null,
+    Guid? ActorUserId = null,
+    string? QuickFilter = null);
 
 public sealed record AuditEventExportDto(
     string FileName,

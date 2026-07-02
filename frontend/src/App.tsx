@@ -136,6 +136,13 @@ const auditEntityTypeOptions = [
   { value: 'access_import_run', label: 'Импорт Access' },
 ]
 
+const auditQuickFilterOptions = [
+  { value: '', label: 'Все события' },
+  { value: 'deletions', label: 'Только удаления' },
+  { value: 'restores', label: 'Только восстановления' },
+  { value: 'financial', label: 'Только финансы' },
+]
+
 function FormField({ label, hint, children, className }: { label: string; hint?: string; children: ReactNode; className?: string }) {
   return (
     <label className={`form-field${className ? ` ${className}` : ''}`}>
@@ -3458,6 +3465,8 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const [section, setSection] = useState('')
   const [actionKind, setActionKind] = useState('')
   const [entityType, setEntityType] = useState('')
+  const [actorUserId, setActorUserId] = useState('')
+  const [quickFilter, setQuickFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
@@ -3469,15 +3478,19 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     section: section || undefined,
     actionKind: actionKind || undefined,
     entityType: entityType || undefined,
+    actorUserId: actorUserId.trim() || undefined,
+    quickFilter: quickFilter || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     limit: auditScreenRequestLimit,
-  }), [actionKind, dateFrom, dateTo, entityType, search, section])
+  }), [actionKind, actorUserId, dateFrom, dateTo, entityType, quickFilter, search, section])
   const auditExportQuery = useMemo(() => ({
     search: auditQuery.search,
     section: auditQuery.section,
     actionKind: auditQuery.actionKind,
     entityType: auditQuery.entityType,
+    actorUserId: auditQuery.actorUserId,
+    quickFilter: auditQuery.quickFilter,
     dateFrom: auditQuery.dateFrom,
     dateTo: auditQuery.dateTo,
   }), [auditQuery])
@@ -3563,6 +3576,14 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
         <FormField label="Объект">
           <select aria-label="Тип объекта истории изменений" value={entityType} onChange={(event) => setEntityType(event.target.value)}>
             {auditEntityTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Пользователь">
+          <input aria-label="ID пользователя истории изменений" placeholder="ID пользователя" value={actorUserId} onChange={(event) => setActorUserId(event.target.value)} />
+        </FormField>
+        <FormField label="Быстрый фильтр">
+          <select aria-label="Быстрый фильтр истории изменений" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
+            {auditQuickFilterOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </FormField>
         <FormField label="С даты">

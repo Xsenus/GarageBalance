@@ -21,9 +21,11 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         [FromQuery] string? section,
         [FromQuery] string? actionKind,
         [FromQuery] string? entityType,
+        [FromQuery] Guid? actorUserId,
+        [FromQuery] string? quickFilter,
         CancellationToken cancellationToken)
     {
-        return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType), cancellationToken));
+        return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter), cancellationToken));
     }
 
     [HttpGet("events/export")]
@@ -36,9 +38,11 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         [FromQuery] string? section,
         [FromQuery] string? actionKind,
         [FromQuery] string? entityType,
+        [FromQuery] Guid? actorUserId,
+        [FromQuery] string? quickFilter,
         CancellationToken cancellationToken)
     {
-        var export = await auditService.ExportEventsCsvAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, null, section, actionKind, entityType), cancellationToken);
+        var export = await auditService.ExportEventsCsvAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, null, section, actionKind, entityType, actorUserId, quickFilter), cancellationToken);
         return File(export.Content, export.ContentType, export.FileName);
     }
 }

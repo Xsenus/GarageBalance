@@ -3372,10 +3372,11 @@ describe('App', () => {
     expect(await within(auditPanel).findByText('История изменений CSV готова.')).toHaveAttribute('role', 'status')
   })
 
-  it('filters audit journal by section action kind entity type and date range', async () => {
+  it('filters audit journal by section action kind entity type actor quick filter and date range', async () => {
     const user = userEvent.setup()
     let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
     let auditExportRequest: Parameters<AuditClient['exportEvents']>[1] = undefined
+    const actorUserId = '5df20dec-2959-4726-a1cb-0e6ec6b28674'
     const auth = createAuthResponse()
     const authClient = createAuthClient({
       login: async () => ({
@@ -3413,6 +3414,8 @@ describe('App', () => {
     await user.selectOptions(within(auditPanel).getByLabelText('Раздел истории изменений'), 'dictionary')
     await user.selectOptions(within(auditPanel).getByLabelText('Тип действия истории изменений'), 'update')
     await user.selectOptions(within(auditPanel).getByLabelText('Тип объекта истории изменений'), 'owner')
+    await user.type(within(auditPanel).getByLabelText('ID пользователя истории изменений'), actorUserId)
+    await user.selectOptions(within(auditPanel).getByLabelText('Быстрый фильтр истории изменений'), 'restores')
     await user.type(within(auditPanel).getByLabelText('Начало периода истории изменений'), '2026-06-01')
     await user.type(within(auditPanel).getByLabelText('Конец периода истории изменений'), '2026-06-30')
 
@@ -3420,6 +3423,8 @@ describe('App', () => {
       expect(auditRequest?.section).toBe('dictionary')
       expect(auditRequest?.actionKind).toBe('update')
       expect(auditRequest?.entityType).toBe('owner')
+      expect(auditRequest?.actorUserId).toBe(actorUserId)
+      expect(auditRequest?.quickFilter).toBe('restores')
       expect(auditRequest?.dateFrom).toBe('2026-06-01')
       expect(auditRequest?.dateTo).toBe('2026-06-30')
       expect(auditRequest?.limit).toBe(50)
@@ -3437,6 +3442,8 @@ describe('App', () => {
     expect(auditExportRequest?.section).toBe('dictionary')
     expect(auditExportRequest?.actionKind).toBe('update')
     expect(auditExportRequest?.entityType).toBe('owner')
+    expect(auditExportRequest?.actorUserId).toBe(actorUserId)
+    expect(auditExportRequest?.quickFilter).toBe('restores')
     expect(auditExportRequest?.dateFrom).toBe('2026-06-01')
     expect(auditExportRequest?.dateTo).toBe('2026-06-30')
     expect(auditExportRequest?.limit).toBeUndefined()
