@@ -48,6 +48,7 @@ builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IAuditEventWriter, AuditEventWriter>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordPolicyValidator, PasswordPolicyValidator>();
 builder.Services.AddSingleton<ITokenService, JwtTokenService>();
