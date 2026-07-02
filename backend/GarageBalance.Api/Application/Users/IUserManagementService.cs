@@ -11,4 +11,6 @@ public interface IUserManagementService
     Task<UserManagementResult<ManagedUserDto>> CreateUserAsync(CreateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<UserManagementResult<ManagedUserDto>> UpdateUserAsync(Guid userId, UpdateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+
+    Task<UserManagementResult<ManagedUserDto>> RestoreUserAsync(Guid userId, Guid? actorUserId, CancellationToken cancellationToken);
 }

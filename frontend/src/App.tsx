@@ -4697,6 +4697,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedUserDto | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<ManagedUserDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
@@ -4704,10 +4705,13 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deleteTarget))
   const deleteDialogRef = useFocusTrap<HTMLElement>(Boolean(deleteTarget))
+  const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
+  const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor), () => closeEditor())
   useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
+  useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
 
   function showToast(text: string, kind: 'success' | 'error' = 'success') {
     const id = Date.now()
@@ -4872,6 +4876,25 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
     }
   }
 
+  async function restoreUser() {
+    if (!restoreTarget) {
+      return
+    }
+
+    setSaving('restore')
+    setError(null)
+    try {
+      await userClient.restoreUser(auth.accessToken, restoreTarget.id)
+      setRestoreTarget(null)
+      showToast('Пользователь восстановлен.')
+      await refreshUsers()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось восстановить пользователя.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   function openDeleteDialog(user: ManagedUserDto) {
     setDeleteReason('')
     setDeleteReasonError(null)
@@ -4994,6 +5017,10 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <Trash2 size={15} />
             <span>Удалить</span>
           </button>
+          <button type="button" role="menuitem" onClick={() => { setRestoreTarget(contextMenu.user); setContextMenu(null) }} disabled={contextMenu.user.isActive}>
+            <RotateCcw size={15} />
+            <span>Вернуть</span>
+          </button>
         </div>
       ) : null}
 
@@ -5109,6 +5136,30 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
               <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete' || !deleteReason.trim()}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {restoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
+          <section ref={restoreDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-restore-title" aria-describedby="user-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <h3 id="user-restore-title">Вернуть пользователя?</h3>
+                <p>{restoreTarget.displayName} снова сможет входить в систему с прежними ролями.</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setRestoreTarget(null)} aria-label="Отменить восстановление пользователя" disabled={saving === 'restore'}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="user-restore-description">Действие будет записано в историю изменений.</p>
+            <div className="detail-dialog-actions">
+              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)} disabled={saving === 'restore'}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void restoreUser()} disabled={saving === 'restore'}>
+                <RotateCcw size={16} />
+                <span>{saving === 'restore' ? 'Возвращаем...' : 'Вернуть'}</span>
               </button>
             </div>
           </section>

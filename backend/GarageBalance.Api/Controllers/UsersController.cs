@@ -57,6 +57,15 @@ public sealed class UsersController(IUserManagementService userManagementService
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpPost("{id:guid}/restore")]
+    [ProducesResponseType<ManagedUserDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ManagedUserDto>> RestoreUser(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await userManagementService.RestoreUserAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;

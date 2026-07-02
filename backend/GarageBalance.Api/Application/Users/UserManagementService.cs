@@ -252,6 +252,53 @@ public sealed class UserManagementService(
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
     }
 
+    public async Task<UserManagementResult<ManagedUserDto>> RestoreUserAsync(Guid userId, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        await EnsureSystemRolesAsync(cancellationToken);
+
+        var user = await dbContext.Users
+            .Include(item => item.UserRoles)
+            .ThenInclude(userRole => userRole.Role)
+            .SingleOrDefaultAsync(item => item.Id == userId && !item.IsActive, cancellationToken);
+
+        if (user is null)
+        {
+            return UserManagementResult<ManagedUserDto>.Failure("user_not_found", "Пользователь не найден среди отключенных.");
+        }
+
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["isActive"] = user.IsActive
+        };
+
+        user.IsActive = true;
+
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "users.user_restored",
+            "app_user",
+            user.Id.ToString(),
+            Summary: $"Восстановлен пользователь {user.DisplayName}.",
+            ActionKind: "restore",
+            EntityDisplayName: user.DisplayName,
+            OldValues: oldValues,
+            NewValues: new Dictionary<string, object?>
+            {
+                ["isActive"] = user.IsActive
+            },
+            FieldLabels: UserAuditFieldLabels,
+            RelatedCounterpartyId: user.Id.ToString(),
+            RelatedCounterpartyName: user.DisplayName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["roles"] = FormatRoleCodes(user.UserRoles.Select(userRole => userRole.Role)),
+                ["isActive"] = user.IsActive
+            }));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
+    }
+
     private static (string Code, string Message)? ValidateDeactivationReason(string? reason, out string normalizedReason)
     {
         normalizedReason = reason?.Trim() ?? string.Empty;

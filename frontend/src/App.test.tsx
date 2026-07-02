@@ -833,6 +833,15 @@ describe('App', () => {
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
     expect(deactivationReason).toBe('Access no longer needed')
     expect(await screen.findByText('Пользователь отключен.')).toHaveAttribute('role', 'status')
+
+    fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Вернуть' }))
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть пользователя?' })
+    expect(within(restoreDialog).getByText('Действие будет записано в историю изменений.')).toBeInTheDocument()
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
+
+    expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
+    expect(await screen.findByText('Пользователь восстановлен.')).toHaveAttribute('role', 'status')
   })
 
   it('keeps restricted sections closed after administrator creates an operator', async () => {
@@ -4489,6 +4498,7 @@ function createUserClient(overrides: Partial<UserManagementClient> = {}): UserMa
     },
     createUser: async () => admin,
     updateUser: async () => admin,
+    restoreUser: async () => admin,
     ...overrides,
   }
 }
@@ -4535,6 +4545,19 @@ function createStatefulUserClient(): UserManagementClient {
       })
       users = users.map((item) => (item.id === userId ? updatedUser : item))
       return updatedUser
+    },
+    restoreUser: async (_token, userId) => {
+      const existingUser = users.find((item) => item.id === userId)
+      const restoredUser = createManagedUser({
+        id: userId,
+        email: existingUser?.email ?? 'restored@example.com',
+        displayName: existingUser?.displayName ?? 'Restored user',
+        isActive: true,
+        roles: existingUser?.roles ?? ['operator'],
+        permissions: existingUser?.permissions ?? roles.find((role) => role.code === 'operator')?.permissions ?? [],
+      })
+      users = users.map((item) => (item.id === userId ? restoredUser : item))
+      return restoredUser
     },
   }
 }

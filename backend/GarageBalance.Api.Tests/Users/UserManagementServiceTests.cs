@@ -212,6 +212,53 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task RestoreUserAsync_ReactivatesDisabledUserAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator]),
+            null,
+            CancellationToken.None);
+        var disabled = await service.UpdateUserAsync(
+            created.Value!.Id,
+            new UpdateManagedUserRequest("User", [SystemRoles.Operator], false, null, "Access no longer needed"),
+            null,
+            CancellationToken.None);
+        Assert.True(disabled.Succeeded);
+
+        var result = await service.RestoreUserAsync(created.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsActive);
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_restored");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("users", auditEvent.Section);
+        Assert.Equal("restore", auditEvent.ActionKind);
+        Assert.Equal(created.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Contains("Восстановлен пользователь User", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.Contains("True", auditEvent.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreUserAsync_ReturnsNotFoundForActiveUser()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator]),
+            null,
+            CancellationToken.None);
+
+        var result = await service.RestoreUserAsync(created.Value!.Id, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("user_not_found", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "users.user_restored");
+    }
+
+    [Fact]
     public async Task UpdateUserAsync_RejectsWeakNewPasswordWithoutChangingHash()
     {
         await using var database = await TestDatabase.CreateAsync();

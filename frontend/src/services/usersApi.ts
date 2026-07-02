@@ -44,6 +44,7 @@ export type UserManagementClient = {
   getUsersPage(accessToken: string, search?: string, offset?: number, limit?: number): Promise<PagedManagedUsersDto>
   createUser(accessToken: string, request: CreateManagedUserRequest): Promise<ManagedUserDto>
   updateUser(accessToken: string, userId: string, request: UpdateManagedUserRequest): Promise<ManagedUserDto>
+  restoreUser(accessToken: string, userId: string): Promise<ManagedUserDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -94,5 +95,8 @@ export const usersApi: UserManagementClient = {
   },
   updateUser(accessToken, userId, request) {
     return requestJson(accessToken, `/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  restoreUser(accessToken, userId) {
+    return requestJson(accessToken, `/api/users/${userId}/restore`, { method: 'POST' })
   },
 }

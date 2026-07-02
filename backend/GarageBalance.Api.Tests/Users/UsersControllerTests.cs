@@ -104,6 +104,40 @@ public sealed class UsersControllerTests
     }
 
     [Fact]
+    public async Task RestoreUser_ReturnsRestoredUserAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var user = CreateUserDto() with { IsActive = true };
+        var service = new FakeUserManagementService
+        {
+            RestoreResult = UserManagementResult<ManagedUserDto>.Success(user)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreUser(user.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(user, ok.Value);
+        Assert.Equal(user.Id, service.LastRestoreUserId);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task RestoreUser_ReturnsNotFoundForMissingDisabledUser()
+    {
+        var controller = CreateController(new FakeUserManagementService
+        {
+            RestoreResult = UserManagementResult<ManagedUserDto>.Failure("user_not_found", "User not found.")
+        });
+
+        var result = await controller.RestoreUser(Guid.NewGuid(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("user_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateUser_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -141,11 +175,13 @@ public sealed class UsersControllerTests
     private sealed class FakeUserManagementService : IUserManagementService
     {
         public Guid? LastActorUserId { get; private set; }
+        public Guid? LastRestoreUserId { get; private set; }
         public (string? Search, int? Limit) LastUserListRequest { get; private set; }
         public (string? Search, int Offset, int Limit) LastUserPageRequest { get; private set; }
         public UpdateManagedUserRequest? LastUpdateRequest { get; private set; }
         public UserManagementResult<ManagedUserDto> CreateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
         public UserManagementResult<ManagedUserDto> UpdateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
+        public UserManagementResult<ManagedUserDto> RestoreResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
         {
@@ -175,6 +211,13 @@ public sealed class UsersControllerTests
             LastActorUserId = actorUserId;
             LastUpdateRequest = request;
             return Task.FromResult(UpdateResult);
+        }
+
+        public Task<UserManagementResult<ManagedUserDto>> RestoreUserAsync(Guid userId, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastRestoreUserId = userId;
+            return Task.FromResult(RestoreResult);
         }
     }
 }
