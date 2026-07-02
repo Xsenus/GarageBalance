@@ -268,6 +268,10 @@ public sealed class AuditServiceTests
         });
         await database.Context.SaveChangesAsync();
 
+        var storedEvent = await database.Context.AuditEvents.AsNoTracking().SingleAsync();
+        Assert.Equal("finance", storedEvent.Section);
+        Assert.Equal("update", storedEvent.ActionKind);
+
         var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
 
         var auditEvent = Assert.Single(result);
@@ -349,6 +353,8 @@ public sealed class AuditServiceTests
         {
             CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 12, 0, 0, TimeSpan.Zero),
             Action = "finance.payment_updated",
+            Section = "stored-section",
+            ActionKind = "stored-kind",
             EntityType = "financial_operation",
             EntityId = Guid.NewGuid().ToString(),
             EntityDisplayName = "Stored operation",
@@ -378,6 +384,8 @@ public sealed class AuditServiceTests
         var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
 
         var auditEvent = Assert.Single(result);
+        Assert.Equal("stored-section", auditEvent.Section);
+        Assert.Equal("stored-kind", auditEvent.ActionKind);
         Assert.Equal("Stored operation", auditEvent.EntityDisplayName);
         Assert.Equal("stored-garage", auditEvent.RelatedGarageId);
         Assert.Equal("101", auditEvent.RelatedGarageNumber);

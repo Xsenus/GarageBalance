@@ -41,8 +41,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
         if (!string.IsNullOrWhiteSpace(request.Section))
         {
-            var sectionPrefix = request.Section.Trim().ToLowerInvariant() + ".";
-            query = query.Where(auditEvent => auditEvent.Action.ToLower().StartsWith(sectionPrefix));
+            query = ApplySectionFilter(query, request.Section);
         }
 
         if (!string.IsNullOrWhiteSpace(request.ActionKind))
@@ -131,8 +130,8 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             auditEvent.EntityType,
             AuditTextMasker.Mask(auditEvent.EntityId),
             maskedSummary,
-            GetSection(auditEvent.Action),
-            GetActionKind(auditEvent.Action),
+            MaskStoredValue(auditEvent.Section) ?? GetSection(auditEvent.Action),
+            MaskStoredValue(auditEvent.ActionKind) ?? GetActionKind(auditEvent.Action),
             ExtractFieldName(maskedSummary),
             beforeAfter.OldValue,
             beforeAfter.NewValue,
@@ -299,8 +298,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
         if (!string.IsNullOrWhiteSpace(request.Section))
         {
-            var sectionPrefix = request.Section.Trim().ToLowerInvariant() + ".";
-            query = query.Where(auditEvent => auditEvent.Action.ToLower().StartsWith(sectionPrefix));
+            query = ApplySectionFilter(query, request.Section);
         }
 
         if (!string.IsNullOrWhiteSpace(request.ActionKind))
@@ -354,6 +352,15 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             "export" => ["_exported", ".export"],
             _ => []
         };
+    }
+
+    private static IQueryable<AuditEvent> ApplySectionFilter(IQueryable<AuditEvent> query, string section)
+    {
+        var normalizedSection = section.Trim().ToLowerInvariant();
+        var sectionPrefix = normalizedSection + ".";
+        return query.Where(auditEvent =>
+            (auditEvent.Section != null && auditEvent.Section.ToLower() == normalizedSection) ||
+            (auditEvent.Section == null && auditEvent.Action.ToLower().StartsWith(sectionPrefix)));
     }
 
     private static string GetSection(string action)
@@ -592,15 +599,22 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
     private static IQueryable<AuditEvent> ApplyActionKindFilter(IQueryable<AuditEvent> query, string actionKind)
     {
+        var normalizedActionKind = actionKind.Trim().ToLowerInvariant();
         var needles = GetActionKindNeedles(actionKind);
         return needles.Count switch
         {
-            1 => query.Where(auditEvent => auditEvent.Action.ToLower().Contains(needles[0])),
-            2 => query.Where(auditEvent => auditEvent.Action.ToLower().Contains(needles[0]) || auditEvent.Action.ToLower().Contains(needles[1])),
+            1 => query.Where(auditEvent =>
+                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
+                (auditEvent.ActionKind == null && auditEvent.Action.ToLower().Contains(needles[0]))),
+            2 => query.Where(auditEvent =>
+                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
+                (auditEvent.ActionKind == null && (auditEvent.Action.ToLower().Contains(needles[0]) || auditEvent.Action.ToLower().Contains(needles[1])))),
             3 => query.Where(auditEvent =>
-                auditEvent.Action.ToLower().Contains(needles[0]) ||
-                auditEvent.Action.ToLower().Contains(needles[1]) ||
-                auditEvent.Action.ToLower().Contains(needles[2])),
+                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
+                (auditEvent.ActionKind == null && (
+                    auditEvent.Action.ToLower().Contains(needles[0]) ||
+                    auditEvent.Action.ToLower().Contains(needles[1]) ||
+                    auditEvent.Action.ToLower().Contains(needles[2])))),
             _ => query
         };
     }
@@ -610,13 +624,20 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         return quickFilter.Trim().ToLowerInvariant() switch
         {
             "deletions" => query.Where(auditEvent =>
-                auditEvent.Action.ToLower().Contains("_archived") ||
-                auditEvent.Action.ToLower().Contains("_deleted") ||
-                auditEvent.Action.ToLower().Contains("_canceled") ||
-                auditEvent.Action.ToLower().Contains("_cancelled")),
-            "restores" => query.Where(auditEvent => auditEvent.Action.ToLower().Contains("_restored")),
+                auditEvent.ActionKind == "archive" ||
+                auditEvent.ActionKind == "delete" ||
+                auditEvent.ActionKind == "cancel" ||
+                (auditEvent.ActionKind == null && (
+                    auditEvent.Action.ToLower().Contains("_archived") ||
+                    auditEvent.Action.ToLower().Contains("_deleted") ||
+                    auditEvent.Action.ToLower().Contains("_canceled") ||
+                    auditEvent.Action.ToLower().Contains("_cancelled")))),
+            "restores" => query.Where(auditEvent =>
+                auditEvent.ActionKind == "restore" ||
+                (auditEvent.ActionKind == null && auditEvent.Action.ToLower().Contains("_restored"))),
             "financial" => query.Where(auditEvent =>
-                auditEvent.Action.ToLower().StartsWith("finance.") ||
+                auditEvent.Section == "finance" ||
+                (auditEvent.Section == null && auditEvent.Action.ToLower().StartsWith("finance.")) ||
                 auditEvent.Action.ToLower().Contains("fund") ||
                 auditEvent.EntityType == "financial_operation" ||
                 auditEvent.EntityType == "accrual" ||

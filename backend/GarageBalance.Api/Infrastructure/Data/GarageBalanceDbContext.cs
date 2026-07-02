@@ -96,6 +96,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("audit_events");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Action).HasMaxLength(120).IsRequired();
+            entity.Property(item => item.Section).HasMaxLength(80);
+            entity.Property(item => item.ActionKind).HasMaxLength(40);
             entity.Property(item => item.EntityType).HasMaxLength(120).IsRequired();
             entity.Property(item => item.EntityId).HasMaxLength(120);
             entity.Property(item => item.EntityDisplayName).HasMaxLength(256);
@@ -108,7 +110,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.RelatedDocumentNumber).HasMaxLength(120);
             entity.Property(item => item.Summary).HasMaxLength(1000).IsRequired();
             entity.HasIndex(item => item.CreatedAtUtc);
+            entity.HasIndex(item => item.Section);
+            entity.HasIndex(item => item.ActionKind);
             entity.HasIndex(item => new { item.EntityType, item.EntityId });
+            entity.HasIndex(item => new { item.Section, item.ActionKind, item.CreatedAtUtc });
             entity.HasIndex(item => item.RelatedGarageId);
             entity.HasIndex(item => item.RelatedGarageNumber);
             entity.HasIndex(item => item.RelatedAccountingMonth);
@@ -419,6 +424,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             var auditEvent = entry.Entity;
             var metadata = ParseAuditMetadata(auditEvent.MetadataJson);
 
+            auditEvent.Section ??= GetAuditSection(auditEvent.Action);
+            auditEvent.ActionKind ??= GetAuditActionKind(auditEvent.Action);
             auditEvent.EntityDisplayName ??= ExtractAuditMetadataValue(metadata, 256, "entityDisplayName", "displayName", "name", "title");
             auditEvent.RelatedGarageId ??= ExtractAuditMetadataValue(metadata, 120, "relatedGarageId", "garageId");
             auditEvent.RelatedGarageNumber ??= ExtractAuditMetadataValue(metadata, 80, "relatedGarageNumber", "garageNumber");
@@ -504,5 +511,74 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             key.Contains("bankAccount", StringComparison.OrdinalIgnoreCase) ||
             key.Contains("accountNumber", StringComparison.OrdinalIgnoreCase) ||
             key.Contains("address", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetAuditSection(string action)
+    {
+        var separatorIndex = action.IndexOf('.', StringComparison.Ordinal);
+        var section = separatorIndex > 0 ? action[..separatorIndex] : "system";
+        return section.Length <= 80 ? section : section[..80];
+    }
+
+    private static string GetAuditActionKind(string action)
+    {
+        var normalized = action.ToLowerInvariant();
+
+        if (normalized.Contains("_created", StringComparison.Ordinal))
+        {
+            return "create";
+        }
+
+        if (normalized.Contains("_updated", StringComparison.Ordinal) || normalized.Contains("password_changed", StringComparison.Ordinal))
+        {
+            return "update";
+        }
+
+        if (normalized.Contains("_archived", StringComparison.Ordinal))
+        {
+            return "archive";
+        }
+
+        if (normalized.Contains("_restored", StringComparison.Ordinal))
+        {
+            return "restore";
+        }
+
+        if (normalized.Contains("_canceled", StringComparison.Ordinal) || normalized.Contains("_cancelled", StringComparison.Ordinal))
+        {
+            return "cancel";
+        }
+
+        if (normalized.Contains("_deleted", StringComparison.Ordinal))
+        {
+            return "delete";
+        }
+
+        if (normalized.Contains("_failed", StringComparison.Ordinal) || normalized.Contains("_rate_limited", StringComparison.Ordinal) || normalized.Contains("_inactive", StringComparison.Ordinal))
+        {
+            return "fail";
+        }
+
+        if (normalized.Contains("_generated", StringComparison.Ordinal))
+        {
+            return "generate";
+        }
+
+        if (normalized.StartsWith("auth.login", StringComparison.Ordinal))
+        {
+            return "login";
+        }
+
+        if (normalized.StartsWith("import.", StringComparison.Ordinal))
+        {
+            return "import";
+        }
+
+        if (normalized.Contains("_exported", StringComparison.Ordinal) || normalized.Contains(".export", StringComparison.Ordinal))
+        {
+            return "export";
+        }
+
+        return "other";
     }
 }

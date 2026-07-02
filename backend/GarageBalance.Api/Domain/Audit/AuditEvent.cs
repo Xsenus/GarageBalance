@@ -6,6 +6,8 @@ public sealed class AuditEvent
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Guid? ActorUserId { get; set; }
     public required string Action { get; set; }
+    public string? Section { get; set; }
+    public string? ActionKind { get; set; }
     public required string EntityType { get; set; }
     public string? EntityId { get; set; }
     public string? EntityDisplayName { get; set; }
