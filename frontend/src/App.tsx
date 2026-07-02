@@ -6035,6 +6035,7 @@ function PrototypeChangeConfirmationDialog({
   onConfirm: () => void
   title: string
 }) {
+  useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   useEscapeKey(true, onCancel)
@@ -6078,6 +6079,8 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: Con
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
+  useRestoreFocusOnClose(true)
+  useRestoreFocusOnClose(Boolean(deleteConfirmationOpen))
   const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
@@ -6201,6 +6204,8 @@ function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: C
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
+  useRestoreFocusOnClose(true)
+  useRestoreFocusOnClose(Boolean(deleteConfirmationOpen))
   const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
@@ -6335,6 +6340,7 @@ function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: C
 function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => void; onSave: (serviceName: string) => void }) {
   const [serviceName, setServiceName] = useState('')
   const [isRegular, setIsRegular] = useState(true)
+  useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
 
@@ -6374,6 +6380,8 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
+  useRestoreFocusOnClose(true)
+  useRestoreFocusOnClose(Boolean(deleteConfirmationOpen))
   const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
@@ -6484,6 +6492,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
 
 function DepartmentPrototypeDialog({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
   const [name, setName] = useState('')
+  useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
 
@@ -7006,6 +7015,7 @@ function TariffsAndFeesPrototypePanel() {
 
 function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
   const [isRegular, setIsRegular] = useState(false)
+  useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
 
@@ -7106,6 +7116,7 @@ function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
 }
 
 function AddFeePrototypeDialog({ onClose }: { onClose: () => void }) {
+  useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
 
