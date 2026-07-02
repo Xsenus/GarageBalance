@@ -2762,7 +2762,6 @@ describe('App', () => {
 
   it('cancels income operation with required reason from payments workspace', async () => {
     const user = userEvent.setup()
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный документ')
     const financeClient = createStatefulFinanceClient()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -2784,16 +2783,19 @@ describe('App', () => {
     const operationMenu = await openFinanceContextMenuByCellText(financePanel, 'PKO-cancel')
     await user.click(within(operationMenu).getByRole('menuitem', { name: 'Удалить' }))
 
-    expect(promptSpy).toHaveBeenCalledWith('Укажите причину отмены операции')
+    const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить поступление?' })
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
+    expect(within(cancelDialog).getByRole('alert')).toHaveTextContent('Укажите причину отмены.')
+    expect(within(financePanel).getByText('+700,00')).toBeInTheDocument()
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный документ')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(financePanel).queryByText('+700,00')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
     expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
-    promptSpy.mockRestore()
   })
 
   it('cancels expense operation with required reason from payments table context menu', async () => {
     const user = userEvent.setup()
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочная выплата')
     const financeClient = createStatefulFinanceClient()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -2819,16 +2821,16 @@ describe('App', () => {
     const operationMenu = await openFinanceContextMenuByCellText(financePanel, 'RKO-cancel')
     await user.click(within(operationMenu).getByRole('menuitem', { name: 'Удалить' }))
 
-    expect(promptSpy).toHaveBeenCalledWith('Укажите причину отмены операции')
+    const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить выплату?' })
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочная выплата')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(financePanel).queryByText('RKO-cancel')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
     expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
-    promptSpy.mockRestore()
   })
 
   it('cancels accruals and meter readings with required reasons from payments workspace', async () => {
     const user = userEvent.setup()
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Ошибочный ввод')
     const financeClient = createStatefulFinanceClient()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -2849,6 +2851,9 @@ describe('App', () => {
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
     const accrualMenu = await openFinanceContextMenuByCellText(financePanel, '900,00')
     await user.click(within(accrualMenu).getByRole('menuitem', { name: 'Удалить' }))
+    let cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление владельцу?' })
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный ввод')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(accrualTable).queryByText('900,00')).not.toBeInTheDocument())
     expect(within(accrualTable).getByText('Начислений пока нет')).toHaveAttribute('role', 'status')
 
@@ -2864,6 +2869,9 @@ describe('App', () => {
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
     const supplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650,00')
     await user.click(within(supplierAccrualMenu).getByRole('menuitem', { name: 'Удалить' }))
+    cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление поставщику?' })
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный ввод')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(supplierAccrualTable).queryByText('650,00')).not.toBeInTheDocument())
     expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toHaveAttribute('role', 'status')
 
@@ -2878,10 +2886,11 @@ describe('App', () => {
     await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
     const meterReadingMenu = await openFinanceContextMenuByCellText(financePanel, '5.5')
     await user.click(within(meterReadingMenu).getByRole('menuitem', { name: 'Удалить' }))
+    cancelDialog = await screen.findByRole('dialog', { name: 'Отменить показание счетчика?' })
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный ввод')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(meterReadingTable).queryByText('5.5')).not.toBeInTheDocument())
     expect(within(meterReadingTable).getByText('Показаний пока нет')).toHaveAttribute('role', 'status')
-    expect(promptSpy).toHaveBeenCalledTimes(3)
-    promptSpy.mockRestore()
   })
 
   it('creates manual accrual and updates debt from payments workspace', async () => {

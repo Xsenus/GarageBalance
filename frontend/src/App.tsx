@@ -707,6 +707,11 @@ function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClie
 }
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
+type CancelFinanceTarget = {
+  section: FinanceSectionKey
+  record: FinanceRecord
+  reason: string
+}
 type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual' | 'garageAccrual' | 'fullPayment'
 
 const paymentPrototypeRows = [
@@ -781,6 +786,8 @@ function FinancePanel({
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
+  const [cancelFinanceTarget, setCancelFinanceTarget] = useState<CancelFinanceTarget | null>(null)
+  const [cancelFinanceReasonError, setCancelFinanceReasonError] = useState<string | null>(null)
   const [incomeValidationErrors, setIncomeValidationErrors] = useState<string[]>([])
   const [expenseValidationErrors, setExpenseValidationErrors] = useState<string[]>([])
   const [accrualValidationErrors, setAccrualValidationErrors] = useState<string[]>([])
@@ -797,12 +804,15 @@ function FinancePanel({
   useRestoreFocusOnClose(Boolean(financeContextMenu))
   useRestoreFocusOnClose(Boolean(paymentsPrototypeDialog))
   useRestoreFocusOnClose(Boolean(financeEditorCloseConfirmation))
+  useRestoreFocusOnClose(Boolean(cancelFinanceTarget))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
   const financeEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditor))
   const financeEditorCloseConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditorCloseConfirmation))
   const financeEditorCloseConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditorCloseConfirmation))
+  const cancelFinanceReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(cancelFinanceTarget))
+  const cancelFinanceDialogRef = useFocusTrap<HTMLElement>(Boolean(cancelFinanceTarget))
   const financeContextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeContextMenu))
 
   function getFinanceEditorFormSnapshot(section: FinanceEditorKey) {
@@ -853,6 +863,7 @@ function FinancePanel({
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
   useEscapeKey(Boolean(financeEditor) && !financeEditorCloseConfirmation, () => closeFinanceEditor())
   useEscapeKey(Boolean(financeEditorCloseConfirmation), () => setFinanceEditorCloseConfirmation(false))
+  useEscapeKey(Boolean(cancelFinanceTarget) && !saving?.startsWith('cancel'), () => closeCancelFinanceDialog())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
   useEscapeKey(Boolean(paymentsPrototypeDialog), () => setPaymentsPrototypeDialog(null))
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
@@ -1288,76 +1299,99 @@ function FinancePanel({
     }
   }
 
-  async function cancelOperation(operation: FinancialOperationDto) {
-    if (!canWritePayments) {
-      setError('Для отмены платежей нужно право payments.write.')
-      return
-    }
-
-    const reason = window.prompt('Укажите причину отмены операции')
-    if (!reason?.trim()) {
-      setError('Для отмены операции нужна причина.')
-      return
-    }
-
-    await runSaving(`cancel-${operation.id}`, async () => {
-      await financeClient.cancelOperation(auth.accessToken, operation.id, { reason: reason.trim() })
-      await loadFinanceWorkbench(operation.operationKind === 'income' ? 'income' : 'expense', financePage.offset, financePage.limit)
-    })
+  function closeCancelFinanceDialog() {
+    setCancelFinanceTarget(null)
+    setCancelFinanceReasonError(null)
   }
 
-  async function cancelAccrual(accrual: AccrualDto) {
+  function openCancelFinanceDialog(section: FinanceSectionKey, record: FinanceRecord) {
     if (!canWritePayments) {
-      setError('Для отмены начислений нужно право payments.write.')
+      setError('Для отмены платежей, начислений и показаний нужно право payments.write.')
       return
     }
 
-    const reason = window.prompt('Укажите причину отмены начисления')
-    if (!reason?.trim()) {
-      setError('Для отмены начисления нужна причина.')
-      return
-    }
-
-    await runSaving(`cancel-accrual-${accrual.id}`, async () => {
-      await financeClient.cancelAccrual(auth.accessToken, accrual.id, { reason: reason.trim() })
-      await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit)
-    })
+    setError(null)
+    setCancelFinanceReasonError(null)
+    setCancelFinanceTarget({ section, record, reason: '' })
   }
 
-  async function cancelSupplierAccrual(accrual: SupplierAccrualDto) {
-    if (!canWritePayments) {
-      setError('Для отмены начислений поставщикам нужно право payments.write.')
-      return
+  function getCancelFinanceSavingScope(target: CancelFinanceTarget) {
+    if (target.section === 'income' || target.section === 'expense') {
+      return `cancel-${target.record.id}`
     }
-
-    const reason = window.prompt('Укажите причину отмены начисления поставщику')
-    if (!reason?.trim()) {
-      setError('Для отмены начисления поставщику нужна причина.')
-      return
+    if (target.section === 'accruals') {
+      return `cancel-accrual-${target.record.id}`
     }
-
-    await runSaving(`cancel-supplier-accrual-${accrual.id}`, async () => {
-      await financeClient.cancelSupplierAccrual(auth.accessToken, accrual.id, { reason: reason.trim() })
-      await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit)
-    })
+    if (target.section === 'supplierAccruals') {
+      return `cancel-supplier-accrual-${target.record.id}`
+    }
+    return `cancel-meter-reading-${target.record.id}`
   }
 
-  async function cancelMeterReading(reading: MeterReadingDto) {
-    if (!canWritePayments) {
-      setError('Для отмены показаний нужно право payments.write.')
+  function getCancelFinanceTitle(target: CancelFinanceTarget) {
+    if (target.section === 'income') {
+      return 'Отменить поступление?'
+    }
+    if (target.section === 'expense') {
+      return 'Отменить выплату?'
+    }
+    if (target.section === 'accruals') {
+      return 'Отменить начисление владельцу?'
+    }
+    if (target.section === 'supplierAccruals') {
+      return 'Отменить начисление поставщику?'
+    }
+    return 'Отменить показание счетчика?'
+  }
+
+  function getCancelFinanceObjectLabel(target: CancelFinanceTarget) {
+    const record = target.record
+    if ('operationKind' in record) {
+      const name = record.operationKind === 'income' ? record.incomeTypeName : record.expenseTypeName
+      const counterparty = record.operationKind === 'income' ? formatFinanceGarageLabel(record.garageNumber) : record.supplierName
+      return `${name ?? 'Операция'} · ${counterparty ?? 'контрагент не указан'} · ${formatMoney(record.amount)}`
+    }
+    if ('meterKind' in record) {
+      return `${getFinanceMeterKindLabel(record.meterKind)} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMonth(record.accountingMonth)}`
+    }
+    if ('supplierName' in record) {
+      return `${record.expenseTypeName} · ${record.supplierName} · ${formatMoney(record.amount)}`
+    }
+    return `${record.incomeTypeName} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMoney(record.amount)}`
+  }
+
+  async function confirmCancelFinanceRecord() {
+    if (!cancelFinanceTarget) {
       return
     }
 
-    const reason = window.prompt('Укажите причину отмены показания')
-    if (!reason?.trim()) {
-      setError('Для отмены показания нужна причина.')
+    const reason = cancelFinanceTarget.reason.trim()
+    if (!reason) {
+      setCancelFinanceReasonError('Укажите причину отмены.')
       return
     }
 
-    await runSaving(`cancel-meter-reading-${reading.id}`, async () => {
-      await financeClient.cancelMeterReading(auth.accessToken, reading.id, { reason: reason.trim() })
-      await loadFinanceWorkbench('meterReadings', financePage.offset, financePage.limit)
+    const target = cancelFinanceTarget
+    const saved = await runSaving(getCancelFinanceSavingScope(target), async () => {
+      if (target.section === 'income' || target.section === 'expense') {
+        const operation = target.record as FinancialOperationDto
+        await financeClient.cancelOperation(auth.accessToken, operation.id, { reason })
+        await loadFinanceWorkbench(operation.operationKind === 'income' ? 'income' : 'expense', financePage.offset, financePage.limit)
+      } else if (target.section === 'accruals') {
+        await financeClient.cancelAccrual(auth.accessToken, target.record.id, { reason })
+        await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit)
+      } else if (target.section === 'supplierAccruals') {
+        await financeClient.cancelSupplierAccrual(auth.accessToken, target.record.id, { reason })
+        await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit)
+      } else {
+        await financeClient.cancelMeterReading(auth.accessToken, target.record.id, { reason })
+        await loadFinanceWorkbench('meterReadings', financePage.offset, financePage.limit)
+      }
     })
+
+    if (saved) {
+      closeCancelFinanceDialog()
+    }
   }
 
   async function runSaving(scope: string, action: () => Promise<void>) {
@@ -1520,15 +1554,7 @@ function FinancePanel({
 
   function deleteFinanceRecord(section: FinanceSectionKey, record: FinanceRecord) {
     setFinanceContextMenu(null)
-    if (section === 'income' || section === 'expense') {
-      void cancelOperation(record as FinancialOperationDto)
-    } else if (section === 'accruals') {
-      void cancelAccrual(record as AccrualDto)
-    } else if (section === 'supplierAccruals') {
-      void cancelSupplierAccrual(record as SupplierAccrualDto)
-    } else {
-      void cancelMeterReading(record as MeterReadingDto)
-    }
+    openCancelFinanceDialog(section, record)
   }
 
   function handleFinanceRowKeyDown(event: KeyboardEvent<HTMLElement>, section: FinanceSectionKey, record: FinanceRecord) {
@@ -2498,6 +2524,50 @@ function FinancePanel({
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
             <span>{getFinanceContextMenuLabel('delete')}</span>
           </button>
+        </div>
+      ) : null}
+      {cancelFinanceTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (saving !== getCancelFinanceSavingScope(cancelFinanceTarget)) {
+            closeCancelFinanceDialog()
+          }
+        }}>
+          <section ref={cancelFinanceDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-cancel-title" aria-describedby="finance-cancel-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Отмена записи</p>
+                <h3 id="finance-cancel-title">{getCancelFinanceTitle(cancelFinanceTarget)}</h3>
+                <p>{getCancelFinanceObjectLabel(cancelFinanceTarget)}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение отмены" onClick={closeCancelFinanceDialog} disabled={saving === getCancelFinanceSavingScope(cancelFinanceTarget)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="finance-cancel-description">Запись будет скрыта из рабочих таблиц как отмененная, но останется в истории изменений и финансовом журнале. Укажите причину, чтобы бухгалтер мог проверить действие позже.</p>
+            <FormField label="Причина отмены">
+              <textarea
+                ref={cancelFinanceReasonRef}
+                aria-label="Причина отмены финансовой записи"
+                value={cancelFinanceTarget.reason}
+                onChange={(event) => {
+                  setCancelFinanceReasonError(null)
+                  setCancelFinanceTarget((target) => target ? { ...target, reason: event.target.value } : target)
+                }}
+                placeholder="Например: ошибочный документ, неверная сумма или дубль записи"
+                required
+              />
+            </FormField>
+            {cancelFinanceReasonError ? <FormError>{cancelFinanceReasonError}</FormError> : null}
+            <div className="detail-dialog-actions">
+              <button className="ghost-button" type="button" onClick={closeCancelFinanceDialog} disabled={saving === getCancelFinanceSavingScope(cancelFinanceTarget)}>
+                Оставить запись
+              </button>
+              <button className="secondary-button danger-button" type="button" onClick={() => void confirmCancelFinanceRecord()} disabled={saving === getCancelFinanceSavingScope(cancelFinanceTarget)}>
+                <Trash2 size={16} aria-hidden="true" />
+                <span>{saving === getCancelFinanceSavingScope(cancelFinanceTarget) ? 'Отменяем...' : 'Отменить запись'}</span>
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
       {financeEditor ? (
