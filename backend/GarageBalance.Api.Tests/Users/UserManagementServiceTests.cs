@@ -1,3 +1,5 @@
+using System.Text.Json;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Domain.Security;
@@ -40,7 +42,19 @@ public sealed class UserManagementServiceTests
         Assert.Equal("OPERATOR@EXAMPLE.COM", database.Context.Users.Single().NormalizedEmail);
         Assert.Contains(SystemRoles.Operator, result.Value!.Roles);
         Assert.DoesNotContain("StrongPass123", database.Context.Users.Single().PasswordHash);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "users.user_created" && item.ActorUserId == actorUserId);
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_created");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal(result.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("users", auditEvent.Section);
+        Assert.Equal("create", auditEvent.ActionKind);
+        Assert.Equal("Оператор", auditEvent.EntityDisplayName);
+        Assert.Equal(result.Value.Id.ToString(), auditEvent.RelatedCounterpartyId);
+        Assert.Equal("Оператор", auditEvent.RelatedCounterpartyName);
+        Assert.Contains("operator", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("operator@example.com", auditEvent.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("operator@example.com", auditEvent.MetadataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("StrongPass123", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("StrongPass123", auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,7 +129,19 @@ public sealed class UserManagementServiceTests
         Assert.Equal("Бухгалтер", result.Value!.DisplayName);
         Assert.Contains(SystemRoles.Accountant, result.Value.Roles);
         Assert.NotEqual(oldHash, database.Context.Users.Single().PasswordHash);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "users.user_updated");
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_updated");
+        Assert.Equal("users", auditEvent.Section);
+        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Equal(created.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("Бухгалтер", auditEvent.EntityDisplayName);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Роли", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Смена учетных данных", changedFields, StringComparison.Ordinal);
+        Assert.Equal("accountant", metadata.RootElement.GetProperty("roles").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("credentialsChanged").GetString());
+        Assert.DoesNotContain("NewStrongPass123", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("NewStrongPass123", auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -218,7 +244,7 @@ public sealed class UserManagementServiceTests
 
     private static UserManagementService CreateService(GarageBalanceDbContext context)
     {
-        return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator());
+        return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator(), new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

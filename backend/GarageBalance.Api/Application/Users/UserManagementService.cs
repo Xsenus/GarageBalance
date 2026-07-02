@@ -1,5 +1,5 @@
 using GarageBalance.Api.Application.Auth;
-using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Infrastructure.Data;
@@ -7,7 +7,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Users;
 
-public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPasswordHasher passwordHasher, IPasswordPolicyValidator passwordPolicyValidator) : IUserManagementService
+public sealed class UserManagementService(
+    GarageBalanceDbContext dbContext,
+    IPasswordHasher passwordHasher,
+    IPasswordPolicyValidator passwordPolicyValidator,
+    IAuditEventWriter auditEventWriter) : IUserManagementService
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
@@ -130,7 +134,22 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
         }
 
         dbContext.Users.Add(user);
-        AddAudit(actorUserId, "users.user_created", "app_user", user.Id, $"Создан пользователь {user.DisplayName}.");
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "users.user_created",
+            "app_user",
+            user.Id.ToString(),
+            Summary: $"Создан пользователь {user.DisplayName}.",
+            ActionKind: "create",
+            EntityDisplayName: user.DisplayName,
+            RelatedCounterpartyId: user.Id.ToString(),
+            RelatedCounterpartyName: user.DisplayName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["displayName"] = user.DisplayName,
+                ["isActive"] = user.IsActive,
+                ["roles"] = FormatRoleCodes(rolesResult.Value!)
+            }));
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
@@ -162,6 +181,15 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
             return UserManagementResult<ManagedUserDto>.Failure("last_admin_required", "Нельзя отключить или лишить роли последнего активного администратора.");
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["displayName"] = user.DisplayName,
+            ["isActive"] = user.IsActive,
+            ["roles"] = FormatRoleCodes(user.UserRoles.Select(userRole => userRole.Role)),
+            ["credentialsChanged"] = false
+        };
+        var passwordChanged = false;
+
         user.DisplayName = request.DisplayName.Trim();
         user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.NewPassword))
@@ -173,6 +201,7 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
             }
 
             user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
+            passwordChanged = true;
         }
 
         user.UserRoles.Clear();
@@ -185,7 +214,31 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
             });
         }
 
-        AddAudit(actorUserId, "users.user_updated", "app_user", user.Id, $"Обновлен пользователь {user.DisplayName}.");
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "users.user_updated",
+            "app_user",
+            user.Id.ToString(),
+            Summary: $"Обновлен пользователь {user.DisplayName}.",
+            ActionKind: "update",
+            EntityDisplayName: user.DisplayName,
+            OldValues: oldValues,
+            NewValues: new Dictionary<string, object?>
+            {
+                ["displayName"] = user.DisplayName,
+                ["isActive"] = user.IsActive,
+                ["roles"] = FormatRoleCodes(rolesResult.Value!),
+                ["credentialsChanged"] = passwordChanged
+            },
+            FieldLabels: UserAuditFieldLabels,
+            RelatedCounterpartyId: user.Id.ToString(),
+            RelatedCounterpartyName: user.DisplayName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["roles"] = FormatRoleCodes(rolesResult.Value!),
+                ["isActive"] = user.IsActive,
+                ["credentialsChanged"] = passwordChanged
+            }));
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
@@ -254,16 +307,17 @@ public sealed class UserManagementService(GarageBalanceDbContext dbContext, IPas
         role.Permissions = permissions.ToList();
     }
 
-    private void AddAudit(Guid? actorUserId, string action, string entityType, Guid entityId, string summary)
+    private static readonly IReadOnlyDictionary<string, string> UserAuditFieldLabels = new Dictionary<string, string>
     {
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = action,
-            EntityType = entityType,
-            EntityId = entityId.ToString(),
-            Summary = summary
-        });
+        ["displayName"] = "Имя",
+        ["isActive"] = "Активность",
+        ["roles"] = "Роли",
+        ["credentialsChanged"] = "Смена учетных данных"
+    };
+
+    private static string FormatRoleCodes(IEnumerable<AppRole> roles)
+    {
+        return string.Join(", ", roles.Select(role => role.Code).Order(StringComparer.Ordinal));
     }
 
     private static string NormalizeEmail(string email)
