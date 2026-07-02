@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Controllers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GarageBalance.Api.Tests.Reports;
@@ -14,13 +16,19 @@ public sealed class ReportsControllerTests
         {
             Result = ReportResult<ConsolidatedReportDto>.Success(report)
         };
+        var actorUserId = Guid.NewGuid();
         var controller = new ReportsController(reportService);
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())]))
+        };
 
         var result = await controller.GetConsolidatedReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, 12, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal(12, reportService.ConsolidatedRequest?.Limit);
+        Assert.Equal(actorUserId, reportService.ConsolidatedRequest?.ActorUserId);
     }
 
     [Fact]

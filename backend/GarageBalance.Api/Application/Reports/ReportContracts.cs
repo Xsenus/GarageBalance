@@ -4,7 +4,8 @@ public sealed record ConsolidatedReportRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
     string? Search,
-    int? Limit = null);
+    int? Limit = null,
+    Guid? ActorUserId = null);
 
 public sealed record IncomeReportRequest(
     DateOnly? DateFrom,
@@ -14,7 +15,8 @@ public sealed record IncomeReportRequest(
     IReadOnlyCollection<Guid> OwnerIds,
     IReadOnlyCollection<Guid> IncomeTypeIds,
     string? RowMode,
-    int? Limit = null);
+    int? Limit = null,
+    Guid? ActorUserId = null);
 
 public sealed record ExpenseReportRequest(
     DateOnly? DateFrom,
@@ -23,7 +25,8 @@ public sealed record ExpenseReportRequest(
     IReadOnlyCollection<Guid> SupplierIds,
     IReadOnlyCollection<Guid> ExpenseTypeIds,
     string? RowMode,
-    int? Limit = null);
+    int? Limit = null,
+    Guid? ActorUserId = null);
 
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,

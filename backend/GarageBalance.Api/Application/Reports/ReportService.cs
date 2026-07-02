@@ -1,4 +1,5 @@
 using System.Globalization;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Reports;
 
-public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportService
+public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventWriter auditEventWriter) : IReportService
 {
     private const string IncomeReportAllRows = "all";
     private const string IncomeReportAccrualRows = "accruals";
@@ -15,6 +16,11 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
     private const string ExpenseReportAllRows = "all";
     private const string ExpenseReportAccrualRows = "accruals";
     private const string ExpenseReportPaymentRows = "payments";
+
+    public ReportService(GarageBalanceDbContext dbContext)
+        : this(dbContext, new AuditEventWriter(dbContext))
+    {
+    }
 
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
@@ -92,6 +98,23 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             garageRows.RowCount,
             garageRows.Rows);
 
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.consolidated_generated",
+            "Сводный отчет",
+            "generated",
+            report.PeriodFrom,
+            report.PeriodTo,
+            report.GarageRowCount,
+            request.Search,
+            new Dictionary<string, object?>
+            {
+                ["limit"] = request.Limit,
+                ["monthlyRowCount"] = report.MonthlyRows.Count,
+                ["visibleGarageRows"] = report.GarageRows.Count
+            },
+            cancellationToken);
+
         return ReportResult<ConsolidatedReportDto>.Success(report);
     }
 
@@ -152,10 +175,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                     ])
             ]);
 
-        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+        var file = new ReportExportFileDto(
             BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            content));
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Сводный отчет", "xlsx", file.FileName, report.PeriodFrom, report.PeriodTo, report.GarageRowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportPdfAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
@@ -200,10 +226,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 row.MeterReadingCount)));
 
         var content = PdfReportDocumentBuilder.Build("GarageBalance consolidated report", lines);
-        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+        var file = new ReportExportFileDto(
             BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "pdf"),
             "application/pdf",
-            content));
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Сводный отчет", "pdf", file.FileName, report.PeriodFrom, report.PeriodTo, report.GarageRowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)
@@ -394,6 +423,18 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             rowCount,
             visibleRows);
 
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.income_generated",
+            "Отчет по поступлениям",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            BuildIncomeReportMetadata(request, rowMode, report.Rows.Count),
+            cancellationToken);
+
         return ReportResult<IncomeReportDto>.Success(report);
     }
 
@@ -562,6 +603,18 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
             rowCount,
             visibleRows);
 
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.expense_generated",
+            "Отчет по выплатам",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            BuildExpenseReportMetadata(request, rowMode, report.Rows.Count),
+            cancellationToken);
+
         return ReportResult<ExpenseReportDto>.Success(report);
     }
 
@@ -608,10 +661,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                     ])
             ]);
 
-        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+        var file = new ReportExportFileDto(
             BuildExportFileName("income", report.DateFrom, report.DateTo, "xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            content));
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по поступлениям", "xlsx", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportPdfAsync(IncomeReportRequest request, CancellationToken cancellationToken)
@@ -644,10 +700,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 row.DocumentNumber ?? string.Empty)));
 
         var content = PdfReportDocumentBuilder.Build("GarageBalance income report", lines);
-        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+        var file = new ReportExportFileDto(
             BuildExportFileName("income", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
-            content));
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по поступлениям", "pdf", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportExpenseReportXlsxAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
@@ -692,10 +751,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                     ])
             ]);
 
-        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+        var file = new ReportExportFileDto(
             BuildExportFileName("expense", report.DateFrom, report.DateTo, "xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            content));
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по выплатам", "xlsx", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportExpenseReportPdfAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
@@ -727,10 +789,13 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 row.DocumentNumber ?? string.Empty)));
 
         var content = PdfReportDocumentBuilder.Build("GarageBalance expense report", lines);
-        return ReportResult<ReportExportFileDto>.Success(new ReportExportFileDto(
+        var file = new ReportExportFileDto(
             BuildExportFileName("expense", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
-            content));
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по выплатам", "pdf", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     private async Task<GarageReportRowsPage> BuildGarageRowsPageAsync(string? search, DateOnly periodFrom, DateOnly periodTo, int? limit, CancellationToken cancellationToken)
@@ -1027,14 +1092,28 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 .ToList(),
             request.Limit);
 
-        return ReportResult<IncomeReportDto>.Success(new IncomeReportDto(
+        var report = new IncomeReportDto(
             dateFrom,
             dateTo,
             accrualTotal,
             incomeTotal,
             accrualTotal - incomeTotal,
             rowCount,
-            visibleRows));
+            visibleRows);
+
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.income_generated",
+            "Отчет по поступлениям",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            BuildIncomeReportMetadata(request, rowMode, report.Rows.Count),
+            cancellationToken);
+
+        return ReportResult<IncomeReportDto>.Success(report);
     }
 
     private async Task<ReportResult<ExpenseReportDto>> GetExpenseReportWithoutSearchAsync(
@@ -1180,14 +1259,136 @@ public sealed class ReportService(GarageBalanceDbContext dbContext) : IReportSer
                 .ToList(),
             request.Limit);
 
-        return ReportResult<ExpenseReportDto>.Success(new ExpenseReportDto(
+        var report = new ExpenseReportDto(
             dateFrom,
             dateTo,
             accrualTotal,
             expenseTotal,
             accrualTotal - expenseTotal,
             rowCount,
-            visibleRows));
+            visibleRows);
+
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.expense_generated",
+            "Отчет по выплатам",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            BuildExpenseReportMetadata(request, rowMode, report.Rows.Count),
+            cancellationToken);
+
+        return ReportResult<ExpenseReportDto>.Success(report);
+    }
+
+    private async Task AddReportExportAuditAsync(
+        Guid? actorUserId,
+        string reportTitle,
+        string format,
+        string fileName,
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        int rowCount,
+        string? search,
+        CancellationToken cancellationToken)
+    {
+        await AddReportAuditAsync(
+            actorUserId,
+            $"reports.{NormalizeReportActionName(reportTitle)}_exported",
+            reportTitle,
+            "exported",
+            dateFrom,
+            dateTo,
+            rowCount,
+            search,
+            new Dictionary<string, object?>
+            {
+                ["format"] = format,
+                ["fileName"] = fileName
+            },
+            cancellationToken);
+    }
+
+    private async Task AddReportAuditAsync(
+        Guid? actorUserId,
+        string action,
+        string reportTitle,
+        string operation,
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        int rowCount,
+        string? search,
+        IReadOnlyDictionary<string, object?> metadata,
+        CancellationToken cancellationToken)
+    {
+        var period = dateFrom == dateTo
+            ? dateFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : $"{dateFrom:yyyy-MM-dd} - {dateTo:yyyy-MM-dd}";
+        var allMetadata = new Dictionary<string, object?>(metadata, StringComparer.Ordinal)
+        {
+            ["reportTitle"] = reportTitle,
+            ["operation"] = operation,
+            ["periodFrom"] = dateFrom,
+            ["periodTo"] = dateTo,
+            ["rowCount"] = rowCount,
+            ["hasSearch"] = !string.IsNullOrWhiteSpace(search),
+            ["searchLength"] = string.IsNullOrWhiteSpace(search) ? 0 : search.Trim().Length
+        };
+
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            action,
+            "report",
+            NormalizeReportActionName(reportTitle),
+            operation == "exported"
+                ? $"Выгружен отчет \"{reportTitle}\" за период {period}."
+                : $"Сформирован отчет \"{reportTitle}\" за период {period}.",
+            EntityDisplayName: reportTitle,
+            RelatedAccountingMonth: dateFrom.Year == dateTo.Year && dateFrom.Month == dateTo.Month
+                ? dateFrom.ToString("yyyy-MM", CultureInfo.InvariantCulture)
+                : null,
+            Metadata: allMetadata));
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static Dictionary<string, object?> BuildIncomeReportMetadata(IncomeReportRequest request, string rowMode, int visibleRowCount)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["reportType"] = "income",
+            ["rowMode"] = rowMode,
+            ["visibleRowCount"] = visibleRowCount,
+            ["garageFilterCount"] = request.GarageIds.Count,
+            ["ownerFilterCount"] = request.OwnerIds.Count,
+            ["incomeTypeFilterCount"] = request.IncomeTypeIds.Count,
+            ["limit"] = request.Limit
+        };
+    }
+
+    private static Dictionary<string, object?> BuildExpenseReportMetadata(ExpenseReportRequest request, string rowMode, int visibleRowCount)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["reportType"] = "expense",
+            ["rowMode"] = rowMode,
+            ["visibleRowCount"] = visibleRowCount,
+            ["supplierFilterCount"] = request.SupplierIds.Count,
+            ["expenseTypeFilterCount"] = request.ExpenseTypeIds.Count,
+            ["limit"] = request.Limit
+        };
+    }
+
+    private static string NormalizeReportActionName(string reportTitle)
+    {
+        return reportTitle switch
+        {
+            "Сводный отчет" => "consolidated",
+            "Отчет по поступлениям" => "income",
+            "Отчет по выплатам" => "expense",
+            _ => "custom"
+        };
     }
 
     private static (DateOnly DateFrom, DateOnly DateTo) NormalizeDateRange(DateOnly? dateFrom, DateOnly? dateTo)

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -20,7 +21,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, limit), cancellationToken);
+        var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, limit, GetActorUserId()), cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
@@ -35,7 +36,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         CancellationToken cancellationToken)
     {
-        var result = await reportService.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
+        var result = await reportService.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, ActorUserId: GetActorUserId()), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
@@ -50,7 +51,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         CancellationToken cancellationToken)
     {
-        var result = await reportService.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search), cancellationToken);
+        var result = await reportService.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, ActorUserId: GetActorUserId()), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
@@ -79,7 +80,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 ownerIds ?? [],
                 incomeTypeIds ?? [],
                 rowMode,
-                limit),
+                limit,
+                GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded
@@ -108,7 +110,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 garageIds ?? [],
                 ownerIds ?? [],
                 incomeTypeIds ?? [],
-                rowMode),
+                rowMode,
+                ActorUserId: GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded
@@ -137,7 +140,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 garageIds ?? [],
                 ownerIds ?? [],
                 incomeTypeIds ?? [],
-                rowMode),
+                rowMode,
+                ActorUserId: GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded
@@ -166,7 +170,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 supplierIds ?? [],
                 expenseTypeIds ?? [],
                 rowMode,
-                limit),
+                limit,
+                GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded
@@ -193,7 +198,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 search,
                 supplierIds ?? [],
                 expenseTypeIds ?? [],
-                rowMode),
+                rowMode,
+                ActorUserId: GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded
@@ -220,11 +226,18 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 search,
                 supplierIds ?? [],
                 expenseTypeIds ?? [],
-                rowMode),
+                rowMode,
+                ActorUserId: GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    private Guid? GetActorUserId()
+    {
+        var principal = HttpContext?.User;
+        return principal is not null && Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
     }
 }

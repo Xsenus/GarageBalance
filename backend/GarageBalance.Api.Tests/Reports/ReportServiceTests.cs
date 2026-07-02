@@ -512,6 +512,57 @@ public sealed class ReportServiceTests
         AssertPdfContains(result.Value.Content, "RKO-1");
     }
 
+    [Fact]
+    public async Task ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var rawSearch = "private@example.com";
+
+        var result = await service.ExportIncomeReportXlsxAsync(
+            new IncomeReportRequest(
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 30),
+                rawSearch,
+                [],
+                [],
+                [],
+                "all",
+                ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var auditEvents = await database.Context.AuditEvents
+            .Where(auditEvent => auditEvent.Action.StartsWith("reports."))
+            .ToListAsync();
+        auditEvents = auditEvents.OrderBy(auditEvent => auditEvent.CreatedAtUtc).ToList();
+        Assert.Collection(
+            auditEvents,
+            generated =>
+            {
+                Assert.Equal("reports.income_generated", generated.Action);
+                Assert.Equal("reports", generated.Section);
+                Assert.Equal("generate", generated.ActionKind);
+                Assert.Equal(actorUserId, generated.ActorUserId);
+                Assert.Equal("report", generated.EntityType);
+                Assert.Equal("income", generated.EntityId);
+                Assert.Equal("Отчет по поступлениям", generated.EntityDisplayName);
+                Assert.DoesNotContain(rawSearch, generated.Summary, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(rawSearch, generated.MetadataJson, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("searchLength", generated.MetadataJson, StringComparison.Ordinal);
+            },
+            exported =>
+            {
+                Assert.Equal("reports.income_exported", exported.Action);
+                Assert.Equal("export", exported.ActionKind);
+                Assert.Equal(actorUserId, exported.ActorUserId);
+                Assert.Contains("xlsx", exported.MetadataJson, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(rawSearch, exported.Summary, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(rawSearch, exported.MetadataJson, StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
