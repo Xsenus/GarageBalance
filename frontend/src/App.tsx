@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RotateCcw,
   Save,
   Search,
   ShieldCheck,
@@ -130,7 +131,7 @@ const navigation: NavigationItem[] = [
   { section: 'funds', label: 'Фонды', icon: WalletCards, requiredAny: [permissions.reportsRead] },
   { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
   { section: 'import', label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
-  { section: 'audit', label: 'Audit', icon: FileText, requiredAny: [permissions.auditRead] },
+  { section: 'audit', label: 'История изменений', icon: FileText, requiredAny: [permissions.auditRead] },
   { section: 'releases', label: 'Что нового', icon: BookOpenCheck },
   { section: 'settings', label: 'Настройки', icon: LockKeyhole },
 ]
@@ -449,7 +450,7 @@ function Workspace({
         return canReadAudit ? (
           <AuditPanel auth={auth} auditClient={auditClient} />
         ) : (
-          <AccessNotice label="Аудит недоступен" title="Аудит" permission={permissions.auditRead} description="Журнал действий доступен только пользователям с правом просмотра audit-событий." />
+          <AccessNotice label="История изменений недоступна" title="История изменений" permission={permissions.auditRead} description="История изменений доступна только пользователям с правом просмотра audit-событий." />
         )
       case 'releases':
         return <ReleasePanel auth={auth} releaseClient={releaseClient} />
@@ -3384,7 +3385,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
         }
       } catch (caught) {
         if (!ignore) {
-          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить audit-журнал.')
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить историю изменений.')
         }
       } finally {
         if (!ignore) {
@@ -3406,9 +3407,9 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     try {
       const blob = await auditClient.exportEvents(auth.accessToken, { search })
       downloadBlob(blob, buildAuditExportFileName())
-      setExportMessage('Audit-журнал CSV готов.')
+      setExportMessage('История изменений CSV готова.')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось скачать audit-журнал.')
+      setError(caught instanceof Error ? caught.message : 'Не удалось скачать историю изменений.')
     } finally {
       setExporting(false)
     }
@@ -3417,11 +3418,11 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const visibleEvents = events.slice(0, 12)
 
   return (
-    <section className="dictionary-panel" aria-label="Audit-журнал">
+    <section className="dictionary-panel" aria-label="История изменений">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Audit</p>
-          <h2>Журнал действий пользователей и системы</h2>
+          <p className="eyebrow">История</p>
+          <h2>История изменений объектов и действий системы</h2>
         </div>
         <div className="section-actions">
           <span>{loading ? 'Загрузка...' : `${events.length} событий`}</span>
@@ -3436,10 +3437,10 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
       <form className="compact-form" onSubmit={(event) => event.preventDefault()}>
-        <input aria-label="Поиск в audit-журнале" placeholder="Действие, сущность или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
       </form>
 
-      <div className="operation-list" role="table" aria-label="События audit-журнала">
+      <div className="operation-list" role="table" aria-label="События истории изменений">
         <div className="operation-row header" role="row">
           <span role="columnheader">Дата</span>
           <span role="columnheader">Событие</span>
@@ -4994,7 +4995,7 @@ function ContractorsPrototypePanel({ actorName }: { actorName: string }) {
         </section>
       ) : null}
 
-      <section className="contractors-history-panel" aria-label="История изменений контрагентов">
+      <section hidden className="contractors-history-panel" aria-label="История изменений контрагентов">
         <label>
           <span>История по разделу</span>
           <select aria-label="Раздел истории контрагентов" value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value as 'all' | ContractorSection)}>
@@ -5466,6 +5467,24 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
     })
   }
 
+  const restoreOneTimePayment = (row: ContractorOneTimeRow) => {
+    if (!row.isDeleted) {
+      return
+    }
+
+    setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+      currentRow.id === row.id ? { ...currentRow, isDeleted: false } : currentRow
+    )))
+    addHistoryEntry({
+      section: 'Нерегулярные платежи',
+      objectName: row.name,
+      field: 'Статус',
+      action: 'Восстановление',
+      previousValue: 'Удален',
+      nextValue: 'Активен',
+    })
+  }
+
   const addElectricityThreshold = () => {
     const electricityThresholdRows = tariffRows.filter((row) => row.category === 'Электроэнергия' && row.threshold)
     const nextIndex = electricityThresholdRows.length + 1
@@ -5528,7 +5547,7 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
         </div>
       </div>
 
-      <div className="contractors-prototype-tabs" role="tablist" aria-label="Режим тарифов и сборов">
+      <div hidden className="contractors-prototype-tabs" role="tablist" aria-label="Режим тарифов и сборов">
         <button type="button" role="tab" aria-selected={activeView === 'values'} className={activeView === 'values' ? 'is-active' : ''} onClick={() => setActiveView('values')}>
           Значения
         </button>
@@ -5637,9 +5656,15 @@ function TariffsAndFeesPrototypePanel({ actorName }: TariffsAndFeesPrototypePane
                   </span>
                   <span>{row.isDeleted ? 'Удален' : 'Активен'}</span>
                   <span>
-                    <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить нерегулярный платеж ${row.name}`} disabled={row.isDeleted} onClick={() => markOneTimeDeleted(row)}>
-                      <Trash2 size={16} />
-                    </button>
+                    {row.isDeleted ? (
+                      <button className="icon-button" type="button" aria-label={`Вернуть нерегулярный платеж ${row.name}`} onClick={() => restoreOneTimePayment(row)}>
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : (
+                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить нерегулярный платеж ${row.name}`} onClick={() => markOneTimeDeleted(row)}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
@@ -6014,7 +6039,7 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
         </div>
       </div>
 
-      <div className="meter-readings-tabs" role="tablist" aria-label="Режим показаний">
+      <div hidden className="meter-readings-tabs" role="tablist" aria-label="Режим показаний">
         <button type="button" role="tab" aria-selected={activeView === 'readings'} className={activeView === 'readings' ? 'is-active' : ''} onClick={() => setActiveView('readings')}>
           Показания
         </button>

@@ -308,7 +308,7 @@ describe('App', () => {
     expect(within(feeDialog).getByLabelText('Перенос долга по сбору в просроченный')).toBeInTheDocument()
   })
 
-  it('edits tariffs and one-time payments with visible change history', async () => {
+  it('edits tariffs and one-time payments without local history access', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -335,30 +335,17 @@ describe('App', () => {
 
     const deleteFineButton = within(tariffsPanel).getByRole('button', { name: 'Удалить нерегулярный платеж Штраф за это' })
     await user.click(deleteFineButton)
-    expect(deleteFineButton).toBeDisabled()
     expect(within(tariffsPanel).getByText('Удален')).toBeInTheDocument()
+    const restoreFineButton = within(tariffsPanel).getByRole('button', { name: 'Вернуть нерегулярный платеж Штраф за это' })
+    await user.click(restoreFineButton)
+    expect(within(tariffsPanel).queryByText('Удален')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Удалить нерегулярный платеж Штраф за это' })).toBeInTheDocument()
 
-    await user.click(within(tariffsPanel).getByRole('tab', { name: 'История изменений' }))
-    const historyTable = within(tariffsPanel).getByRole('table', { name: 'История изменений тарифов и сборов' })
-    expect(within(historyTable).getByText('Вода: Тариф на воду')).toBeInTheDocument()
-    expect(within(historyTable).getAllByText('Электроэнергия: Порог 4').length).toBeGreaterThan(0)
-    expect(within(historyTable).getByText('Добавлен порог')).toBeInTheDocument()
-    expect(within(historyTable).getByText('7.5')).toBeInTheDocument()
-    expect(within(historyTable).getAllByText('Администратор').length).toBeGreaterThan(0)
-    expect(within(historyTable).getAllByText('Пусто').length).toBeGreaterThan(0)
-    expect(within(historyTable).getByText('1250')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Вступительный взнос')).toBeInTheDocument()
-    expect(within(historyTable).getByText('5000')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Штраф за это')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Удаление')).toBeInTheDocument()
-
-    await user.selectOptions(within(tariffsPanel).getByLabelText('Раздел истории изменений'), 'Нерегулярные платежи')
-    expect(within(historyTable).queryByText('Вода: Тариф на воду')).not.toBeInTheDocument()
-    expect(within(historyTable).getByText('Вступительный взнос')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Штраф за это')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов' })).not.toBeInTheDocument()
   })
 
-  it('shows contractors tabs, section dialogs and change history', async () => {
+  it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -413,17 +400,8 @@ describe('App', () => {
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
 
-    const historyTable = within(contractorsPanel).getByRole('table', { name: 'История изменений контрагентов' })
-    expect(within(historyTable).getByText('Новый владелец')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Иванов Иван')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Новый подрядчик')).toBeInTheDocument()
-    expect(within(historyTable).getAllByText('Уборка территории').length).toBeGreaterThan(0)
-    expect(within(historyTable).getByText('Смирнов Алексей')).toBeInTheDocument()
-    expect(within(historyTable).getAllByText('Администратор').length).toBeGreaterThan(0)
-
-    await user.selectOptions(within(contractorsPanel).getByLabelText('Раздел истории контрагентов'), 'staff')
-    expect(within(historyTable).queryByText('Новый подрядчик')).not.toBeInTheDocument()
-    expect(within(historyTable).getByText('Смирнов Алексей')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов' })).not.toBeInTheDocument()
+    expect(within(contractorsPanel).getByLabelText('Раздел истории контрагентов')).not.toBeVisible()
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
@@ -461,13 +439,8 @@ describe('App', () => {
     await user.type(januaryInput, '4654{Enter}')
     expect(januaryInput).toHaveValue('4654')
 
-    await user.click(within(readingsPanel).getByRole('tab', { name: 'История изменений' }))
-    const historyTable = within(readingsPanel).getByRole('table', { name: 'История изменений показаний' })
-    expect(within(historyTable).getByText('Гараж 12')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Январь')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Электроэнергия')).toBeInTheDocument()
-    expect(within(historyTable).getByText('4654')).toBeInTheDocument()
-    expect(within(historyTable).getByText('Администратор')).toBeInTheDocument()
+    expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
+    expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний' })).not.toBeInTheDocument()
   })
 
   it('shows payments prototype and opens payment form modals', async () => {
@@ -3251,13 +3224,13 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
-    await openSection(user, 'Audit')
-    const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
     expect(await within(auditPanel).findByText('auth.login_success')).toBeInTheDocument()
     expect(within(auditPanel).getByText('finance.income_created')).toBeInTheDocument()
 
-    await user.type(within(auditPanel).getByLabelText('Поиск в audit-журнале'), 'import')
+    await user.type(within(auditPanel).getByLabelText('Поиск в истории изменений'), 'import')
 
     expect(await within(auditPanel).findByText('import.access_dry_run')).toBeInTheDocument()
     expect(auditRequest?.search).toBe('import')
@@ -3267,7 +3240,7 @@ describe('App', () => {
 
     expect(auditExportRequest?.search).toBe('import')
     expect(auditExportRequest?.limit).toBeUndefined()
-    expect(await within(auditPanel).findByText('Audit-журнал CSV готов.')).toHaveAttribute('role', 'status')
+    expect(await within(auditPanel).findByText('История изменений CSV готова.')).toHaveAttribute('role', 'status')
   })
 
   it('shows visible audit event counter when audit log is compacted', async () => {
@@ -3297,9 +3270,9 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
-    await openSection(user, 'Audit')
-    const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
-    const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
 
     expect(await within(auditTable).findByText('Показано 12 из 13 событий')).toHaveAttribute('role', 'status')
     expect(within(auditTable).getByText('audit.event_12')).toBeInTheDocument()
@@ -3325,9 +3298,9 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
-    await openSection(user, 'Audit')
-    const auditPanel = await screen.findByRole('region', { name: 'Audit-журнал' })
-    const auditTable = within(auditPanel).getByRole('table', { name: 'События audit-журнала' })
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
 
     expect(await within(auditTable).findByText('Событий пока нет')).toHaveAttribute('role', 'status')
   })
@@ -4208,21 +4181,27 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     getOwners: async () => [owner],
     createOwner: async () => owner,
     archiveOwner: async () => undefined,
+    restoreOwner: async () => owner,
     getGarages: async () => [garage],
     createGarage: async () => garage,
     archiveGarage: async () => undefined,
+    restoreGarage: async () => garage,
     getSupplierGroups: async () => [group],
     createSupplierGroup: async () => group,
     archiveSupplierGroup: async () => undefined,
+    restoreSupplierGroup: async () => group,
     getSuppliers: async () => [supplier],
     createSupplier: async () => supplier,
     archiveSupplier: async () => undefined,
+    restoreSupplier: async () => supplier,
     getIncomeTypes: async () => [incomeType],
     createIncomeType: async () => incomeType,
     archiveIncomeType: async () => undefined,
+    restoreIncomeType: async () => incomeType,
     getExpenseTypes: async () => [expenseType],
     createExpenseType: async () => expenseType,
     archiveExpenseType: async () => undefined,
+    restoreExpenseType: async () => expenseType,
     getTariffs: async () => [tariff],
     createTariff: async () => tariff,
     updateTariff: async (_token, id, request) => createTariff({
@@ -4239,6 +4218,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       electricityThirdRate: request.electricityThirdRate ?? null,
     }),
     archiveTariff: async () => undefined,
+    restoreTariff: async () => tariff,
     ...overrides,
   }
 }

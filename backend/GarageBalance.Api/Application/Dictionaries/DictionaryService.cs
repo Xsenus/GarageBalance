@@ -116,6 +116,22 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
+    public async Task<DictionaryResult<OwnerDto>> RestoreOwnerAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var owner = await dbContext.Owners.Include(item => item.Garages).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (owner is null)
+        {
+            return DictionaryResult<OwnerDto>.Failure("owner_not_found", "Владелец не найден в архиве.");
+        }
+
+        owner.IsArchived = false;
+        owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.owner_restored", "owner", owner.Id, $"Восстановлен владелец {owner.FullName}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
+    }
+
     public async Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null)
     {
         var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => !garage.IsArchived);
@@ -289,6 +305,27 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
     }
 
+    public async Task<DictionaryResult<GarageDto>> RestoreGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return DictionaryResult<GarageDto>.Failure("garage_not_found", "Гараж не найден в архиве.");
+        }
+
+        if (await dbContext.Garages.AnyAsync(item => item.Id != id && !item.IsArchived && item.Number == garage.Number, cancellationToken))
+        {
+            return DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Активный гараж с таким номером уже существует.");
+        }
+
+        garage.IsArchived = false;
+        garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.garage_restored", "garage", garage.Id, $"Восстановлен гараж N {garage.Number}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+    }
+
     public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null)
     {
         return await dbContext.SupplierGroups.AsNoTracking()
@@ -374,6 +411,27 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_group_archived", "supplier_group", group.Id, $"Архивирована группа поставщиков {group.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
+    }
+
+    public async Task<DictionaryResult<SupplierGroupDto>> RestoreSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var group = await dbContext.SupplierGroups.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (group is null)
+        {
+            return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Группа поставщиков не найдена в архиве.");
+        }
+
+        if (await dbContext.SupplierGroups.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == group.Name, cancellationToken))
+        {
+            return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Активная группа поставщиков с таким названием уже существует.");
+        }
+
+        group.IsArchived = false;
+        group.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.supplier_group_restored", "supplier_group", group.Id, $"Восстановлена группа поставщиков {group.Name}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
@@ -509,6 +567,27 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
+    public async Task<DictionaryResult<SupplierDto>> RestoreSupplierAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var supplier = await dbContext.Suppliers.Include(item => item.Group).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (supplier is null)
+        {
+            return DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Поставщик не найден в архиве.");
+        }
+
+        if (supplier.Group.IsArchived)
+        {
+            return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Сначала восстановите группу поставщика.");
+        }
+
+        supplier.IsArchived = false;
+        supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.supplier_restored", "supplier", supplier.Id, $"Восстановлен поставщик {supplier.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+    }
+
     public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null)
     {
         return await dbContext.IncomeTypes.AsNoTracking()
@@ -604,6 +683,27 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
+    public async Task<DictionaryResult<AccountingTypeDto>> RestoreIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Вид поступления не найден в архиве.");
+        }
+
+        if (await dbContext.IncomeTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == incomeType.Name, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Активный вид поступления с таким названием уже существует.");
+        }
+
+        incomeType.IsArchived = false;
+        incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.income_type_restored", "income_type", incomeType.Id, $"Восстановлен вид поступления {incomeType.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+    }
+
     public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null)
     {
         return await dbContext.ExpenseTypes.AsNoTracking()
@@ -695,6 +795,27 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.expense_type_archived", "expense_type", expenseType.Id, $"Архивирован вид выплаты {expenseType.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
+    }
+
+    public async Task<DictionaryResult<AccountingTypeDto>> RestoreExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (expenseType is null)
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден в архиве.");
+        }
+
+        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == expenseType.Name, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Активный вид выплаты с таким названием уже существует.");
+        }
+
+        expenseType.IsArchived = false;
+        expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.expense_type_restored", "expense_type", expenseType.Id, $"Восстановлен вид выплаты {expenseType.Name}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
@@ -863,6 +984,27 @@ public sealed class DictionaryService(GarageBalanceDbContext dbContext) : IDicti
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.tariff_archived", "tariff", tariff.Id, $"Архивирован тариф {FormatTariffAuditDetails(tariff)}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
+    }
+
+    public async Task<DictionaryResult<TariffDto>> RestoreTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (tariff is null)
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден в архиве.");
+        }
+
+        if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == tariff.Name && item.EffectiveFrom == tariff.EffectiveFrom, cancellationToken))
+        {
+            return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Активный тариф с таким названием и датой действия уже существует.");
+        }
+
+        tariff.IsArchived = false;
+        tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.tariff_restored", "tariff", tariff.Id, $"Восстановлен тариф {FormatTariffAuditDetails(tariff)}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }

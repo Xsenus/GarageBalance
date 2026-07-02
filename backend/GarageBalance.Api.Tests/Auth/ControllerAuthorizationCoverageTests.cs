@@ -59,6 +59,7 @@ public sealed class ControllerAuthorizationCoverageTests
     [InlineData(nameof(DictionariesController.CreateTariff))]
     [InlineData(nameof(DictionariesController.UpdateTariff))]
     [InlineData(nameof(DictionariesController.ArchiveTariff))]
+    [InlineData(nameof(DictionariesController.RestoreTariff))]
     public void TariffWriteActionsRequireTariffManagementPermission(string actionName)
     {
         var action = typeof(DictionariesController).GetMethod(actionName);

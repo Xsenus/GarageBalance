@@ -29,10 +29,10 @@
 - `[ ]` Любое создание, изменение, архивирование, удаление, восстановление, отмена, импорт, начисление, платеж, настройка, изменение прав, изменение пользователя, ручная корректировка и интеграция должны создавать историю изменения.
 - `[ ]` История должна храниться на backend и в PostgreSQL, а не только в React-state.
 - `[ ]` История должна показывать минимум: дата и время, пользователь, раздел, тип объекта, идентификатор объекта, видимое название объекта, действие, поле/группа полей, старое значение, новое значение, причина/комментарий, связанный гараж/контрагент/месяц/документ при наличии.
-- `[ ]` В рабочих разделах не должно быть отдельных вкладок `История изменений`. История доступна через единую вкладку левого меню `История изменений`.
+- `[x]` В рабочих разделах не должно быть отдельных вкладок `История изменений`. История доступна через единую вкладку левого меню `История изменений`.
 - `[ ]` В рабочих разделах допустимы только короткие ссылки на объект или действие, но не отдельные таблицы истории внутри каждого раздела.
 - `[ ]` Удаление по умолчанию является soft delete / archive / cancel с audit-событием; физическое удаление запрещено для рабочих объектов без отдельного решения.
-- `[ ]` Для каждого soft-deleted объекта, который можно безопасно вернуть, должна быть кнопка `Вернуть` / `Восстановить`.
+- `[~]` Для каждого soft-deleted объекта, который можно безопасно вернуть, должна быть кнопка `Вернуть` / `Восстановить`.
 - `[ ]` Восстановление должно проверять конфликты уникальности и бизнес-ограничения, например номер гаража, название активного тарифа, документ платежа.
 - `[ ]` Каждое опасное действие удаления/архивации/отмены должно открывать confirmation dialog.
 - `[ ]` Каждое сохранение формы с изменениями должно открывать confirmation dialog с понятным списком `было -> стало`.
@@ -237,16 +237,16 @@
 
 - `[ ]` Backend unit tests на diff builder, masking, action kinds, no-op update.
 - `[ ]` Backend controller tests на `ChangeHistoryController`.
-- `[ ]` Backend controller tests на restore endpoints всех поддержанных объектов.
-- `[ ]` Backend service tests на каждое создание/изменение/удаление/восстановление объекта.
-- `[ ]` Backend permission tests: `audit.read`, write permissions для restore/delete/update.
+- `[~]` Backend controller tests на restore endpoints всех поддержанных объектов.
+- `[~]` Backend service tests на каждое создание/изменение/удаление/восстановление объекта.
+- `[~]` Backend permission tests: `audit.read`, write permissions для restore/delete/update.
 - `[ ]` Backend migration tests: schema, indexes, UTF-8 no BOM.
-- `[ ]` Frontend tests на центральную вкладку истории.
-- `[ ]` Frontend tests на отсутствие локальных вкладок истории в рабочих разделах.
+- `[x]` Frontend tests на центральную вкладку истории.
+- `[x]` Frontend tests на отсутствие локальных вкладок истории в рабочих разделах.
 - `[ ]` Frontend tests на confirmation delete.
 - `[ ]` Frontend tests на confirmation update with `было -> стало`.
 - `[ ]` Frontend tests на no-op save without confirmation.
-- `[ ]` Frontend tests на restore buttons and conflict errors.
+- `[~]` Frontend tests на restore buttons and conflict errors.
 - `[ ]` Frontend accessibility tests for dialogs and keyboard.
 - `[ ]` Performance tests/guards for history pagination and filters.
 - `[ ]` Run `dotnet test`.
@@ -286,7 +286,7 @@
 - `[ ]` Все новые frontend workflows покрыты tests and accessibility checks.
 - `[ ]` Full local checks pass.
 - `[ ]` Roadmap history updated.
-- `[ ]` Release notes added where user-visible.
+- `[~]` Release notes added where user-visible.
 - `[acceptance]` Заказчик проверил ключевые сценарии на staging or local environment.
 
 ## Риски И Вопросы
@@ -303,3 +303,4 @@
 ## История выполнения
 
 - `[x]` 02.07.2026: создан проектный roadmap для всей системы по истории изменений, восстановлению удаленных объектов, подтверждениям удаления/изменения и единому стилю контролов. Roadmap покрывает backend, frontend, PostgreSQL migrations, все разделы проекта, тесты, документацию, release notes, deploy и приемку. Код приложения, API и БД пока не менялись; это подготовка перед реализацией.
+- `[~]` 02.07.2026: начата реализация project-wide задания. Общий раздел `audit` в интерфейсе переименован в `История изменений`, локальные таблицы истории в рабочих прототипах тарифов/сборов, контрагентов и показаний скрыты из пользовательского доступа. Для архивируемых справочников backend получил restore-операции через controllers/services: владельцы, гаражи, группы поставщиков, поставщики, виды поступлений, виды выплат и тарифы. Restore пишет audit-события и проверяет конфликты active-only уникальности. В макете тарифов добавлена кнопка возврата удаленного нерегулярного платежа. Проверено выборочно: `dotnet test backend/GarageBalance.Api.Tests/GarageBalance.Api.Tests.csproj --filter "FullyQualifiedName~DictionaryServiceTests|FullyQualifiedName~DictionariesControllerTests|FullyQualifiedName~ControllerAuthorizationCoverageTests"` прошел 72/72, `npm run test -- --run App.test.tsx --reporter=dot` прошел 93/93. Локальная PostgreSQL-проверка заблокирована окружением: Docker не найден в PATH, `127.0.0.1:5432` недоступен, `psql` не найден; вместо этого использованы EF/SQLite integration-style тесты, PostgreSQL нужно перепроверить после поднятия локальной БД.

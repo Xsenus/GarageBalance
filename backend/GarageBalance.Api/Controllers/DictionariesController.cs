@@ -60,6 +60,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("owners/{id:guid}/restore")]
+    [ProducesResponseType<OwnerDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OwnerDto>> RestoreOwner(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreOwnerAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("garages")]
     [ProducesResponseType<IReadOnlyList<GarageDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<GarageDto>>> GetGarages([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
@@ -109,6 +119,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         var result = await dictionaryService.ArchiveGarageAsync(id, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("garages/{id:guid}/restore")]
+    [ProducesResponseType<GarageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<GarageDto>> RestoreGarage(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreGarageAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [HttpGet("supplier-groups")]
@@ -162,6 +183,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("supplier-groups/{id:guid}/restore")]
+    [ProducesResponseType<SupplierGroupDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SupplierGroupDto>> RestoreSupplierGroup(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreSupplierGroupAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("suppliers")]
     [ProducesResponseType<IReadOnlyList<SupplierDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SupplierDto>>> GetSuppliers([FromQuery] Guid? groupId, [FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
@@ -209,6 +241,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         var result = await dictionaryService.ArchiveSupplierAsync(id, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("suppliers/{id:guid}/restore")]
+    [ProducesResponseType<SupplierDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierDto>> RestoreSupplier(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreSupplierAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     [HttpGet("income-types")]
@@ -262,6 +304,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("income-types/{id:guid}/restore")]
+    [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountingTypeDto>> RestoreIncomeType(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreIncomeTypeAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("expense-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetExpenseTypes([FromQuery] int? limit, CancellationToken cancellationToken)
@@ -313,6 +366,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? NoContent() : ToError(result).Result!;
     }
 
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("expense-types/{id:guid}/restore")]
+    [ProducesResponseType<AccountingTypeDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountingTypeDto>> RestoreExpenseType(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreExpenseTypeAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("tariffs")]
     [ProducesResponseType<IReadOnlyList<TariffDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
@@ -361,6 +425,17 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         var result = await dictionaryService.ArchiveTariffAsync(id, GetActorUserId(), cancellationToken);
         return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("tariffs/{id:guid}/restore")]
+    [ProducesResponseType<TariffDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TariffDto>> RestoreTariff(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreTariffAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
     private Guid? GetActorUserId()
