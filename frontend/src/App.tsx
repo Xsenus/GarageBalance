@@ -6401,10 +6401,15 @@ function TariffsAndFeesPrototypePanel() {
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
+  const [oneTimeRestoreTarget, setOneTimeRestoreTarget] = useState<ContractorOneTimeRow | null>(null)
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
     setOneTimeDeleteReason('')
+  }
+
+  function closeOneTimeRestoreDialog() {
+    setOneTimeRestoreTarget(null)
   }
 
   function cancelPendingChange() {
@@ -6455,8 +6460,11 @@ function TariffsAndFeesPrototypePanel() {
   const changeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingChange))
   const oneTimeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeDeleteTarget))
+  const oneTimeRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeRestoreTarget))
+  const oneTimeRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeRestoreTarget))
   useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
+  useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
 
   const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit') => {
     const nextValue = tariffDrafts[row.id]?.[field] ?? ''
@@ -6532,14 +6540,23 @@ function TariffsAndFeesPrototypePanel() {
     closeOneTimeDeleteDialog()
   }
 
-  const restoreOneTimePayment = (row: ContractorOneTimeRow) => {
+  const openOneTimeRestoreDialog = (row: ContractorOneTimeRow) => {
     if (!row.isDeleted) {
       return
     }
 
+    setOneTimeRestoreTarget(row)
+  }
+
+  const confirmOneTimeRestore = () => {
+    if (!oneTimeRestoreTarget) {
+      return
+    }
+
     setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
-      currentRow.id === row.id ? { ...currentRow, isDeleted: false } : currentRow
+      currentRow.id === oneTimeRestoreTarget.id ? { ...currentRow, isDeleted: false } : currentRow
     )))
+    closeOneTimeRestoreDialog()
   }
 
   const addElectricityThreshold = () => {
@@ -6693,7 +6710,7 @@ function TariffsAndFeesPrototypePanel() {
                   <span>{row.isDeleted ? 'Удален' : 'Активен'}</span>
                   <span>
                     {row.isDeleted ? (
-                      <button className="icon-button" type="button" aria-label={`Вернуть нерегулярный платеж ${row.name}`} onClick={() => restoreOneTimePayment(row)}>
+                      <button className="icon-button" type="button" aria-label={`Вернуть нерегулярный платеж ${row.name}`} onClick={() => openOneTimeRestoreDialog(row)}>
                         <RotateCcw size={16} />
                       </button>
                     ) : (
@@ -6785,6 +6802,31 @@ function TariffsAndFeesPrototypePanel() {
               <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim()}>
                 <Trash2 size={16} />
                 <span>Удалить нерегулярный платеж</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {oneTimeRestoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeOneTimeRestoreDialog}>
+          <section ref={oneTimeRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="one-time-restore-title" aria-describedby="one-time-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление</p>
+                <h3 id="one-time-restore-title">Вернуть нерегулярный платеж?</h3>
+                <p>{oneTimeRestoreTarget.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления нерегулярного платежа" onClick={closeOneTimeRestoreDialog}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="one-time-restore-description">Платеж снова станет активным в списке тарифов и сборов. После подключения backend действие будет записываться в историю изменений.</p>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={oneTimeRestoreCancelRef} className="ghost-button" type="button" onClick={closeOneTimeRestoreDialog}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmOneTimeRestore}>
+                <RotateCcw size={16} />
+                <span>Вернуть платеж</span>
               </button>
             </div>
           </section>

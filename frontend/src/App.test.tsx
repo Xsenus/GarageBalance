@@ -355,7 +355,11 @@ describe('App', () => {
     expect(within(tariffsPanel).getByText('Удален')).toBeInTheDocument()
     const restoreFineButton = within(tariffsPanel).getByRole('button', { name: 'Вернуть нерегулярный платеж Штраф за это' })
     await user.click(restoreFineButton)
-    expect(within(tariffsPanel).queryByText('Удален')).not.toBeInTheDocument()
+    const restoreFineDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
+    expect(within(restoreFineDialog).getByText('Штраф за это')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Удален')).toBeInTheDocument()
+    await user.click(within(restoreFineDialog).getByRole('button', { name: 'Вернуть платеж' }))
+    await waitFor(() => expect(within(tariffsPanel).queryByText('Удален')).not.toBeInTheDocument())
     expect(within(tariffsPanel).getByRole('button', { name: 'Удалить нерегулярный платеж Штраф за это' })).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
