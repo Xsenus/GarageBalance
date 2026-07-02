@@ -385,6 +385,11 @@ describe('App', () => {
     await user.clear(within(garageDialog).getByLabelText('Владелец гаража'))
     await user.type(within(garageDialog).getByLabelText('Владелец гаража'), 'Новый владелец')
     await user.click(within(garageDialog).getByRole('button', { name: /Сохранить/i }))
+    const garageChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения гаража' })
+    expect(within(garageChangeDialog).getByText('Гараж 1')).toBeInTheDocument()
+    expect(within(garageChangeDialog).getByText('Владелец')).toBeInTheDocument()
+    expect(within(garageChangeDialog).getByText('Иванов Иван -> Новый владелец')).toBeInTheDocument()
+    await user.click(within(garageChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
 
     const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
@@ -415,9 +420,20 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
 
     const suppliersTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
-    const supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
+    let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
-    const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
+    let editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
+    await user.type(within(editSupplierDialog).getByLabelText('Телефон поставщика'), '+7 900 111-22-33')
+    await user.click(within(editSupplierDialog).getByRole('button', { name: /Сохранить/i }))
+    const supplierChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения поставщика' })
+    expect(within(supplierChangeDialog).getByText('Новый подрядчик')).toBeInTheDocument()
+    expect(within(supplierChangeDialog).getByText('Телефон')).toBeInTheDocument()
+    expect(within(supplierChangeDialog).getByText('Пусто -> +7 900 111-22-33')).toBeInTheDocument()
+    await user.click(within(supplierChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
+    editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
     await user.click(within(editSupplierDialog).getByRole('button', { name: 'Удалить поставщика' }))
     const deleteSupplierDialog = await screen.findByRole('dialog', { name: 'Удалить поставщика?' })
     expect(within(deleteSupplierDialog).getByText('Новый подрядчик')).toBeInTheDocument()
@@ -444,7 +460,19 @@ describe('App', () => {
     const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
     const employeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
     await user.click(within(employeeRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
-    const editEmployeeDialog = await screen.findByRole('dialog', { name: 'Смирнов Алексей' })
+    let editEmployeeDialog = await screen.findByRole('dialog', { name: 'Смирнов Алексей' })
+    await user.clear(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'))
+    await user.type(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'), '30000')
+    await user.click(within(editEmployeeDialog).getByRole('button', { name: /Сохранить/i }))
+    const employeeChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения сотрудника' })
+    expect(within(employeeChangeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
+    expect(within(employeeChangeDialog).getByText('Ставка')).toBeInTheDocument()
+    expect(within(employeeChangeDialog).getByText('25000 -> 30000')).toBeInTheDocument()
+    await user.click(within(employeeChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    const updatedEmployeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
+    await user.click(within(updatedEmployeeRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
+    editEmployeeDialog = await screen.findByRole('dialog', { name: 'Смирнов Алексей' })
     await user.click(within(editEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' }))
     const deleteEmployeeDialog = await screen.findByRole('dialog', { name: 'Удалить сотрудника?' })
     expect(within(deleteEmployeeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()

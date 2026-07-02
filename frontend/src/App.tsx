@@ -5802,15 +5802,146 @@ function createEmptyEmployeePrototype(department: string): ContractorStaffRow {
   }
 }
 
+type PrototypeChangeEntry = {
+  fieldLabel: string
+  previousValue: string
+  nextValue: string
+}
+
+function createPrototypeChangeEntry(fieldLabel: string, previousValue: string, nextValue: string): PrototypeChangeEntry | null {
+  if (previousValue.trim() === nextValue.trim()) {
+    return null
+  }
+
+  return { fieldLabel, previousValue, nextValue }
+}
+
+function compactPrototypeChanges(changes: Array<PrototypeChangeEntry | null>) {
+  return changes.filter((change): change is PrototypeChangeEntry => Boolean(change))
+}
+
+function getGaragePrototypeChanges(previous: ContractorGarageRow, next: ContractorGarageRow) {
+  return compactPrototypeChanges([
+    createPrototypeChangeEntry('Номер', previous.number, next.number),
+    createPrototypeChangeEntry('Баланс', previous.balance, next.balance),
+    createPrototypeChangeEntry('Количество человек', previous.peopleCount, next.peopleCount),
+    createPrototypeChangeEntry('Просроченная задолженность', previous.overdueDebt, next.overdueDebt),
+    createPrototypeChangeEntry('Этажи', previous.floorCount, next.floorCount),
+    createPrototypeChangeEntry('Стартовое значение счетчика воды', previous.initialWater, next.initialWater),
+    createPrototypeChangeEntry('Владелец', previous.owner, next.owner),
+    createPrototypeChangeEntry('Телефон', previous.phone, next.phone),
+    createPrototypeChangeEntry('Адрес', previous.address, next.address),
+    createPrototypeChangeEntry('Счетчики', previous.meters, next.meters),
+    createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
+  ])
+}
+
+function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: ContractorSupplierRow) {
+  return compactPrototypeChanges([
+    createPrototypeChangeEntry('Наименование', previous.name, next.name),
+    createPrototypeChangeEntry('Услуга', previous.service, next.service),
+    createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
+    createPrototypeChangeEntry('Задолженность', previous.debt, next.debt),
+    createPrototypeChangeEntry('Юридический адрес', previous.legalAddress, next.legalAddress),
+    createPrototypeChangeEntry('Контактное лицо', previous.contactPerson, next.contactPerson),
+    createPrototypeChangeEntry('Телефон', previous.phone, next.phone),
+    createPrototypeChangeEntry('Почта', previous.email, next.email),
+    createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
+  ])
+}
+
+function getEmployeePrototypeChanges(previous: ContractorStaffRow, next: ContractorStaffRow) {
+  return compactPrototypeChanges([
+    createPrototypeChangeEntry('ФИО', previous.fullName, next.fullName),
+    createPrototypeChangeEntry('Отдел', previous.department, next.department),
+    createPrototypeChangeEntry('Ставка', previous.rate, next.rate),
+  ])
+}
+
+function PrototypeChangeConfirmationDialog({
+  changes,
+  objectName,
+  onCancel,
+  onConfirm,
+  title,
+}: {
+  changes: PrototypeChangeEntry[]
+  objectName: string
+  onCancel: () => void
+  onConfirm: () => void
+  title: string
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useEscapeKey(true, onCancel)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="prototype-change-title" aria-describedby="prototype-change-description" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Изменение</p>
+            <h3 id="prototype-change-title">{title}</h3>
+            <p>{objectName}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть подтверждение изменений" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <p className="confirmation-text" id="prototype-change-description">Проверьте, что именно изменится. После подключения backend это действие будет записываться в историю изменений.</p>
+        <dl className="dictionary-change-list">
+          {changes.map((change) => (
+            <div key={change.fieldLabel}>
+              <dt>{change.fieldLabel}</dt>
+              <dd>{formatPrototypeChangeValue(change.previousValue)} {'->'} {formatPrototypeChangeValue(change.nextValue)}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="detail-dialog-actions contractors-dialog-actions">
+          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
+          <button className="secondary-button" type="button" onClick={onConfirm}>
+            <Save size={16} />
+            <span>Сохранить изменения</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
+  const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
-  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen)
+  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen, onClose)
+  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
   useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+
+  function saveAndClose() {
+    onSave(form)
+    setSaveChanges([])
+    onClose()
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!item) {
+      saveAndClose()
+      return
+    }
+
+    const changes = getGaragePrototypeChanges(item, form)
+    if (changes.length === 0) {
+      onClose()
+      return
+    }
+
+    setSaveChanges(changes)
+  }
 
   function closeDeleteConfirmation() {
     setDeleteConfirmationOpen(false)
@@ -5835,11 +5966,7 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: Con
             <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму гаража" onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-            event.preventDefault()
-            onSave(form)
-            onClose()
-          }}>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <div className="contractors-modal-grid">
               <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
               <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance} onChange={(event) => setForm({ ...form, balance: event.target.value })} /></FormField>
@@ -5862,6 +5989,10 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: Con
           </form>
         </section>
       </div>
+
+      {item && saveChanges.length > 0 ? (
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения гаража" />
+      ) : null}
 
       {item && deleteConfirmationOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
@@ -5903,13 +6034,37 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: Con
 
 function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorSupplierRow; onClose: () => void; onDelete: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
   const [form, setForm] = useState<ContractorSupplierRow>(item ?? createEmptySupplierPrototype())
+  const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
-  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen)
+  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen, onClose)
+  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
   useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+
+  function saveAndClose() {
+    onSave(form)
+    setSaveChanges([])
+    onClose()
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!item) {
+      saveAndClose()
+      return
+    }
+
+    const changes = getSupplierPrototypeChanges(item, form)
+    if (changes.length === 0) {
+      onClose()
+      return
+    }
+
+    setSaveChanges(changes)
+  }
 
   function closeDeleteConfirmation() {
     setDeleteConfirmationOpen(false)
@@ -5934,11 +6089,7 @@ function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: C
             <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-            event.preventDefault()
-            onSave(form)
-            onClose()
-          }}>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
             <FormField label="Услуга"><input aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })} /></FormField>
             <div className="contractors-modal-grid">
@@ -5974,6 +6125,10 @@ function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: C
           </form>
         </section>
       </div>
+
+      {item && saveChanges.length > 0 ? (
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Поставщик'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения поставщика" />
+      ) : null}
 
       {item && deleteConfirmationOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
@@ -6052,13 +6207,37 @@ function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => 
 
 function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onDelete: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
   const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(departments[0]?.name ?? ''))
+  const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
-  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen)
+  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen, onClose)
+  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
   useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+
+  function saveAndClose() {
+    onSave(form)
+    setSaveChanges([])
+    onClose()
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!item) {
+      saveAndClose()
+      return
+    }
+
+    const changes = getEmployeePrototypeChanges(item, form)
+    if (changes.length === 0) {
+      onClose()
+      return
+    }
+
+    setSaveChanges(changes)
+  }
 
   function closeDeleteConfirmation() {
     setDeleteConfirmationOpen(false)
@@ -6083,11 +6262,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
             <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-            event.preventDefault()
-            onSave(form)
-            onClose()
-          }}>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
             <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{departments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
             <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
@@ -6100,6 +6275,10 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
           </form>
         </section>
       </div>
+
+      {item && saveChanges.length > 0 ? (
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.fullName || 'Сотрудник'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения сотрудника" />
+      ) : null}
 
       {item && deleteConfirmationOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
