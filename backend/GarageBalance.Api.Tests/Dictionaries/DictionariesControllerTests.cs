@@ -155,6 +155,30 @@ public sealed class DictionariesControllerTests
         Assert.Equal(id, service.LastRestoreId);
     }
 
+    [Theory]
+    [InlineData("owner", "owner_not_found")]
+    [InlineData("garage", "garage_not_found")]
+    [InlineData("supplierGroup", "supplier_group_not_found")]
+    [InlineData("supplier", "supplier_not_found")]
+    [InlineData("incomeType", "income_type_not_found")]
+    [InlineData("expenseType", "expense_type_not_found")]
+    [InlineData("tariff", "tariff_not_found")]
+    public async Task RestoreEndpoints_ReturnNotFoundWhenArchivedRecordDoesNotExist(string dictionaryKind, string errorCode)
+    {
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var service = CreateRestoreFailureService(dictionaryKind, errorCode);
+        var controller = CreateController(service, actorUserId);
+
+        var result = await RestoreDictionaryRecord(controller, dictionaryKind, id);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(id, service.LastRestoreId);
+    }
+
     [Fact]
     public async Task RestoreTariff_ReturnsConflictForDuplicateTariff()
     {
@@ -299,10 +323,48 @@ public sealed class DictionariesControllerTests
         };
     }
 
+    private static FakeDictionaryService CreateRestoreFailureService(string dictionaryKind, string errorCode)
+    {
+        var errorMessage = "Архивная запись не найдена.";
+        return dictionaryKind switch
+        {
+            "owner" => new FakeDictionaryService
+            {
+                RestoreOwnerResult = DictionaryResult<OwnerDto>.Failure(errorCode, errorMessage)
+            },
+            "garage" => new FakeDictionaryService
+            {
+                RestoreGarageResult = DictionaryResult<GarageDto>.Failure(errorCode, errorMessage)
+            },
+            "supplierGroup" => new FakeDictionaryService
+            {
+                RestoreSupplierGroupResult = DictionaryResult<SupplierGroupDto>.Failure(errorCode, errorMessage)
+            },
+            "supplier" => new FakeDictionaryService
+            {
+                RestoreSupplierResult = DictionaryResult<SupplierDto>.Failure(errorCode, errorMessage)
+            },
+            "incomeType" => new FakeDictionaryService
+            {
+                RestoreIncomeTypeResult = DictionaryResult<AccountingTypeDto>.Failure(errorCode, errorMessage)
+            },
+            "expenseType" => new FakeDictionaryService
+            {
+                RestoreExpenseTypeResult = DictionaryResult<AccountingTypeDto>.Failure(errorCode, errorMessage)
+            },
+            "tariff" => new FakeDictionaryService
+            {
+                RestoreTariffResult = DictionaryResult<TariffDto>.Failure(errorCode, errorMessage)
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.")
+        };
+    }
+
     private static async Task<IActionResult> RestoreDictionaryRecord(DictionariesController controller, string dictionaryKind, Guid id)
     {
         return dictionaryKind switch
         {
+            "owner" => (await controller.RestoreOwner(id, CancellationToken.None)).Result!,
             "garage" => (await controller.RestoreGarage(id, CancellationToken.None)).Result!,
             "supplierGroup" => (await controller.RestoreSupplierGroup(id, CancellationToken.None)).Result!,
             "supplier" => (await controller.RestoreSupplier(id, CancellationToken.None)).Result!,
