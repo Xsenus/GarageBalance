@@ -4024,7 +4024,15 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               </button>
             </div>
             {detailState.loading ? <p className="form-note" role="status" aria-live="polite">Загружаем карточку события...</p> : null}
-            {detailState.error ? <FormError>{detailState.error}</FormError> : null}
+            {detailState.error ? (
+              <div className="audit-error-state">
+                <FormError>{detailState.error}</FormError>
+                <button className="ghost-button" type="button" onClick={() => void openAuditEventDetail(detailState.event)} disabled={detailState.loading}>
+                  <RefreshCw size={16} aria-hidden="true" />
+                  <span>{detailState.loading ? 'Загружаем...' : 'Повторить загрузку карточки'}</span>
+                </button>
+              </div>
+            ) : null}
             <dl className="detail-grid audit-detail-grid">
               <div>
                 <dt>Пользователь</dt>

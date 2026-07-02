@@ -3747,6 +3747,69 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
   })
 
+  it('retries audit event detail loading inside the dialog', async () => {
+    const user = userEvent.setup()
+    let detailLoadCount = 0
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [
+        createAuditEvent({
+          id: 'audit-detail-retry',
+          action: 'dictionary.owner_updated',
+          entityType: 'owner',
+          entityId: 'owner-1',
+          summary: 'Изменен владелец.',
+          section: 'dictionary',
+          actionKind: 'update',
+        }),
+      ],
+      getEvent: async (_token, id) => {
+        detailLoadCount += 1
+        if (detailLoadCount === 1) {
+          throw new Error('Карточка временно недоступна')
+        }
+
+        return createAuditEvent({
+          id,
+          action: 'dictionary.owner_updated',
+          entityType: 'owner',
+          entityId: 'owner-1',
+          summary: 'Изменен владелец.',
+          section: 'dictionary',
+          actionKind: 'update',
+          fieldName: 'Владелец',
+          oldValue: 'Иванов Иван',
+          newValue: 'Петров Петр',
+        })
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+    const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    expect(await within(detailDialog).findByText('Карточка временно недоступна')).toHaveAttribute('role', 'alert')
+
+    await user.click(within(detailDialog).getByRole('button', { name: 'Повторить загрузку карточки' }))
+
+    expect(await within(detailDialog).findByText('Петров Петр')).toBeInTheDocument()
+    expect(within(detailDialog).queryByText('Карточка временно недоступна')).not.toBeInTheDocument()
+    expect(detailLoadCount).toBe(2)
+  })
+
   it('paginates audit journal on the server', async () => {
     const user = userEvent.setup()
     const auth = createAuthResponse()
