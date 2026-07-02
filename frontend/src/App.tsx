@@ -5804,98 +5804,212 @@ function createEmptyEmployeePrototype(department: string): ContractorStaffRow {
 
 function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
+  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen)
+  const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
+  const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
+  useEscapeKey(!deleteConfirmationOpen, onClose)
+  useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+
+  function closeDeleteConfirmation() {
+    setDeleteConfirmationOpen(false)
+    setDeleteReason('')
+  }
+
+  function confirmGarageDelete() {
+    if (!item || !deleteReason.trim()) {
+      return
+    }
+
+    onDelete(item)
+    closeDeleteConfirmation()
+    onClose()
+  }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму гаража" onClick={onClose}><X size={18} /></button>
+    <>
+      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-dialog-header">
+            <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
+            <button className="icon-button" type="button" aria-label="Закрыть форму гаража" onClick={onClose}><X size={18} /></button>
+          </div>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+            event.preventDefault()
+            onSave(form)
+            onClose()
+          }}>
+            <div className="contractors-modal-grid">
+              <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
+              <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance} onChange={(event) => setForm({ ...form, balance: event.target.value })} /></FormField>
+              <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
+              <FormField label="Просроченная зад-ть"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt} onChange={(event) => setForm({ ...form, overdueDebt: event.target.value })} /></FormField>
+              <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+              <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
+            </div>
+            <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
+            <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
+            <FormField label="Адрес"><input aria-label="Адрес гаража" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></FormField>
+            <FormField label="Счетчики"><textarea aria-label="Счетчики гаража" value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
+            <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button" type="button">Открыть фин. отчет</button>
+              <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+              <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+              {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить гараж</button> : null}
+            </div>
+          </form>
+        </section>
+      </div>
+
+      {item && deleteConfirmationOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
+          <section ref={deleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-delete-title" aria-describedby="garage-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="garage-delete-title">Удалить гараж?</h3>
+                <p>{`Гараж ${item.number || 'без номера'}`}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления гаража" onClick={closeDeleteConfirmation}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="garage-delete-description">Гараж будет скрыт из рабочего списка контрагентов. Укажите причину, чтобы действие можно было проверить позже.</p>
+            <label className="field-label" htmlFor="garage-delete-reason">Причина удаления</label>
+            <textarea
+              id="garage-delete-reason"
+              aria-label="Причина удаления гаража"
+              maxLength={1000}
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              placeholder="Например: дубликат карточки"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmGarageDelete} disabled={!deleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить гараж</span>
+              </button>
+            </div>
+          </section>
         </div>
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onSave(form)
-          onClose()
-        }}>
-          <div className="contractors-modal-grid">
-            <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
-            <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance} onChange={(event) => setForm({ ...form, balance: event.target.value })} /></FormField>
-            <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-            <FormField label="Просроченная зад-ть"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt} onChange={(event) => setForm({ ...form, overdueDebt: event.target.value })} /></FormField>
-            <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
-            <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
-          </div>
-          <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
-          <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
-          <FormField label="Адрес"><input aria-label="Адрес гаража" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></FormField>
-          <FormField label="Счетчики"><textarea aria-label="Счетчики гаража" value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
-          <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
-          <div className="detail-dialog-actions contractors-dialog-actions">
-            <button className="secondary-button" type="button">Открыть фин. отчет</button>
-            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
-            {item ? <button className="danger-button" type="button" onClick={() => { onDelete(item); onClose() }}>Удалить гараж</button> : null}
-          </div>
-        </form>
-      </section>
-    </div>
+      ) : null}
+    </>
   )
 }
 
 function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorSupplierRow; onClose: () => void; onDelete: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
   const [form, setForm] = useState<ContractorSupplierRow>(item ?? createEmptySupplierPrototype())
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
+  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen)
+  const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
+  const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
+  useEscapeKey(!deleteConfirmationOpen, onClose)
+  useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+
+  function closeDeleteConfirmation() {
+    setDeleteConfirmationOpen(false)
+    setDeleteReason('')
+  }
+
+  function confirmSupplierDelete() {
+    if (!item || !deleteReason.trim()) {
+      return
+    }
+
+    onDelete(item)
+    closeDeleteConfirmation()
+    onClose()
+  }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="supplier-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
+    <>
+      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="supplier-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-dialog-header">
+            <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
+            <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
+          </div>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
+            event.preventDefault()
+            onSave(form)
+            onClose()
+          }}>
+            <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
+            <FormField label="Услуга"><input aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })} /></FormField>
+            <div className="contractors-modal-grid">
+              <FormField label="ИНН"><input aria-label="ИНН поставщика" value={form.inn} onChange={(event) => setForm({ ...form, inn: event.target.value })} /></FormField>
+              <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt} onChange={(event) => setForm({ ...form, debt: event.target.value })} /></FormField>
+            </div>
+            <FormField label="Юр. адрес"><input aria-label="Юридический адрес поставщика" value={form.legalAddress} onChange={(event) => setForm({ ...form, legalAddress: event.target.value })} /></FormField>
+            <div className="contractors-contacts-preview" role="table" aria-label="Контакты поставщика">
+              <div className="contractors-contacts-row contractors-contacts-row--header" role="row">
+                <span role="columnheader">ФИО</span>
+                <span role="columnheader">Телефон</span>
+                <span role="columnheader">Почта</span>
+              </div>
+              <div className="contractors-contacts-row" role="row">
+                <span role="cell">{form.contactPerson || 'Пусто'}</span>
+                <span role="cell">{form.phone || 'Пусто'}</span>
+                <span role="cell">{form.email || 'Пусто'}</span>
+              </div>
+            </div>
+            <button className="secondary-button contractors-inline-action" type="button">Добавить контакт</button>
+            <FormField label="Контактное лицо"><input aria-label="Контактное лицо поставщика" value={form.contactPerson} onChange={(event) => setForm({ ...form, contactPerson: event.target.value })} /></FormField>
+            <div className="contractors-modal-grid">
+              <FormField label="Телефон"><input aria-label="Телефон поставщика" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
+              <FormField label="Почта"><input aria-label="Почта поставщика" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
+            </div>
+            <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button" type="button">Открыть фин. отчет</button>
+              <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
+              <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+              {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить поставщика</button> : null}
+            </div>
+          </form>
+        </section>
+      </div>
+
+      {item && deleteConfirmationOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
+          <section ref={deleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-delete-title" aria-describedby="supplier-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="supplier-delete-title">Удалить поставщика?</h3>
+                <p>{item.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления поставщика" onClick={closeDeleteConfirmation}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="supplier-delete-description">Поставщик будет скрыт из рабочего списка контрагентов. Укажите причину, чтобы действие можно было проверить позже.</p>
+            <label className="field-label" htmlFor="supplier-delete-reason">Причина удаления</label>
+            <textarea
+              id="supplier-delete-reason"
+              aria-label="Причина удаления поставщика"
+              maxLength={1000}
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              placeholder="Например: договор больше не действует"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmSupplierDelete} disabled={!deleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить поставщика</span>
+              </button>
+            </div>
+          </section>
         </div>
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onSave(form)
-          onClose()
-        }}>
-          <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
-          <FormField label="Услуга"><input aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })} /></FormField>
-          <div className="contractors-modal-grid">
-            <FormField label="ИНН"><input aria-label="ИНН поставщика" value={form.inn} onChange={(event) => setForm({ ...form, inn: event.target.value })} /></FormField>
-            <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt} onChange={(event) => setForm({ ...form, debt: event.target.value })} /></FormField>
-          </div>
-          <FormField label="Юр. адрес"><input aria-label="Юридический адрес поставщика" value={form.legalAddress} onChange={(event) => setForm({ ...form, legalAddress: event.target.value })} /></FormField>
-          <div className="contractors-contacts-preview" role="table" aria-label="Контакты поставщика">
-            <div className="contractors-contacts-row contractors-contacts-row--header" role="row">
-              <span role="columnheader">ФИО</span>
-              <span role="columnheader">Телефон</span>
-              <span role="columnheader">Почта</span>
-            </div>
-            <div className="contractors-contacts-row" role="row">
-              <span role="cell">{form.contactPerson || 'Пусто'}</span>
-              <span role="cell">{form.phone || 'Пусто'}</span>
-              <span role="cell">{form.email || 'Пусто'}</span>
-            </div>
-          </div>
-          <button className="secondary-button contractors-inline-action" type="button">Добавить контакт</button>
-          <FormField label="Контактное лицо"><input aria-label="Контактное лицо поставщика" value={form.contactPerson} onChange={(event) => setForm({ ...form, contactPerson: event.target.value })} /></FormField>
-          <div className="contractors-modal-grid">
-            <FormField label="Телефон"><input aria-label="Телефон поставщика" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
-            <FormField label="Почта"><input aria-label="Почта поставщика" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
-          </div>
-          <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
-          <div className="detail-dialog-actions contractors-dialog-actions">
-            <button className="secondary-button" type="button">Открыть фин. отчет</button>
-            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
-            {item ? <button className="danger-button" type="button" onClick={() => { onDelete(item); onClose() }}>Удалить поставщика</button> : null}
-          </div>
-        </form>
-      </section>
-    </div>
+      ) : null}
+    </>
   )
 }
 

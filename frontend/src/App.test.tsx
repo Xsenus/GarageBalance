@@ -370,6 +370,18 @@ describe('App', () => {
     await user.click(within(garageDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
 
+    const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
+    const garageRow = within(garagesTable).getByText('Новый владелец').closest('[role="row"]')!
+    await user.click(within(garageRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
+    const editGarageDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
+    await user.click(within(editGarageDialog).getByRole('button', { name: 'Удалить гараж' }))
+    const deleteGarageDialog = await screen.findByRole('dialog', { name: 'Удалить гараж?' })
+    expect(within(deleteGarageDialog).getByText('Гараж 1')).toBeInTheDocument()
+    expect(within(deleteGarageDialog).getByRole('button', { name: 'Удалить гараж' })).toBeDisabled()
+    await user.type(within(deleteGarageDialog).getByLabelText('Причина удаления гаража'), 'Дубликат карточки')
+    await user.click(within(deleteGarageDialog).getByRole('button', { name: 'Удалить гараж' }))
+    await waitFor(() => expect(within(garagesTable).queryByText('Новый владелец')).not.toBeInTheDocument())
+
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     expect(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByText('Энергосбыт')).toBeInTheDocument()
@@ -384,6 +396,18 @@ describe('App', () => {
     const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги контрагента'), 'Уборка территории')
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
+
+    const suppliersTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
+    const supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Открыть' }))
+    const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
+    await user.click(within(editSupplierDialog).getByRole('button', { name: 'Удалить поставщика' }))
+    const deleteSupplierDialog = await screen.findByRole('dialog', { name: 'Удалить поставщика?' })
+    expect(within(deleteSupplierDialog).getByText('Новый подрядчик')).toBeInTheDocument()
+    expect(within(deleteSupplierDialog).getByRole('button', { name: 'Удалить поставщика' })).toBeDisabled()
+    await user.type(within(deleteSupplierDialog).getByLabelText('Причина удаления поставщика'), 'Договор больше не действует')
+    await user.click(within(deleteSupplierDialog).getByRole('button', { name: 'Удалить поставщика' }))
+    await waitFor(() => expect(within(suppliersTable).queryByText('Новый подрядчик')).not.toBeInTheDocument())
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
     expect(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).toBeInTheDocument()
