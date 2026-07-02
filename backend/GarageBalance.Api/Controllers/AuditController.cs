@@ -28,6 +28,15 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter), cancellationToken));
     }
 
+    [HttpGet("events/{id:guid}")]
+    [ProducesResponseType<AuditEventDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AuditEventDto>> GetEvent(Guid id, CancellationToken cancellationToken)
+    {
+        var auditEvent = await auditService.GetEventAsync(id, cancellationToken);
+        return auditEvent is null ? NotFound() : Ok(auditEvent);
+    }
+
     [HttpGet("events/export")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ExportEvents(

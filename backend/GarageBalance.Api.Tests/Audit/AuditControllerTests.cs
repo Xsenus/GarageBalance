@@ -71,16 +71,51 @@ public sealed class AuditControllerTests
         Assert.Equal("restores", service.LastRequest.QuickFilter);
     }
 
+    [Fact]
+    public async Task GetEvent_ReturnsEventFromService()
+    {
+        var auditEvent = new AuditEventDto(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "dictionary.owner_updated", "owner", "owner-1", "Изменен владелец.");
+        var service = new FakeAuditService { Event = auditEvent };
+        var controller = new AuditController(service);
+
+        var result = await controller.GetEvent(auditEvent.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(auditEvent, ok.Value);
+        Assert.Equal(auditEvent.Id, service.LastEventId);
+    }
+
+    [Fact]
+    public async Task GetEvent_ReturnsNotFoundWhenEventDoesNotExist()
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+        var id = Guid.NewGuid();
+
+        var result = await controller.GetEvent(id, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        Assert.Equal(id, service.LastEventId);
+    }
+
     private sealed class FakeAuditService : IAuditService
     {
         public AuditEventListRequest? LastRequest { get; private set; }
+        public Guid? LastEventId { get; private set; }
         public IReadOnlyList<AuditEventDto> Events { get; init; } = [];
+        public AuditEventDto? Event { get; init; }
         public AuditEventExportDto Export { get; init; } = new("audit-events.csv", "text/csv; charset=utf-8", []);
 
         public Task<IReadOnlyList<AuditEventDto>> GetEventsAsync(AuditEventListRequest request, CancellationToken cancellationToken)
         {
             LastRequest = request;
             return Task.FromResult(Events);
+        }
+
+        public Task<AuditEventDto?> GetEventAsync(Guid id, CancellationToken cancellationToken)
+        {
+            LastEventId = id;
+            return Task.FromResult(Event);
         }
 
         public Task<AuditEventExportDto> ExportEventsCsvAsync(AuditEventListRequest request, CancellationToken cancellationToken)

@@ -3473,6 +3473,11 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const [detailState, setDetailState] = useState<{ event: AuditEventDto; loading: boolean; error: string | null } | null>(null)
+  const detailRequestIdRef = useRef(0)
+  useRestoreFocusOnClose(Boolean(detailState))
+  const detailCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(detailState))
+  const detailDialogRef = useFocusTrap<HTMLElement>(Boolean(detailState))
   const auditQuery = useMemo(() => ({
     search: search.trim() || undefined,
     section: section || undefined,
@@ -3494,6 +3499,33 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
     dateFrom: auditQuery.dateFrom,
     dateTo: auditQuery.dateTo,
   }), [auditQuery])
+
+  function closeAuditEventDetail() {
+    detailRequestIdRef.current += 1
+    setDetailState(null)
+  }
+
+  async function openAuditEventDetail(auditEvent: AuditEventDto) {
+    const requestId = detailRequestIdRef.current + 1
+    detailRequestIdRef.current = requestId
+    setDetailState({ event: auditEvent, loading: true, error: null })
+    try {
+      const loadedEvent = await auditClient.getEvent(auth.accessToken, auditEvent.id)
+      if (detailRequestIdRef.current === requestId) {
+        setDetailState({ event: loadedEvent, loading: false, error: null })
+      }
+    } catch (caught) {
+      if (detailRequestIdRef.current === requestId) {
+        setDetailState({
+          event: auditEvent,
+          loading: false,
+          error: caught instanceof Error ? caught.message : 'Не удалось загрузить карточку события.',
+        })
+      }
+    }
+  }
+
+  useEscapeKey(Boolean(detailState), closeAuditEventDetail)
 
   useEffect(() => {
     let ignore = false
@@ -3603,6 +3635,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
           <span role="columnheader">Действие</span>
           <span role="columnheader">Было</span>
           <span role="columnheader">Стало</span>
+          <span role="columnheader">Карточка</span>
         </div>
         {!loading && events.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
         {visibleEvents.map((auditEvent) => {
@@ -3622,11 +3655,76 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               </span>
               <span role="cell">{beforeAfter.before}</span>
               <span role="cell">{beforeAfter.after}</span>
+              <span role="cell">
+                <button className="ghost-button audit-detail-button" type="button" onClick={() => void openAuditEventDetail(auditEvent)}>
+                  <FileText size={15} aria-hidden="true" />
+                  <span>Открыть</span>
+                </button>
+              </span>
             </div>
           )
         })}
         {events.length > visibleEvents.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleEvents.length} из {events.length} событий</p> : null}
       </div>
+      {detailState ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeAuditEventDetail}>
+          <section ref={detailDialogRef} className="detail-dialog audit-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="audit-detail-title" aria-describedby="audit-detail-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Карточка события</p>
+                <h3 id="audit-detail-title">{getAuditEventActionKindLabel(detailState.event)}</h3>
+                <p id="audit-detail-description">{getAuditEventSectionLabel(detailState.event)} · {formatDateTime(detailState.event.createdAtUtc)}</p>
+              </div>
+              <button ref={detailCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть карточку события" onClick={closeAuditEventDetail}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            {detailState.loading ? <p className="form-note" role="status" aria-live="polite">Загружаем карточку события...</p> : null}
+            {detailState.error ? <FormError>{detailState.error}</FormError> : null}
+            <dl className="detail-grid audit-detail-grid">
+              <div>
+                <dt>Пользователь</dt>
+                <dd>{formatAuditActor(detailState.event.actorUserId)}</dd>
+              </div>
+              <div>
+                <dt>ID пользователя</dt>
+                <dd>{detailState.event.actorUserId ?? 'Система'}</dd>
+              </div>
+              <div>
+                <dt>Раздел</dt>
+                <dd>{getAuditEventSectionLabel(detailState.event)}</dd>
+              </div>
+              <div>
+                <dt>Объект</dt>
+                <dd>{getAuditEntityTypeLabel(detailState.event.entityType)}</dd>
+              </div>
+              <div>
+                <dt>ID объекта</dt>
+                <dd>{detailState.event.entityId ?? 'без идентификатора'}</dd>
+              </div>
+              <div>
+                <dt>Код действия</dt>
+                <dd>{detailState.event.action}</dd>
+              </div>
+              <div>
+                <dt>Было</dt>
+                <dd>{parseAuditBeforeAfter(detailState.event.summary).before}</dd>
+              </div>
+              <div>
+                <dt>Стало</dt>
+                <dd>{parseAuditBeforeAfter(detailState.event.summary).after}</dd>
+              </div>
+            </dl>
+            <div className="audit-detail-summary">
+              <span>Описание события</span>
+              <p>{detailState.event.summary}</p>
+            </div>
+            <div className="detail-dialog-actions">
+              <button className="secondary-button" type="button" onClick={closeAuditEventDetail}>Закрыть</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }

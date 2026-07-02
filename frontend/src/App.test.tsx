@@ -3449,6 +3449,63 @@ describe('App', () => {
     expect(auditExportRequest?.limit).toBeUndefined()
   })
 
+  it('opens audit event detail dialog from the journal table', async () => {
+    const user = userEvent.setup()
+    let loadedEventId: string | null = null
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [
+        createAuditEvent({
+          id: 'audit-detail-1',
+          action: 'dictionary.owner_updated',
+          entityType: 'owner',
+          entityId: 'owner-1',
+          summary: 'Изменен владелец.',
+        }),
+      ],
+      getEvent: async (_token, id) => {
+        loadedEventId = id
+        return createAuditEvent({
+          id,
+          action: 'dictionary.owner_updated',
+          entityType: 'owner',
+          entityId: 'owner-1',
+          summary: 'Изменен владелец: было Иванов Иван; стало Петров Петр.',
+        })
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+
+    const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    expect(loadedEventId).toBe('audit-detail-1')
+    expect(within(detailDialog).getByText('Карточка события')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('dictionary.owner_updated')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('owner-1')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Петров Петр')).toBeInTheDocument()
+    expect(detailDialog).toHaveAttribute('aria-modal', 'true')
+
+    await user.click(within(detailDialog).getByRole('button', { name: 'Закрыть' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
+  })
+
   it('shows visible audit event counter when audit log is compacted', async () => {
     const user = userEvent.setup()
     const auth = createAuthResponse()
@@ -4293,6 +4350,7 @@ function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseCli
 function createAuditClient(overrides: Partial<AuditClient> = {}): AuditClient {
   return {
     getEvents: async () => [createAuditEvent({})],
+    getEvent: async (_token, id) => createAuditEvent({ id }),
     exportEvents: async () => new Blob(['createdAtUtc,action\n'], { type: 'text/csv' }),
     ...overrides,
   }

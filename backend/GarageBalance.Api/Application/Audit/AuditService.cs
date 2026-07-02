@@ -170,6 +170,15 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         return new AuditEventExportDto(fileName, "text/csv; charset=utf-8", Encoding.UTF8.GetBytes(csv));
     }
 
+    public async Task<AuditEventDto?> GetEventAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var auditEvent = await dbContext.AuditEvents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(auditEvent => auditEvent.Id == id, cancellationToken);
+
+        return auditEvent is null ? null : ToDto(auditEvent);
+    }
+
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
     {
         var builder = new StringBuilder();

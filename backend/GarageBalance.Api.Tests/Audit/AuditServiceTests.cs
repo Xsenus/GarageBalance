@@ -225,6 +225,44 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventAsync_ReturnsMaskedEventById()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        var id = Guid.NewGuid();
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            Id = id,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 10, 0, 0, TimeSpan.Zero),
+            Action = "auth.login_failed",
+            EntityType = "login_email",
+            EntityId = "owner@example.com",
+            Summary = "Login owner@example.com failed: password=Secret123"
+        });
+        await database.Context.SaveChangesAsync();
+
+        var auditEvent = await service.GetEventAsync(id, CancellationToken.None);
+
+        Assert.NotNull(auditEvent);
+        Assert.Equal(id, auditEvent.Id);
+        Assert.Equal("[email скрыт]", auditEvent.EntityId);
+        Assert.Contains("[email скрыт]", auditEvent.Summary);
+        Assert.DoesNotContain("owner@example.com", auditEvent.Summary);
+        Assert.DoesNotContain("Secret123", auditEvent.Summary);
+    }
+
+    [Fact]
+    public async Task GetEventAsync_ReturnsNullWhenEventDoesNotExist()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+
+        var auditEvent = await service.GetEventAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.Null(auditEvent);
+    }
+
+    [Fact]
     public async Task ExportEventsCsvAsync_UsesFiltersAndMaskedCsvValues()
     {
         await using var database = await TestDatabase.CreateAsync();

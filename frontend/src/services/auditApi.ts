@@ -12,6 +12,7 @@ export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: str
 
 export type AuditClient = {
   getEvents(accessToken: string, params?: AuditEventQuery): Promise<AuditEventDto[]>
+  getEvent(accessToken: string, id: string): Promise<AuditEventDto>
   exportEvents(accessToken: string, params?: AuditEventQuery): Promise<Blob>
 }
 
@@ -86,6 +87,9 @@ export const auditApi: AuditClient = {
   getEvents(accessToken, params) {
     const query = buildQuery(params)
     return requestJson(accessToken, `/api/audit/events${query ? `?${query}` : ''}`)
+  },
+  getEvent(accessToken, id) {
+    return requestJson(accessToken, `/api/audit/events/${encodeURIComponent(id)}`)
   },
   exportEvents(accessToken, params) {
     const query = buildQuery(params)
