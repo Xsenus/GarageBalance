@@ -1,3 +1,4 @@
+using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -43,6 +44,52 @@ public sealed class FinanceServiceTests
         Assert.Contains("вид Членский взнос", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ PKO-19", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Авансовый платеж", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OperationAudit_UsesWriterStructuredFieldsAndCancelReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 19),
+                new DateOnly(2026, 6, 1),
+                500m,
+                "PKO-writer",
+                "writer smoke"),
+            actorUserId,
+            CancellationToken.None);
+        var canceled = await service.CancelOperationAsync(
+            created.Value!.Id,
+            new CancelFinanceEntryRequest("duplicate document"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(canceled.Succeeded);
+        var createAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_created");
+        Assert.Equal(actorUserId, createAudit.ActorUserId);
+        Assert.Equal(created.Value.Id.ToString(), createAudit.EntityId);
+        Assert.Equal("finance", createAudit.Section);
+        Assert.Equal("create", createAudit.ActionKind);
+        Assert.Contains("PKO-writer", createAudit.EntityDisplayName, StringComparison.Ordinal);
+        using var createMetadata = JsonDocument.Parse(createAudit.MetadataJson!);
+        Assert.Equal("financial_operation", createMetadata.RootElement.GetProperty("financeEntityType").GetString());
+
+        var cancelAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled");
+        Assert.Equal(actorUserId, cancelAudit.ActorUserId);
+        Assert.Equal(created.Value.Id.ToString(), cancelAudit.EntityId);
+        Assert.Equal("finance", cancelAudit.Section);
+        Assert.Equal("cancel", cancelAudit.ActionKind);
+        Assert.Contains("duplicate document", cancelAudit.Summary, StringComparison.Ordinal);
+        using var cancelMetadata = JsonDocument.Parse(cancelAudit.MetadataJson!);
+        Assert.Equal("financial_operation", cancelMetadata.RootElement.GetProperty("financeEntityType").GetString());
+        Assert.Equal("Отмена финансовой записи.", cancelMetadata.RootElement.GetProperty("reason").GetString());
     }
 
     [Fact]
