@@ -57,7 +57,7 @@ internal sealed class InMemoryUserRepository : IUserRepository
         return Task.CompletedTask;
     }
 
-    public Task AddUserAsync(AppUser user, IReadOnlyList<AppRole> roles, AuditEvent auditEvent, CancellationToken cancellationToken)
+    public Task AddUserAsync(AppUser user, IReadOnlyList<AppRole> roles, CancellationToken cancellationToken)
     {
         foreach (var role in roles)
         {
@@ -71,13 +71,6 @@ internal sealed class InMemoryUserRepository : IUserRepository
         }
 
         Users.Add(user);
-        AuditEvents.Add(auditEvent);
-        return Task.CompletedTask;
-    }
-
-    public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken cancellationToken)
-    {
-        AuditEvents.Add(auditEvent);
         return Task.CompletedTask;
     }
 

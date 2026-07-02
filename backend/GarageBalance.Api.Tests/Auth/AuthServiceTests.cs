@@ -287,6 +287,11 @@ public sealed class AuthServiceTests
             SigningKey = "test-signing-key-that-is-long-enough-32",
             AccessTokenMinutes = 15
         });
-        return new AuthService(repository, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator(), new JwtTokenService(jwtOptions));
+        return new AuthService(
+            repository,
+            new Pbkdf2PasswordHasher(),
+            new PasswordPolicyValidator(),
+            new JwtTokenService(jwtOptions),
+            new InMemoryAuditEventWriter(repository));
     }
 }

@@ -1,13 +1,17 @@
-using System.Security.Cryptography;
-using System.Text.Json;
 using System.Security.Claims;
-using GarageBalance.Api.Domain.Audit;
+using System.Security.Cryptography;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Domain.Users;
 
 namespace GarageBalance.Api.Application.Auth;
 
-public sealed class AuthService(IUserRepository users, IPasswordHasher passwordHasher, IPasswordPolicyValidator passwordPolicyValidator, ITokenService tokenService) : IAuthService
+public sealed class AuthService(
+    IUserRepository users,
+    IPasswordHasher passwordHasher,
+    IPasswordPolicyValidator passwordPolicyValidator,
+    ITokenService tokenService,
+    IAuditEventWriter auditEventWriter) : IAuthService
 {
     private const int MaxFailedLoginAttempts = 5;
     private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
@@ -42,16 +46,19 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
             PasswordHash = passwordHasher.HashPassword(request.Password)
         };
 
-        var audit = new AuditEvent
-        {
-            ActorUserId = admin.Id,
-            Action = "auth.bootstrap_admin_created",
-            EntityType = "user",
-            EntityId = admin.Id.ToString(),
-            Summary = $"Создан первый администратор {admin.Email}."
-        };
-
-        await users.AddUserAsync(admin, [adminRole], audit, cancellationToken);
+        await users.AddUserAsync(admin, [adminRole], cancellationToken);
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            admin.Id,
+            "auth.bootstrap_admin_created",
+            "user",
+            admin.Id.ToString(),
+            $"Создан первый администратор {admin.Email}.",
+            EntityDisplayName: admin.DisplayName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["email"] = admin.Email,
+                ["role"] = adminRole.Code
+            }));
         await users.SaveChangesAsync(cancellationToken);
 
         return AuthResult<AuthResponse>.Success(tokenService.CreateToken(admin, [adminRole.Code], adminRole.Permissions));
@@ -66,7 +73,7 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
         var attemptEntityId = user?.Id.ToString() ?? CreateLoginEmailHash(normalizedEmail);
         if (await IsLoginRateLimitedAsync(attemptEntityType, attemptEntityId, cancellationToken))
         {
-            await AddLoginRateLimitedAuditAsync(user, attemptEntityType, attemptEntityId, cancellationToken);
+            AddLoginRateLimitedAudit(user, attemptEntityType, attemptEntityId);
             await users.SaveChangesAsync(cancellationToken);
 
             return AuthResult<AuthResponse>.Failure("too_many_login_attempts", "Слишком много неуспешных попыток входа. Повторите позже.");
@@ -74,7 +81,7 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
 
         if (user is null || !passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
-            await AddLoginFailedAuditAsync(user, attemptEntityType, attemptEntityId, cancellationToken);
+            AddLoginFailedAudit(user, attemptEntityType, attemptEntityId);
             await users.SaveChangesAsync(cancellationToken);
 
             return AuthResult<AuthResponse>.Failure("invalid_credentials", "Неверный email или пароль.");
@@ -82,14 +89,18 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
 
         if (!user.IsActive)
         {
-            await users.AddAuditEventAsync(new AuditEvent
-            {
-                ActorUserId = user.Id,
-                Action = "auth.login_inactive",
-                EntityType = "user",
-                EntityId = user.Id.ToString(),
-                Summary = $"Отклонен вход отключенного пользователя {user.Email}."
-            }, cancellationToken);
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                user.Id,
+                "auth.login_inactive",
+                "user",
+                user.Id.ToString(),
+                $"Отклонен вход отключенного пользователя {user.Email}.",
+                EntityDisplayName: user.DisplayName,
+                Metadata: new Dictionary<string, object?>
+                {
+                    ["email"] = user.Email,
+                    ["reason"] = "inactive_user"
+                }));
             await users.SaveChangesAsync(cancellationToken);
 
             return AuthResult<AuthResponse>.Failure("user_inactive", "Пользователь отключен.");
@@ -104,14 +115,18 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
             .OrderBy(permission => permission)
             .ToArray();
 
-        await users.AddAuditEventAsync(new AuditEvent
-        {
-            ActorUserId = user.Id,
-            Action = "auth.login_success",
-            EntityType = "user",
-            EntityId = user.Id.ToString(),
-            Summary = $"Пользователь {user.Email} вошел в систему."
-        }, cancellationToken);
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            user.Id,
+            "auth.login_success",
+            "user",
+            user.Id.ToString(),
+            $"Пользователь {user.Email} вошел в систему.",
+            EntityDisplayName: user.DisplayName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["email"] = user.Email,
+                ["roles"] = string.Join(", ", roleCodes)
+            }));
         await users.SaveChangesAsync(cancellationToken);
 
         return AuthResult<AuthResponse>.Success(tokenService.CreateToken(user, roleCodes, permissions));
@@ -158,14 +173,18 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
 
         if (!passwordHasher.VerifyPassword(request.CurrentPassword, user.PasswordHash))
         {
-            await users.AddAuditEventAsync(new AuditEvent
-            {
-                ActorUserId = user.Id,
-                Action = "auth.password_change_failed",
-                EntityType = "user",
-                EntityId = user.Id.ToString(),
-                Summary = $"Отклонена смена пароля пользователя {user.Email}: неверный текущий пароль."
-            }, cancellationToken);
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                user.Id,
+                "auth.password_change_failed",
+                "user",
+                user.Id.ToString(),
+                $"Отклонена смена пароля пользователя {user.Email}: неверный текущий пароль.",
+                EntityDisplayName: user.DisplayName,
+                Metadata: new Dictionary<string, object?>
+                {
+                    ["email"] = user.Email,
+                    ["reason"] = "invalid_current_password"
+                }));
             await users.SaveChangesAsync(cancellationToken);
 
             return AuthResult<CurrentUserDto>.Failure("invalid_current_password", "Текущий пароль указан неверно.");
@@ -183,14 +202,17 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
         }
 
         user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
-        await users.AddAuditEventAsync(new AuditEvent
-        {
-            ActorUserId = user.Id,
-            Action = "auth.password_changed",
-            EntityType = "user",
-            EntityId = user.Id.ToString(),
-            Summary = $"Пользователь {user.Email} сменил пароль."
-        }, cancellationToken);
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            user.Id,
+            "auth.password_changed",
+            "user",
+            user.Id.ToString(),
+            $"Пользователь {user.Email} сменил пароль.",
+            EntityDisplayName: user.DisplayName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["email"] = user.Email
+            }));
         await users.SaveChangesAsync(cancellationToken);
 
         var roles = user.UserRoles.Select(userRole => userRole.Role).ToList();
@@ -217,43 +239,43 @@ public sealed class AuthService(IUserRepository users, IPasswordHasher passwordH
         return failedAttempts >= MaxFailedLoginAttempts;
     }
 
-    private Task AddLoginFailedAuditAsync(AppUser? user, string entityType, string entityId, CancellationToken cancellationToken)
+    private void AddLoginFailedAudit(AppUser? user, string entityType, string entityId)
     {
         var summary = user is null
             ? "Неуспешная попытка входа: пользователь не найден."
             : $"Неуспешная попытка входа пользователя {user.Email}: неверный пароль.";
 
-        return users.AddAuditEventAsync(new AuditEvent
-        {
-            ActorUserId = user?.Id,
-            Action = "auth.login_failed",
-            EntityType = entityType,
-            EntityId = entityId,
-            Summary = summary,
-            MetadataJson = JsonSerializer.Serialize(new
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            user?.Id,
+            "auth.login_failed",
+            entityType,
+            entityId,
+            summary,
+            EntityDisplayName: user?.DisplayName,
+            Metadata: new Dictionary<string, object?>
             {
-                reason = user is null ? "unknown_user" : "invalid_password"
-            })
-        }, cancellationToken);
+                ["email"] = user?.Email,
+                ["reason"] = user is null ? "unknown_user" : "invalid_password"
+            }));
     }
 
-    private Task AddLoginRateLimitedAuditAsync(AppUser? user, string entityType, string entityId, CancellationToken cancellationToken)
+    private void AddLoginRateLimitedAudit(AppUser? user, string entityType, string entityId)
     {
-        return users.AddAuditEventAsync(new AuditEvent
-        {
-            ActorUserId = user?.Id,
-            Action = "auth.login_rate_limited",
-            EntityType = entityType,
-            EntityId = entityId,
-            Summary = user is null
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            user?.Id,
+            "auth.login_rate_limited",
+            entityType,
+            entityId,
+            user is null
                 ? "Вход временно ограничен после серии неуспешных попыток для указанного email."
                 : $"Вход пользователя {user.Email} временно ограничен после серии неуспешных попыток.",
-            MetadataJson = JsonSerializer.Serialize(new
+            EntityDisplayName: user?.DisplayName,
+            Metadata: new Dictionary<string, object?>
             {
-                failedAttempts = MaxFailedLoginAttempts,
-                windowMinutes = (int)LoginAttemptWindow.TotalMinutes
-            })
-        }, cancellationToken);
+                ["email"] = user?.Email,
+                ["failedAttempts"] = MaxFailedLoginAttempts,
+                ["windowMinutes"] = (int)LoginAttemptWindow.TotalMinutes
+            }));
     }
 
     private static string CreateLoginEmailHash(string normalizedEmail)

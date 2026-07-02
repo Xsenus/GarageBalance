@@ -1,5 +1,4 @@
 using GarageBalance.Api.Application.Auth;
-using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -64,7 +63,7 @@ public sealed class EfUserRepository(GarageBalanceDbContext dbContext) : IUserRe
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AddUserAsync(AppUser user, IReadOnlyList<AppRole> roles, AuditEvent auditEvent, CancellationToken cancellationToken)
+    public async Task AddUserAsync(AppUser user, IReadOnlyList<AppRole> roles, CancellationToken cancellationToken)
     {
         dbContext.Users.Add(user);
         foreach (var role in roles)
@@ -76,13 +75,6 @@ public sealed class EfUserRepository(GarageBalanceDbContext dbContext) : IUserRe
             });
         }
 
-        dbContext.AuditEvents.Add(auditEvent);
-        await Task.CompletedTask;
-    }
-
-    public async Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken cancellationToken)
-    {
-        dbContext.AuditEvents.Add(auditEvent);
         await Task.CompletedTask;
     }
 
