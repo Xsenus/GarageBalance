@@ -5,6 +5,7 @@ export type AuditEventDto = {
   action: string
   entityType: string
   entityId: string | null
+  entityDisplayName?: string | null
   summary: string
   section?: string | null
   actionKind?: string | null

@@ -3395,6 +3395,7 @@ describe('App', () => {
             action: 'dictionary.owner_updated',
             entityType: 'owner',
             entityId: 'owner-1',
+            entityDisplayName: 'Garage 12',
             summary: 'Изменен владелец.',
             section: 'dictionary',
             actionKind: 'update',
@@ -3439,6 +3440,7 @@ describe('App', () => {
     const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
     expect(await within(auditTable).findByText('Справочники')).toBeInTheDocument()
     expect(within(auditTable).getByText('Изменение')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Garage 12')).toBeInTheDocument()
     expect(within(auditTable).getAllByText('Владелец')).toHaveLength(2)
     expect(within(auditTable).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(auditTable).getByText('Петров Петр')).toBeInTheDocument()
@@ -3475,6 +3477,7 @@ describe('App', () => {
           action: 'dictionary.owner_updated',
           entityType: 'owner',
           entityId: 'owner-1',
+          entityDisplayName: 'Garage 12',
           summary: 'Изменен владелец.',
           section: 'dictionary',
           actionKind: 'update',
@@ -3487,6 +3490,7 @@ describe('App', () => {
           action: 'dictionary.owner_updated',
           entityType: 'owner',
           entityId: 'owner-1',
+          entityDisplayName: 'Garage 12',
           summary: 'Изменен владелец.',
           section: 'dictionary',
           actionKind: 'update',
@@ -3516,6 +3520,7 @@ describe('App', () => {
     expect(within(detailDialog).getByText('Карточка события')).toBeInTheDocument()
     expect(within(detailDialog).getByText('dictionary.owner_updated')).toBeInTheDocument()
     expect(within(detailDialog).getByText('owner-1')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
     expect(within(detailDialog).getAllByText('Владелец')).toHaveLength(2)
     expect(within(detailDialog).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Петров Петр')).toBeInTheDocument()

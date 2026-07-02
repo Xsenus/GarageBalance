@@ -3671,6 +3671,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               <span role="cell">{getAuditEventSectionLabel(auditEvent)}</span>
               <span role="cell">
                 <strong>{getAuditEntityTypeLabel(auditEvent.entityType)}</strong>
+                {auditEvent.entityDisplayName ? <small>{auditEvent.entityDisplayName}</small> : null}
                 <small>{auditEvent.entityId ?? 'без идентификатора'}</small>
               </span>
               <span role="cell">
@@ -3732,6 +3733,10 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               <div>
                 <dt>Объект</dt>
                 <dd>{getAuditEntityTypeLabel(detailState.event.entityType)}</dd>
+              </div>
+              <div>
+                <dt>Название объекта</dt>
+                <dd>{detailState.event.entityDisplayName ?? 'не указано'}</dd>
               </div>
               <div>
                 <dt>ID объекта</dt>

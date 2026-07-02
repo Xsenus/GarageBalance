@@ -14,7 +14,8 @@ public sealed record AuditEventDto(
     string? OldValue = null,
     string? NewValue = null,
     string? Reason = null,
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null,
+    string? EntityDisplayName = null);
 
 public sealed record AuditEventPageDto(
     IReadOnlyList<AuditEventDto> Items,

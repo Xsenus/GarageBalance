@@ -121,6 +121,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     {
         var maskedSummary = AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty;
         var beforeAfter = ExtractBeforeAfter(maskedSummary);
+        var metadata = ParseMetadata(auditEvent.MetadataJson);
 
         return new AuditEventDto(
             auditEvent.Id,
@@ -136,7 +137,8 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             beforeAfter.OldValue,
             beforeAfter.NewValue,
             ExtractReason(maskedSummary),
-            ParseMetadata(auditEvent.MetadataJson));
+            metadata,
+            ExtractEntityDisplayName(metadata));
     }
 
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
@@ -218,7 +220,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,metadata,summary");
+        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,fieldName,oldValue,newValue,reason,metadata,summary");
 
         foreach (var auditEvent in events)
         {
@@ -230,6 +232,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
                 .Append(EscapeCsv(auditEvent.Action)).Append(',')
                 .Append(EscapeCsv(auditEvent.EntityType)).Append(',')
                 .Append(EscapeCsv(auditEvent.EntityId)).Append(',')
+                .Append(EscapeCsv(auditEvent.EntityDisplayName)).Append(',')
                 .Append(EscapeCsv(auditEvent.FieldName)).Append(',')
                 .Append(EscapeCsv(auditEvent.OldValue)).Append(',')
                 .Append(EscapeCsv(auditEvent.NewValue)).Append(',')
@@ -505,6 +508,51 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
         return metadata is null || metadata.Count == 0
             ? null
             : string.Join("; ", metadata.Select(item => $"{item.Key}={item.Value}"));
+    }
+
+    private static string? ExtractEntityDisplayName(IReadOnlyDictionary<string, string>? metadata)
+    {
+        if (metadata is null || metadata.Count == 0)
+        {
+            return null;
+        }
+
+        var explicitName = GetMetadataValue(metadata, "entityDisplayName")
+            ?? GetMetadataValue(metadata, "displayName")
+            ?? GetMetadataValue(metadata, "objectName")
+            ?? GetMetadataValue(metadata, "name")
+            ?? GetMetadataValue(metadata, "title");
+
+        if (!string.IsNullOrWhiteSpace(explicitName))
+        {
+            return explicitName;
+        }
+
+        var garageNumber = GetMetadataValue(metadata, "garageNumber");
+        if (!string.IsNullOrWhiteSpace(garageNumber))
+        {
+            return $"Гараж {garageNumber}";
+        }
+
+        var documentNumber = GetMetadataValue(metadata, "documentNumber");
+        if (!string.IsNullOrWhiteSpace(documentNumber))
+        {
+            return $"Документ {documentNumber}";
+        }
+
+        return GetMetadataValue(metadata, "period")
+            ?? GetMetadataValue(metadata, "month");
+    }
+
+    private static string? GetMetadataValue(IReadOnlyDictionary<string, string> metadata, string key)
+    {
+        var value = metadata
+            .FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))
+            .Value;
+
+        return string.IsNullOrWhiteSpace(value) || value == "[секрет скрыт]"
+            ? null
+            : value;
     }
 
     private static IQueryable<AuditEvent> ApplyActionKindFilter(IQueryable<AuditEvent> query, string actionKind)

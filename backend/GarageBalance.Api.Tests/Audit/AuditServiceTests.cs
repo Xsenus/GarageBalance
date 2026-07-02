@@ -294,6 +294,7 @@ public sealed class AuditServiceTests
             MetadataJson = """
             {
               "reason": "invalid_password",
+              "entityDisplayName": "Garage 12",
               "email": "owner@example.com",
               "failedAttempts": 3,
               "apiToken": "secret-token-value"
@@ -306,6 +307,7 @@ public sealed class AuditServiceTests
 
         var auditEvent = Assert.Single(result);
         Assert.NotNull(auditEvent.Metadata);
+        Assert.Equal("Garage 12", auditEvent.EntityDisplayName);
         Assert.Equal("invalid_password", auditEvent.Metadata["reason"]);
         Assert.Equal("[email скрыт]", auditEvent.Metadata["email"]);
         Assert.Equal("3", auditEvent.Metadata["failedAttempts"]);
@@ -382,7 +384,7 @@ public sealed class AuditServiceTests
         Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
         Assert.EndsWith(".csv", export.FileName, StringComparison.Ordinal);
         Assert.Equal("text/csv; charset=utf-8", export.ContentType);
-        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,metadata,summary", csv);
+        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,fieldName,oldValue,newValue,reason,metadata,summary", csv);
         Assert.Contains("auth,fail,auth.login_failed", csv);
         Assert.Contains("auth.login_failed", csv);
         Assert.Contains("\"Login [email скрыт] failed, password=[секрет скрыт] \"\"quoted\"\"\"", csv);
