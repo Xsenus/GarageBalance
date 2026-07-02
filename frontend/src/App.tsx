@@ -3762,6 +3762,19 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               <span>Описание события</span>
               <p>{detailState.event.summary}</p>
             </div>
+            {detailState.event.metadata && Object.keys(detailState.event.metadata).length > 0 ? (
+              <div className="audit-detail-summary audit-detail-metadata">
+                <span>Служебные данные</span>
+                <dl>
+                  {Object.entries(detailState.event.metadata).map(([key, value]) => (
+                    <div key={key}>
+                      <dt>{key}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null}
             <div className="detail-dialog-actions">
               <button className="secondary-button" type="button" onClick={closeAuditEventDetail}>Закрыть</button>
             </div>

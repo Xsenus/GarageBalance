@@ -2903,6 +2903,29 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.audit-detail-metadata dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.audit-detail-metadata div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.45fr) minmax(160px, 1fr);
+  gap: 10px;
+}
+
+.audit-detail-metadata dt,
+.audit-detail-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-detail-metadata dt {
+  color: #667085;
+  font-weight: 700;
+}
+
 .audit-pagination {
   margin-top: 12px;
 }

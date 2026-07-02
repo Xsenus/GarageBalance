@@ -13,7 +13,8 @@ public sealed record AuditEventDto(
     string? FieldName = null,
     string? OldValue = null,
     string? NewValue = null,
-    string? Reason = null);
+    string? Reason = null,
+    IReadOnlyDictionary<string, string>? Metadata = null);
 
 public sealed record AuditEventPageDto(
     IReadOnlyList<AuditEventDto> Items,

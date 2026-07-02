@@ -3,6 +3,7 @@ using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace GarageBalance.Api.Application.Audit;
@@ -134,7 +135,8 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             ExtractFieldName(maskedSummary),
             beforeAfter.OldValue,
             beforeAfter.NewValue,
-            ExtractReason(maskedSummary));
+            ExtractReason(maskedSummary),
+            ParseMetadata(auditEvent.MetadataJson));
     }
 
     private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
@@ -216,7 +218,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,summary");
+        builder.AppendLine("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,metadata,summary");
 
         foreach (var auditEvent in events)
         {
@@ -232,6 +234,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
                 .Append(EscapeCsv(auditEvent.OldValue)).Append(',')
                 .Append(EscapeCsv(auditEvent.NewValue)).Append(',')
                 .Append(EscapeCsv(auditEvent.Reason)).Append(',')
+                .Append(EscapeCsv(FormatMetadata(auditEvent.Metadata))).Append(',')
                 .Append(EscapeCsv(auditEvent.Summary))
                 .AppendLine();
         }
@@ -428,6 +431,80 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     {
         var normalized = value.Trim().TrimEnd(';', '.').Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static IReadOnlyDictionary<string, string>? ParseMetadata(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadataJson);
+            var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in document.RootElement.EnumerateObject().Take(20))
+                {
+                    metadata[property.Name] = FormatMetadataValue(property.Name, property.Value);
+                }
+            }
+            else
+            {
+                metadata["value"] = FormatMetadataValue("value", document.RootElement);
+            }
+
+            return metadata.Count == 0 ? null : metadata;
+        }
+        catch (JsonException)
+        {
+            var maskedMetadata = AuditTextMasker.Mask(metadataJson);
+            return string.IsNullOrWhiteSpace(maskedMetadata)
+                ? null
+                : new Dictionary<string, string>(StringComparer.Ordinal) { ["raw"] = maskedMetadata };
+        }
+    }
+
+    private static string FormatMetadataValue(string key, JsonElement value)
+    {
+        if (IsSensitiveMetadataKey(key))
+        {
+            return "[секрет скрыт]";
+        }
+
+        var rawValue = value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString(),
+            JsonValueKind.Null => "null",
+            _ => value.GetRawText()
+        };
+
+        return AuditTextMasker.Mask(rawValue) ?? string.Empty;
+    }
+
+    private static bool IsSensitiveMetadataKey(string key)
+    {
+        var normalized = key.ToLowerInvariant();
+        return normalized.Contains("password", StringComparison.Ordinal) ||
+            normalized.Contains("token", StringComparison.Ordinal) ||
+            normalized.Contains("secret", StringComparison.Ordinal) ||
+            normalized.Contains("authorization", StringComparison.Ordinal) ||
+            normalized.Contains("connectionstring", StringComparison.Ordinal) ||
+            normalized.Contains("api_key", StringComparison.Ordinal) ||
+            normalized.Contains("apikey", StringComparison.Ordinal) ||
+            normalized.Contains("private_key", StringComparison.Ordinal) ||
+            normalized.Contains("privatekey", StringComparison.Ordinal);
+    }
+
+    private static string? FormatMetadata(IReadOnlyDictionary<string, string>? metadata)
+    {
+        return metadata is null || metadata.Count == 0
+            ? null
+            : string.Join("; ", metadata.Select(item => $"{item.Key}={item.Value}"));
     }
 
     private static IQueryable<AuditEvent> ApplyActionKindFilter(IQueryable<AuditEvent> query, string actionKind)

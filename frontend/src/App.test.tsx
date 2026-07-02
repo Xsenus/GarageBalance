@@ -3494,6 +3494,11 @@ describe('App', () => {
           oldValue: 'Иванов Иван',
           newValue: 'Петров Петр',
           reason: 'Смена собственника',
+          metadata: {
+            reason: 'manual_fix',
+            email: '[email скрыт]',
+            apiToken: '[секрет скрыт]',
+          },
         })
       },
     })
@@ -3515,6 +3520,10 @@ describe('App', () => {
     expect(within(detailDialog).getByText('Иванов Иван')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Петров Петр')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Смена собственника')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Служебные данные')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('manual_fix')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('[email скрыт]')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('[секрет скрыт]')).toBeInTheDocument()
     expect(detailDialog).toHaveAttribute('aria-modal', 'true')
 
     await user.click(within(detailDialog).getByRole('button', { name: 'Закрыть' }))

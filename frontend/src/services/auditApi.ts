@@ -12,6 +12,7 @@ export type AuditEventDto = {
   oldValue?: string | null
   newValue?: string | null
   reason?: string | null
+  metadata?: Record<string, string> | null
 }
 
 export type AuditEventPageDto = {

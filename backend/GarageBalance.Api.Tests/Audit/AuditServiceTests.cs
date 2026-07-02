@@ -280,6 +280,41 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_ReturnsMaskedMetadata()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AuditService(database.Context);
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 11, 0, 0, TimeSpan.Zero),
+            Action = "auth.login_failed",
+            EntityType = "login_email",
+            EntityId = "owner@example.com",
+            Summary = "Неуспешный вход.",
+            MetadataJson = """
+            {
+              "reason": "invalid_password",
+              "email": "owner@example.com",
+              "failedAttempts": 3,
+              "apiToken": "secret-token-value"
+            }
+            """
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
+
+        var auditEvent = Assert.Single(result);
+        Assert.NotNull(auditEvent.Metadata);
+        Assert.Equal("invalid_password", auditEvent.Metadata["reason"]);
+        Assert.Equal("[email скрыт]", auditEvent.Metadata["email"]);
+        Assert.Equal("3", auditEvent.Metadata["failedAttempts"]);
+        Assert.Equal("[секрет скрыт]", auditEvent.Metadata["apiToken"]);
+        Assert.DoesNotContain("owner@example.com", auditEvent.Metadata.Values);
+        Assert.DoesNotContain("secret-token-value", auditEvent.Metadata.Values);
+    }
+
+    [Fact]
     public async Task GetEventAsync_ReturnsMaskedEventById()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -347,7 +382,7 @@ public sealed class AuditServiceTests
         Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
         Assert.EndsWith(".csv", export.FileName, StringComparison.Ordinal);
         Assert.Equal("text/csv; charset=utf-8", export.ContentType);
-        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,summary", csv);
+        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,fieldName,oldValue,newValue,reason,metadata,summary", csv);
         Assert.Contains("auth,fail,auth.login_failed", csv);
         Assert.Contains("auth.login_failed", csv);
         Assert.Contains("\"Login [email скрыт] failed, password=[секрет скрыт] \"\"quoted\"\"\"", csv);
