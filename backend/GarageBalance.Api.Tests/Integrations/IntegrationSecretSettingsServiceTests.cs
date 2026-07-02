@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Integrations;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Security;
@@ -32,8 +33,15 @@ public sealed class IntegrationSecretSettingsServiceTests
 
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "integration.secret_upserted");
         Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("integration", auditEvent.Section);
+        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Equal("OneCFresh:RefreshToken", auditEvent.EntityDisplayName);
+        Assert.Contains("OneCFresh", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("RefreshToken", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("OneCFresh.RefreshToken", auditEvent.MetadataJson, StringComparison.Ordinal);
         Assert.DoesNotContain(secret, auditEvent.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain(secret, auditEvent.EntityId, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -108,7 +116,7 @@ public sealed class IntegrationSecretSettingsServiceTests
     {
         var provider = DataProtectionProvider.Create("GarageBalance.IntegrationSecretSettings.Tests");
         var protector = new DataProtectionSensitiveDataProtector(provider);
-        return new IntegrationSecretSettingsService(context, protector);
+        return new IntegrationSecretSettingsService(context, protector, new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

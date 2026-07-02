@@ -1,5 +1,5 @@
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Security;
-using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Integrations;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +8,8 @@ namespace GarageBalance.Api.Application.Integrations;
 
 public sealed class IntegrationSecretSettingsService(
     GarageBalanceDbContext dbContext,
-    ISensitiveDataProtector sensitiveDataProtector) : IIntegrationSecretSettingsService
+    ISensitiveDataProtector sensitiveDataProtector,
+    IAuditEventWriter auditEventWriter) : IIntegrationSecretSettingsService
 {
     public async Task<IntegrationSecretSettingResult<IntegrationSecretSettingDto>> UpsertSecretAsync(
         UpsertIntegrationSecretRequest request,
@@ -56,14 +57,20 @@ public sealed class IntegrationSecretSettingsService(
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
         setting.UpdatedByUserId = actorUserId;
 
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = "integration.secret_upserted",
-            EntityType = "integration_secret_setting",
-            EntityId = $"{provider}:{settingKey}",
-            Summary = $"Integration secret setting '{provider}:{settingKey}' updated."
-        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "integration.secret_upserted",
+            "integration_secret_setting",
+            $"{provider}:{settingKey}",
+            Summary: $"Integration secret setting '{provider}:{settingKey}' updated.",
+            ActionKind: "update",
+            EntityDisplayName: $"{provider}:{settingKey}",
+            Metadata: new Dictionary<string, object?>
+            {
+                ["provider"] = provider,
+                ["settingKey"] = settingKey,
+                ["purpose"] = purpose
+            }));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Success(ToDto(setting));
