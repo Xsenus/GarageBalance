@@ -1,7 +1,9 @@
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Import;
 
@@ -14,7 +16,7 @@ public sealed class ImportQuarantineServiceTests
     public async Task RegisterAsync_CreatesQuarantineItemAndAuditWithoutRawSnapshot()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportQuarantineService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var runId = Guid.NewGuid();
 
@@ -41,10 +43,21 @@ public sealed class ImportQuarantineServiceTests
         Assert.Equal("warning", result.Value.Severity);
         Assert.Equal("open", result.Value.Status);
         Assert.Single(database.Context.AccessImportQuarantineItems);
-        Assert.Contains(database.Context.AuditEvents, item =>
-            item.Action == "import.quarantine_registered" &&
-            item.ActorUserId == actorUserId &&
-            !item.Summary.Contains("Петров", StringComparison.Ordinal));
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.quarantine_registered");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("import", auditEvent.ActionKind);
+        Assert.Equal("Access/Garage/missing-owner", auditEvent.EntityDisplayName);
+        Assert.Equal(runId.ToString(), auditEvent.RelatedDocumentId);
+        Assert.Equal("42", auditEvent.RelatedDocumentNumber);
+        Assert.Contains("Комментарий: Не найден владелец гаража.", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.Contains("\"sourceSystem\":\"Access\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"importEntityType\":\"Garage\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"externalId\":\"42\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"reasonCode\":\"missing-owner\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"severity\":\"warning\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Петров", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("Петров", auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -65,7 +78,7 @@ public sealed class ImportQuarantineServiceTests
         string expectedCode)
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportQuarantineService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.RegisterAsync(
             new RegisterImportQuarantineItemRequest(source, entityType, "1", rowHash, reasonCode, "Причина.", severity, rowSnapshotJson, null),
@@ -82,7 +95,7 @@ public sealed class ImportQuarantineServiceTests
     public async Task GetOpenItemsAsync_ReturnsOpenItemsNewestFirstAndFiltersByRun()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportQuarantineService(database.Context);
+        var service = CreateService(database.Context);
         var firstRunId = Guid.NewGuid();
         var secondRunId = Guid.NewGuid();
 
@@ -103,7 +116,7 @@ public sealed class ImportQuarantineServiceTests
     public async Task GetOpenItemsAsync_AppliesExplicitLimit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportQuarantineService(database.Context);
+        var service = CreateService(database.Context);
 
         await service.RegisterAsync(CreateRequest(RowHash, null, "garage-1"), null, CancellationToken.None);
         await Task.Delay(5);
@@ -122,7 +135,7 @@ public sealed class ImportQuarantineServiceTests
     public async Task ResolveAsync_MarksItemResolvedAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportQuarantineService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var registered = await service.RegisterAsync(CreateRequest(RowHash, null, "garage-1"), null, CancellationToken.None);
 
@@ -133,17 +146,23 @@ public sealed class ImportQuarantineServiceTests
         Assert.Equal("Владелец создан вручную.", resolved.Value.ResolutionComment);
         Assert.Equal(actorUserId, resolved.Value.ResolvedByUserId);
         Assert.NotNull(resolved.Value.ResolvedAtUtc);
-        Assert.Contains(database.Context.AuditEvents, item =>
-            item.Action == "import.quarantine_resolved" &&
-            item.ActorUserId == actorUserId &&
-            item.EntityId == registered.Value.Id.ToString());
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.quarantine_resolved");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal(registered.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Equal("Access/Garage/missing-owner", auditEvent.EntityDisplayName);
+        Assert.Equal("garage-1", auditEvent.RelatedDocumentNumber);
+        Assert.Contains("Комментарий: Владелец создан вручную.", auditEvent.Summary, StringComparison.Ordinal);
+        using var metadataJson = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("Владелец создан вручную.", metadataJson.RootElement.GetProperty("resolutionComment").GetString());
     }
 
     [Fact]
     public async Task ResolveAsync_ReturnsNotFoundForMissingItem()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ImportQuarantineService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.ResolveAsync(Guid.NewGuid(), new ResolveImportQuarantineItemRequest("Нет строки."), null, CancellationToken.None);
 
@@ -163,6 +182,11 @@ public sealed class ImportQuarantineServiceTests
             "error",
             "{}",
             runId);
+    }
+
+    private static ImportQuarantineService CreateService(GarageBalanceDbContext context)
+    {
+        return new ImportQuarantineService(context, new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

@@ -1,12 +1,14 @@
 using System.Text.Json;
-using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Import;
 
-public sealed class ImportQuarantineService(GarageBalanceDbContext dbContext) : IImportQuarantineService
+public sealed class ImportQuarantineService(
+    GarageBalanceDbContext dbContext,
+    IAuditEventWriter auditEventWriter) : IImportQuarantineService
 {
     private const int DefaultListLimit = 50;
     private const int MaxListLimit = 200;
@@ -94,14 +96,27 @@ public sealed class ImportQuarantineService(GarageBalanceDbContext dbContext) : 
         };
 
         dbContext.AccessImportQuarantineItems.Add(item);
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = "import.quarantine_registered",
-            EntityType = "access_import_quarantine_item",
-            EntityId = item.Id.ToString(),
-            Summary = $"Import quarantine item registered: {sourceSystem}/{entityType}/{reasonCode}."
-        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.quarantine_registered",
+            "access_import_quarantine_item",
+            item.Id.ToString(),
+            Summary: $"Import quarantine item registered: {sourceSystem}/{entityType}/{reasonCode}.",
+            ActionKind: "import",
+            EntityDisplayName: $"{sourceSystem}/{entityType}/{reasonCode}",
+            Reason: reasonMessage,
+            RelatedDocumentId: request.AccessImportRunId?.ToString(),
+            RelatedDocumentNumber: externalId,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["sourceSystem"] = sourceSystem,
+                ["importEntityType"] = entityType,
+                ["externalId"] = externalId,
+                ["rowHash"] = rowHash,
+                ["accessImportRunId"] = request.AccessImportRunId,
+                ["reasonCode"] = reasonCode,
+                ["severity"] = severity
+            }));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportQuarantineItemDto>.Success(ToDto(item));
@@ -135,14 +150,28 @@ public sealed class ImportQuarantineService(GarageBalanceDbContext dbContext) : 
         item.ResolvedAtUtc = DateTimeOffset.UtcNow;
         item.ResolvedByUserId = actorUserId;
 
-        dbContext.AuditEvents.Add(new AuditEvent
-        {
-            ActorUserId = actorUserId,
-            Action = "import.quarantine_resolved",
-            EntityType = "access_import_quarantine_item",
-            EntityId = item.Id.ToString(),
-            Summary = $"Import quarantine item resolved: {item.SourceSystem}/{item.EntityType}/{item.ReasonCode}."
-        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.quarantine_resolved",
+            "access_import_quarantine_item",
+            item.Id.ToString(),
+            Summary: $"Import quarantine item resolved: {item.SourceSystem}/{item.EntityType}/{item.ReasonCode}.",
+            ActionKind: "update",
+            EntityDisplayName: $"{item.SourceSystem}/{item.EntityType}/{item.ReasonCode}",
+            Reason: resolutionComment,
+            RelatedDocumentId: item.AccessImportRunId?.ToString(),
+            RelatedDocumentNumber: item.ExternalId,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["sourceSystem"] = item.SourceSystem,
+                ["importEntityType"] = item.EntityType,
+                ["externalId"] = item.ExternalId,
+                ["rowHash"] = item.RowHash,
+                ["accessImportRunId"] = item.AccessImportRunId,
+                ["reasonCode"] = item.ReasonCode,
+                ["severity"] = item.Severity,
+                ["resolutionComment"] = resolutionComment
+            }));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportQuarantineItemDto>.Success(ToDto(item));
