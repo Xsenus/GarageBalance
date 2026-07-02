@@ -151,6 +151,19 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CancelOperation_ReturnsBadRequestForMissingCancelBody()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        var result = await controller.CancelOperation(Guid.NewGuid(), null, CancellationToken.None);
+
+        AssertCancelReasonBadRequest(result, "operation_cancel_reason_required");
+        Assert.Null(service.LastCancelRequest);
+        Assert.Null(service.LastCanceledOperationId);
+    }
+
+    [Fact]
     public async Task CreateIncome_ReturnsNotFoundForMissingGarage()
     {
         var controller = CreateController(new FakeFinanceService
@@ -238,6 +251,19 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CancelAccrual_ReturnsBadRequestForBlankCancelReason()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        var result = await controller.CancelAccrual(Guid.NewGuid(), new CancelFinanceEntryRequest("   "), CancellationToken.None);
+
+        AssertCancelReasonBadRequest(result, "accrual_cancel_reason_required");
+        Assert.Null(service.LastCancelRequest);
+        Assert.Null(service.LastCanceledAccrualId);
+    }
+
+    [Fact]
     public async Task CreateSupplierAccrual_ReturnsConflictForDuplicateAccrual()
     {
         var controller = CreateController(new FakeFinanceService
@@ -289,6 +315,19 @@ public sealed class FinanceControllerTests
         Assert.Same(accrual, ok.Value);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(accrual.Id, service.LastCanceledSupplierAccrualId);
+    }
+
+    [Fact]
+    public async Task CancelSupplierAccrual_ReturnsBadRequestForBlankCancelReason()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        var result = await controller.CancelSupplierAccrual(Guid.NewGuid(), new CancelFinanceEntryRequest("   "), CancellationToken.None);
+
+        AssertCancelReasonBadRequest(result, "supplier_accrual_cancel_reason_required");
+        Assert.Null(service.LastCancelRequest);
+        Assert.Null(service.LastCanceledSupplierAccrualId);
     }
 
     [Fact]
@@ -412,6 +451,19 @@ public sealed class FinanceControllerTests
         Assert.Equal("meter_reading_not_found", problem.Title);
     }
 
+    [Fact]
+    public async Task CancelMeterReading_ReturnsBadRequestForBlankCancelReason()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        var result = await controller.CancelMeterReading(Guid.NewGuid(), new CancelFinanceEntryRequest("   "), CancellationToken.None);
+
+        AssertCancelReasonBadRequest(result, "meter_reading_cancel_reason_required");
+        Assert.Null(service.LastCancelRequest);
+        Assert.Null(service.LastCanceledMeterReadingId);
+    }
+
     private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
     {
         var controller = new FinanceController(service);
@@ -421,6 +473,14 @@ public sealed class FinanceControllerTests
             User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
         };
         return controller;
+    }
+
+    private static void AssertCancelReasonBadRequest<T>(ActionResult<T> result, string errorCode)
+    {
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
     }
 
     private static FinancialOperationDto CreateOperation(string kind)
