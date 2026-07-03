@@ -92,6 +92,22 @@ public sealed class ControllerThinnessTests
         Assert.Empty(offenders);
     }
 
+    [Fact]
+    public void DangerousControllerActions_DoNotUseSafeHttpMethods()
+    {
+        var safeHttpMethods = new[] { "GET", "HEAD", "OPTIONS", "TRACE" };
+        var offenders = GetControllerActionMethods()
+            .Where(IsDangerousActionName)
+            .SelectMany(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true)
+                .SelectMany(attribute => attribute.HttpMethods)
+                .Where(httpMethod => safeHttpMethods.Contains(httpMethod, StringComparer.OrdinalIgnoreCase))
+                .Select(httpMethod => $"{method.DeclaringType!.Name}.{method.Name} uses safe HTTP method {httpMethod}."))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
     private static IEnumerable<Type> GetControllerTypes()
     {
         return typeof(AuthController).Assembly
