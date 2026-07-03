@@ -7546,6 +7546,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [accountingTypeForm, setAccountingTypeForm] = useState(createEmptyAccountingTypeForm())
   const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>(createEmptyTariffForm())
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor))
   useRestoreFocusOnClose(Boolean(pendingEditorConfirmation))

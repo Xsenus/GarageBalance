@@ -2517,11 +2517,14 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
-    let typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const addIncomeTypeButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    await user.click(addIncomeTypeButton)
+    let typeDialog = await screen.findByRole('dialog')
     await user.type(within(typeDialog).getByLabelText('Название вида операции'), 'Целевой взнос')
     await user.type(within(typeDialog).getByLabelText('Код вида операции'), 'target')
     await user.click(within(typeDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dictionaryPanel).findByText('Целевой взнос')).toBeInTheDocument()
+    await waitFor(() => expect(addIncomeTypeButton).toHaveFocus())
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
     typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
