@@ -88,6 +88,30 @@ export type ExpenseReportDto = {
   rows: ExpenseReportRowDto[]
 }
 
+export type FundChangeReportRowDto = {
+  operationId: string
+  fundId: string
+  fundName: string
+  date: string
+  changeKind: string
+  changeName: string
+  amount: number
+  balanceBefore: number
+  balanceAfter: number
+  actorUserId: string | null
+  actorDisplayName: string | null
+  reason: string
+}
+
+export type FundChangeReportDto = {
+  dateFrom: string
+  dateTo: string
+  depositTotal: number
+  withdrawalTotal: number
+  rowCount: number
+  rows: FundChangeReportRowDto[]
+}
+
 export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number }): Promise<ConsolidatedReportDto>
   exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
@@ -141,6 +165,15 @@ export type ReportClient = {
       limit?: number
     },
   ): Promise<ExpenseReportDto>
+  getFundChangeReport(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      limit?: number
+    },
+  ): Promise<FundChangeReportDto>
   exportExpenseReportXlsx(
     accessToken: string,
     params?: {
@@ -271,6 +304,23 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
   return searchParams.toString()
 }
 
+function buildFundChangeReportQuery(params: Parameters<ReportClient['getFundChangeReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.dateFrom) {
+    searchParams.set('dateFrom', params.dateFrom)
+  }
+  if (params.dateTo) {
+    searchParams.set('dateTo', params.dateTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+  return searchParams.toString()
+}
+
 export const reportsApi: ReportClient = {
   getConsolidatedReport(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)
@@ -299,6 +349,10 @@ export const reportsApi: ReportClient = {
   getExpenseReport(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)
     return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`)
+  },
+  getFundChangeReport(accessToken, params = {}) {
+    const query = buildFundChangeReportQuery(params)
+    return requestJson(accessToken, `/api/reports/fund-changes${query ? `?${query}` : ''}`)
   },
   exportExpenseReportXlsx(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)

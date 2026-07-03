@@ -179,6 +179,25 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpGet("fund-changes")]
+    [ProducesResponseType<FundChangeReportDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<FundChangeReportDto>> GetFundChangeReport(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.GetFundChangeReportAsync(
+            new FundChangeReportRequest(dateFrom, dateTo, search, limit, GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpPost("expense/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

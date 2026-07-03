@@ -1,6 +1,8 @@
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -431,6 +433,76 @@ public sealed class ReportServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("period_invalid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetFundChangeReportAsync_ReturnsFundOperationsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var operatorUser = new AppUser
+        {
+            Id = actorUserId,
+            Email = "funds@example.test",
+            NormalizedEmail = "FUNDS@EXAMPLE.TEST",
+            DisplayName = "Администратор ГСК",
+            PasswordHash = "hash"
+        };
+        var fund = new Fund { Name = "Электроэнергия", NormalizedName = "ЭЛЕКТРОЭНЕРГИЯ", SortOrder = 10 };
+        database.Context.Users.Add(operatorUser);
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 1500m,
+                BalanceBefore = 0m,
+                BalanceAfter = 1500m,
+                Reason = "Распределение средств",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Withdraw,
+                Amount = 300m,
+                BalanceBefore = 1500m,
+                BalanceAfter = 1200m,
+                Reason = "Оплата счета",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 11, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 500m,
+                BalanceBefore = 1200m,
+                BalanceAfter = 1700m,
+                Reason = "Вне периода",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 9, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetFundChangeReportAsync(
+            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1500m, result.Value!.DepositTotal);
+        Assert.Equal(300m, result.Value.WithdrawalTotal);
+        Assert.Equal(2, result.Value.RowCount);
+        Assert.Equal(2, result.Value.Rows.Count);
+        Assert.Contains(result.Value.Rows, row => row.ChangeKind == FundOperationKinds.Deposit && row.ChangeName == "Пополнение" && row.ActorDisplayName == "Администратор ГСК");
+        Assert.Contains(result.Value.Rows, row => row.ChangeKind == FundOperationKinds.Withdraw && row.ChangeName == "Изъятие" && row.BalanceAfter == 1200m);
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.fund_changes_generated" &&
+            auditEvent.EntityId == "fund_changes" &&
+            auditEvent.ActorUserId == actorUserId);
     }
 
     [Fact]

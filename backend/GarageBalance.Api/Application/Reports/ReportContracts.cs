@@ -28,6 +28,13 @@ public sealed record ExpenseReportRequest(
     int? Limit = null,
     Guid? ActorUserId = null);
 
+public sealed record FundChangeReportRequest(
+    DateOnly? DateFrom,
+    DateOnly? DateTo,
+    string? Search,
+    int? Limit = null,
+    Guid? ActorUserId = null);
+
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,
     DateOnly PeriodTo,
@@ -110,6 +117,28 @@ public sealed record ExpenseReportRowDto(
     decimal Difference,
     string? DocumentNumber,
     string? Comment);
+
+public sealed record FundChangeReportDto(
+    DateOnly DateFrom,
+    DateOnly DateTo,
+    decimal DepositTotal,
+    decimal WithdrawalTotal,
+    int RowCount,
+    IReadOnlyList<FundChangeReportRowDto> Rows);
+
+public sealed record FundChangeReportRowDto(
+    Guid OperationId,
+    Guid FundId,
+    string FundName,
+    DateOnly Date,
+    string ChangeKind,
+    string ChangeName,
+    decimal Amount,
+    decimal BalanceBefore,
+    decimal BalanceAfter,
+    Guid? ActorUserId,
+    string? ActorDisplayName,
+    string Reason);
 
 public sealed record ReportExportFileDto(
     string FileName,

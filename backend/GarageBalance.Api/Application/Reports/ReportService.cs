@@ -618,6 +618,143 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         return ReportResult<ExpenseReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<FundChangeReportDto>> GetFundChangeReportAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
+    {
+        var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
+        if (dateTo < dateFrom)
+        {
+            return ReportResult<FundChangeReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var operationsQuery = dbContext.FundOperations.AsNoTracking()
+            .Include(operation => operation.Fund)
+            .Where(operation => operation.CreatedAtUtc >= fromUtc && operation.CreatedAtUtc < toExclusiveUtc);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var normalizedSearch = request.Search.Trim().ToLower();
+            operationsQuery = operationsQuery.Where(operation =>
+                operation.Fund.Name.ToLower().Contains(normalizedSearch) ||
+                operation.OperationKind.ToLower().Contains(normalizedSearch) ||
+                operation.Reason.ToLower().Contains(normalizedSearch));
+        }
+
+        List<FundOperationReportRow> operations;
+        int rowCount;
+        decimal depositTotal;
+        decimal withdrawalTotal;
+        if (dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var sqliteOperations = await dbContext.FundOperations.AsNoTracking()
+                .Include(operation => operation.Fund)
+                .ToListAsync(cancellationToken);
+            var filteredOperations = sqliteOperations
+                .Where(operation => operation.CreatedAtUtc >= fromUtc && operation.CreatedAtUtc < toExclusiveUtc);
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var normalizedSearch = request.Search.Trim();
+                filteredOperations = filteredOperations.Where(operation =>
+                    operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    operation.OperationKind.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var filteredList = filteredOperations.ToList();
+            rowCount = filteredList.Count;
+            depositTotal = filteredList
+                .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
+                .Sum(operation => operation.Amount);
+            withdrawalTotal = filteredList
+                .Where(operation => operation.OperationKind == FundOperationKinds.Withdraw)
+                .Sum(operation => operation.Amount);
+            operations = ApplyEnumerableReportRowLimit(
+                    filteredList
+                        .OrderBy(operation => operation.CreatedAtUtc)
+                        .ThenBy(operation => operation.Fund.Name),
+                    request.Limit)
+                .Select(CreateFundOperationReportRow)
+                .ToList();
+        }
+        else
+        {
+            rowCount = await operationsQuery.CountAsync(cancellationToken);
+            depositTotal = await operationsQuery
+                .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
+                .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+            withdrawalTotal = await operationsQuery
+                .Where(operation => operation.OperationKind == FundOperationKinds.Withdraw)
+                .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+            operations = await ApplyReportRowLimit(
+                    operationsQuery
+                        .OrderBy(operation => operation.CreatedAtUtc)
+                        .ThenBy(operation => operation.Fund.Name),
+                    request.Limit)
+                .Select(operation => new FundOperationReportRow(
+                    operation.Id,
+                    operation.FundId,
+                    operation.Fund.Name,
+                    operation.OperationKind,
+                    operation.Amount,
+                    operation.BalanceBefore,
+                    operation.BalanceAfter,
+                    operation.ActorUserId,
+                    operation.CreatedAtUtc,
+                    operation.Reason))
+                .ToListAsync(cancellationToken);
+        }
+        var actorIds = operations
+            .Where(operation => operation.ActorUserId.HasValue)
+            .Select(operation => operation.ActorUserId!.Value)
+            .Distinct()
+            .ToList();
+        var usersById = actorIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await dbContext.Users.AsNoTracking()
+                .Where(user => actorIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
+        var rows = operations
+            .Select(operation => new FundChangeReportRowDto(
+                operation.Id,
+                operation.FundId,
+                operation.FundName,
+                DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
+                operation.OperationKind,
+                FormatFundOperationKind(operation.OperationKind),
+                operation.Amount,
+                operation.BalanceBefore,
+                operation.BalanceAfter,
+                operation.ActorUserId,
+                operation.ActorUserId.HasValue && usersById.TryGetValue(operation.ActorUserId.Value, out var displayName)
+                    ? displayName
+                    : operation.ActorUserId?.ToString(),
+                operation.Reason))
+            .ToList();
+        var report = new FundChangeReportDto(dateFrom, dateTo, depositTotal, withdrawalTotal, rowCount, rows);
+
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.fund_changes_generated",
+            "Отчет по изменению фондов",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            new Dictionary<string, object?>
+            {
+                ["reportType"] = "fund_changes",
+                ["visibleRowCount"] = report.Rows.Count,
+                ["depositTotal"] = report.DepositTotal,
+                ["withdrawalTotal"] = report.WithdrawalTotal,
+                ["limit"] = request.Limit
+            },
+            cancellationToken);
+
+        return ReportResult<FundChangeReportDto>.Success(report);
+    }
+
     public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
         var reportResult = await GetIncomeReportAsync(request, cancellationToken);
@@ -1387,6 +1524,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             "Сводный отчет" => "consolidated",
             "Отчет по поступлениям" => "income",
             "Отчет по выплатам" => "expense",
+            "Отчет по изменению фондов" => "fund_changes",
             _ => "custom"
         };
     }
@@ -1416,6 +1554,28 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         return limit is > 0
             ? query.Take(NormalizeReportLimit(limit.Value))
             : query;
+    }
+
+    private static IEnumerable<T> ApplyEnumerableReportRowLimit<T>(IEnumerable<T> rows, int? limit)
+    {
+        return limit is > 0
+            ? rows.Take(NormalizeReportLimit(limit.Value))
+            : rows;
+    }
+
+    private static FundOperationReportRow CreateFundOperationReportRow(FundOperation operation)
+    {
+        return new FundOperationReportRow(
+            operation.Id,
+            operation.FundId,
+            operation.Fund.Name,
+            operation.OperationKind,
+            operation.Amount,
+            operation.BalanceBefore,
+            operation.BalanceAfter,
+            operation.ActorUserId,
+            operation.CreatedAtUtc,
+            operation.Reason);
     }
 
     private static int NormalizeReportLimit(int limit) => Math.Clamp(limit, 1, 500);
@@ -1450,9 +1610,30 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         };
     }
 
+    private static string FormatFundOperationKind(string operationKind)
+    {
+        return operationKind switch
+        {
+            FundOperationKinds.Deposit => "Пополнение",
+            FundOperationKinds.Withdraw => "Изъятие",
+            _ => operationKind
+        };
+    }
+
     private readonly record struct AmountCountByMonth(DateOnly Month, decimal Amount, int Count);
     private readonly record struct CountByMonth(DateOnly Month, int Count);
     private readonly record struct AmountByGarage(Guid GarageId, decimal Amount);
     private readonly record struct CountByGarage(Guid GarageId, int Count);
+    private sealed record FundOperationReportRow(
+        Guid Id,
+        Guid FundId,
+        string FundName,
+        string OperationKind,
+        decimal Amount,
+        decimal BalanceBefore,
+        decimal BalanceAfter,
+        Guid? ActorUserId,
+        DateTimeOffset CreatedAtUtc,
+        string Reason);
     private sealed record GarageReportRowsPage(int RowCount, IReadOnlyList<GarageReportRowDto> Rows);
 }

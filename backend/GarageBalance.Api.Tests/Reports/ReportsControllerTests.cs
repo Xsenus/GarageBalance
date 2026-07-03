@@ -199,6 +199,50 @@ public sealed class ReportsControllerTests
     }
 
     [Fact]
+    public async Task GetFundChangeReport_ReturnsOk()
+    {
+        var report = CreateFundChangeReport();
+        var service = new FakeReportService
+        {
+            FundChangeResult = ReportResult<FundChangeReportDto>.Success(report)
+        };
+        var actorUserId = Guid.NewGuid();
+        var controller = new ReportsController(service);
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())]))
+        };
+
+        var result = await controller.GetFundChangeReport(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "Электро",
+            16,
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(report, ok.Value);
+        Assert.Equal(16, service.FundChangeRequest?.Limit);
+        Assert.Equal("Электро", service.FundChangeRequest?.Search);
+        Assert.Equal(actorUserId, service.FundChangeRequest?.ActorUserId);
+    }
+
+    [Fact]
+    public async Task GetFundChangeReport_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            FundChangeResult = ReportResult<FundChangeReportDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.GetFundChangeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsx_ReturnsFile()
     {
         var content = new byte[] { 1, 2, 3 };
@@ -433,6 +477,32 @@ public sealed class ReportsControllerTests
             ]);
     }
 
+    private static FundChangeReportDto CreateFundChangeReport()
+    {
+        var fundId = Guid.NewGuid();
+        return new FundChangeReportDto(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            1500m,
+            0m,
+            1,
+            [
+                new FundChangeReportRowDto(
+                    Guid.NewGuid(),
+                    fundId,
+                    "Электроэнергия",
+                    new DateOnly(2026, 6, 10),
+                    "deposit",
+                    "Пополнение",
+                    1500m,
+                    0m,
+                    1500m,
+                    Guid.NewGuid(),
+                    "Администратор",
+                    "Распределение средств")
+            ]);
+    }
+
     private sealed class FakeReportService : IReportService
     {
         public ReportResult<ConsolidatedReportDto> Result { get; init; } = ReportResult<ConsolidatedReportDto>.Failure("not_configured", "Not configured.");
@@ -447,6 +517,9 @@ public sealed class ReportsControllerTests
 
         public ReportResult<ExpenseReportDto> ExpenseResult { get; init; } = ReportResult<ExpenseReportDto>.Failure("not_configured", "Not configured.");
         public ExpenseReportRequest? ExpenseRequest { get; private set; }
+
+        public ReportResult<FundChangeReportDto> FundChangeResult { get; init; } = ReportResult<FundChangeReportDto>.Failure("not_configured", "Not configured.");
+        public FundChangeReportRequest? FundChangeRequest { get; private set; }
 
         public ReportResult<ReportExportFileDto> IncomeExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
@@ -482,6 +555,12 @@ public sealed class ReportsControllerTests
         {
             ExpenseRequest = request;
             return Task.FromResult(ExpenseResult);
+        }
+
+        public Task<ReportResult<FundChangeReportDto>> GetFundChangeReportAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
+        {
+            FundChangeRequest = request;
+            return Task.FromResult(FundChangeResult);
         }
 
         public Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)

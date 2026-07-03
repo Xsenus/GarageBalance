@@ -38,7 +38,7 @@ import type { FundDto, FundsClient } from './services/fundsApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
-import type { ReportClient } from './services/reportsApi'
+import type { FundChangeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
@@ -4636,7 +4636,7 @@ function getReportMonthLabel(monthValue: string) {
   return formatMonth(`${monthValue}-01`)
 }
 
-function ReportPanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
+function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
   const previousMonth = getPreviousMonthInputValue(currentMonth)
@@ -4664,6 +4664,9 @@ function ReportPanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionar
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
+  const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
+  const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
+  const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -4699,6 +4702,44 @@ function ReportPanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionar
       ignore = true
     }
   }, [auth.accessToken, dictionaryClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'funds') {
+      return
+    }
+
+    let ignore = false
+
+    async function loadFundChanges() {
+      setFundChangeReportLoading(true)
+      setFundChangeReportError(null)
+      try {
+        const filter = dateFilters.funds
+        const report = await reportClient.getFundChangeReport(auth.accessToken, {
+          dateFrom: filter.dateFrom,
+          dateTo: filter.dateTo,
+          limit: 100,
+        })
+        if (!ignore) {
+          setFundChangeReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setFundChangeReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по изменению фондов.')
+        }
+      } finally {
+        if (!ignore) {
+          setFundChangeReportLoading(false)
+        }
+      }
+    }
+
+    void loadFundChanges()
+
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, dateFilters.funds, reportClient])
 
   const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
   const garageFilterLabel = garageFilter.trim() || 'Все гаражи'
@@ -4957,10 +4998,31 @@ function ReportPanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionar
       )
     }
 
+    const fundRows = fundChangeReport?.rows.map((row) => [
+      row.fundName,
+      row.date,
+      row.changeName,
+      formatMoney(row.balanceBefore),
+      formatMoney(row.balanceAfter),
+      row.actorDisplayName ?? '',
+    ]) ?? []
+    const visibleFundRows = fundRows.length > 0
+      ? fundRows
+      : [['', '', 'Операций за период нет', '', '', '']]
+
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
         {renderDateFilter('funds', { from: 'С', to: 'По' })}
-        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма до', 'Сумма после', 'Пользователь'], [['Резервный фонд', today, 'Пополнение', formatMoney(0), formatMoney(0), auth.user.displayName]])}
+        {fundChangeReportLoading ? <p className="prototype-status" role="status">Загружаем изменения фондов...</p> : null}
+        {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
+        {fundChangeReport ? (
+          <div className="report-workbook-summary-row">
+            <strong>Пополнено: {formatMoney(fundChangeReport.depositTotal)}</strong>
+            <strong>Изъято: {formatMoney(fundChangeReport.withdrawalTotal)}</strong>
+            <strong>Операций: {fundChangeReport.rowCount}</strong>
+          </div>
+        ) : null}
+        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма до', 'Сумма после', 'Пользователь'], visibleFundRows)}
       </ReportWorkbookSheet>
     )
   }

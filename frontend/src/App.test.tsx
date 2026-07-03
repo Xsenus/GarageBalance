@@ -9,7 +9,7 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, Supplier
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { ConsolidatedReportDto, ExpenseReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
@@ -5022,7 +5022,14 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, 'Изменение фондов')
     expect(within(reportsPanel).getByText('Отчёт по изменению фондов')).toBeInTheDocument()
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по изменению фондов' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByText(/Пополнено:\s*1\s*500,00/)).toBeInTheDocument()
+    expect(within(reportsPanel).getByText(/Изъято:\s*300,00/)).toBeInTheDocument()
+    const fundChangesTable = within(reportsPanel).getByRole('table', { name: 'Отчет по изменению фондов' })
+    expect(fundChangesTable).toHaveTextContent('Электроэнергия')
+    expect(fundChangesTable).toHaveTextContent('Пополнение')
+    expect(fundChangesTable).toHaveTextContent('Изъятие')
+    expect(fundChangesTable).toHaveTextContent('Администратор ГСК')
+    expect(fundChangesTable).not.toHaveTextContent('Резервный фонд')
   })
   it('shows login errors without opening protected workspace', async () => {
     const user = userEvent.setup()
@@ -5645,6 +5652,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     },
     exportExpenseReportXlsx: async () => new Blob(['expense xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportExpenseReportPdf: async () => new Blob(['expense pdf'], { type: 'application/pdf' }),
+    getFundChangeReport: async () => createFundChangeReport(),
     ...overrides,
   }
 }
@@ -6477,6 +6485,47 @@ function createExpenseReport(overrides: Partial<ExpenseReportDto> = {}): Expense
         difference: -400,
         documentNumber: 'RKO-1',
         comment: 'Оплата воды',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createFundChangeReport(overrides: Partial<FundChangeReportDto> = {}): FundChangeReportDto {
+  return {
+    dateFrom: '2026-06-01',
+    dateTo: '2026-06-30',
+    depositTotal: 1500,
+    withdrawalTotal: 300,
+    rowCount: 2,
+    rows: [
+      {
+        operationId: 'fund-operation-1',
+        fundId: 'fund-electricity',
+        fundName: 'Электроэнергия',
+        date: '2026-06-10',
+        changeKind: 'deposit',
+        changeName: 'Пополнение',
+        amount: 1500,
+        balanceBefore: 0,
+        balanceAfter: 1500,
+        actorUserId: 'user-admin',
+        actorDisplayName: 'Администратор ГСК',
+        reason: 'Распределение средств',
+      },
+      {
+        operationId: 'fund-operation-2',
+        fundId: 'fund-electricity',
+        fundName: 'Электроэнергия',
+        date: '2026-06-11',
+        changeKind: 'withdraw',
+        changeName: 'Изъятие',
+        amount: 300,
+        balanceBefore: 1500,
+        balanceAfter: 1200,
+        actorUserId: 'user-admin',
+        actorDisplayName: 'Администратор ГСК',
+        reason: 'Оплата счета',
       },
     ],
     ...overrides,
