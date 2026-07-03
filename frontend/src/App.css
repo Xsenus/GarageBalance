@@ -2155,7 +2155,9 @@ h1 {
 
 .dictionary-form input,
 .dictionary-form select,
-.dictionary-form textarea {
+.dictionary-form textarea,
+.audit-filter-grid input,
+.audit-filter-grid select {
   width: 100%;
   min-height: 40px;
   border: 1px solid #d0d5dd;
@@ -2197,7 +2199,10 @@ h1 {
 .dictionary-modal-form input[type='month'],
 .report-filter input[type='date'],
 .report-filter input[type='month'],
-.balance-history-filters input[type='month'] {
+.balance-history-filters input[type='month'],
+.finance-period-filter input[type='month'],
+.audit-filter-grid input[type='date'],
+.audit-filter-grid input[type='month'] {
   color-scheme: light;
   padding-right: 10px;
 }
@@ -2208,7 +2213,10 @@ h1 {
 .dictionary-modal-form input[type='month']::-webkit-calendar-picker-indicator,
 .report-filter input[type='date']::-webkit-calendar-picker-indicator,
 .report-filter input[type='month']::-webkit-calendar-picker-indicator,
-.balance-history-filters input[type='month']::-webkit-calendar-picker-indicator {
+.balance-history-filters input[type='month']::-webkit-calendar-picker-indicator,
+.finance-period-filter input[type='month']::-webkit-calendar-picker-indicator,
+.audit-filter-grid input[type='date']::-webkit-calendar-picker-indicator,
+.audit-filter-grid input[type='month']::-webkit-calendar-picker-indicator {
   cursor: pointer;
   opacity: 0.72;
 }
@@ -2306,7 +2314,9 @@ h1 {
 
 .dictionary-form input:focus,
 .dictionary-form select:focus,
-.dictionary-form textarea:focus {
+.dictionary-form textarea:focus,
+.audit-filter-grid input:focus,
+.audit-filter-grid select:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }

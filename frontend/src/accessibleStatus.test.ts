@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('accessible dynamic messages', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src', 'App.tsx'), 'utf8')
+  const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const formFeedbackSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'formFeedback.tsx'), 'utf8')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
@@ -60,6 +61,38 @@ describe('accessible dynamic messages', () => {
       expect(appSource).toContain(`aria-describedby="${hint.id}"`)
       expect(appSource).toContain(`id="${hint.id}">${hint.text}</p>`)
     }
+  })
+
+  it('keeps date month and year controls styled and validated', () => {
+    const calendarStyleContainers = [
+      ".dictionary-form input[type='date']",
+      ".dictionary-form input[type='month']",
+      ".dictionary-modal-form input[type='date']",
+      ".dictionary-modal-form input[type='month']",
+      ".report-filter input[type='date']",
+      ".report-filter input[type='month']",
+      ".balance-history-filters input[type='month']",
+      ".finance-period-filter input[type='month']",
+      ".audit-filter-grid input[type='date']",
+      ".audit-filter-grid input[type='month']",
+    ]
+
+    for (const selector of calendarStyleContainers) {
+      expect(appCss).toContain(selector)
+      expect(appCss).toContain(`${selector}::-webkit-calendar-picker-indicator`)
+    }
+
+    expect(appCss).toContain('.audit-filter-grid input,\n.audit-filter-grid select')
+    expect(appCss).toContain('.audit-filter-grid input:focus,\n.audit-filter-grid select:focus')
+    expect(appCss).toContain('.meter-readings-control[aria-invalid=\'true\']')
+
+    expect(appSource).toContain('function isValidMeterReadingYear(value: string)')
+    expect(appSource).toContain('return year >= 1900 && year <= 9999')
+    expect(appSource).toContain('aria-label="Год показаний"')
+    expect(appSource).toContain('aria-invalid={!yearIsValid}')
+    expect(appSource).toContain('inputMode="numeric"')
+    expect(appSource).toContain('maxLength={4}')
+    expect(appSource).toContain('Введите год четырьмя цифрами от 1900 до 9999.')
   })
 
   it('keeps report export buttons out of filter form submission', () => {
