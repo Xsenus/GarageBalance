@@ -329,7 +329,10 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('reports-workbook-panel')
   })
   it('keeps icon-only buttons named and explicitly typed', () => {
-    const iconButtonIndexes = [...appSource.matchAll(/className="icon-button"/g)].map((match) => match.index ?? -1)
+    const iconButtonIndexes = [
+      ...appSource.matchAll(/className="icon-button"/g),
+      ...appSource.matchAll(/className="funds-action-button/g),
+    ].map((match) => match.index ?? -1)
 
     expect(iconButtonIndexes.length).toBeGreaterThan(0)
 
@@ -373,6 +376,7 @@ describe('accessible dynamic messages', () => {
       'nav-item',
       'file-picker-button',
       'operation-row',
+      'funds-action-button',
     ]
 
     const containerStyledButtonPatterns = [

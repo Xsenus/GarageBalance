@@ -10,6 +10,7 @@ import {
   Gauge,
   LockKeyhole,
   LogOut,
+  Minus,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -513,7 +514,7 @@ function Workspace({
     }
   }
 
-  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings' && activeSection !== 'reports'
+  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings' && activeSection !== 'funds' && activeSection !== 'reports'
 
   return (
     <>
@@ -3184,7 +3185,7 @@ function FundsPrototypePanel() {
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
   useRestoreFocusOnClose(Boolean(operation))
-  const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
+  const operationConfirmRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
@@ -3268,15 +3269,15 @@ function FundsPrototypePanel() {
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
                 <td>
                   {row.actions === false ? null : (
-                    <button className="link-button" type="button" aria-label={`Изъять из фонда ${row.name}`} onClick={() => openFundOperation('withdraw', row.name)}>
-                      Изъять
+                    <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row.name)}>
+                      <Minus size={16} aria-hidden="true" />
                     </button>
                   )}
                 </td>
                 <td>
                   {row.actions === false ? null : (
-                    <button className="link-button" type="button" aria-label={`Пополнить фонд ${row.name}`} onClick={() => openFundOperation('deposit', row.name)}>
-                      Пополнить
+                    <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row.name)}>
+                      <Plus size={16} aria-hidden="true" />
                     </button>
                   )}
                 </td>
@@ -3349,11 +3350,11 @@ function FundsPrototypePanel() {
               </dl>
               {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
               <div className="detail-dialog-actions">
-                <button ref={operationCancelRef} className="ghost-button" type="button" onClick={closeFundOperation}>Отмена</button>
-                <button className="secondary-button" type="submit">
+                <button ref={operationConfirmRef} className="secondary-button" type="submit">
                   <Save size={16} />
                   <span>Подтвердить операцию</span>
                 </button>
+                <button className="ghost-button" type="button" onClick={closeFundOperation}>Отмена</button>
               </div>
             </form>
           </section>

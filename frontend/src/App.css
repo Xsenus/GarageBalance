@@ -2347,6 +2347,66 @@ h1 {
   font-weight: 700;
 }
 
+.funds-action-button {
+  position: relative;
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1849a9;
+  cursor: pointer;
+}
+
+.funds-action-button:hover,
+.funds-action-button:focus-visible {
+  border-color: #84adff;
+  background: #eef4ff;
+  color: #1d4ed8;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(46, 144, 250, 0.16);
+}
+
+.funds-action-button--withdraw:hover,
+.funds-action-button--withdraw:focus-visible {
+  border-color: #fecdca;
+  background: #fff1f3;
+  color: #b42318;
+  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.14);
+}
+
+.funds-action-button::after {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: 180px;
+  transform: translateX(-50%) translateY(2px);
+  border-radius: 6px;
+  background: #111827;
+  color: #ffffff;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0;
+  padding: 6px 8px;
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  white-space: nowrap;
+}
+
+.funds-action-button:hover::after,
+.funds-action-button:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .funds-distribution {
   display: inline-grid;
   width: min(360px, 100%);
