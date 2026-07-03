@@ -1025,8 +1025,9 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    const addUserButton = within(usersPanel).getByRole('button', { name: 'Добавить' })
 
-    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    await user.click(addUserButton)
     const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
     expect(within(dialog).getByText('Email')).toBeInTheDocument()
     expect(within(dialog).getByText('Имя сотрудника')).toBeInTheDocument()
@@ -1041,6 +1042,7 @@ describe('App', () => {
     expect(within(usersPanel).getByText('operator@example.com')).toBeInTheDocument()
     expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
     expect(await screen.findByText('Пользователь добавлен.')).toHaveAttribute('role', 'status')
+    await waitFor(() => expect(addUserButton).toHaveFocus())
   })
 
   it('does not call user API when managed user password violates policy', async () => {

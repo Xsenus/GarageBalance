@@ -4956,6 +4956,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
+  useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !saveConfirmation)
   useRestoreFocusOnClose(Boolean(saveConfirmation))
