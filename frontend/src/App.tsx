@@ -5660,15 +5660,17 @@ type ContractorOneTimeRow = {
   id: string
   name: string
   amount: string
+  isActive: boolean
   isDeleted: boolean
+  isUsed: boolean
 }
 
 const contractorOneTimeRows = [
-  { id: 'entry-fee', name: 'Вступительный взнос', amount: '', isDeleted: false },
-  { id: 'sewerage-connection', name: 'Подключение канализации', amount: '', isDeleted: false },
-  { id: 'electricity-connection', name: 'Подключение к линии электросети', amount: '', isDeleted: false },
-  { id: 'fine-that', name: 'Штраф за то', amount: '', isDeleted: false },
-  { id: 'fine-this', name: 'Штраф за это', amount: '', isDeleted: false },
+  { id: 'entry-fee', name: 'Вступительный взнос', amount: '', isActive: true, isDeleted: false, isUsed: true },
+  { id: 'sewerage-connection', name: 'Подключение канализации', amount: '', isActive: true, isDeleted: false, isUsed: false },
+  { id: 'electricity-connection', name: 'Подключение к линии электросети', amount: '', isActive: true, isDeleted: false, isUsed: false },
+  { id: 'fine-that', name: 'Штраф за то', amount: '', isActive: true, isDeleted: false, isUsed: false },
+  { id: 'fine-this', name: 'Штраф за это', amount: '', isActive: true, isDeleted: false, isUsed: false },
 ]
 
 type ContractorSection = 'garages' | 'suppliers' | 'staff'
@@ -6722,6 +6724,14 @@ type TariffPrototypePendingChange =
     previousValue: string
     nextValue: string
   }
+  | {
+    kind: 'one-time-active'
+    rowId: string
+    objectName: string
+    fieldLabel: string
+    previousValue: string
+    nextValue: string
+  }
 
 function formatPrototypeChangeValue(value: string) {
   return value.trim() || 'Пусто'
@@ -6737,15 +6747,12 @@ function TariffsAndFeesPrototypePanel() {
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
-  const [oneTimeRestoreTarget, setOneTimeRestoreTarget] = useState<ContractorOneTimeRow | null>(null)
+  const [oneTimeContextMenu, setOneTimeContextMenu] = useState<{ row: ContractorOneTimeRow; x: number; y: number } | null>(null)
+  const [oneTimeActionMessage, setOneTimeActionMessage] = useState<string | null>(null)
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
     setOneTimeDeleteReason('')
-  }
-
-  function closeOneTimeRestoreDialog() {
-    setOneTimeRestoreTarget(null)
   }
 
   function cancelPendingChange() {
@@ -6805,9 +6812,13 @@ function TariffsAndFeesPrototypePanel() {
           dateMonth: pendingChange.nextMonth,
         },
       }))
-    } else {
+    } else if (pendingChange.kind === 'one-time-amount') {
       setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, amount: pendingChange.nextValue } : currentRow
+      )))
+    } else {
+      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === pendingChange.rowId ? { ...currentRow, isActive: pendingChange.nextValue === 'Активен' } : currentRow
       )))
     }
 
@@ -6820,12 +6831,9 @@ function TariffsAndFeesPrototypePanel() {
   useRestoreFocusOnClose(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeDeleteTarget))
-  useRestoreFocusOnClose(Boolean(oneTimeRestoreTarget))
-  const oneTimeRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeRestoreTarget))
-  const oneTimeRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeRestoreTarget))
   useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
-  useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
+  useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
   const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit') => {
     const nextValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
@@ -6968,11 +6976,40 @@ function TariffsAndFeesPrototypePanel() {
     })
   }
 
+  const openOneTimeContextMenu = (event: MouseEvent<HTMLDivElement>, row: ContractorOneTimeRow) => {
+    event.preventDefault()
+    if (row.isDeleted) {
+      return
+    }
+
+    setOneTimeActionMessage(null)
+    setOneTimeContextMenu({ row, x: event.clientX, y: event.clientY })
+  }
+
+  const toggleOneTimeActive = (row: ContractorOneTimeRow) => {
+    setOneTimeContextMenu(null)
+    setPendingChange({
+      kind: 'one-time-active',
+      rowId: row.id,
+      objectName: row.name,
+      fieldLabel: 'Статус',
+      previousValue: row.isActive ? 'Активен' : 'Деактивирован',
+      nextValue: row.isActive ? 'Деактивирован' : 'Активен',
+    })
+  }
+
   const openOneTimeDeleteDialog = (row: ContractorOneTimeRow) => {
     if (row.isDeleted) {
       return
     }
 
+    setOneTimeContextMenu(null)
+    if (row.isUsed) {
+      setOneTimeActionMessage(`Удаление недоступно: нерегулярный платеж "${row.name}" уже используется в платежах или начислениях.`)
+      return
+    }
+
+    setOneTimeActionMessage(null)
     setOneTimeDeleteTarget(row)
     setOneTimeDeleteReason('')
   }
@@ -6982,29 +7019,8 @@ function TariffsAndFeesPrototypePanel() {
       return
     }
 
-    setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
-      currentRow.id === oneTimeDeleteTarget.id ? { ...currentRow, isDeleted: true } : currentRow
-    )))
+    setOneTimeRows((currentRows) => currentRows.filter((currentRow) => currentRow.id !== oneTimeDeleteTarget.id))
     closeOneTimeDeleteDialog()
-  }
-
-  const openOneTimeRestoreDialog = (row: ContractorOneTimeRow) => {
-    if (!row.isDeleted) {
-      return
-    }
-
-    setOneTimeRestoreTarget(row)
-  }
-
-  const confirmOneTimeRestore = () => {
-    if (!oneTimeRestoreTarget) {
-      return
-    }
-
-    setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
-      currentRow.id === oneTimeRestoreTarget.id ? { ...currentRow, isDeleted: false } : currentRow
-    )))
-    closeOneTimeRestoreDialog()
   }
 
   const addElectricityThreshold = () => {
@@ -7181,51 +7197,57 @@ function TariffsAndFeesPrototypePanel() {
           <div className="contractors-bottom-grid">
             <section className="contractors-mini-table" aria-label="Нерегулярные платежи">
               <div className="contractors-mini-title">Нерегулярные платежи</div>
+              {oneTimeActionMessage ? <p className="contractors-action-message" role="alert">{oneTimeActionMessage}</p> : null}
               <div className="contractors-mini-header contractors-mini-header--editable">
                 <span>Основание</span>
                 <span>Сумма, руб.</span>
-                <span>Статус</span>
-                <span>Действие</span>
               </div>
               {oneTimeRows.map((row) => (
-                <div className={row.isDeleted ? 'contractors-mini-row contractors-mini-row--editable contractors-mini-row--deleted' : 'contractors-mini-row contractors-mini-row--editable'} key={row.id}>
+                <div
+                  aria-label={`Нерегулярный платеж ${row.name}`}
+                  className={[
+                    'contractors-mini-row contractors-mini-row--editable',
+                    row.isDeleted ? 'contractors-mini-row--deleted' : '',
+                    !row.isActive ? 'contractors-mini-row--inactive' : '',
+                  ].filter(Boolean).join(' ')}
+                  key={row.id}
+                  onContextMenu={(event) => openOneTimeContextMenu(event, row)}
+                >
                   <span>{row.name}</span>
                   <span>
                     <input
                       aria-label={`Сумма: ${row.name}`}
                       className="contractors-editable-input"
-                      disabled={row.isDeleted}
+                      disabled={row.isDeleted || !row.isActive}
                       value={oneTimeDrafts[row.id]?.amount ?? ''}
                       onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
                       onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
                     />
                   </span>
-                  <span>{row.isDeleted ? 'Удален' : 'Активен'}</span>
-                  <span>
-                    {row.isDeleted ? (
-                      <button className="icon-button" type="button" aria-label={`Вернуть нерегулярный платеж ${row.name}`} onClick={() => openOneTimeRestoreDialog(row)}>
-                        <RotateCcw size={16} />
-                      </button>
-                    ) : (
-                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить нерегулярный платеж ${row.name}`} onClick={() => openOneTimeDeleteDialog(row)}>
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </span>
                 </div>
               ))}
             </section>
-
-            <div className="contractors-action-stack" aria-label="Действия по тарифам и сборам">
-              <button className="secondary-button" type="button" onClick={() => setModal('service')}>
-                Добавить услугу
-              </button>
-              <button className="secondary-button" type="button" onClick={() => setModal('fee')}>
-                Объявить сбор
-              </button>
-            </div>
           </div>
       </>
+
+      {oneTimeContextMenu ? (
+        <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setOneTimeContextMenu(null)}>
+          <div
+            className="context-menu contractors-context-menu"
+            role="menu"
+            aria-label={`Действия нерегулярного платежа ${oneTimeContextMenu.row.name}`}
+            style={{ left: oneTimeContextMenu.x, top: oneTimeContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button type="button" role="menuitem" onClick={() => toggleOneTimeActive(oneTimeContextMenu.row)}>
+              {oneTimeContextMenu.row.isActive ? 'Деактивировать' : 'Активировать'}
+            </button>
+            <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openOneTimeDeleteDialog(oneTimeContextMenu.row)}>
+              <span>Удалить</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {pendingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingChange}>
@@ -7281,7 +7303,7 @@ function TariffsAndFeesPrototypePanel() {
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="one-time-delete-description">Платеж будет скрыт из активного списка, но его можно будет вернуть кнопкой восстановления. Укажите причину, чтобы действие можно было проверить позже.</p>
+            <p className="confirmation-text" id="one-time-delete-description">Платеж будет удален из списка нерегулярных платежей. Укажите причину, чтобы действие можно было проверить позже.</p>
             <label className="field-label" htmlFor="one-time-delete-reason">Причина удаления</label>
             <textarea
               id="one-time-delete-reason"
@@ -7293,36 +7315,11 @@ function TariffsAndFeesPrototypePanel() {
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim()}>
                 <Trash2 size={16} />
-                <span>Удалить нерегулярный платеж</span>
+                <span>Удалить</span>
               </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {oneTimeRestoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeOneTimeRestoreDialog}>
-          <section ref={oneTimeRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="one-time-restore-title" aria-describedby="one-time-restore-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Восстановление</p>
-                <h3 id="one-time-restore-title">Вернуть нерегулярный платеж?</h3>
-                <p>{oneTimeRestoreTarget.name}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления нерегулярного платежа" onClick={closeOneTimeRestoreDialog}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="one-time-restore-description">Платеж снова станет активным в списке тарифов и сборов. После подключения backend действие будет записываться в историю изменений.</p>
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={oneTimeRestoreCancelRef} className="ghost-button" type="button" onClick={closeOneTimeRestoreDialog}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={confirmOneTimeRestore}>
-                <RotateCcw size={16} />
-                <span>Вернуть платеж</span>
-              </button>
+              <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>

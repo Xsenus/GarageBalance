@@ -799,7 +799,7 @@ h1 {
 
 .contractors-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(240px, 0.7fr);
+  grid-template-columns: minmax(320px, 0.9fr);
   gap: 18px;
   align-items: start;
 }
@@ -825,7 +825,7 @@ h1 {
 
 .contractors-mini-header--editable,
 .contractors-mini-row--editable {
-  grid-template-columns: minmax(190px, 1fr) minmax(110px, 150px) 88px 72px;
+  grid-template-columns: minmax(190px, 1fr) minmax(110px, 150px);
 }
 
 .contractors-mini-header {
@@ -844,6 +844,26 @@ h1 {
 .contractors-mini-row--deleted {
   background: #f8fafc;
   color: #667085;
+}
+
+.contractors-mini-row--inactive {
+  background: #f9fafb;
+  color: #667085;
+}
+
+.contractors-mini-row--inactive span:first-child {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.contractors-action-message {
+  margin: 0;
+  border-bottom: 1px solid #eaecf0;
+  background: #fff8f6;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 10px 14px;
 }
 
 .contractors-delete-button {
@@ -2971,6 +2991,12 @@ h1 {
   padding: 6px;
 }
 
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+}
+
 .context-menu button {
   display: inline-flex;
   align-items: center;
@@ -2983,6 +3009,10 @@ h1 {
   font: inherit;
   padding: 8px;
   text-align: left;
+}
+
+.contractors-context-menu {
+  min-width: 190px;
 }
 
 .context-menu button:hover {

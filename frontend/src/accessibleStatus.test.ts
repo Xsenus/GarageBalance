@@ -421,17 +421,15 @@ describe('accessible dynamic messages', () => {
       '>Удалить гараж</span>',
       '>Удалить поставщика</span>',
       '>Удалить сотрудника</span>',
-      '>Удалить нерегулярный платеж</span>',
+      '>Удалить</span>',
       '>Отменить запись</span>',
       '>Архивировать запись</span>',
       '>Перейти без сохранения</span>',
       '>Отменить без сохранения</span>',
-      'aria-label={`Удалить нерегулярный платеж',
     ]
     const destructiveStyleClasses = [
       'danger-button',
       'context-menu-danger',
-      'contractors-delete-button',
       'dictionary-row-action-danger',
     ]
 
