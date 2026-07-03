@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.ComponentModel.DataAnnotations;
 using GarageBalance.Api.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
@@ -78,6 +79,19 @@ public sealed class ControllerThinnessTests
         Assert.Empty(offenders);
     }
 
+    [Fact]
+    public void DangerousControllerActions_RequireReasonRequest()
+    {
+        var offenders = GetControllerActionMethods()
+            .Where(IsDangerousActionName)
+            .Where(method => !method.GetParameters().Any(parameter => RequestTypeHasRequiredReason(parameter.ParameterType)))
+            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must require a request body with required Reason.")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
     private static IEnumerable<Type> GetControllerTypes()
     {
         return typeof(AuthController).Assembly
@@ -136,6 +150,27 @@ public sealed class ControllerThinnessTests
     {
         return (type.Namespace?.StartsWith("GarageBalance.Api.Domain.", StringComparison.Ordinal) ?? false) &&
             type.Assembly == typeof(AuthController).Assembly;
+    }
+
+    private static bool IsDangerousActionName(MethodInfo method)
+    {
+        return method.Name.StartsWith("Archive", StringComparison.Ordinal) ||
+            method.Name.StartsWith("Cancel", StringComparison.Ordinal) ||
+            method.Name.StartsWith("Delete", StringComparison.Ordinal);
+    }
+
+    private static bool RequestTypeHasRequiredReason(Type type)
+    {
+        var requestType = Nullable.GetUnderlyingType(type) ?? type;
+        var reasonProperty = requestType.GetProperty("Reason", BindingFlags.Instance | BindingFlags.Public);
+        var reasonConstructorParameter = requestType
+            .GetConstructors(BindingFlags.Instance | BindingFlags.Public)
+            .SelectMany(ctor => ctor.GetParameters())
+            .FirstOrDefault(parameter => parameter.Name?.Equals("Reason", StringComparison.OrdinalIgnoreCase) == true);
+
+        return reasonProperty?.PropertyType == typeof(string) &&
+            (reasonProperty.GetCustomAttribute<RequiredAttribute>() is not null ||
+                reasonConstructorParameter?.GetCustomAttribute<RequiredAttribute>() is not null);
     }
 
     private static string FindApiProjectRoot()
