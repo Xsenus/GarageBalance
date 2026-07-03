@@ -107,6 +107,7 @@ const auditSectionOptions = [
   { value: 'users', label: 'Пользователи' },
   { value: 'auth', label: 'Вход и безопасность' },
   { value: 'import', label: 'Импорт' },
+  { value: 'reports', label: 'Отчеты' },
   { value: 'app_releases', label: 'Что нового' },
 ]
 
@@ -133,6 +134,7 @@ const auditEntityTypeOptions = [
   { value: 'accrual', label: 'Начисление' },
   { value: 'supplier_accrual', label: 'Начисление поставщику' },
   { value: 'meter_reading', label: 'Показание счетчика' },
+  { value: 'report', label: 'Отчет' },
   { value: 'app_user', label: 'Пользователь' },
   { value: 'access_import_run', label: 'Импорт Access' },
 ]

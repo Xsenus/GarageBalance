@@ -4084,6 +4084,57 @@ describe('App', () => {
     expect(auditExportRequest?.limit).toBeUndefined()
   })
 
+  it('filters audit journal by reports section and report entity type', async () => {
+    const user = userEvent.setup()
+    let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEvents: async (_token, params) => {
+        auditRequest = params
+        return [
+          createAuditEvent({
+            id: 'audit-report-filter',
+            action: 'reports.consolidated_generated',
+            entityType: 'report',
+            entityId: 'consolidated',
+            entityDisplayName: 'Сводный отчет',
+            summary: 'Сформирован сводный отчет.',
+            section: 'reports',
+            actionKind: 'generate',
+          }),
+        ]
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    await user.selectOptions(within(auditPanel).getByLabelText('Раздел истории изменений'), 'reports')
+    await user.selectOptions(within(auditPanel).getByLabelText('Тип объекта истории изменений'), 'report')
+
+    await waitFor(() => {
+      expect(auditRequest?.section).toBe('reports')
+      expect(auditRequest?.entityType).toBe('report')
+    })
+
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+    expect(await within(auditTable).findByText('Отчеты')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Отчет')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Сводный отчет')).toBeInTheDocument()
+  })
+
   it('opens audit event detail dialog from the journal table', async () => {
     const user = userEvent.setup()
     let loadedEventId: string | null = null
