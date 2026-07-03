@@ -27,8 +27,9 @@
 3. Добавить метод в `ReportService`; контроллер должен оставаться тонким.
 4. Добавить endpoint в `ReportsController` под правом `reports.read`.
 5. Для экспорта добавить отдельные endpoints XLSX/PDF, если отчет нужен вне экрана.
-6. Для ошибок использовать общий `ProblemDetails` contract: `validation_failed`, `unauthorized`, `forbidden`, `internal_error`.
-7. Не переносить тяжелую агрегацию в память приложения, если ее можно выполнить PostgreSQL-запросом.
+6. Если экспорт записывает событие в историю изменений, endpoint выгрузки должен использовать `POST`, а не безопасный `GET`.
+7. Для ошибок использовать общий `ProblemDetails` contract: `validation_failed`, `unauthorized`, `forbidden`, `internal_error`.
+8. Не переносить тяжелую агрегацию в память приложения, если ее можно выполнить PostgreSQL-запросом.
 
 ## 4. Производительность
 

@@ -182,10 +182,12 @@ async function requestJson<TResponse>(accessToken: string, path: string): Promis
   return response.json()
 }
 
-async function requestBlob(accessToken: string, path: string): Promise<Blob> {
+async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
     },
   })
 
@@ -276,11 +278,11 @@ export const reportsApi: ReportClient = {
   },
   exportConsolidatedReportXlsx(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)
-    return requestBlob(accessToken, `/api/reports/consolidated/export/xlsx${query ? `?${query}` : ''}`)
+    return requestBlob(accessToken, `/api/reports/consolidated/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportConsolidatedReportPdf(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)
-    return requestBlob(accessToken, `/api/reports/consolidated/export/pdf${query ? `?${query}` : ''}`)
+    return requestBlob(accessToken, `/api/reports/consolidated/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getIncomeReport(accessToken, params = {}) {
     const query = buildIncomeReportQuery(params)
@@ -288,11 +290,11 @@ export const reportsApi: ReportClient = {
   },
   exportIncomeReportXlsx(accessToken, params = {}) {
     const query = buildIncomeReportQuery(params)
-    return requestBlob(accessToken, `/api/reports/income/export/xlsx${query ? `?${query}` : ''}`)
+    return requestBlob(accessToken, `/api/reports/income/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportIncomeReportPdf(accessToken, params = {}) {
     const query = buildIncomeReportQuery(params)
-    return requestBlob(accessToken, `/api/reports/income/export/pdf${query ? `?${query}` : ''}`)
+    return requestBlob(accessToken, `/api/reports/income/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getExpenseReport(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)
@@ -300,10 +302,10 @@ export const reportsApi: ReportClient = {
   },
   exportExpenseReportXlsx(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)
-    return requestBlob(accessToken, `/api/reports/expense/export/xlsx${query ? `?${query}` : ''}`)
+    return requestBlob(accessToken, `/api/reports/expense/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportExpenseReportPdf(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)
-    return requestBlob(accessToken, `/api/reports/expense/export/pdf${query ? `?${query}` : ''}`)
+    return requestBlob(accessToken, `/api/reports/expense/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
 }

@@ -8,6 +8,23 @@ namespace GarageBalance.Api.Tests.Reports;
 
 public sealed class ReportsControllerTests
 {
+    [Theory]
+    [InlineData(nameof(ReportsController.ExportConsolidatedReportXlsx), "consolidated/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportConsolidatedReportPdf), "consolidated/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportIncomeReportXlsx), "income/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportIncomeReportPdf), "income/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportExpenseReportXlsx), "expense/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportExpenseReportPdf), "expense/export/pdf")]
+    public void ExportReportActions_UsePostBecauseExportsWriteAuditEvents(string actionName, string expectedRoute)
+    {
+        var method = typeof(ReportsController).GetMethod(actionName)!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var postAttribute = Assert.Single(attributes.OfType<HttpPostAttribute>());
+        Assert.Equal(expectedRoute, postAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpGetAttribute>());
+    }
+
     [Fact]
     public async Task GetConsolidatedReport_ReturnsOk()
     {

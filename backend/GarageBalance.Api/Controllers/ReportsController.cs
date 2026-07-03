@@ -27,7 +27,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
-    [HttpGet("consolidated/export/xlsx")]
+    [HttpPost("consolidated/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportConsolidatedReportXlsx(
@@ -42,7 +42,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
-    [HttpGet("consolidated/export/pdf")]
+    [HttpPost("consolidated/export/pdf")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportConsolidatedReportPdf(
@@ -89,7 +89,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
-    [HttpGet("income/export/xlsx")]
+    [HttpPost("income/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportIncomeReportXlsx(
@@ -119,7 +119,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
-    [HttpGet("income/export/pdf")]
+    [HttpPost("income/export/pdf")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportIncomeReportPdf(
@@ -179,7 +179,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
-    [HttpGet("expense/export/xlsx")]
+    [HttpPost("expense/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportExpenseReportXlsx(
@@ -207,7 +207,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
-    [HttpGet("expense/export/pdf")]
+    [HttpPost("expense/export/pdf")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportExpenseReportPdf(
