@@ -269,6 +269,51 @@ describe('accessible dynamic messages', () => {
     }
   })
 
+  it('keeps tables scrollable focused and announced', () => {
+    const scrollableTableContainers = [
+      '.dictionary-table-scroll',
+      '.operation-list',
+      '.audit-event-table',
+      '.contractors-sheet',
+      '.contractors-directory-table',
+      '.contractors-contacts-preview',
+      '.meter-readings-table-shell',
+    ]
+    const stickyHeaderSnippets = [
+      '.dictionary-data-table th {\n  position: sticky;',
+      '.meter-readings-title-row {\n  position: sticky;',
+      '.meter-readings-month-row {\n  position: sticky;',
+      '.contractors-sheet-header {\n  position: sticky;',
+      '.contractors-directory-row--header {\n  position: sticky;',
+      '.contractors-contacts-row--header {\n  position: sticky;',
+      '.operation-row.header {\n  position: sticky;',
+    ]
+
+    for (const selector of scrollableTableContainers) {
+      expect(appCss).toContain(selector)
+    }
+
+    for (const snippet of stickyHeaderSnippets) {
+      expect(appCss).toContain(snippet)
+    }
+
+    expect(appCss).toContain('overflow-x: auto;')
+    expect(appCss).toContain('.dictionary-data-table tbody tr:hover')
+    expect(appCss).toContain('.operation-row--interactive:focus-visible')
+    expect(appCss).toContain('button.operation-row:focus-visible')
+    expect(appCss).toContain('.contractors-sheet-row:hover')
+    expect(appCss).toContain('.contractors-directory-row:not(.contractors-directory-row--header):hover')
+    expect(appCss).toContain('.contractors-contacts-row:not(.contractors-contacts-row--header):hover')
+    expect(appCss).toContain('.empty-state')
+    expect(appCss).toContain('overflow-wrap: anywhere;')
+
+    const tableOpeningTags = [...appSource.matchAll(/<[^>]+\brole="table"[\s\S]*?>/g)].map((match) => match[0])
+
+    expect(tableOpeningTags.length).toBeGreaterThan(0)
+    expect(tableOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+    expect(appSource).toContain('role="status" aria-live="polite"')
+  })
+
   it('keeps report export buttons out of filter form submission', () => {
     const reportExportButtons = [
       'Скачать сводный XLSX',

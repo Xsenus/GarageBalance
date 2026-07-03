@@ -597,7 +597,7 @@ h1 {
 }
 
 .contractors-sheet {
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #ffffff;
@@ -612,6 +612,9 @@ h1 {
 }
 
 .contractors-sheet-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   background: #f8fafc;
   color: #344054;
   font-size: 12px;
@@ -628,6 +631,10 @@ h1 {
 
 .contractors-sheet-row {
   color: #344054;
+}
+
+.contractors-sheet-row:hover {
+  background: #f9fbff;
 }
 
 .contractors-sheet-row > span:first-child {
@@ -926,11 +933,18 @@ h1 {
 }
 
 .contractors-directory-row--header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   background: #f8fafc;
   color: #475467;
   font-size: 12px;
   font-weight: 750;
   text-transform: uppercase;
+}
+
+.contractors-directory-row:not(.contractors-directory-row--header):hover {
+  background: #f9fbff;
 }
 
 .contractors-directory-row--deleted {
@@ -999,7 +1013,7 @@ h1 {
 }
 
 .contractors-contacts-preview {
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
 }
@@ -1010,11 +1024,18 @@ h1 {
 }
 
 .contractors-contacts-row--header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   background: #f8fafc;
   color: #344054;
   font-size: 12px;
   font-weight: 750;
   text-transform: uppercase;
+}
+
+.contractors-contacts-row:not(.contractors-contacts-row--header):hover {
+  background: #f9fbff;
 }
 
 .contractors-contacts-row span {
@@ -2626,8 +2647,10 @@ h1 {
 }
 
 .empty-state {
+  min-width: 0;
   border-top: 1px solid #e4e7ec;
   margin-top: 4px;
+  overflow-wrap: anywhere;
   padding-top: 10px;
 }
 
@@ -3039,7 +3062,7 @@ h1 {
 }
 
 .operation-list {
-  overflow: hidden;
+  overflow-x: auto;
   grid-column: span 1;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
@@ -3186,6 +3209,12 @@ button.operation-row {
 
 button.operation-row:hover {
   background: #f8fafc;
+}
+
+button.operation-row:focus-visible {
+  background: #f8fafc;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+  outline-offset: -3px;
 }
 
 .report-filter {
@@ -3470,6 +3499,9 @@ button.operation-row:hover {
 .role-matrix-row.header,
 .user-table-row.header,
 .operation-row.header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   border-top: 0;
   background: #f2f4f7;
   color: #667085;
