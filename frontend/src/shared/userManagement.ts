@@ -1,6 +1,6 @@
 import type { ManagedRoleDto, ManagedUserDto } from '../services/usersApi'
 import type { ChangePreview } from './changePreview'
-import { appendChangePreview, formatChangeText } from './changePreview'
+import { appendChangePreview, formatChangeText, formatSensitiveChange } from './changePreview'
 import { getManagedUserValidationErrors, getPasswordPolicyErrors } from './validation'
 
 export type UserFormState = {
@@ -44,7 +44,7 @@ export function getUserEditorChanges(form: UserFormState, user: ManagedUserDto, 
   appendChangePreview(changes, 'Статус', getUserStatusLabel(user.isActive), getUserStatusLabel(form.isActive))
 
   if (form.password.trim()) {
-    appendChangePreview(changes, 'Пароль', 'Без изменения', 'Будет задан новый пароль')
+    appendChangePreview(changes, 'Пароль', 'Без изменения', formatSensitiveChange(form.password))
   }
 
   return changes

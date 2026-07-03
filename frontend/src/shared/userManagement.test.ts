@@ -44,7 +44,7 @@ describe('user management helpers', () => {
       { field: 'Имя', before: 'Оператор', after: 'Старший оператор' },
       { field: 'Роль', before: 'Оператор', after: 'Администратор' },
       { field: 'Статус', before: 'Активен', after: 'Отключен' },
-      { field: 'Пароль', before: 'Без изменения', after: 'Будет задан новый пароль' },
+      { field: 'Пароль', before: 'Без изменения', after: 'изменено' },
     ])
   })
 
