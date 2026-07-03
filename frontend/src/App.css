@@ -992,8 +992,8 @@ h1 {
 }
 
 .contractors-directory-table--garages .contractors-directory-row {
-  grid-template-columns: 96px minmax(150px, 0.9fr) minmax(140px, 0.9fr) minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(150px, 0.9fr) 96px;
-  min-width: 1080px;
+  grid-template-columns: var(--garage-col-number, 96px) var(--garage-col-peopleCount, 170px) var(--garage-col-floorCount, 170px) var(--garage-col-owner, 260px) var(--garage-col-phone, 220px) var(--garage-col-overdueDebt, 220px) var(--garage-col-actions, 132px);
+  min-width: max-content;
 }
 
 .contractors-directory-table--suppliers .contractors-directory-row {
@@ -1017,6 +1017,53 @@ h1 {
   text-transform: uppercase;
 }
 
+.contractors-directory-header-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.contractors-directory-header-cell > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.contractors-column-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  z-index: 2;
+  width: 8px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  padding: 0;
+}
+
+.contractors-column-resizer::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  right: 3px;
+  bottom: 9px;
+  width: 1px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.contractors-column-resizer:hover::after,
+.contractors-column-resizer:focus-visible::after {
+  background: #155eef;
+}
+
+.contractors-column-resizer:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: -3px;
+}
+
 .contractors-directory-row:not(.contractors-directory-row--header):hover {
   background: #f9fbff;
 }
@@ -1034,6 +1081,43 @@ h1 {
   min-width: 0;
   border-bottom: 1px solid #eaecf0;
   padding: 11px 12px;
+}
+
+.contractors-directory-cell--center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.contractors-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.contractors-row-actions .icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.contractors-report-button {
+  justify-self: start;
+  border-color: #12b76a;
+  background: #12b76a;
+  color: #ffffff;
+}
+
+.contractors-report-button:hover,
+.contractors-report-button:focus-visible {
+  border-color: #039855;
+  background: #039855;
+  color: #ffffff;
+}
+
+.contractors-garage-actions {
+  grid-template-columns: minmax(0, 1fr) repeat(3, max-content);
 }
 
 .contractors-directory-row:last-child > span {
@@ -2477,6 +2561,7 @@ h1 {
 .dictionary-form textarea:disabled,
 .dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
 .dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.dictionary-modal-form input[readonly],
 .dictionary-modal-form textarea:disabled,
 .payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
 .payments-prototype-modal-form textarea:disabled,

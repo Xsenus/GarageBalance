@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
   Bell,
@@ -12,6 +12,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -515,7 +516,7 @@ function Workspace({
     }
   }
 
-  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees'
+  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors'
 
   return (
     <>
@@ -5761,6 +5762,55 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
   staff: 'Персонал',
 }
 
+type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
+
+const contractorGarageColumnStorageKey = 'garagebalance.contractors.garageColumnWidths'
+
+const contractorGarageColumnDefinitions: Array<{ key: ContractorGarageColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
+  { key: 'number', label: 'Номер', defaultWidth: 96, minWidth: 72 },
+  { key: 'peopleCount', label: 'Количество человек', defaultWidth: 170, minWidth: 132 },
+  { key: 'floorCount', label: 'Количество этажей', defaultWidth: 170, minWidth: 132 },
+  { key: 'owner', label: 'Владелец', defaultWidth: 260, minWidth: 160 },
+  { key: 'phone', label: 'Телефон', defaultWidth: 220, minWidth: 150 },
+  { key: 'overdueDebt', label: 'Просроченная задолженность', defaultWidth: 220, minWidth: 170 },
+  { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
+]
+
+function getDefaultGarageColumnWidths() {
+  return contractorGarageColumnDefinitions.reduce<Record<ContractorGarageColumnKey, number>>((widths, column) => {
+    widths[column.key] = column.defaultWidth
+    return widths
+  }, {} as Record<ContractorGarageColumnKey, number>)
+}
+
+function loadGarageColumnWidths() {
+  const defaults = getDefaultGarageColumnWidths()
+
+  try {
+    const rawValue = window.localStorage.getItem(contractorGarageColumnStorageKey)
+    if (!rawValue) {
+      return defaults
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<Record<ContractorGarageColumnKey, number>>
+    return contractorGarageColumnDefinitions.reduce<Record<ContractorGarageColumnKey, number>>((widths, column) => {
+      const value = parsed[column.key]
+      widths[column.key] = typeof value === 'number' && Number.isFinite(value) ? Math.max(column.minWidth, value) : defaults[column.key]
+      return widths
+    }, {} as Record<ContractorGarageColumnKey, number>)
+  } catch {
+    return defaults
+  }
+}
+
+function saveGarageColumnWidths(widths: Record<ContractorGarageColumnKey, number>) {
+  try {
+    window.localStorage.setItem(contractorGarageColumnStorageKey, JSON.stringify(widths))
+  } catch {
+    // Column widths are a UI preference; the table must work if localStorage is unavailable.
+  }
+}
+
 function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   if (target.type === 'garage') {
     return `Гараж ${target.item.number || 'без номера'}`
@@ -5782,10 +5832,52 @@ function ContractorsPrototypePanel() {
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
+  const [garageColumnWidths, setGarageColumnWidths] = useState(loadGarageColumnWidths)
+  const [garageContextMenu, setGarageContextMenu] = useState<{ row: ContractorGarageRow; x: number; y: number } | null>(null)
+  const [garageDeleteTarget, setGarageDeleteTarget] = useState<ContractorGarageRow | null>(null)
+  const [garageDeleteReason, setGarageDeleteReason] = useState('')
   useRestoreFocusOnClose(Boolean(restoreTarget))
+  useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
+  const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
+  const garageDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageDeleteTarget))
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
+  useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
+  useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
+
+  useEffect(() => {
+    saveGarageColumnWidths(garageColumnWidths)
+  }, [garageColumnWidths])
+
+  const garageTableStyle = useMemo(() => {
+    return contractorGarageColumnDefinitions.reduce<CSSProperties>((style, column) => {
+      return { ...style, [`--garage-col-${column.key}`]: `${garageColumnWidths[column.key]}px` }
+    }, {})
+  }, [garageColumnWidths])
+
+  const resizeGarageColumn = (columnKey: ContractorGarageColumnKey, event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const column = contractorGarageColumnDefinitions.find((item) => item.key === columnKey)
+    if (!column) {
+      return
+    }
+
+    const startX = event.clientX
+    const startWidth = garageColumnWidths[columnKey]
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const nextWidth = Math.max(column.minWidth, startWidth + moveEvent.clientX - startX)
+      setGarageColumnWidths((currentWidths) => ({ ...currentWidths, [columnKey]: nextWidth }))
+    }
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
 
   const saveGarage = (garage: ContractorGarageRow) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
@@ -5800,6 +5892,46 @@ function ContractorsPrototypePanel() {
 
   const deleteGarage = (garage: ContractorGarageRow) => {
     setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? { ...item, isDeleted: true } : item)))
+  }
+
+  function openGarageContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorGarageRow) {
+    event.preventDefault()
+    setGarageContextMenu({ row, x: event.clientX, y: event.clientY })
+  }
+
+  function openGarageEditor(row: ContractorGarageRow) {
+    setGarageContextMenu(null)
+    setModal({ type: 'garage', item: row })
+  }
+
+  function openGarageDeleteDialog(row: ContractorGarageRow) {
+    setGarageContextMenu(null)
+    setGarageDeleteTarget(row)
+    setGarageDeleteReason('')
+  }
+
+  function closeGarageDeleteDialog() {
+    setGarageDeleteTarget(null)
+    setGarageDeleteReason('')
+  }
+
+  function confirmGarageDeleteFromTable() {
+    if (!garageDeleteTarget || !garageDeleteReason.trim()) {
+      return
+    }
+
+    deleteGarage(garageDeleteTarget)
+    closeGarageDeleteDialog()
+  }
+
+  function restoreGarage(row: ContractorGarageRow) {
+    setGarageContextMenu(null)
+    setRestoreTarget({ type: 'garage', item: row })
+  }
+
+  function openGarageFinancialReport(row: ContractorGarageRow) {
+    setGarageContextMenu(null)
+    void row
   }
 
   const saveSupplier = (supplier: ContractorSupplierRow) => {
@@ -5900,31 +6032,49 @@ function ContractorsPrototypePanel() {
 
       {activeSection === 'garages' ? (
         <section className="contractors-directory-card" aria-label="Гаражи">
-          <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи">
+          <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи" style={garageTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">Номер</span>
-              <span role="columnheader">Количество человек</span>
-              <span role="columnheader">Количество этажей</span>
-              <span role="columnheader">Владелец</span>
-              <span role="columnheader">Телефон</span>
-              <span role="columnheader">Просроченная з-ть</span>
-              <span role="columnheader">Действие</span>
+              {contractorGarageColumnDefinitions.map((column) => (
+                <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                  <span>{column.label}</span>
+                  {column.key !== 'actions' ? (
+                    <button
+                      className="icon-button contractors-column-resizer"
+                      type="button"
+                      aria-label={`Изменить ширину столбца ${column.label}`}
+                      onMouseDown={(event) => resizeGarageColumn(column.key, event)}
+                    />
+                  ) : null}
+                </span>
+              ))}
             </div>
             {visibleGarages.map((row) => (
-              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id}>
-                <span role="cell">{row.number}</span>
-                <span role="cell">{row.peopleCount}</span>
-                <span role="cell">{row.floorCount}</span>
+              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openGarageContextMenu(event, row)}>
+                <span role="cell" className="contractors-directory-cell--center">{row.number}</span>
+                <span role="cell" className="contractors-directory-cell--center">{row.peopleCount}</span>
+                <span role="cell" className="contractors-directory-cell--center">{row.floorCount}</span>
                 <span role="cell">{row.owner}</span>
                 <span role="cell">{row.phone}</span>
-                <span role="cell" className={row.overdueDebt ? 'money-expense' : undefined}>
+                <span role="cell" className={row.overdueDebt ? 'contractors-directory-cell--center money-expense' : 'contractors-directory-cell--center'}>
                   {row.isDeleted ? 'Удален' : row.overdueDebt || 'Нет'}
                 </span>
-                <span role="cell">
+                <span role="cell" className="contractors-row-actions">
                   {row.isDeleted ? (
-                    <button className="link-button" type="button" onClick={() => setRestoreTarget({ type: 'garage', item: row })}>Вернуть</button>
+                    <button className="icon-button" type="button" aria-label={`Восстановить гараж ${row.number}`} title="Восстановить" onClick={() => restoreGarage(row)}>
+                      <RotateCcw size={16} />
+                    </button>
                   ) : (
-                    <button className="link-button" type="button" onClick={() => setModal({ type: 'garage', item: row })}>Открыть</button>
+                    <>
+                      <button className="icon-button" type="button" aria-label={`Изменить гараж ${row.number}`} title="Изменить" onClick={() => openGarageEditor(row)}>
+                        <Pencil size={16} />
+                      </button>
+                      <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет гаража ${row.number}`} title="Финансовый отчет" onClick={() => openGarageFinancialReport(row)}>
+                        <FileText size={16} />
+                      </button>
+                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить гараж ${row.number}`} title="Удалить" onClick={() => openGarageDeleteDialog(row)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </>
                   )}
                 </span>
               </div>
@@ -5995,7 +6145,41 @@ function ContractorsPrototypePanel() {
         </section>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} /> : null}
+      {garageContextMenu ? (
+        <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setGarageContextMenu(null)}>
+          <div
+            className="context-menu contractors-context-menu"
+            role="menu"
+            aria-label={`Действия гаража ${garageContextMenu.row.number}`}
+            style={{ left: garageContextMenu.x, top: garageContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {garageContextMenu.row.isDeleted ? (
+              <button type="button" role="menuitem" onClick={() => restoreGarage(garageContextMenu.row)}>
+                <RotateCcw size={16} />
+                <span>Восстановить</span>
+              </button>
+            ) : (
+              <>
+                <button type="button" role="menuitem" onClick={() => openGarageEditor(garageContextMenu.row)}>
+                  <Pencil size={16} />
+                  <span>Изменить</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => openGarageFinancialReport(garageContextMenu.row)}>
+                  <FileText size={16} />
+                  <span>Открыть финансовый отчет</span>
+                </button>
+                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openGarageDeleteDialog(garageContextMenu.row)}>
+                  <Trash2 size={16} />
+                  <span>Удалить</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteSupplier} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onDelete={deleteEmployee} onSave={saveEmployee} /> : null}
@@ -6021,6 +6205,41 @@ function ContractorsPrototypePanel() {
                 <RotateCcw size={16} />
                 <span>Вернуть запись</span>
               </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {garageDeleteTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeGarageDeleteDialog}>
+          <section ref={garageDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-table-delete-title" aria-describedby="garage-table-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="garage-table-delete-title">Удалить гараж?</h3>
+                <p>{`Гараж ${garageDeleteTarget.number || 'без номера'}`}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления гаража" onClick={closeGarageDeleteDialog}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="garage-table-delete-description">Гараж будет скрыт из рабочего списка, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <label className="field-label" htmlFor="garage-table-delete-reason">Причина удаления</label>
+            <textarea
+              id="garage-table-delete-reason"
+              aria-label="Причина удаления гаража"
+              maxLength={1000}
+              value={garageDeleteReason}
+              onChange={(event) => setGarageDeleteReason(event.target.value)}
+              placeholder="Например: дубликат карточки"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button danger-button" type="button" onClick={confirmGarageDeleteFromTable} disabled={!garageDeleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить гараж</span>
+              </button>
+              <button ref={garageDeleteCancelRef} className="ghost-button" type="button" onClick={closeGarageDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>
@@ -6095,15 +6314,13 @@ function compactPrototypeChanges(changes: Array<PrototypeChangeEntry | null>) {
 function getGaragePrototypeChanges(previous: ContractorGarageRow, next: ContractorGarageRow) {
   return compactPrototypeChanges([
     createPrototypeChangeEntry('Номер', previous.number, next.number),
-    createPrototypeChangeEntry('Баланс', previous.balance, next.balance),
     createPrototypeChangeEntry('Количество человек', previous.peopleCount, next.peopleCount),
-    createPrototypeChangeEntry('Просроченная задолженность', previous.overdueDebt, next.overdueDebt),
     createPrototypeChangeEntry('Этажи', previous.floorCount, next.floorCount),
     createPrototypeChangeEntry('Стартовое значение счетчика воды', previous.initialWater, next.initialWater),
+    createPrototypeChangeEntry('Стартовое значение счетчика электричества', previous.initialElectricity, next.initialElectricity),
     createPrototypeChangeEntry('Владелец', previous.owner, next.owner),
     createPrototypeChangeEntry('Телефон', previous.phone, next.phone),
     createPrototypeChangeEntry('Адрес', previous.address, next.address),
-    createPrototypeChangeEntry('Счетчики', previous.meters, next.meters),
     createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
   ])
 }
@@ -6182,7 +6399,7 @@ function PrototypeChangeConfirmationDialog({
   )
 }
 
-function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow) => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
@@ -6244,21 +6461,24 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onSave }: { item?: Con
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <div className="contractors-modal-grid">
               <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
-              <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance} onChange={(event) => setForm({ ...form, balance: event.target.value })} /></FormField>
+              <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance || '0'} readOnly /></FormField>
               <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-              <FormField label="Просроченная зад-ть"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt} onChange={(event) => setForm({ ...form, overdueDebt: event.target.value })} /></FormField>
+              <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
               <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
+              <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" value={form.initialElectricity} onChange={(event) => setForm({ ...form, initialElectricity: event.target.value })} /></FormField>
             </div>
             <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
             <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
             <FormField label="Адрес"><input aria-label="Адрес гаража" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></FormField>
-            <FormField label="Счетчики"><textarea aria-label="Счетчики гаража" value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
             <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button className="secondary-button" type="button">Открыть фин. отчет</button>
+            <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
+              <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                <FileText size={16} />
+                <span>Открыть фин. отчет</span>
+              </button>
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-              <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
               {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить гараж</button> : null}
             </div>
           </form>
