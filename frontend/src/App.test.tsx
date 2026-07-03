@@ -797,13 +797,29 @@ describe('App', () => {
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
-    expect(within(prototype).getByLabelText('Поиск платежей по гаражу или владельцу')).toBeInTheDocument()
-    expect(within(prototype).getByRole('region', { name: 'Карточка гаража' })).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
+    const garageSearchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    expect(garageSearchInput).toBeInTheDocument()
+    expect(within(prototype).queryByRole('table', { name: /Поступления гаража/ })).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+
+    await user.type(garageSearchInput, 'Иванов')
+    const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
+    await user.click(garageOption)
+
+    expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('Просроченная задолженность')
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Иванов Иван')
     expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
-    expect(within(prototype).getByRole('table', { name: 'Платежи гаража за июнь 2026' })).toBeInTheDocument()
-    expect(within(prototype).getByRole('table', { name: 'Форма платежей за июнь 2026' })).toBeInTheDocument()
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toBeInTheDocument()
     expect(within(prototype).getAllByText('Электроэнергия').length).toBeGreaterThan(0)
-    expect(within(prototype).getAllByText('257 100')).toHaveLength(2)
+    expect(within(prototype).getByText('май.26')).toBeInTheDocument()
+
+    const electricityPaymentInput = within(prototype).getByLabelText('Платеж Электроэнергия июн.26')
+    expect(electricityPaymentInput).toHaveValue('5674')
+    await user.click(electricityPaymentInput)
+    await user.keyboard('{Enter}')
+    expect(electricityPaymentInput).toHaveValue('')
+    expect(within(prototype).getAllByText('5 674').length).toBeGreaterThanOrEqual(2)
 
     const addGarageAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление гаражу' })
     await user.click(addGarageAccrualButton)
@@ -822,6 +838,10 @@ describe('App', () => {
     await waitFor(() => expect(fullPaymentCancelButton).toHaveFocus())
     await user.click(fullPaymentCancelButton)
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
+
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    expect(within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })).toBeInTheDocument()
+    expect(within(prototype).getAllByText('257 100')).toHaveLength(2)
 
     const addExpenseButton = within(prototype).getByRole('button', { name: 'Добавить выплату' })
     await user.click(addExpenseButton)

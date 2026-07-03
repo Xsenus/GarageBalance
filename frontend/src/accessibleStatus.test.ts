@@ -377,6 +377,7 @@ describe('accessible dynamic messages', () => {
       'file-picker-button',
       'operation-row',
       'funds-action-button',
+      'payments-prototype-search-option',
     ]
 
     const containerStyledButtonPatterns = [

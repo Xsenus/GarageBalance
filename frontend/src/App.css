@@ -1948,10 +1948,22 @@ h1 {
   margin-bottom: 18px;
 }
 
+.payments-prototype-topline {
+  display: grid;
+  grid-template-columns: minmax(280px, 520px) minmax(360px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.payments-prototype-search-wrap {
+  position: relative;
+  min-width: 0;
+}
+
 .payments-prototype-search {
   display: flex;
   align-items: center;
-  width: min(420px, 100%);
+  width: 100%;
   min-height: 44px;
   gap: 10px;
   border: 1px solid #d0d5dd;
@@ -1969,6 +1981,85 @@ h1 {
   background: transparent;
   color: #101828;
   font: inherit;
+}
+
+.payments-prototype-search-results {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14);
+}
+
+.payments-prototype-search-results button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(100px, 0.55fr) minmax(0, 1fr);
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid #eaecf0;
+  background: #ffffff;
+  color: #101828;
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.payments-prototype-search-results button:hover,
+.payments-prototype-search-results button:focus-visible {
+  background: #eef4ff;
+  outline: 0;
+}
+
+.payments-prototype-search-results button:last-child {
+  border-bottom: 0;
+}
+
+.payments-prototype-search-results span {
+  color: #475467;
+}
+
+.payments-prototype-search-empty {
+  display: block;
+  padding: 10px 12px;
+}
+
+.payments-prototype-garage-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 8px;
+  justify-self: end;
+  width: min(560px, 100%);
+}
+
+.payments-prototype-garage-summary div,
+.payments-prototype-owner-row > div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 9px 12px;
+}
+
+.payments-prototype-garage-summary span,
+.payments-prototype-owner-row span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.payments-prototype-garage-summary strong,
+.payments-prototype-owner-row strong {
+  color: #101828;
+  font-size: 15px;
+  text-align: right;
 }
 
 .payments-prototype-toolbar {
@@ -2037,6 +2128,17 @@ h1 {
   grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
   gap: 14px;
   align-items: stretch;
+}
+
+.payments-prototype-owner-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.35fr) minmax(220px, 0.8fr) minmax(180px, 0.7fr) minmax(230px, 0.9fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.payments-prototype-owner-row .payments-prototype-actions {
+  min-width: 0;
 }
 
 .payments-prototype-card {
@@ -2177,6 +2279,62 @@ h1 {
   color: #101828;
   padding: 5px 30px 5px 8px;
   font: inherit;
+}
+
+.payments-prototype-period-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  border-bottom: 1px solid #e4e7ec;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.payments-prototype-period-row label {
+  display: grid;
+  min-width: 180px;
+  gap: 5px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.payments-prototype-period-row select {
+  min-height: 34px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #101828;
+  padding: 6px 32px 6px 10px;
+  font: inherit;
+}
+
+.payments-prototype-payment-input {
+  width: min(130px, 100%);
+  min-height: 32px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+  padding: 5px 8px;
+  text-align: right;
+}
+
+.payments-prototype-payment-input:focus {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.payments-prototype-month-total td {
+  background: #f2f4f7 !important;
+  color: #101828;
+  font-weight: 800;
+}
+
+.payments-prototype-required-cell {
+  background: #fff1ed !important;
 }
 
 .payments-prototype-table tbody tr:nth-child(even) td {
@@ -4482,6 +4640,15 @@ button.operation-row:focus-visible {
 
   .payments-prototype-main-grid {
     grid-template-columns: 1fr;
+  }
+
+  .payments-prototype-topline,
+  .payments-prototype-owner-row {
+    grid-template-columns: 1fr;
+  }
+
+  .payments-prototype-garage-summary {
+    justify-self: stretch;
   }
 
   .payments-prototype-garage-line {

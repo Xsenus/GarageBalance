@@ -514,7 +514,7 @@ function Workspace({
     }
   }
 
-  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings' && activeSection !== 'funds' && activeSection !== 'reports'
+  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings' && activeSection !== 'payments' && activeSection !== 'funds' && activeSection !== 'reports'
 
   return (
     <>
@@ -731,18 +731,81 @@ const paymentPrototypeRows = [
   { item: 'Выплата без чека', cost: 16500, paid: '', balance: '', collected: '', difference: '', action: true },
 ]
 
-const garagePaymentPrototypeRows = [
-  { meter: 88, difference: 18, payable: 5674, payment: 5674, paid: '', debt: 0 },
-  { meter: 59, difference: 4, payable: 3500, payment: '', paid: 1000, debt: 2500 },
-  { meter: 49, difference: 14, payable: '', payment: '', paid: '', debt: '' },
-  { meter: '', difference: 0, payable: '', payment: '', paid: '', debt: '' },
-  { meter: '', difference: '', payable: 500, payment: '', paid: 500, debt: 0 },
-]
-
 const garagePaymentHistoryRows = [
   { date: '19.06.2026', time: '10:24', amount: 5674, purpose: 'Электроэнергия', debtAfter: 0 },
   { date: '20.06.2026', time: '16:05', amount: 1000, purpose: 'Частичная оплата', debtAfter: 2500 },
 ]
+
+type PaymentsPrototypeGarage = {
+  id: string
+  number: string
+  ownerName: string
+  phone: string
+  peopleCount: number
+  floorCount: number
+  balance: number
+  overdueDebt: number
+}
+
+type GarageIncomePrototypeRow = {
+  id: string
+  month: string
+  monthLabel: string
+  service: string
+  meter: number | null
+  difference: number | null
+  payable: number
+  paymentDraft: string
+  paid: number
+  debt: number
+  meterRequired?: boolean
+}
+
+type GaragePaymentHistoryPrototypeRow = {
+  date: string
+  time: string
+  amount: number
+  purpose: string
+  debtAfter: number
+}
+
+const paymentsPrototypeGarages: PaymentsPrototypeGarage[] = [
+  { id: 'garage-1', number: '1', ownerName: 'Иванов Иван', phone: '+7 900 000-00-01', peopleCount: 3, floorCount: 1, balance: -5300, overdueDebt: 1300 },
+  { id: 'garage-12', number: '12', ownerName: 'Петров Петр', phone: '+7 900 000-00-12', peopleCount: 1, floorCount: 2, balance: 2500, overdueDebt: 0 },
+  { id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', phone: '+7 900 000-00-27', peopleCount: 2, floorCount: 1, balance: -1700, overdueDebt: 1700 },
+]
+
+function createGarageIncomePrototypeRows(garageId: string): GarageIncomePrototypeRow[] {
+  if (garageId === 'garage-12') {
+    return [
+      { id: 'garage-12-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 42, difference: 8, payable: 1840, paymentDraft: '', paid: 1840, debt: 0 },
+      { id: 'garage-12-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: 16, difference: 2, payable: 900, paymentDraft: '', paid: 900, debt: 0 },
+      { id: 'garage-12-2026-06-trash', month: '2026-06', monthLabel: 'июн.26', service: 'Вывоз мусора', meter: null, difference: null, payable: 300, paymentDraft: '', paid: 300, debt: 0 },
+      { id: 'garage-12-2026-05-lighting', month: '2026-05', monthLabel: 'май.26', service: 'Наружное освещение', meter: null, difference: null, payable: 500, paymentDraft: '', paid: 500, debt: 0 },
+    ]
+  }
+
+  if (garageId === 'garage-27') {
+    return [
+      { id: 'garage-27-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 74, difference: 13, payable: 4210, paymentDraft: '', paid: 2510, debt: 1700 },
+      { id: 'garage-27-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: null, difference: 0, payable: 1800, paymentDraft: '', paid: 1800, debt: 0, meterRequired: true },
+      { id: 'garage-27-2026-05-membership', month: '2026-05', monthLabel: 'май.26', service: 'Членский взнос', meter: null, difference: null, payable: 1600, paymentDraft: '', paid: 1600, debt: 0 },
+    ]
+  }
+
+  return [
+    { id: 'garage-1-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 86, difference: 18, payable: 5674, paymentDraft: '5674', paid: 0, debt: 5674 },
+    { id: 'garage-1-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: 59, difference: 4, payable: 3500, paymentDraft: '', paid: 1000, debt: 2500 },
+    { id: 'garage-1-2026-06-trash', month: '2026-06', monthLabel: 'июн.26', service: 'Вывоз мусора', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
+    { id: 'garage-1-2026-06-penalty', month: '2026-06', monthLabel: 'июн.26', service: 'Штраф', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
+    { id: 'garage-1-2026-05-electricity', month: '2026-05', monthLabel: 'май.26', service: 'Электроэнергия', meter: 49, difference: 14, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
+    { id: 'garage-1-2026-05-water', month: '2026-05', monthLabel: 'май.26', service: 'Водоснабжение', meter: null, difference: 0, payable: 0, paymentDraft: '', paid: 0, debt: 0, meterRequired: true },
+    { id: 'garage-1-2026-05-membership', month: '2026-05', monthLabel: 'май.26', service: 'Членский взнос', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
+    { id: 'garage-1-2026-05-target', month: '2026-05', monthLabel: 'май.26', service: 'Целевой взнос', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
+    { id: 'garage-1-2026-05-gate', month: '2026-05', monthLabel: 'май.26', service: 'Сбор на ворота', meter: null, difference: null, payable: 500, paymentDraft: '', paid: 500, debt: 0 },
+    { id: 'garage-1-2026-05-lighting', month: '2026-05', monthLabel: 'май.26', service: 'Наружное освещение', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
+  ]
+}
 
 function FinancePanel({
   auth,
@@ -2737,18 +2800,121 @@ function formatPaymentPrototypeValue(value: number | string) {
 
 function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
+  const [garageSearch, setGarageSearch] = useState('')
+  const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
+  const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
+  const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
+  const selectedGarage = paymentsPrototypeGarages.find((garage) => garage.id === selectedGarageId) ?? null
+  const normalizedSearch = garageSearch.trim().toLowerCase()
+  const garageSearchResults = paymentsPrototypeGarages
+    .filter((garage) => !normalizedSearch || garage.number.toLowerCase().includes(normalizedSearch) || garage.ownerName.toLowerCase().includes(normalizedSearch))
+    .slice(0, 6)
+  const shouldShowGarageResults = garageSearch.length > 0 && (!selectedGarage || garageSearch !== `Гараж ${selectedGarage.number} - ${selectedGarage.ownerName}`)
+  const garageSearchListId = useId()
 
   function openDialogFromButton(event: MouseEvent<HTMLButtonElement>, dialog: PaymentsPrototypeDialogKey) {
     event.currentTarget.focus()
     onOpenDialog(dialog, event.currentTarget)
   }
 
+  function selectGarage(garage: PaymentsPrototypeGarage) {
+    setSelectedGarageId(garage.id)
+    setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
+    setGarageRows(createGarageIncomePrototypeRows(garage.id))
+    setHistoryRows(garage.id === 'garage-1' ? garagePaymentHistoryRows : [])
+  }
+
+  function selectFirstGarageResult() {
+    if (garageSearchResults.length > 0) {
+      selectGarage(garageSearchResults[0])
+    }
+  }
+
+  function handlePaymentDraftChange(rowId: string, value: string) {
+    setGarageRows((currentRows) => currentRows.map((row) => row.id === rowId ? { ...row, paymentDraft: value } : row))
+  }
+
+  function commitGaragePayment(row: GarageIncomePrototypeRow) {
+    const amount = Number(row.paymentDraft.trim().replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return
+    }
+
+    const nextPaid = row.paid + amount
+    const nextDebt = Math.max(row.payable - nextPaid, 0)
+    const now = new Date()
+    const paymentDate = now.toLocaleDateString('ru-RU')
+    const paymentTime = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+
+    setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, debt: nextDebt } : currentRow))
+    setHistoryRows((currentRows) => [
+      { date: paymentDate, time: paymentTime, amount, purpose: row.service, debtAfter: nextDebt },
+      ...currentRows,
+    ])
+  }
+
+  const groupedGarageRows = garageRows.reduce<Array<{ month: string; monthLabel: string; rows: GarageIncomePrototypeRow[] }>>((groups, row) => {
+    const existingGroup = groups.find((group) => group.month === row.month)
+    if (existingGroup) {
+      existingGroup.rows.push(row)
+    } else {
+      groups.push({ month: row.month, monthLabel: row.monthLabel, rows: [row] })
+    }
+    return groups
+  }, [])
+
+  const paymentTotal = garageRows.reduce((sum, row) => sum + row.payable, 0)
+  const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
+  const debtTotal = garageRows.reduce((sum, row) => sum + row.debt, 0)
+
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
-      <label className="payments-prototype-search">
-        <Search size={18} aria-hidden="true" />
-        <input aria-label="Поиск платежей по гаражу или владельцу" placeholder="Номер гаража или ФИО владельца" />
-      </label>
+      <div className="payments-prototype-topline">
+        <div className="payments-prototype-search-wrap">
+          <label className="payments-prototype-search">
+            <Search size={18} aria-hidden="true" />
+            <input
+              aria-label="Поиск номера гаража или ФИО владельца"
+              role="combobox"
+              aria-expanded={shouldShowGarageResults}
+              aria-controls={garageSearchListId}
+              placeholder="Введите номер гаража или ФИО владельца"
+              value={garageSearch}
+              onChange={(event) => {
+                setGarageSearch(event.target.value)
+                setSelectedGarageId(null)
+                setGarageRows([])
+                setHistoryRows([])
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  selectFirstGarageResult()
+                }
+              }}
+            />
+          </label>
+          {shouldShowGarageResults ? (
+            <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи">
+              {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
+                <button className="payments-prototype-search-option" key={garage.id} type="button" role="option" aria-selected={garage.id === selectedGarageId} onClick={() => selectGarage(garage)}>
+                  <strong>Гараж {garage.number}</strong>
+                  <span>{garage.ownerName}</span>
+                </button>
+              )) : <span className="payments-prototype-search-empty">Ничего не найдено</span>}
+            </div>
+          ) : null}
+        </div>
+
+        {selectedGarage ? (
+          <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
+            <div><span>Люди</span><strong>{selectedGarage.peopleCount}</strong></div>
+            <div><span>Баланс</span><strong className={selectedGarage.balance < 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(Math.abs(selectedGarage.balance))}</strong></div>
+            <div><span>Этажи</span><strong>{selectedGarage.floorCount}</strong></div>
+            <div><span>Просроченная задолженность</span><strong className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
+          </section>
+        ) : null}
+      </div>
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -2761,179 +2927,251 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
         </div>
       </div>
 
-      <div className="payments-prototype-main-grid">
-        <section className="payments-prototype-card" aria-label="Карточка гаража">
-          <div className="payments-prototype-garage-line">
-            <span>Люди</span>
-            <strong>3</strong>
-            <span>Баланс</span>
-            <strong>5 300</strong>
+      {!selectedGarage ? (
+        <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
+      ) : activeTab === 'income' ? (
+        <>
+          <div className="payments-prototype-owner-row" aria-label="Выбранный гараж">
+            <div><span>Гараж</span><strong>{selectedGarage.number}</strong></div>
+            <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
+            <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
+            <div className="payments-prototype-actions payments-prototype-actions--stacked">
+              <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={(event) => openDialogFromButton(event, 'garageAccrual')}>
+                <Plus size={16} aria-hidden="true" />
+                <span>Добавить начисление</span>
+              </button>
+              <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'fullPayment')}>
+                <span>Полная оплата</span>
+              </button>
+            </div>
           </div>
-          <div className="payments-prototype-garage-line">
-            <span>Этажи</span>
-            <strong>1</strong>
-            <span>Просроченная задолженность</span>
-            <strong className="money-expense">1 300</strong>
+
+          <section className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
+            <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
+              <thead>
+                <tr>
+                  <th scope="col">Дата</th>
+                  <th scope="col">Время</th>
+                  <th scope="col">Сумма платежа</th>
+                  <th scope="col">Назначение платежа</th>
+                  <th scope="col">Остаток долга после платежа</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyRows.length > 0 ? historyRows.map((row) => (
+                  <tr key={`${row.date}-${row.time}-${row.purpose}-${row.amount}`}>
+                    <td>{row.date}</td>
+                    <td>{row.time}</td>
+                    <td>{formatPaymentPrototypeValue(row.amount)}</td>
+                    <td>{row.purpose}</td>
+                    <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={5}>Платежей по выбранному гаражу пока нет.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+
+          <div className="payments-prototype-sheet">
+            <div className="payments-prototype-period-row">
+              <label>
+                <span>Месяц с</span>
+                <select aria-label="Месяц поступлений с" defaultValue="2026-05">
+                  <option value="2026-06">июнь 2026</option>
+                  <option value="2026-05">май 2026</option>
+                  <option value="2026-04">апрель 2026</option>
+                </select>
+              </label>
+              <label>
+                <span>Месяц по</span>
+                <select aria-label="Месяц поступлений по" defaultValue="2026-06">
+                  <option value="2026-06">июнь 2026</option>
+                  <option value="2026-05">май 2026</option>
+                  <option value="2026-04">апрель 2026</option>
+                </select>
+              </label>
+              <button className="link-button" type="button">Текущий</button>
+            </div>
+            <div className="payments-prototype-table-scroll">
+              <table className="payments-prototype-table payments-prototype-table--garage" aria-label={`Поступления гаража ${selectedGarage.number}`}>
+                <thead>
+                  <tr>
+                    <th scope="col">Месяц</th>
+                    <th scope="col">Услуга</th>
+                    <th scope="col">Счётчик</th>
+                    <th scope="col">Разница</th>
+                    <th scope="col">К оплате</th>
+                    <th scope="col">Платёж</th>
+                    <th scope="col">Оплачено</th>
+                    <th scope="col">Задолженность</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedGarageRows.map((group) => {
+                    const groupPayable = group.rows.reduce((sum, row) => sum + row.payable, 0)
+                    const groupPaid = group.rows.reduce((sum, row) => sum + row.paid, 0)
+                    const groupDebt = group.rows.reduce((sum, row) => sum + row.debt, 0)
+                    return (
+                      <Fragment key={group.month}>
+                        <tr className="payments-prototype-month-total">
+                          <td>{group.monthLabel}</td>
+                          <td>ИТОГО</td>
+                          <td />
+                          <td />
+                          <td>{formatPaymentPrototypeValue(groupPayable)}</td>
+                          <td />
+                          <td>{formatPaymentPrototypeValue(groupPaid)}</td>
+                          <td className={groupDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(groupDebt)}</td>
+                        </tr>
+                        {group.rows.map((row) => (
+                          <tr key={row.id}>
+                            <td />
+                            <td>{row.service}</td>
+                            <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>{formatPaymentPrototypeValue(row.meter ?? '')}</td>
+                            <td>{formatPaymentPrototypeValue(row.difference ?? '')}</td>
+                            <td>{formatPaymentPrototypeValue(row.payable)}</td>
+                            <td>
+                              <input
+                                className="payments-prototype-payment-input"
+                                aria-label={`Платеж ${row.service} ${row.monthLabel}`}
+                                inputMode="decimal"
+                                value={row.paymentDraft}
+                                onChange={(event) => handlePaymentDraftChange(row.id, event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    commitGaragePayment(row)
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td>{formatPaymentPrototypeValue(row.paid)}</td>
+                            <td className={row.debt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(row.debt)}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                  <tr className="payments-prototype-total-row">
+                    <td />
+                    <td>ИТОГО</td>
+                    <td />
+                    <td />
+                    <td>{formatPaymentPrototypeValue(paymentTotal)}</td>
+                    <td />
+                    <td>{formatPaymentPrototypeValue(paidTotal)}</td>
+                    <td className={debtTotal > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(debtTotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="payments-prototype-actions payments-prototype-actions--stacked">
-            <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={(event) => openDialogFromButton(event, 'garageAccrual')}>
+        </>
+      ) : (
+        <>
+          <div className="payments-prototype-actions payments-prototype-actions--sheet">
+            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'accrual')}>
               <Plus size={16} aria-hidden="true" />
               <span>Добавить начисление</span>
             </button>
-            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'fullPayment')}>
-              <span>Полная оплата</span>
+            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')}>
+              <Plus size={16} aria-hidden="true" />
+              <span>Добавить выплату</span>
             </button>
           </div>
-        </section>
 
-        <section className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
-          <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
-            <thead>
-              <tr>
-                <th scope="col">Дата</th>
-                <th scope="col">Время</th>
-                <th scope="col">Сумма платежа</th>
-                <th scope="col">Назначение платежа</th>
-                <th scope="col">Остаток долга после платежа</th>
-              </tr>
-            </thead>
-            <tbody>
-              {garagePaymentHistoryRows.map((row) => (
-                <tr key={`${row.date}-${row.time}-${row.purpose}`}>
-                  <td>{row.date}</td>
-                  <td>{row.time}</td>
-                  <td>{formatPaymentPrototypeValue(row.amount)}</td>
-                  <td>{row.purpose}</td>
-                  <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </div>
+          <div className="payments-prototype-sheet">
+            <div className="payments-prototype-period-row">
+              <label>
+                <span>Месяц</span>
+                <select aria-label="Месяц выплат" defaultValue="2026-06">
+                  <option value="2026-06">июнь 2026</option>
+                  <option value="2026-05">май 2026</option>
+                  <option value="2026-04">апрель 2026</option>
+                </select>
+              </label>
+            </div>
+            <div className="payments-prototype-table-scroll">
+              <table className="payments-prototype-table" aria-label="Форма выплат за июнь 2026">
+                <thead>
+                  <tr>
+                    <th scope="col">Поставщик</th>
+                    <th scope="col">Услуга</th>
+                    <th scope="col">Стоимость</th>
+                    <th scope="col">Оплачено</th>
+                    <th scope="col">Остаток</th>
+                    <th scope="col">Собрано</th>
+                    <th scope="col">Разница</th>
+                    <th scope="col">Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentPrototypeRows.map((row, index) => {
+                    const supplier = index < 5 ? '' : ['Иванов', 'Петрова', 'Сидоров', '', '', ''][index - 5] ?? ''
+                    return (
+                      <tr key={`${row.item}-${index}`}>
+                        <td>{supplier}</td>
+                        <td>{row.item}</td>
+                        <td className={row.cost ? 'money-income' : undefined}>{formatPaymentPrototypeValue(row.cost)}</td>
+                        <td>{formatPaymentPrototypeValue(row.paid)}</td>
+                        <td>{formatPaymentPrototypeValue(row.balance)}</td>
+                        {index === 5 ? (
+                          <td className="payments-prototype-merged-total" rowSpan={6}>
+                            156 800
+                          </td>
+                        ) : index < 5 ? (
+                          <td>{formatPaymentPrototypeValue(row.collected)}</td>
+                        ) : null}
+                        <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
+                          {formatPaymentPrototypeValue(row.difference)}
+                        </td>
+                        <td>
+                          {row.action && row.item !== 'Авансовые выплаты' && row.item !== 'Выплата без чека' ? (
+                            <button className="link-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')} aria-label={`Оплатить ${row.item}`}>
+                              Оплатить
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  <tr className="payments-prototype-total-row">
+                    <td>ИТОГО</td>
+                    <td />
+                    <td>235 000</td>
+                    <td>55 500</td>
+                    <td />
+                    <td>257 100</td>
+                    <td className="money-income">22 100</td>
+                    <td />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      <div className="payments-prototype-sheet">
-        <div className="payments-prototype-table-scroll">
-          <table className="payments-prototype-table payments-prototype-table--garage" aria-label="Платежи гаража за июнь 2026">
-            <thead>
-              <tr>
-                <th scope="col">
-                  <label>
-                    <span>Месяц по</span>
-                    <select aria-label="Месяц платежей гаража" defaultValue="2026-06">
-                      <option value="2026-06">Текущий</option>
-                      <option value="2026-05">май 2026</option>
-                      <option value="2026-04">апрель 2026</option>
-                    </select>
-                  </label>
-                </th>
-                <th scope="col">Счётчик</th>
-                <th scope="col">Разница</th>
-                <th scope="col">К оплате</th>
-                <th scope="col">Платёж</th>
-                <th scope="col">Оплачено</th>
-                <th scope="col">Задолженность</th>
-              </tr>
-            </thead>
-            <tbody>
-              {garagePaymentPrototypeRows.map((row, index) => (
-                <tr key={`garage-payment-${index}`}>
-                  <td>{index === 0 ? activeTab === 'income' ? 'Поступления' : 'Выплаты' : ''}</td>
-                  <td>{formatPaymentPrototypeValue(row.meter)}</td>
-                  <td>{formatPaymentPrototypeValue(row.difference)}</td>
-                  <td>{formatPaymentPrototypeValue(row.payable)}</td>
-                  <td>{formatPaymentPrototypeValue(row.payment)}</td>
-                  <td>{formatPaymentPrototypeValue(row.paid)}</td>
-                  <td className={row.debt ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(row.debt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="payments-prototype-actions payments-prototype-actions--sheet">
-        <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'accrual')}>
-          <Plus size={16} aria-hidden="true" />
-          <span>Добавить начисление</span>
-        </button>
-        <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')}>
-          <Plus size={16} aria-hidden="true" />
-          <span>Добавить выплату</span>
-        </button>
-      </div>
-
-      <div className="payments-prototype-sheet">
-        <div className="payments-prototype-table-scroll">
-          <table className="payments-prototype-table" aria-label="Форма платежей за июнь 2026">
-            <thead>
-              <tr>
-                <th scope="col">Статья</th>
-                <th scope="col">Стоимость</th>
-                <th scope="col">Оплачено</th>
-                <th scope="col">Остаток</th>
-                <th scope="col">Собрано</th>
-                <th scope="col">Разница</th>
-                <th scope="col">Действие</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paymentPrototypeRows.map((row, index) => (
-                <tr key={`${row.item}-${index}`}>
-                  <td>{row.item}</td>
-                  <td className={row.cost ? 'money-income' : undefined}>{formatPaymentPrototypeValue(row.cost)}</td>
-                  <td>{formatPaymentPrototypeValue(row.paid)}</td>
-                  <td>{formatPaymentPrototypeValue(row.balance)}</td>
-                  {index === 5 ? (
-                    <td className="payments-prototype-merged-total" rowSpan={6}>
-                      156 800
-                    </td>
-                  ) : index < 5 ? (
-                    <td>{formatPaymentPrototypeValue(row.collected)}</td>
-                  ) : null}
-                  <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
-                    {formatPaymentPrototypeValue(row.difference)}
-                  </td>
-                  <td>
-                    {row.action ? (
-                      <button className="link-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')} aria-label={`Оплатить ${row.item}`}>
-                        Оплатить
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              <tr className="payments-prototype-total-row">
-                <td>ИТОГО</td>
-                <td>235 000</td>
-                <td>55 500</td>
-                <td />
-                <td>257 100</td>
-                <td className="money-income">22 100</td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="payments-prototype-footer" aria-label="Итоги кассы и банка">
-        <div>
-          <span>Сумма в банке</span>
-          <strong>234 000</strong>
-        </div>
-        <div>
-          <span>Касса</span>
-          <strong>23 100</strong>
-        </div>
-        <div>
-          <span>ИТОГО</span>
-          <strong className="money-income">257 100</strong>
-        </div>
-        <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
-          Сдать кассу в банк
-        </button>
-      </div>
+          <div className="payments-prototype-footer" aria-label="Итоги кассы и банка">
+            <div>
+              <span>Сумма в банке</span>
+              <strong>234 000</strong>
+            </div>
+            <div>
+              <span>Касса</span>
+              <strong>23 100</strong>
+            </div>
+            <div>
+              <span>ИТОГО</span>
+              <strong className="money-income">257 100</strong>
+            </div>
+            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
+              Сдать кассу в банк
+            </button>
+          </div>
+        </>
+      )}
     </section>
   )
 }
