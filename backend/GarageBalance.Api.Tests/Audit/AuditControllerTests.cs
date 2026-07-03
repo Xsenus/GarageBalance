@@ -58,6 +58,21 @@ public sealed class AuditControllerTests
         Assert.Null(service.LastRequest);
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(501)]
+    public async Task GetEvents_ReturnsBadRequestWhenLimitIsInvalid(int limit)
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+
+        var result = await controller.GetEvents(null, null, null, null, limit, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+
+        AssertProblem(result.Result, "Проверьте пагинацию истории", "Количество строк истории должно быть от 1 до 500.");
+        Assert.Null(service.LastRequest);
+    }
+
     [Fact]
     public async Task ExportEvents_ReturnsCsvFileAndPassesFiltersToService()
     {

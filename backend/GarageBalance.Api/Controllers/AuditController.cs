@@ -41,6 +41,12 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
             return invalidDateRange;
         }
 
+        var invalidLimit = ValidateLimit(limit);
+        if (invalidLimit is not null)
+        {
+            return invalidLimit;
+        }
+
         return Ok(await auditService.GetEventsAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter, null, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken));
     }
 
@@ -164,6 +170,17 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
             return CreateBadRequestProblem(InvalidPaginationTitle, "Смещение страницы истории не может быть отрицательным.");
         }
 
+        var invalidLimit = ValidateLimit(limit);
+        if (invalidLimit is not null)
+        {
+            return invalidLimit;
+        }
+
+        return null;
+    }
+
+    private BadRequestObjectResult? ValidateLimit(int? limit)
+    {
         if (limit is <= 0 or > MaxPageLimit)
         {
             return CreateBadRequestProblem(InvalidPaginationTitle, $"Количество строк истории должно быть от 1 до {MaxPageLimit}.");
