@@ -52,6 +52,20 @@ public sealed class ControllerThinnessTests
     }
 
     [Fact]
+    public void ControllerConstructors_DependOnServiceAbstractionsOnly()
+    {
+        var offenders = GetControllerTypes()
+            .SelectMany(type => type.GetConstructors(BindingFlags.Instance | BindingFlags.Public))
+            .SelectMany(ctor => ctor.GetParameters()
+                .Where(parameter => IsGarageBalanceServiceType(parameter.ParameterType) && !parameter.ParameterType.IsInterface)
+                .Select(parameter => $"{ctor.DeclaringType!.Name} depends on concrete service {parameter.ParameterType.FullName}"))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void ControllerActions_DoNotExposeDomainEntities()
     {
         var offenders = GetControllerActionMethods()
@@ -106,6 +120,16 @@ public sealed class ControllerThinnessTests
         return typeName.Contains(".Infrastructure.", StringComparison.Ordinal) ||
             typeName.EndsWith("DbContext", StringComparison.Ordinal) ||
             typeName.EndsWith("Repository", StringComparison.Ordinal);
+    }
+
+    private static bool IsGarageBalanceServiceType(Type type)
+    {
+        var typeName = type.FullName ?? type.Name;
+
+        return type.Assembly == typeof(AuthController).Assembly &&
+            (typeName.Contains(".Application.", StringComparison.Ordinal) ||
+                typeName.Contains(".Domain.", StringComparison.Ordinal) ||
+                typeName.Contains(".Infrastructure.", StringComparison.Ordinal));
     }
 
     private static bool IsDomainType(Type type)
