@@ -1026,23 +1026,82 @@ h1 {
 }
 
 .contractors-check-row {
-  display: flex;
+  display: inline-flex;
+  min-height: 40px;
   align-items: center;
   gap: 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
   color: #344054;
+  cursor: pointer;
   font-size: 14px;
   font-weight: 700;
+  padding: 8px 10px;
 }
 
 .contractors-check-row--compact {
   justify-content: flex-start;
 }
 
-.contractors-check-row input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  accent-color: #2563eb;
+.contractors-check-row:hover,
+.dictionary-archive-toggle:hover {
+  border-color: #b2ccff;
+  background: #f8fbff;
+}
+
+.contractors-check-row input[type='checkbox'],
+.dictionary-archive-toggle input[type='checkbox'] {
+  position: relative;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  appearance: none;
+  border: 1px solid #98a2b3;
+  border-radius: 5px;
+  background: #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.contractors-check-row input[type='checkbox']:checked,
+.dictionary-archive-toggle input[type='checkbox']:checked {
+  border-color: #111827;
+  background: #111827;
+}
+
+.contractors-check-row input[type='checkbox']:checked::after,
+.dictionary-archive-toggle input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  margin-top: -1px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.contractors-check-row input[type='checkbox']:focus-visible,
+.dictionary-archive-toggle input[type='checkbox']:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
+}
+
+.contractors-check-row:has(input[type='checkbox']:disabled),
+.dictionary-archive-toggle:has(input[type='checkbox']:disabled) {
+  cursor: not-allowed;
+  background: #f8fafc;
+  color: #667085;
+  opacity: 0.72;
+}
+
+.contractors-check-row input[type='checkbox']:disabled,
+.dictionary-archive-toggle input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  background: #f2f4f7;
 }
 
 .contractors-form-row {
@@ -2686,11 +2745,7 @@ h1 {
 }
 
 .dictionary-archive-toggle input {
-  width: 16px;
-  min-height: 16px;
-  accent-color: #101828;
   cursor: pointer;
-  padding: 0;
 }
 
 .dictionary-table-scroll {

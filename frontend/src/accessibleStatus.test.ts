@@ -188,6 +188,44 @@ describe('accessible dynamic messages', () => {
     expect(fieldsWithPlaceholder.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
   })
 
+  it('keeps checkbox and toggle controls visible labeled and keyboard reachable', () => {
+    const checkboxStyleContainers = [
+      ".contractors-check-row input[type='checkbox']",
+      ".dictionary-archive-toggle input[type='checkbox']",
+    ]
+
+    expect(appCss).toContain('.contractors-check-row')
+    expect(appCss).toContain('.dictionary-archive-toggle')
+    expect(appCss).toContain('.contractors-check-row:hover,\n.dictionary-archive-toggle:hover')
+    expect(appCss).toContain(".contractors-check-row:has(input[type='checkbox']:disabled)")
+    expect(appCss).toContain(".dictionary-archive-toggle:has(input[type='checkbox']:disabled)")
+
+    for (const selector of checkboxStyleContainers) {
+      expect(appCss).toContain(selector)
+      expect(appCss).toContain(`${selector}:checked`)
+      expect(appCss).toContain(`${selector}:checked::after`)
+      expect(appCss).toContain(`${selector}:focus-visible`)
+      expect(appCss).toContain(`${selector}:disabled`)
+    }
+
+    expect(appCss).toContain('appearance: none;')
+    expect(appCss).toContain('width: 18px;')
+    expect(appCss).toContain('height: 18px;')
+    expect(appCss).toContain('border-radius: 5px;')
+    expect(appCss).toContain('outline: 3px solid rgba(46, 144, 250, 0.18);')
+
+    const checkboxOpeningTags = [...appSource.matchAll(/<input\b(?=[\s\S]*?\btype="checkbox")[\s\S]*?>/g)].map(
+      (match) => match[0],
+    )
+
+    expect(checkboxOpeningTags.length).toBeGreaterThan(0)
+    expect(checkboxOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+    expect(appSource).toContain('Показывать архивные')
+    expect(appSource).toContain('Регулярные платежи')
+    expect(appSource).toContain('Пороговая тарификация')
+    expect(appSource).toContain('Все гаражи')
+  })
+
   it('keeps report export buttons out of filter form submission', () => {
     const reportExportButtons = [
       'Скачать сводный XLSX',
