@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+﻿import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -35,7 +35,7 @@ import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, C
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
-import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
@@ -45,7 +45,7 @@ import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey }
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './shared/financeWorkbench'
-import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
+import { buildAuditExportFileName, buildImportReportFileName, downloadBlob } from './shared/fileExports'
 import type { ChangePreview } from './shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from './shared/changePreview'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
@@ -72,12 +72,12 @@ import {
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './shared/focusHooks'
 import { createEmptyPage, createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from './shared/pagination'
 import type { PagedItems } from './shared/pagination'
-import { createDefaultGarageBalanceHistoryFilters, loadConsolidatedReportFilters, loadExpenseReportFilters, loadIncomeReportFilters, saveConsolidatedReportFilters, saveExpenseReportFilters, saveIncomeReportFilters } from './shared/reportFilters'
+import { createDefaultGarageBalanceHistoryFilters } from './shared/reportFilters'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import type { UserEditChange, UserFormState } from './shared/userManagement'
 import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from './shared/userManagement'
-import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters, OwnerGarageLinkForm } from './shared/validation'
-import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseReportValidationErrors, getExpenseValidationErrors, getGarageValidationErrors, getIncomeReportValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getRegularAccrualValidationErrorsForCatalog, getReportMonthRangeValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
+import type { OwnerGarageLinkForm } from './shared/validation'
+import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getGarageValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
 import './App.css'
 
 type AppProps = {
@@ -97,8 +97,6 @@ type AccrualBreakdown =
 
 const authSessionStorageKey = 'garagebalance.auth.session'
 const sidebarExpandedStorageKey = 'garagebalance.sidebar.expanded'
-const garageReportScreenRowLimit = 12
-const reportScreenRowLimit = 16
 const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
 const importQuarantineScreenRequestLimit = 50
@@ -172,7 +170,6 @@ type NavigationItem = {
 }
 
 type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'tariffsAndFees' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
-type ReportTab = 'consolidated' | 'income' | 'expense'
 type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
 
 const navigation: NavigationItem[] = [
@@ -516,7 +513,7 @@ function Workspace({
     }
   }
 
-  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings'
+  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings' && activeSection !== 'reports'
 
   return (
     <>
@@ -4279,408 +4276,399 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
   )
 }
 
-function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
+type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
+
+type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
+type ReportDateFilterKey = 'income' | 'cashPayments' | 'bankDeposits' | 'funds'
+
+type ReportMonthRange = {
+  monthFrom: string
+  monthTo: string
+}
+
+type ReportDateRange = {
+  dateFrom: string
+  dateTo: string
+}
+
+const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; meta: string }> = [
+  { key: 'consolidated', label: 'Консолидированный', meta: 'месяцы' },
+  { key: 'garages', label: 'По гаражам', meta: 'гаражи' },
+  { key: 'payouts', label: 'По выплатам', meta: 'поставщики и сотрудники' },
+  { key: 'income', label: 'Поступления', meta: 'касса' },
+  { key: 'cashPayments', label: 'Оплаты из кассы', meta: 'расход' },
+  { key: 'bankDeposits', label: 'Сдача кассы в банк', meta: 'банк' },
+  { key: 'fees', label: 'Сборы', meta: 'вариации' },
+  { key: 'funds', label: 'Изменение фондов', meta: 'фонды' },
+]
+
+function getCurrentMonthInputValue(dateValue = getLocalDateInputValue()) {
+  return dateValue.slice(0, 7)
+}
+
+function getPreviousMonthInputValue(monthValue: string) {
+  const [yearText, monthText] = monthValue.split('-')
+  const date = new Date(Number(yearText), Number(monthText) - 2, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function getReportMonthLabel(monthValue: string) {
+  return formatMonth(`${monthValue}-01`)
+}
+
+function ReportPanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
-  const month = `${today.slice(0, 7)}-01`
-  const [filters, setFilters] = useState<ConsolidatedReportFilters>(() => loadConsolidatedReportFilters(month))
-  const [incomeFilters, setIncomeFilters] = useState<IncomeReportFilters>(() => loadIncomeReportFilters(month, today))
-  const [expenseFilters, setExpenseFilters] = useState<ExpenseReportFilters>(() => loadExpenseReportFilters(month, today))
-  const [report, setReport] = useState<ConsolidatedReportDto | null>(null)
-  const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
-  const [expenseReport, setExpenseReport] = useState<ExpenseReportDto | null>(null)
-  const [incomeGarages, setIncomeGarages] = useState<GarageDto[]>([])
-  const [incomeOwners, setIncomeOwners] = useState<OwnerDto[]>([])
+  const currentMonth = getCurrentMonthInputValue(today)
+  const previousMonth = getPreviousMonthInputValue(currentMonth)
+  const garageOptionsId = useId()
+  const supplierOptionsId = useId()
+  const feeOptionsId = useId()
+  const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
+  const [monthlyFilters, setMonthlyFilters] = useState<Record<ReportMonthlyFilterKey, ReportMonthRange>>({
+    consolidated: { monthFrom: currentMonth, monthTo: currentMonth },
+    garages: { monthFrom: currentMonth, monthTo: currentMonth },
+    payouts: { monthFrom: currentMonth, monthTo: currentMonth },
+  })
+  const [dateFilters, setDateFilters] = useState<Record<ReportDateFilterKey, ReportDateRange>>({
+    income: { dateFrom: today, dateTo: today },
+    cashPayments: { dateFrom: today, dateTo: today },
+    bankDeposits: { dateFrom: today, dateTo: today },
+    funds: { dateFrom: today, dateTo: today },
+  })
+  const [garageFilter, setGarageFilter] = useState('')
+  const [counterpartyFilter, setCounterpartyFilter] = useState('')
+  const [incomeGarageFilter, setIncomeGarageFilter] = useState('')
+  const [feeVariationFilter, setFeeVariationFilter] = useState('Сбор на ворота')
+  const [garages, setGarages] = useState<GarageDto[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
-  const [loading, setLoading] = useState(true)
-  const [exporting, setExporting] = useState(false)
-  const [incomeLoading, setIncomeLoading] = useState(true)
-  const [expenseLoading, setExpenseLoading] = useState(true)
-  const [incomeExporting, setIncomeExporting] = useState(false)
-  const [expenseExporting, setExpenseExporting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [incomeError, setIncomeError] = useState<string | null>(null)
-  const [expenseError, setExpenseError] = useState<string | null>(null)
-  const [exportMessage, setExportMessage] = useState<string | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
-  const [reportValidationErrors, setReportValidationErrors] = useState<string[]>([])
-  const [incomeReportValidationErrors, setIncomeReportValidationErrors] = useState<string[]>([])
-  const [expenseReportValidationErrors, setExpenseReportValidationErrors] = useState<string[]>([])
-  const [activeReportTab, setActiveReportTab] = useState<ReportTab>('consolidated')
+  const [dictionaryError, setDictionaryError] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const loadedReport = await reportClient.getConsolidatedReport(auth.accessToken, {
-          ...filters,
-          limit: garageReportScreenRowLimit,
-        })
-        if (!ignore) {
-          setReport(loadedReport)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setError(caught instanceof Error ? caught.message : 'Не удалось сформировать отчет.')
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false)
-        }
-      }
-    }
 
-    void load()
-    return () => {
-      ignore = true
-    }
-  }, [auth.accessToken, filters, reportClient])
-
-  useEffect(() => {
-    let ignore = false
-    async function loadIncomeReport() {
-      setIncomeLoading(true)
-      setIncomeError(null)
+    async function loadReportDictionaries() {
+      setDictionaryError(null)
       try {
-        const [loadedGarages, loadedOwners, loadedIncomeTypes, loadedIncomeReport] = await Promise.all([
+        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
-          reportClient.getIncomeReport(auth.accessToken, {
-            dateFrom: incomeFilters.dateFrom,
-            dateTo: incomeFilters.dateTo,
-            search: incomeFilters.search,
-            garageIds: incomeFilters.garageIds,
-            ownerIds: incomeFilters.ownerIds,
-            incomeTypeIds: incomeFilters.incomeTypeIds,
-            rowMode: incomeFilters.rowMode,
-            limit: reportScreenRowLimit,
-          }),
-        ])
-        if (!ignore) {
-          setIncomeGarages(loadedGarages)
-          setIncomeOwners(loadedOwners)
-          setIncomeTypes(loadedIncomeTypes)
-          setIncomeReport(loadedIncomeReport)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setIncomeError(caught instanceof Error ? caught.message : 'Не удалось сформировать отчет по поступлениям.')
-        }
-      } finally {
-        if (!ignore) {
-          setIncomeLoading(false)
-        }
-      }
-    }
-
-    void loadIncomeReport()
-    return () => {
-      ignore = true
-    }
-  }, [auth.accessToken, dictionaryClient, incomeFilters, reportClient])
-
-  useEffect(() => {
-    let ignore = false
-    async function loadExpenseReport() {
-      setExpenseLoading(true)
-      setExpenseError(null)
-      try {
-        const [loadedSuppliers, loadedExpenseTypes, loadedExpenseReport] = await Promise.all([
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
-          reportClient.getExpenseReport(auth.accessToken, {
-            dateFrom: expenseFilters.dateFrom,
-            dateTo: expenseFilters.dateTo,
-            search: expenseFilters.search,
-            supplierIds: expenseFilters.supplierIds,
-            expenseTypeIds: expenseFilters.expenseTypeIds,
-            rowMode: expenseFilters.rowMode,
-            limit: reportScreenRowLimit,
-          }),
         ])
-        if (!ignore) {
-          setSuppliers(loadedSuppliers)
-          setExpenseTypes(loadedExpenseTypes)
-          setExpenseReport(loadedExpenseReport)
+
+        if (ignore) {
+          return
         }
+
+        setGarages(loadedGarages.filter((garage) => !garage.isArchived))
+        setSuppliers(loadedSuppliers.filter((supplier) => !supplier.isArchived))
+        setIncomeTypes(loadedIncomeTypes.filter((item) => !item.isArchived))
+        setExpenseTypes(loadedExpenseTypes.filter((item) => !item.isArchived))
       } catch (caught) {
         if (!ignore) {
-          setExpenseError(caught instanceof Error ? caught.message : 'Не удалось сформировать отчет по выплатам.')
-        }
-      } finally {
-        if (!ignore) {
-          setExpenseLoading(false)
+          setDictionaryError(caught instanceof Error ? caught.message : 'Не удалось загрузить подсказки для фильтров отчетов.')
         }
       }
     }
 
-    void loadExpenseReport()
+    void loadReportDictionaries()
+
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient, expenseFilters, reportClient])
+  }, [auth.accessToken, dictionaryClient])
 
-  function applyFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const nextFilters = {
-      monthFrom: `${form.get('monthFrom')}-01`,
-      monthTo: `${form.get('monthTo')}-01`,
-      search: String(form.get('search') ?? ''),
-    }
-    const errors = getReportMonthRangeValidationErrors(nextFilters)
-    if (errors.length > 0) {
-      setError(null)
-      setReportValidationErrors(errors)
-      return
-    }
+  const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
+  const garageFilterLabel = garageFilter.trim() || 'Все гаражи'
+  const incomeGarageFilterLabel = incomeGarageFilter.trim() || 'Все гаражи'
+  const counterpartyFilterLabel = counterpartyFilter.trim() || 'Все поставщики и сотрудники'
+  const feeVariationLabel = feeVariationFilter.trim() || 'Все сборы'
+  const feeOptions = Array.from(new Set(['Сбор на ворота', 'Вступительный взнос', 'Целевой взнос', ...incomeTypes.map((item) => item.name)]))
+  const counterpartyOptions = Array.from(new Set([...suppliers.map((supplier) => supplier.name), ...expenseTypes.map((item) => item.name), 'Электрик', 'Председатель', 'Бухгалтерия']))
 
-    setReportValidationErrors([])
-    setFilters(nextFilters)
-    saveConsolidatedReportFilters(nextFilters)
+  function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
+    setMonthlyFilters((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        [field]: value,
+      },
+    }))
   }
 
-  function applyIncomeFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const nextFilters = {
-      dateFrom: String(form.get('dateFrom') ?? today),
-      dateTo: String(form.get('dateTo') ?? today),
-      search: String(form.get('search') ?? ''),
-      garageIds: getFormValues(form, 'garageIds'),
-      ownerIds: getFormValues(form, 'ownerIds'),
-      incomeTypeIds: getFormValues(form, 'incomeTypeIds'),
-      rowMode: String(form.get('rowMode') ?? 'all'),
-    }
-    const errors = getIncomeReportValidationErrors(nextFilters)
-    if (errors.length > 0) {
-      setIncomeError(null)
-      setIncomeReportValidationErrors(errors)
-      return
-    }
-
-    setIncomeReportValidationErrors([])
-    setIncomeFilters(nextFilters)
-    saveIncomeReportFilters(nextFilters)
+  function updateDateFilter(key: ReportDateFilterKey, field: keyof ReportDateRange, value: string) {
+    setDateFilters((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        [field]: value,
+      },
+    }))
   }
 
-  function applyExpenseFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const nextFilters = {
-      dateFrom: String(form.get('dateFrom') ?? today),
-      dateTo: String(form.get('dateTo') ?? today),
-      search: String(form.get('search') ?? ''),
-      supplierIds: getFormValues(form, 'supplierIds'),
-      expenseTypeIds: getFormValues(form, 'expenseTypeIds'),
-      rowMode: String(form.get('rowMode') ?? 'all'),
-    }
-    const errors = getExpenseReportValidationErrors(nextFilters)
-    if (errors.length > 0) {
-      setExpenseError(null)
-      setExpenseReportValidationErrors(errors)
-      return
-    }
-
-    setExpenseReportValidationErrors([])
-    setExpenseFilters(nextFilters)
-    saveExpenseReportFilters(nextFilters)
+  function applyPreviousMonth(key: ReportMonthlyFilterKey) {
+    setMonthlyFilters((current) => ({
+      ...current,
+      [key]: { monthFrom: previousMonth, monthTo: previousMonth },
+    }))
   }
 
-  async function exportConsolidatedXlsx() {
-    const errors = getReportMonthRangeValidationErrors(filters)
-    if (errors.length > 0) {
-      setExportError(null)
-      setReportValidationErrors(errors)
-      return
-    }
-
-    setReportValidationErrors([])
-    setExporting(true)
-    setExportError(null)
-    setExportMessage(null)
-    try {
-      const blob = await reportClient.exportConsolidatedReportXlsx(auth.accessToken, filters)
-      downloadBlob(blob, buildReportFileName('consolidated', filters.monthFrom, filters.monthTo, 'xlsx'))
-      setExportMessage('XLSX по сводному отчету готов.')
-    } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить XLSX по сводному отчету.')
-    } finally {
-      setExporting(false)
-    }
+  function applyToday(key: ReportDateFilterKey) {
+    setDateFilters((current) => ({
+      ...current,
+      [key]: { dateFrom: today, dateTo: today },
+    }))
   }
 
-  async function exportConsolidatedPdf() {
-    const errors = getReportMonthRangeValidationErrors(filters)
-    if (errors.length > 0) {
-      setExportError(null)
-      setReportValidationErrors(errors)
-      return
-    }
-
-    setReportValidationErrors([])
-    setExporting(true)
-    setExportError(null)
-    setExportMessage(null)
-    try {
-      const blob = await reportClient.exportConsolidatedReportPdf(auth.accessToken, filters)
-      downloadBlob(blob, buildReportFileName('consolidated', filters.monthFrom, filters.monthTo, 'pdf'))
-      setExportMessage('PDF по сводному отчету готов.')
-    } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить PDF по сводному отчету.')
-    } finally {
-      setExporting(false)
-    }
+  function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
+    const filter = monthlyFilters[key]
+    return (
+      <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
+        <label>
+          <span>{labels.from}</span>
+          <input aria-label={labels.from} type="month" value={filter.monthFrom} onChange={(event) => updateMonthlyFilter(key, 'monthFrom', event.target.value)} />
+        </label>
+        <label>
+          <span>{labels.to}</span>
+          <input aria-label={labels.to} type="month" value={filter.monthTo} onChange={(event) => updateMonthlyFilter(key, 'monthTo', event.target.value)} />
+        </label>
+        <button className="link-button report-period-button" type="button" onClick={() => applyPreviousMonth(key)}>Предыдущий</button>
+        {labels.extra}
+      </div>
+    )
   }
 
-  async function exportIncomeXlsx() {
-    const errors = getIncomeReportValidationErrors(incomeFilters)
-    if (errors.length > 0) {
-      setExportError(null)
-      setIncomeReportValidationErrors(errors)
-      return
-    }
-
-    setIncomeReportValidationErrors([])
-    setIncomeExporting(true)
-    setExportError(null)
-    setExportMessage(null)
-    try {
-      const blob = await reportClient.exportIncomeReportXlsx(auth.accessToken, {
-        dateFrom: incomeFilters.dateFrom,
-        dateTo: incomeFilters.dateTo,
-        search: incomeFilters.search,
-        garageIds: incomeFilters.garageIds,
-        ownerIds: incomeFilters.ownerIds,
-        incomeTypeIds: incomeFilters.incomeTypeIds,
-        rowMode: incomeFilters.rowMode,
-      })
-      downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo, 'xlsx'))
-      setExportMessage('XLSX по поступлениям готов.')
-    } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить XLSX по поступлениям.')
-    } finally {
-      setIncomeExporting(false)
-    }
+  function renderDateFilter(key: ReportDateFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
+    const filter = dateFilters[key]
+    return (
+      <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
+        <label>
+          <span>{labels.from}</span>
+          <input aria-label={labels.from} type="date" value={filter.dateFrom} onChange={(event) => updateDateFilter(key, 'dateFrom', event.target.value)} />
+        </label>
+        <label>
+          <span>{labels.to}</span>
+          <input aria-label={labels.to} type="date" value={filter.dateTo} onChange={(event) => updateDateFilter(key, 'dateTo', event.target.value)} />
+        </label>
+        <button className="link-button report-period-button" type="button" onClick={() => applyToday(key)}>Сегодня</button>
+        {labels.extra}
+      </div>
+    )
   }
 
-  async function exportIncomePdf() {
-    const errors = getIncomeReportValidationErrors(incomeFilters)
-    if (errors.length > 0) {
-      setExportError(null)
-      setIncomeReportValidationErrors(errors)
-      return
-    }
-
-    setIncomeReportValidationErrors([])
-    setIncomeExporting(true)
-    setExportError(null)
-    setExportMessage(null)
-    try {
-      const blob = await reportClient.exportIncomeReportPdf(auth.accessToken, {
-        dateFrom: incomeFilters.dateFrom,
-        dateTo: incomeFilters.dateTo,
-        search: incomeFilters.search,
-        garageIds: incomeFilters.garageIds,
-        ownerIds: incomeFilters.ownerIds,
-        incomeTypeIds: incomeFilters.incomeTypeIds,
-        rowMode: incomeFilters.rowMode,
-      })
-      downloadBlob(blob, buildReportFileName('income', incomeFilters.dateFrom, incomeFilters.dateTo, 'pdf'))
-      setExportMessage('PDF по поступлениям готов.')
-    } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить PDF по поступлениям.')
-    } finally {
-      setIncomeExporting(false)
-    }
+  function renderReportTable(ariaLabel: string, columns: string[], rows: Array<Array<ReactNode>>, footer?: Array<ReactNode>) {
+    return (
+      <div className="report-workbook-table" role="table" aria-label={ariaLabel}>
+        <div className="report-workbook-row report-workbook-row--header" role="row" style={{ '--report-columns': columns.length } as CSSProperties}>
+          {columns.map((column, columnIndex) => <span role="columnheader" key={`${column}-${columnIndex}`}>{column}</span>)}
+        </div>
+        {rows.map((row, rowIndex) => (
+          <div className="report-workbook-row" role="row" style={{ '--report-columns': columns.length } as CSSProperties} key={`${ariaLabel}-${rowIndex}`}>
+            {row.map((cell, cellIndex) => <span role="cell" key={`${ariaLabel}-${rowIndex}-${cellIndex}`}>{cell}</span>)}
+          </div>
+        ))}
+        {footer ? (
+          <div className="report-workbook-row report-workbook-row--footer" role="row" style={{ '--report-columns': columns.length } as CSSProperties}>
+            {footer.map((cell, cellIndex) => <span role="cell" key={`${ariaLabel}-footer-${cellIndex}`}>{cell}</span>)}
+          </div>
+        ) : null}
+      </div>
+    )
   }
 
-  async function exportExpenseXlsx() {
-    const errors = getExpenseReportValidationErrors(expenseFilters)
-    if (errors.length > 0) {
-      setExportError(null)
-      setExpenseReportValidationErrors(errors)
-      return
+  function renderActiveReport() {
+    if (activeReportTab === 'consolidated') {
+      const filter = monthlyFilters.consolidated
+      return (
+        <ReportWorkbookSheet title="Консолидированный отчёт">
+          {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
+          {renderReportTable(
+            'Консолидированный отчет',
+            ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
+            [
+              [getReportMonthLabel(filter.monthTo), 'Электроэнергия', formatMoney(95000), 'Электроэнергия', formatMoney(89000), formatMoney(6000), formatMoney(98000), formatMoney(32500)],
+              ['', 'Водоснабжение', formatMoney(64000), 'Водоснабжение', formatMoney(63000), formatMoney(1000), '', ''],
+              ['', 'Вывоз мусора', formatMoney(38000), 'Вывоз мусора', formatMoney(37500), formatMoney(500), '', ''],
+              ['', 'Наружное освещение', formatMoney(10000), 'Наружное освещение', formatMoney(9800), formatMoney(200), '', ''],
+              ['', 'Членские взносы', '', 'Юридические услуги', formatMoney(12000), '', '', ''],
+              ['', 'Целевые взносы', formatMoney(167000), 'Авансовые выплаты', formatMoney(65000), formatMoney(65750), '', ''],
+            ],
+            ['ИТОГО', '', formatMoney(374000), '', formatMoney(300550), formatMoney(73450), formatMoney(98000), formatMoney(32500)],
+          )}
+        </ReportWorkbookSheet>
+      )
     }
 
-    setExpenseReportValidationErrors([])
-    setExpenseExporting(true)
-    setExportError(null)
-    setExportMessage(null)
-    try {
-      const blob = await reportClient.exportExpenseReportXlsx(auth.accessToken, {
-        dateFrom: expenseFilters.dateFrom,
-        dateTo: expenseFilters.dateTo,
-        search: expenseFilters.search,
-        supplierIds: expenseFilters.supplierIds,
-        expenseTypeIds: expenseFilters.expenseTypeIds,
-        rowMode: expenseFilters.rowMode,
-      })
-      downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo, 'xlsx'))
-      setExportMessage('XLSX по выплатам готов.')
-    } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить XLSX по выплатам.')
-    } finally {
-      setExpenseExporting(false)
+    if (activeReportTab === 'garages') {
+      const filter = monthlyFilters.garages
+      return (
+        <ReportWorkbookSheet title="Отчёт по гаражам">
+          {renderMonthlyFilter('garages', {
+            from: 'Месяц с',
+            to: 'Месяц по',
+            extra: (
+              <label className="report-workbook-filter-wide">
+                <span>Гаражи</span>
+                <input aria-label="Гаражи" list={garageOptionsId} value={garageFilter} onChange={(event) => setGarageFilter(event.target.value)} placeholder="Гараж или номер" />
+              </label>
+            ),
+          })}
+          <div className="report-workbook-summary-row">
+            <strong>ИТОГО начислений</strong>
+            <strong>ИТОГО поступлений</strong>
+            <strong>Разница</strong>
+          </div>
+          {renderReportTable(
+            'Отчет по гаражам',
+            ['Месяц', 'Гараж', 'Начисления', 'Услуга', 'Поступления', 'Разница'],
+            [
+              [getReportMonthLabel(filter.monthTo), garageFilterLabel, formatMoney(9000), 'Электроэнергия', formatMoney(53300), formatMoney(0)],
+              ['', garageFilterLabel, formatMoney(4500), 'Водоснабжение', '', ''],
+              ['', garageFilterLabel, formatMoney(300), 'Вывоз мусора', '', ''],
+              ['', garageFilterLabel, formatMoney(500), 'Наружное освещение', '', ''],
+              ['', garageFilterLabel, formatMoney(16000), 'Членские взносы', '', ''],
+              ['', garageFilterLabel, formatMoney(23000), 'Целевые взносы', '', ''],
+            ],
+          )}
+        </ReportWorkbookSheet>
+      )
     }
+
+    if (activeReportTab === 'payouts') {
+      const filter = monthlyFilters.payouts
+      return (
+        <ReportWorkbookSheet title="Отчёт по выплатам">
+          {renderMonthlyFilter('payouts', {
+            from: 'Месяц с',
+            to: 'Месяц по',
+            extra: (
+              <label className="report-workbook-filter-wide">
+                <span>Поставщики/сотрудники</span>
+                <input aria-label="Поставщики или сотрудники" list={supplierOptionsId} value={counterpartyFilter} onChange={(event) => setCounterpartyFilter(event.target.value)} placeholder="Поставщик или сотрудник" />
+              </label>
+            ),
+          })}
+          <div className="report-workbook-summary-row">
+            <strong>ИТОГО начислений</strong>
+            <strong>ИТОГО выплат</strong>
+            <strong>Разница</strong>
+          </div>
+          {renderReportTable(
+            'Отчет по выплатам',
+            ['Месяц', 'Услуга', 'Сотрудник', 'Начисления', 'Выплаты', 'Разница'],
+            [
+              [getReportMonthLabel(filter.monthTo), 'Электричество', counterpartyFilterLabel, '', '', ''],
+              ['', 'Н/О', counterpartyFilterLabel, '', '', ''],
+              ['', 'Вода', counterpartyFilterLabel, '', '', ''],
+              ['', 'Мусор', counterpartyFilterLabel, '', '', ''],
+              ['', 'Юридические услуги', counterpartyFilterLabel, '', '', ''],
+              ['', 'Прочие услуги', counterpartyFilterLabel, '', '', ''],
+              ['', '', 'Юрист', '', '', ''],
+              ['', '', 'Электрик', '', '', ''],
+              ['', '', 'Председатель', '', '', ''],
+            ],
+          )}
+        </ReportWorkbookSheet>
+      )
+    }
+
+    if (activeReportTab === 'income') {
+      return (
+        <ReportWorkbookSheet title="Отчет по поступлениям">
+          {renderDateFilter('income', {
+            from: 'С',
+            to: 'По',
+            extra: (
+              <label className="report-workbook-filter-wide">
+                <span>Гаражи</span>
+                <input aria-label="Гаражи по поступлениям" list={garageOptionsId} value={incomeGarageFilter} onChange={(event) => setIncomeGarageFilter(event.target.value)} placeholder="Гараж или номер" />
+              </label>
+            ),
+          })}
+          <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
+          {renderReportTable('Отчет по поступлениям', ['Гараж', 'Дата', 'Время', 'Сумма платежа', 'Назначение платежа'], [[incomeGarageFilterLabel, today, '09:00', formatMoney(0), 'Членский взнос']])}
+        </ReportWorkbookSheet>
+      )
+    }
+
+    if (activeReportTab === 'cashPayments') {
+      return (
+        <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
+          {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
+          <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
+          {renderReportTable('Отчет по оплатам из кассы', ['Дата', 'Сумма', 'Наличие чека', 'Назначение', 'Комментарий'], [[today, formatMoney(0), 'Да/Нет', 'Назначение платежа', '']])}
+        </ReportWorkbookSheet>
+      )
+    }
+
+    if (activeReportTab === 'bankDeposits') {
+      return (
+        <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
+          {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
+          <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
+          {renderReportTable('Отчет по сдаче кассы в банк', ['Дата', 'Сумма', 'Комментарий'], [[today, formatMoney(0), '']])}
+        </ReportWorkbookSheet>
+      )
+    }
+
+    if (activeReportTab === 'fees') {
+      return (
+        <ReportWorkbookSheet title="Отчёт по сборам">
+          <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
+            <label className="report-workbook-filter-wide">
+              <span>Вариация сбора</span>
+              <input aria-label="Вариация сбора" list={feeOptionsId} value={feeVariationFilter} onChange={(event) => setFeeVariationFilter(event.target.value)} placeholder="Название сбора" />
+            </label>
+          </div>
+          <div className="report-workbook-split">
+            {renderReportTable('Отчет по сборам', ['Наименование', 'Цель', 'Сумма сбора', 'Собрано'], [[feeVariationLabel, 'Целевой сбор', formatMoney(500), formatMoney(33500)]])}
+            <div className="report-workbook-side-summary" aria-label="Детализация сбора">
+              <dl>
+                <div><dt>{feeVariationLabel}</dt><dd>{formatMoney(500)}</dd></div>
+                <div><dt>Собрано</dt><dd>{formatMoney(33500)}</dd></div>
+              </dl>
+              <button className="link-button" type="button">Показать должников</button>
+              {renderReportTable('Должники по сбору', ['Гараж', 'Оплачено', 'Дата', 'Задолженность'], [['1', formatMoney(500), '04.05.2026', formatMoney(0)], ['2', formatMoney(500), '08.05.2026', formatMoney(0)], ['3', formatMoney(200), '25.06.2026', formatMoney(300)]])}
+            </div>
+          </div>
+        </ReportWorkbookSheet>
+      )
+    }
+
+    return (
+      <ReportWorkbookSheet title="Отчёт по изменению фондов">
+        {renderDateFilter('funds', { from: 'С', to: 'По' })}
+        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма до', 'Сумма после', 'Пользователь'], [['Резервный фонд', today, 'Пополнение', formatMoney(0), formatMoney(0), auth.user.displayName]])}
+      </ReportWorkbookSheet>
+    )
   }
-
-  async function exportExpensePdf() {
-    const errors = getExpenseReportValidationErrors(expenseFilters)
-    if (errors.length > 0) {
-      setExportError(null)
-      setExpenseReportValidationErrors(errors)
-      return
-    }
-
-    setExpenseReportValidationErrors([])
-    setExpenseExporting(true)
-    setExportError(null)
-    setExportMessage(null)
-    try {
-      const blob = await reportClient.exportExpenseReportPdf(auth.accessToken, {
-        dateFrom: expenseFilters.dateFrom,
-        dateTo: expenseFilters.dateTo,
-        search: expenseFilters.search,
-        supplierIds: expenseFilters.supplierIds,
-        expenseTypeIds: expenseFilters.expenseTypeIds,
-        rowMode: expenseFilters.rowMode,
-      })
-      downloadBlob(blob, buildReportFileName('expense', expenseFilters.dateFrom, expenseFilters.dateTo, 'pdf'))
-      setExportMessage('PDF по выплатам готов.')
-    } catch (caught) {
-      setExportError(caught instanceof Error ? caught.message : 'Не удалось выгрузить PDF по выплатам.')
-    } finally {
-      setExpenseExporting(false)
-    }
-  }
-
-  const reportTabs: Array<{ key: ReportTab; label: string; meta: string }> = [
-    { key: 'consolidated', label: 'Сводный', meta: loading ? 'Формируем...' : `${report?.monthlyRows.length ?? 0} месяцев` },
-    { key: 'income', label: 'Поступления', meta: incomeLoading ? 'Формируем...' : `${incomeReport?.rowCount ?? 0} строк` },
-    { key: 'expense', label: 'Выплаты', meta: expenseLoading ? 'Формируем...' : `${expenseReport?.rowCount ?? 0} строк` },
-  ]
-  const activeReportMeta = reportTabs.find((tab) => tab.key === activeReportTab)?.meta ?? ''
 
   return (
-    <section className="dictionary-panel reports-panel" aria-label="Отчеты">
+    <section className="dictionary-panel reports-panel reports-workbook-panel" aria-label="Отчеты">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Отчеты</p>
           <h2>Отчетность ГСК</h2>
         </div>
-        <span>{activeReportMeta}</span>
+        <span>{selectedTab.meta}</span>
       </div>
 
-      {exportError ? <FormError>{exportError}</FormError> : null}
-      {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
+      {dictionaryError ? <FormError>{dictionaryError}</FormError> : null}
 
-      <div className="report-tabs" role="tablist" aria-label="Разделы отчетов">
-        {reportTabs.map((tab) => (
+      <datalist id={garageOptionsId}>
+        {garages.map((garage) => <option value={`Гараж ${garage.number}`} key={garage.id} />)}
+      </datalist>
+      <datalist id={supplierOptionsId}>
+        {counterpartyOptions.map((item) => <option value={item} key={item} />)}
+      </datalist>
+      <datalist id={feeOptionsId}>
+        {feeOptions.map((item) => <option value={item} key={item} />)}
+      </datalist>
+
+      <div className="report-tabs report-tabs--workbook" role="tablist" aria-label="Разделы отчетов">
+        {reportWorkbookTabs.map((tab) => (
           <button
             type="button"
             role="tab"
@@ -4697,315 +4685,19 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         ))}
       </div>
 
-      {activeReportTab === 'consolidated' ? (
-        <div className="report-tab-panel" role="tabpanel" id="report-panel-consolidated" aria-labelledby="report-tab-consolidated">
-          <div className="report-card">
-            <div className="report-card-heading">
-              <div>
-                <h3>Консолидированный отчет за период</h3>
-                <p>Начисления попадают в сводный отчет по учетному месяцу, поступления и выплаты - по фактической дате операции.</p>
-              </div>
-            </div>
-
-            {error ? <FormError>{error}</FormError> : null}
-
-            <form className="compact-form report-filter report-filter--consolidated" onSubmit={applyFilters}>
-              <input aria-label="Начало периода отчета" aria-describedby="consolidated-report-date-format" name="monthFrom" type="month" defaultValue={filters.monthFrom.slice(0, 7)} required />
-              <input aria-label="Конец периода отчета" aria-describedby="consolidated-report-date-format" name="monthTo" type="month" defaultValue={filters.monthTo.slice(0, 7)} required />
-              <input aria-label="Поиск в отчете" name="search" placeholder="Гараж или владелец" defaultValue={filters.search} />
-              <FormValidationSummary title="Проверьте период отчета" items={reportValidationErrors} />
-              <div className="report-actions">
-                <button className="secondary-button" type="submit">
-                  <Search size={16} />
-                  <span>Сформировать</span>
-                </button>
-                <button className="secondary-button" type="button" onClick={exportConsolidatedXlsx} disabled={loading || exporting}>
-                  <FileSpreadsheet size={16} />
-                  <span>{exporting ? 'Готовим XLSX' : 'Скачать сводный XLSX'}</span>
-                </button>
-                <button className="secondary-button" type="button" onClick={exportConsolidatedPdf} disabled={loading || exporting}>
-                  <FileText size={16} />
-                  <span>{exporting ? 'Готовим PDF' : 'Скачать сводный PDF'}</span>
-                </button>
-              </div>
-              <p className="form-hint report-date-format" id="consolidated-report-date-format">Формат периода сводного отчета: ММ.ГГГГ.</p>
-            </form>
-
-            <div className="summary-strip report-summary-strip" aria-label="Итоги отчета">
-              <div>
-                <span>Начислено</span>
-                <strong>{formatMoney(report?.accrualTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>Поступило</span>
-                <strong>{formatMoney(report?.incomeTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>{formatDebtLabel(report?.debt ?? 0)}</span>
-                <strong className={getDebtClassName(report?.debt ?? 0)}>{formatDebtAmount(report?.debt ?? 0)}</strong>
-              </div>
-              <div>
-                <span>Выплаты</span>
-                <strong>{formatMoney(report?.expenseTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>Баланс</span>
-                <strong>{formatMoney(report?.balance ?? 0)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="report-table-grid">
-            <div className="operation-list report-table report-table--monthly" role="table" aria-label="Помесячный отчет">
-              <div className="operation-row header" role="row">
-                <span role="columnheader">Месяц</span>
-                <span role="columnheader">Итоги</span>
-                <span role="columnheader">Долг</span>
-              </div>
-              {report?.monthlyRows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Помесячных строк отчета пока нет</p> : null}
-              {report?.monthlyRows.map((row) => (
-                <div className="operation-row" role="row" key={row.accountingMonth}>
-                  <span role="cell">{formatMonth(row.accountingMonth)}</span>
-                  <span role="cell">
-                    <strong>{formatMoney(row.accrualTotal)} начислено</strong>
-                    <small>
-                      {formatMoney(row.incomeTotal)} поступило, {formatMoney(row.expenseTotal)} выплат
-                    </small>
-                  </span>
-                  <span role="cell" className={getDebtClassName(row.debt)}>
-                    {formatDebtAmount(row.debt)}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="operation-list report-table report-table--garages" role="table" aria-label="Отчет по гаражам">
-              <div className="operation-row header" role="row">
-                <span role="columnheader">Гараж</span>
-                <span role="columnheader">Начисления</span>
-                <span role="columnheader">Долг</span>
-              </div>
-              {report?.garageRowCount === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному фильтру гаражей нет</p> : null}
-              {report?.garageRows.slice(0, garageReportScreenRowLimit).map((row) => (
-                <div className="operation-row" role="row" key={row.garageId}>
-                  <span role="cell">
-                    <strong>Гараж {row.garageNumber}</strong>
-                    <small>{row.ownerName ?? 'владелец не указан'}</small>
-                  </span>
-                  <span role="cell">
-                    <strong>{formatMoney(row.accrualTotal)}</strong>
-                    <small>{formatMoney(row.incomeTotal)} оплачено</small>
-                  </span>
-                  <span role="cell" className={getDebtClassName(row.debt)}>
-                    {formatDebtAmount(row.debt)}
-                  </span>
-                </div>
-              ))}
-              {report && report.garageRowCount > report.garageRows.length ? <p className="empty-state" role="status" aria-live="polite">Показано {report.garageRows.length} из {report.garageRowCount} строк</p> : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {activeReportTab === 'income' ? (
-        <div className="report-tab-panel" role="tabpanel" id="report-panel-income" aria-labelledby="report-tab-income">
-          <div className="report-card">
-            <div className="report-card-heading">
-              <div>
-                <h3>Отчет по поступлениям</h3>
-                <p>В поступлениях начисления считаются по учетному месяцу, оплаты - по фактической дате поступления.</p>
-              </div>
-            </div>
-
-            {incomeError ? <FormError>{incomeError}</FormError> : null}
-
-            <form className="compact-form report-filter report-filter--detailed" onSubmit={applyIncomeFilters}>
-              <input aria-label="Начало отчета по поступлениям" aria-describedby="income-report-date-format" name="dateFrom" type="date" defaultValue={incomeFilters.dateFrom} required />
-              <input aria-label="Конец отчета по поступлениям" aria-describedby="income-report-date-format" name="dateTo" type="date" defaultValue={incomeFilters.dateTo} required />
-              <input aria-label="Поиск в поступлениях" name="search" placeholder="Гараж, владелец, документ" defaultValue={incomeFilters.search} />
-              <select aria-label="Тип строк отчета по поступлениям" name="rowMode" defaultValue={incomeFilters.rowMode}>
-                <option value="all">Начисления и оплаты</option>
-                <option value="accruals">Только начисления</option>
-                <option value="payments">Только оплаты</option>
-              </select>
-              <select aria-label="Гаражи в отчете по поступлениям" name="garageIds" multiple defaultValue={incomeFilters.garageIds} size={Math.min(4, Math.max(2, incomeGarages.length))}>
-                {incomeGarages.map((garage) => (
-                  <option value={garage.id} key={garage.id}>
-                    Гараж {garage.number}
-                  </option>
-                ))}
-              </select>
-              <select aria-label="Владельцы в отчете по поступлениям" name="ownerIds" multiple defaultValue={incomeFilters.ownerIds} size={Math.min(4, Math.max(2, incomeOwners.length))}>
-                {incomeOwners.map((owner) => (
-                  <option value={owner.id} key={owner.id}>
-                    {owner.fullName}
-                  </option>
-                ))}
-              </select>
-              <select aria-label="Виды поступлений в отчете" name="incomeTypeIds" multiple defaultValue={incomeFilters.incomeTypeIds} size={Math.min(4, Math.max(2, incomeTypes.length))}>
-                {incomeTypes.map((incomeType) => (
-                  <option value={incomeType.id} key={incomeType.id}>
-                    {incomeType.name}
-                  </option>
-                ))}
-              </select>
-              <FormValidationSummary title="Проверьте отчет по поступлениям" items={incomeReportValidationErrors} />
-              <div className="report-actions">
-                <button className="secondary-button" type="submit">
-                  <Search size={16} />
-                  <span>Показать</span>
-                </button>
-                <button className="secondary-button" type="button" onClick={exportIncomeXlsx} disabled={incomeLoading || incomeExporting}>
-                  <FileSpreadsheet size={16} />
-                  <span>{incomeExporting ? 'Готовим XLSX' : 'Скачать поступления XLSX'}</span>
-                </button>
-                <button className="secondary-button" type="button" onClick={exportIncomePdf} disabled={incomeLoading || incomeExporting}>
-                  <FileText size={16} />
-                  <span>{incomeExporting ? 'Готовим PDF' : 'Скачать поступления PDF'}</span>
-                </button>
-              </div>
-              <p className="form-hint report-date-format" id="income-report-date-format">Формат дат поступлений: ДД.ММ.ГГГГ.</p>
-            </form>
-
-            <div className="summary-strip report-summary-strip" aria-label="Итоги отчета по поступлениям">
-              <div>
-                <span>Начислено</span>
-                <strong>{formatMoney(incomeReport?.accrualTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>Оплачено</span>
-                <strong>{formatMoney(incomeReport?.incomeTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>{formatDebtLabel(incomeReport?.debt ?? 0)}</span>
-                <strong className={getDebtClassName(incomeReport?.debt ?? 0)}>{formatDebtAmount(incomeReport?.debt ?? 0)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="operation-list report-table report-table--wide" role="table" aria-label="Отчет по поступлениям">
-            <div className="operation-row header" role="row">
-              <span role="columnheader">Дата</span>
-              <span role="columnheader">Гараж и вид</span>
-              <span role="columnheader">Сумма</span>
-            </div>
-            {incomeReport?.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному фильтру поступлений нет</p> : null}
-            {incomeReport?.rows.map((row) => (
-              <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.garageId}-${row.documentNumber ?? row.incomeTypeId}`}>
-                <span role="cell">
-                  <strong>{formatDateOnly(row.date)}</strong>
-                  <small>{row.rowType === 'starting_balance' ? 'стартовый баланс' : row.rowType === 'accruals' ? 'начисление' : 'оплата'}</small>
-                </span>
-                <span role="cell">
-                  <strong>Гараж {row.garageNumber} · {row.incomeTypeName}</strong>
-                  <small>{row.ownerName ?? 'владелец не указан'}{row.documentNumber ? ` · ${row.documentNumber}` : ''}</small>
-                </span>
-                <span role="cell" className={row.rowType === 'payments' ? 'money-income' : 'money-accrual'}>
-                  {row.rowType === 'payments' ? '+' : ''}{formatMoney(row.rowType === 'payments' ? row.incomeAmount : row.accrualAmount)}
-                </span>
-              </div>
-            ))}
-            {incomeReport && incomeReport.rowCount > incomeReport.rows.length ? <p className="empty-state" role="status" aria-live="polite">Показано {incomeReport.rows.length} из {incomeReport.rowCount} строк</p> : null}
-          </div>
-        </div>
-      ) : null}
-
-      {activeReportTab === 'expense' ? (
-        <div className="report-tab-panel" role="tabpanel" id="report-panel-expense" aria-labelledby="report-tab-expense">
-          <div className="report-card">
-            <div className="report-card-heading">
-              <div>
-                <h3>Отчет по выплатам</h3>
-                <p>В выплатах начисления поставщикам считаются по учетному месяцу, фактические выплаты - по дате оплаты.</p>
-              </div>
-            </div>
-
-            {expenseError ? <FormError>{expenseError}</FormError> : null}
-
-            <form className="compact-form report-filter report-filter--detailed report-filter--expense" onSubmit={applyExpenseFilters}>
-              <input aria-label="Начало отчета по выплатам" aria-describedby="expense-report-date-format" name="dateFrom" type="date" defaultValue={expenseFilters.dateFrom} required />
-              <input aria-label="Конец отчета по выплатам" aria-describedby="expense-report-date-format" name="dateTo" type="date" defaultValue={expenseFilters.dateTo} required />
-              <input aria-label="Поиск в выплатах" name="search" placeholder="Поставщик, вид, документ" defaultValue={expenseFilters.search} />
-              <select aria-label="Тип строк отчета по выплатам" name="rowMode" defaultValue={expenseFilters.rowMode}>
-                <option value="all">Начисления и выплаты</option>
-                <option value="accruals">Только начисления</option>
-                <option value="payments">Только выплаты</option>
-              </select>
-              <select aria-label="Поставщики в отчете по выплатам" name="supplierIds" multiple defaultValue={expenseFilters.supplierIds} size={Math.min(4, Math.max(2, suppliers.length))}>
-                {suppliers.map((supplier) => (
-                  <option value={supplier.id} key={supplier.id}>
-                    {supplier.name}
-                  </option>
-                ))}
-              </select>
-              <select aria-label="Виды выплат в отчете" name="expenseTypeIds" multiple defaultValue={expenseFilters.expenseTypeIds} size={Math.min(4, Math.max(2, expenseTypes.length))}>
-                {expenseTypes.map((expenseType) => (
-                  <option value={expenseType.id} key={expenseType.id}>
-                    {expenseType.name}
-                  </option>
-                ))}
-              </select>
-              <FormValidationSummary title="Проверьте отчет по выплатам" items={expenseReportValidationErrors} />
-              <div className="report-actions">
-                <button className="secondary-button" type="submit">
-                  <Search size={16} />
-                  <span>Показать</span>
-                </button>
-                <button className="secondary-button" type="button" onClick={exportExpenseXlsx} disabled={expenseLoading || expenseExporting}>
-                  <FileSpreadsheet size={16} />
-                  <span>{expenseExporting ? 'Готовим XLSX' : 'Скачать выплаты XLSX'}</span>
-                </button>
-                <button className="secondary-button" type="button" onClick={exportExpensePdf} disabled={expenseLoading || expenseExporting}>
-                  <FileText size={16} />
-                  <span>{expenseExporting ? 'Готовим PDF' : 'Скачать выплаты PDF'}</span>
-                </button>
-              </div>
-              <p className="form-hint report-date-format" id="expense-report-date-format">Формат дат выплат: ДД.ММ.ГГГГ.</p>
-            </form>
-
-            <div className="summary-strip report-summary-strip" aria-label="Итоги отчета по выплатам">
-              <div>
-                <span>Начислено</span>
-                <strong>{formatMoney(expenseReport?.accrualTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>Выплачено</span>
-                <strong>{formatMoney(expenseReport?.expenseTotal ?? 0)}</strong>
-              </div>
-              <div>
-                <span>Разница</span>
-                <strong>{formatMoney(expenseReport?.difference ?? 0)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="operation-list report-table report-table--wide" role="table" aria-label="Отчет по выплатам">
-            <div className="operation-row header" role="row">
-              <span role="columnheader">Дата</span>
-              <span role="columnheader">Поставщик и вид</span>
-              <span role="columnheader">Сумма</span>
-            </div>
-            {expenseReport?.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному фильтру выплат нет</p> : null}
-            {expenseReport?.rows.map((row) => (
-              <div className="operation-row" role="row" key={`${row.rowType}-${row.date}-${row.supplierId}-${row.documentNumber ?? row.expenseTypeId}`}>
-                <span role="cell">
-                  <strong>{formatDateOnly(row.date)}</strong>
-                  <small>{row.rowType === 'starting_balance' ? 'стартовый баланс' : row.rowType === 'accruals' ? 'начисление' : 'выплата'}</small>
-                </span>
-                <span role="cell">
-                  <strong>{row.supplierName} · {row.expenseTypeName}</strong>
-                  <small>{row.documentNumber ?? 'документ не указан'}</small>
-                </span>
-                <span role="cell" className={row.rowType === 'payments' ? 'money-expense' : 'money-accrual'}>
-                  {row.rowType === 'payments' ? '-' : ''}{formatMoney(row.rowType === 'payments' ? row.expenseAmount : row.accrualAmount)}
-                </span>
-              </div>
-            ))}
-            {expenseReport && expenseReport.rowCount > expenseReport.rows.length ? <p className="empty-state" role="status" aria-live="polite">Показано {expenseReport.rows.length} из {expenseReport.rowCount} строк</p> : null}
-          </div>
-        </div>
-      ) : null}
+      <div className="report-tab-panel" role="tabpanel" id={`report-panel-${activeReportTab}`} aria-labelledby={`report-tab-${activeReportTab}`}>
+        {renderActiveReport()}
+      </div>
     </section>
+  )
+}
+
+function ReportWorkbookSheet({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <div className="report-workbook-sheet">
+      <h3>{title}</h3>
+      {children}
+    </div>
   )
 }
 

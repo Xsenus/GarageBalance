@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+﻿import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 describe('accessible dynamic messages', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src', 'App.tsx'), 'utf8')
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
+  const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
   const formFeedbackSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'formFeedback.tsx'), 'utf8')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
@@ -50,19 +51,15 @@ describe('accessible dynamic messages', () => {
     expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-expanded={showAllItems}'))).toEqual([])
   })
 
-  it('keeps report date format hints linked to date fields', () => {
-    const reportDateHints = [
-      { id: 'consolidated-report-date-format', text: 'Формат периода сводного отчета: ММ.ГГГГ.' },
-      { id: 'income-report-date-format', text: 'Формат дат поступлений: ДД.ММ.ГГГГ.' },
-      { id: 'expense-report-date-format', text: 'Формат дат выплат: ДД.ММ.ГГГГ.' },
-    ]
-
-    for (const hint of reportDateHints) {
-      expect(appSource).toContain(`aria-describedby="${hint.id}"`)
-      expect(appSource).toContain(`id="${hint.id}">${hint.text}</p>`)
-    }
+  it('keeps report workbook period filters typed and quickly adjustable', () => {
+    expect(appSource).toContain('type="month"')
+    expect(appSource).toContain('type="date"')
+    expect(appSource).toContain('applyPreviousMonth')
+    expect(appSource).toContain('applyToday')
+    expect(appSource).toContain('report-period-button')
+    expect(appCss).toContain('.report-workbook-filter')
+    expect(appCss).toContain('.report-period-button')
   })
-
   it('keeps date month and year controls styled and validated', () => {
     const calendarStyleContainers = [
       ".dictionary-form input[type='date']",
@@ -122,7 +119,7 @@ describe('accessible dynamic messages', () => {
     }
 
     expect(appCss).toContain('appearance: none;')
-    expect(appCss).toContain('background-image:\n    linear-gradient(45deg, transparent 50%, #475467 50%),')
+    expect(normalizedAppCss).toContain('background-image:\n    linear-gradient(45deg, transparent 50%, #475467 50%),')
     expect(appCss).toContain('padding-right: 34px;')
     expect(appCss).toContain('appearance: auto;')
     expect(appCss).toContain('background-image: none;')
@@ -133,11 +130,10 @@ describe('accessible dynamic messages', () => {
 
     expect(selectOpeningTags.length).toBeGreaterThan(0)
     expect(selectOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
-    expect(appSource).toContain('Выберите гараж')
-    expect(appSource).toContain('Выберите вид')
-    expect(appSource).toContain('Выберите поставщика')
-    expect(appSource).toContain('Выберите тариф')
-    expect(appSource).toContain('Все')
+    expect(appSource).toContain('aria-label="Гараж для поступления"')
+    expect(appSource).toContain('aria-label="Вид выплаты"')
+    expect(appSource).toContain('aria-label="Тариф для регулярного начисления"')
+    expect(appSource).toContain("aria-label={getFinanceToolbarLabel('pageSize')}")
   })
 
   it('keeps text inputs and textareas consistently styled and labeled', () => {
@@ -196,7 +192,7 @@ describe('accessible dynamic messages', () => {
 
     expect(appCss).toContain('.contractors-check-row')
     expect(appCss).toContain('.dictionary-archive-toggle')
-    expect(appCss).toContain('.contractors-check-row:hover,\n.dictionary-archive-toggle:hover')
+    expect(normalizedAppCss).toContain('.contractors-check-row:hover,\n.dictionary-archive-toggle:hover')
     expect(appCss).toContain(".contractors-check-row:has(input[type='checkbox']:disabled)")
     expect(appCss).toContain(".dictionary-archive-toggle:has(input[type='checkbox']:disabled)")
 
@@ -223,7 +219,6 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('Показывать архивные')
     expect(appSource).toContain('Регулярные платежи')
     expect(appSource).toContain('Пороговая тарификация')
-    expect(appSource).toContain('Все гаражи')
   })
 
   it('keeps tabs active focused and responsive', () => {
@@ -246,8 +241,8 @@ describe('accessible dynamic messages', () => {
 
     expect(appCss).toContain('.dictionary-subnav button:focus-visible')
     expect(appCss).toContain('outline: 3px solid rgba(46, 144, 250, 0.18);')
-    expect(appCss).toContain('.contractors-prototype-tabs,\n  .meter-readings-tabs,')
-    expect(appCss).toContain('.payments-prototype-tabs button,\n  .contractors-prototype-tabs button,\n  .meter-readings-tabs button')
+    expect(normalizedAppCss).toContain('.contractors-prototype-tabs,\n  .meter-readings-tabs,')
+    expect(normalizedAppCss).toContain('.payments-prototype-tabs button,\n  .contractors-prototype-tabs button,\n  .meter-readings-tabs button')
     expect(appCss).toContain('flex-wrap: wrap;')
     expect(appCss).toContain('grid-template-columns: 1fr;')
 
@@ -278,6 +273,7 @@ describe('accessible dynamic messages', () => {
       '.contractors-directory-table',
       '.contractors-contacts-preview',
       '.meter-readings-table-shell',
+      '.report-workbook-table',
     ]
     const stickyHeaderSnippets = [
       '.dictionary-data-table th {\n  position: sticky;',
@@ -287,6 +283,7 @@ describe('accessible dynamic messages', () => {
       '.contractors-directory-row--header {\n  position: sticky;',
       '.contractors-contacts-row--header {\n  position: sticky;',
       '.operation-row.header {\n  position: sticky;',
+      '.report-workbook-row--header {\n  position: sticky;',
     ]
 
     for (const selector of scrollableTableContainers) {
@@ -294,7 +291,7 @@ describe('accessible dynamic messages', () => {
     }
 
     for (const snippet of stickyHeaderSnippets) {
-      expect(appCss).toContain(snippet)
+      expect(normalizedAppCss).toContain(snippet)
     }
 
     expect(appCss).toContain('overflow-x: auto;')
@@ -314,8 +311,8 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('role="status" aria-live="polite"')
   })
 
-  it('keeps report export buttons out of filter form submission', () => {
-    const reportExportButtons = [
+  it('keeps old report export buttons hidden while workbook layouts are active', () => {
+    const removedReportExportButtons = [
       'Скачать сводный XLSX',
       'Скачать сводный PDF',
       'Скачать поступления XLSX',
@@ -324,21 +321,13 @@ describe('accessible dynamic messages', () => {
       'Скачать выплаты PDF',
     ]
 
-    for (const label of reportExportButtons) {
-      const labelIndex = appSource.indexOf(`'${label}'`)
-      expect(labelIndex).toBeGreaterThan(-1)
-
-      const buttonStart = appSource.lastIndexOf('<button', labelIndex)
-      const buttonEnd = appSource.indexOf('</button>', labelIndex)
-      expect(buttonStart).toBeGreaterThan(-1)
-      expect(buttonEnd).toBeGreaterThan(labelIndex)
-
-      const buttonSource = appSource.slice(buttonStart, buttonEnd)
-      expect(buttonSource).toContain('className="secondary-button"')
-      expect(buttonSource).toContain('type="button"')
+    for (const label of removedReportExportButtons) {
+      expect(appSource).not.toContain(label)
     }
-  })
 
+    expect(appSource).toContain('reportWorkbookTabs')
+    expect(appSource).toContain('reports-workbook-panel')
+  })
   it('keeps icon-only buttons named and explicitly typed', () => {
     const iconButtonIndexes = [...appSource.matchAll(/className="icon-button"/g)].map((match) => match.index ?? -1)
 
