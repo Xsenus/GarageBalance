@@ -288,6 +288,32 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateOwnerAsync_WritesOldAndNewValuesToAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOwnerAsync(
+            owner.Value!.Id,
+            new UpsertOwnerRequest("Петров", "Иван", null, null, null, null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("owner", metadata.RootElement.GetProperty("dictionaryEntityType").GetString());
+        Assert.Equal("Фамилия", metadata.RootElement.GetProperty("fieldName").GetString());
+        Assert.Equal("Иванов", metadata.RootElement.GetProperty("oldValue").GetString());
+        Assert.Equal("Петров", metadata.RootElement.GetProperty("newValue").GetString());
+    }
+
+    [Fact]
     public async Task UpdateOwnerAsync_ReturnsNotFoundForMissingOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -878,6 +904,14 @@ public sealed class DictionaryServiceTests
         Assert.Contains("Вода новая", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("база people", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("ставка 20.5556", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("tariff", metadata.RootElement.GetProperty("dictionaryEntityType").GetString());
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Наименование", changedFields, StringComparison.Ordinal);
+        Assert.Contains("База расчета", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Ставка", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Дата начала", changedFields, StringComparison.Ordinal);
+        Assert.Equal("5", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]

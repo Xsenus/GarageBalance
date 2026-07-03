@@ -14,6 +14,38 @@ public sealed class DictionaryService(
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private static readonly IReadOnlyDictionary<string, string> DictionaryFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["lastName"] = "Фамилия",
+        ["firstName"] = "Имя",
+        ["middleName"] = "Отчество",
+        ["phone"] = "Телефон",
+        ["address"] = "Адрес",
+        ["meterNotes"] = "Счетчики",
+        ["number"] = "Номер",
+        ["peopleCount"] = "Количество людей",
+        ["floorCount"] = "Количество этажей",
+        ["owner"] = "Владелец",
+        ["startingBalance"] = "Стартовый баланс",
+        ["initialWaterMeterValue"] = "Стартовое показание воды",
+        ["initialElectricityMeterValue"] = "Стартовое показание электроэнергии",
+        ["comment"] = "Комментарий",
+        ["name"] = "Наименование",
+        ["group"] = "Группа",
+        ["inn"] = "ИНН",
+        ["legalAddress"] = "Юр. адрес",
+        ["contactPerson"] = "Контактное лицо",
+        ["email"] = "Почта",
+        ["code"] = "Код",
+        ["calculationBase"] = "База расчета",
+        ["rate"] = "Ставка",
+        ["effectiveFrom"] = "Дата начала",
+        ["electricityFirstThreshold"] = "Порог 1",
+        ["electricitySecondThreshold"] = "Порог 2",
+        ["electricityFirstRate"] = "Цена за ед. порога 1",
+        ["electricitySecondRate"] = "Цена за ед. порога 2",
+        ["electricityThirdRate"] = "Цена сверх порога 2"
+    };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
         : this(dbContext, new AuditEventWriter(dbContext))
@@ -105,6 +137,25 @@ public sealed class DictionaryService(
             return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["lastName"] = owner.LastName,
+            ["firstName"] = owner.FirstName,
+            ["middleName"] = owner.MiddleName,
+            ["phone"] = owner.Phone,
+            ["address"] = owner.Address,
+            ["meterNotes"] = owner.MeterNotes
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["lastName"] = lastName,
+            ["firstName"] = firstName,
+            ["middleName"] = middleName,
+            ["phone"] = phone,
+            ["address"] = address,
+            ["meterNotes"] = meterNotes
+        };
+
         owner.LastName = lastName;
         owner.FirstName = firstName;
         owner.MiddleName = middleName;
@@ -113,7 +164,7 @@ public sealed class DictionaryService(
         owner.MeterNotes = meterNotes;
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.owner_updated", "owner", owner.Id, $"Обновлен владелец {owner.FullName}.");
+        AddAudit(actorUserId, "dictionary.owner_updated", "owner", owner.Id, $"Обновлен владелец {owner.FullName}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
@@ -305,6 +356,29 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["number"] = garage.Number,
+            ["peopleCount"] = garage.PeopleCount,
+            ["floorCount"] = garage.FloorCount,
+            ["owner"] = garage.Owner?.FullName,
+            ["startingBalance"] = garage.StartingBalance,
+            ["initialWaterMeterValue"] = garage.InitialWaterMeterValue,
+            ["initialElectricityMeterValue"] = garage.InitialElectricityMeterValue,
+            ["comment"] = garage.Comment
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["number"] = number,
+            ["peopleCount"] = request.PeopleCount,
+            ["floorCount"] = request.FloorCount,
+            ["owner"] = owner?.FullName,
+            ["startingBalance"] = startingBalance,
+            ["initialWaterMeterValue"] = initialWaterMeterValue,
+            ["initialElectricityMeterValue"] = initialElectricityMeterValue,
+            ["comment"] = comment
+        };
+
         garage.Number = number;
         garage.PeopleCount = request.PeopleCount;
         garage.FloorCount = request.FloorCount;
@@ -316,7 +390,7 @@ public sealed class DictionaryService(
         garage.Comment = comment;
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.");
+        AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
     }
@@ -428,10 +502,19 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["name"] = group.Name
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["name"] = name
+        };
+
         group.Name = name;
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.supplier_group_updated", "supplier_group", group.Id, $"Обновлена группа поставщиков {group.Name}.");
+        AddAudit(actorUserId, "dictionary.supplier_group_updated", "supplier_group", group.Id, $"Обновлена группа поставщиков {group.Name}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
@@ -594,6 +677,31 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["name"] = supplier.Name,
+            ["group"] = supplier.Group.Name,
+            ["inn"] = supplier.Inn,
+            ["legalAddress"] = supplier.LegalAddress,
+            ["contactPerson"] = supplier.ContactPerson,
+            ["phone"] = supplier.Phone,
+            ["email"] = supplier.Email,
+            ["startingBalance"] = supplier.StartingBalance,
+            ["comment"] = supplier.Comment
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["group"] = group.Name,
+            ["inn"] = inn,
+            ["legalAddress"] = legalAddress,
+            ["contactPerson"] = contactPerson,
+            ["phone"] = phone,
+            ["email"] = email,
+            ["startingBalance"] = startingBalance,
+            ["comment"] = comment
+        };
+
         supplier.Name = name;
         supplier.GroupId = group.Id;
         supplier.Group = group;
@@ -606,7 +714,7 @@ public sealed class DictionaryService(
         supplier.Comment = comment;
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.supplier_updated", "supplier", supplier.Id, $"Обновлен поставщик {supplier.Name}.");
+        AddAudit(actorUserId, "dictionary.supplier_updated", "supplier", supplier.Id, $"Обновлен поставщик {supplier.Name}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
@@ -724,11 +832,22 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["name"] = incomeType.Name,
+            ["code"] = incomeType.Code
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["code"] = code
+        };
+
         incomeType.Name = name;
         incomeType.Code = code;
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.income_type_updated", "income_type", incomeType.Id, $"Обновлен вид поступления {incomeType.Name}.");
+        AddAudit(actorUserId, "dictionary.income_type_updated", "income_type", incomeType.Id, $"Обновлен вид поступления {incomeType.Name}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
@@ -851,11 +970,22 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["name"] = expenseType.Name,
+            ["code"] = expenseType.Code
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["code"] = code
+        };
+
         expenseType.Name = name;
         expenseType.Code = code;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.expense_type_updated", "expense_type", expenseType.Id, $"Обновлен вид выплаты {expenseType.Name}.");
+        AddAudit(actorUserId, "dictionary.expense_type_updated", "expense_type", expenseType.Id, $"Обновлен вид выплаты {expenseType.Name}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
@@ -1053,6 +1183,33 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["name"] = tariff.Name,
+            ["calculationBase"] = tariff.CalculationBase,
+            ["rate"] = tariff.Rate,
+            ["effectiveFrom"] = tariff.EffectiveFrom,
+            ["comment"] = tariff.Comment,
+            ["electricityFirstThreshold"] = tariff.ElectricityFirstThreshold,
+            ["electricitySecondThreshold"] = tariff.ElectricitySecondThreshold,
+            ["electricityFirstRate"] = tariff.ElectricityFirstRate,
+            ["electricitySecondRate"] = tariff.ElectricitySecondRate,
+            ["electricityThirdRate"] = tariff.ElectricityThirdRate
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["calculationBase"] = calculationBase,
+            ["rate"] = rate,
+            ["effectiveFrom"] = request.EffectiveFrom,
+            ["comment"] = comment,
+            ["electricityFirstThreshold"] = electricityTiers.Value?.FirstThreshold,
+            ["electricitySecondThreshold"] = electricityTiers.Value?.SecondThreshold,
+            ["electricityFirstRate"] = electricityTiers.Value?.FirstRate,
+            ["electricitySecondRate"] = electricityTiers.Value?.SecondRate,
+            ["electricityThirdRate"] = electricityTiers.Value?.ThirdRate
+        };
+
         tariff.Name = name;
         tariff.CalculationBase = calculationBase;
         tariff.Rate = rate;
@@ -1061,7 +1218,7 @@ public sealed class DictionaryService(
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
-        AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {FormatTariffAuditDetails(tariff)}.");
+        AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {FormatTariffAuditDetails(tariff)}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
@@ -1131,7 +1288,15 @@ public sealed class DictionaryService(
         return null;
     }
 
-    private void AddAudit(Guid? actorUserId, string action, string entityType, Guid entityId, string summary, string? reason = null)
+    private void AddAudit(
+        Guid? actorUserId,
+        string action,
+        string entityType,
+        Guid entityId,
+        string summary,
+        string? reason = null,
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        IReadOnlyDictionary<string, object?>? newValues = null)
     {
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -1141,6 +1306,9 @@ public sealed class DictionaryService(
             Summary: summary,
             EntityDisplayName: NormalizeAuditDisplayName(summary),
             Reason: reason,
+            OldValues: oldValues,
+            NewValues: newValues,
+            FieldLabels: oldValues is null || newValues is null ? null : DictionaryFieldLabels,
             Metadata: new Dictionary<string, object?>
             {
                 ["dictionaryEntityType"] = entityType
