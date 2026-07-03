@@ -33,6 +33,8 @@ import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import { fundsApi } from './services/fundsApi'
+import type { FundDto, FundsClient } from './services/fundsApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
@@ -86,6 +88,7 @@ type AppProps = {
   auditClient?: AuditClient
   dictionaryClient?: DictionaryClient
   financeClient?: FinanceClient
+  fundsClient?: FundsClient
   importClient?: ImportClient
   reportClient?: ReportClient
   releaseClient?: ReleaseClient
@@ -215,7 +218,7 @@ function saveStoredSidebarExpanded(key: string, expanded: boolean) {
   }
 }
 
-function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [isSidebarExpanded, setSidebarExpanded] = useState(() => loadStoredSidebarExpanded(sidebarExpandedStorageKey))
@@ -314,7 +317,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -385,6 +388,7 @@ function Workspace({
   auditClient,
   dictionaryClient,
   financeClient,
+  fundsClient,
   importClient,
   reportClient,
   releaseClient,
@@ -399,6 +403,7 @@ function Workspace({
   auditClient: AuditClient
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
+  fundsClient: FundsClient
   importClient: ImportClient
   reportClient: ReportClient
   releaseClient: ReleaseClient
@@ -478,7 +483,7 @@ function Workspace({
         )
       case 'funds':
         return canReadReports ? (
-          <FundsPrototypePanel />
+          <FundsPrototypePanel auth={auth} fundsClient={fundsClient} />
         ) : (
           <AccessNotice label="Фонды недоступны" title="Управление фондами" permission={permissions.reportsRead} description="Для просмотра фондов нужно право на отчетность." />
         )
@@ -3418,6 +3423,7 @@ function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
 }
 
 type FundPrototypeRow = {
+  id: string
   name: string
   amount: number | null
   actions?: false
@@ -3427,34 +3433,76 @@ type FundOperationKind = 'withdraw' | 'deposit'
 
 type FundOperationDraft = {
   kind: FundOperationKind
+  fundId: string
   fundName: string
   amount: string
   reason: string
 }
 
 const fundPrototypeRows: FundPrototypeRow[] = [
-  { name: 'Электроэнергия', amount: null },
-  { name: 'Водоснабжение', amount: null },
-  { name: 'Вывоз мусора', amount: null },
-  { name: 'Наружное освещение', amount: null },
-  { name: 'Членские взносы', amount: null, actions: false },
-  { name: 'Целевые взносы', amount: null },
-  { name: 'Прочее', amount: null, actions: false },
+  { id: 'electricity', name: 'Электроэнергия', amount: null },
+  { id: 'water', name: 'Водоснабжение', amount: null },
+  { id: 'trash', name: 'Вывоз мусора', amount: null },
+  { id: 'street-lighting', name: 'Наружное освещение', amount: null },
+  { id: 'membership', name: 'Членские взносы', amount: null, actions: false },
+  { id: 'target', name: 'Целевые взносы', amount: null },
+  { id: 'other', name: 'Прочее', amount: null, actions: false },
 ]
 
-function FundsPrototypePanel() {
+function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
+  return {
+    id: fund.id,
+    name: fund.name,
+    amount: fund.balance,
+    actions: fund.allowOperations ? undefined : false,
+  }
+}
+
+function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
   const [rows, setRows] = useState<FundPrototypeRow[]>(() => fundPrototypeRows.map((row) => ({ ...row })))
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [savingOperation, setSavingOperation] = useState(false)
   useRestoreFocusOnClose(Boolean(operation))
   const operationConfirmRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
 
-  function openFundOperation(kind: FundOperationKind, fundName: string) {
-    setOperation({ kind, fundName, amount: '', reason: '' })
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadFunds() {
+      setIsLoading(true)
+      setLoadError(null)
+      try {
+        const funds = await fundsClient.getFunds(auth.accessToken)
+        if (!cancelled) {
+          setRows(funds.map(mapFundDtoToPrototypeRow))
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить фонды.')
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadFunds()
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth.accessToken, fundsClient])
+
+  function openFundOperation(kind: FundOperationKind, fund: FundPrototypeRow) {
+    setOperation({ kind, fundId: fund.id, fundName: fund.name, amount: '', reason: '' })
     setOperationError(null)
     setOperationMessage(null)
   }
@@ -3474,7 +3522,7 @@ function FundsPrototypePanel() {
     return Number.isFinite(amount) && amount > 0 ? amount : null
   }
 
-  function submitFundOperation(event: FormEvent<HTMLFormElement>) {
+  async function submitFundOperation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!operation) {
       return
@@ -3492,17 +3540,23 @@ function FundsPrototypePanel() {
       return
     }
 
-    setRows((currentRows) => currentRows.map((row) => {
-      if (row.name !== operation.fundName) {
-        return row
-      }
-
-      const currentAmount = row.amount ?? 0
-      const nextAmount = operation.kind === 'deposit' ? currentAmount + amount : currentAmount - amount
-      return { ...row, amount: nextAmount }
-    }))
-    setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${operation.fundName}" сохранено в прототипе.`)
-    closeFundOperation()
+    setSavingOperation(true)
+    try {
+      const savedOperation = await fundsClient.createOperation(auth.accessToken, operation.fundId, {
+        operationKind: operation.kind,
+        amount,
+        reason,
+      })
+      setRows((currentRows) => currentRows.map((row) => (
+        row.id === savedOperation.fundId ? { ...row, amount: savedOperation.balanceAfter } : row
+      )))
+      setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${savedOperation.fundName}" сохранено и записано в историю изменений.`)
+      closeFundOperation()
+    } catch (error: unknown) {
+      setOperationError(error instanceof Error ? error.message : 'Не удалось выполнить операцию фонда.')
+    } finally {
+      setSavingOperation(false)
+    }
   }
 
   const distributionAmount = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
@@ -3516,6 +3570,8 @@ function FundsPrototypePanel() {
       </div>
 
       <div className="funds-sheet">
+        {isLoading ? <p className="prototype-status" role="status">Загружаем фонды...</p> : null}
+        {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
         <table className="funds-table" aria-label="Фонды и собранные суммы">
           <thead>
             <tr>
@@ -3527,19 +3583,19 @@ function FundsPrototypePanel() {
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.name}>
+              <tr key={row.id}>
                 <td>{row.name}</td>
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
                 <td>
                   {row.actions === false ? null : (
-                    <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row.name)}>
+                    <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row)}>
                       <Minus size={16} aria-hidden="true" />
                     </button>
                   )}
                 </td>
                 <td>
                   {row.actions === false ? null : (
-                    <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row.name)}>
+                    <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row)}>
                       <Plus size={16} aria-hidden="true" />
                     </button>
                   )}
@@ -3570,7 +3626,7 @@ function FundsPrototypePanel() {
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="fund-operation-description">Проверьте сумму и укажите причину. После подключения backend эта операция будет записываться в историю изменений.</p>
+            <p className="confirmation-text" id="fund-operation-description">Проверьте сумму и укажите причину. Операция будет сохранена и записана в историю изменений.</p>
             <form className="dictionary-modal-form" onSubmit={submitFundOperation}>
               <FormField label="Сумма">
                 <input
@@ -3613,11 +3669,11 @@ function FundsPrototypePanel() {
               </dl>
               {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
               <div className="detail-dialog-actions">
-                <button ref={operationConfirmRef} className="secondary-button" type="submit">
+                <button ref={operationConfirmRef} className="secondary-button" type="submit" disabled={savingOperation}>
                   <Save size={16} />
-                  <span>Подтвердить операцию</span>
+                  <span>{savingOperation ? 'Сохраняем...' : 'Подтвердить операцию'}</span>
                 </button>
-                <button className="ghost-button" type="button" onClick={closeFundOperation}>Отмена</button>
+                <button className="ghost-button" type="button" onClick={closeFundOperation} disabled={savingOperation}>Отмена</button>
               </div>
             </form>
           </section>

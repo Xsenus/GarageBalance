@@ -7,6 +7,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -938,7 +939,8 @@ describe('App', () => {
 
   it('shows funds management prototype from dashboard tile', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const fundsClient = createFundsClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -949,7 +951,7 @@ describe('App', () => {
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
     expect(screen.queryByPlaceholderText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(fundsPanel).getByRole('table', { name: 'Фонды и собранные суммы' })).toBeInTheDocument()
-    expect(within(fundsPanel).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(await within(fundsPanel).findByText('Электроэнергия')).toBeInTheDocument()
     const withdrawElectricityButton = within(fundsPanel).getByRole('button', { name: 'Изъять из фонда Электроэнергия' })
     expect(withdrawElectricityButton).toHaveAttribute('data-tooltip', 'Изъять')
     expect(withdrawElectricityButton).toHaveAttribute('title', 'Изъять из фонда Электроэнергия')
@@ -988,7 +990,7 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Пополнить фонд' })).not.toBeInTheDocument()
     expect(depositTargetButton).toHaveFocus()
-    expect(within(fundsPanel).queryByText(/Пополнение по фонду "Целевые взносы" сохранено в прототипе\./)).not.toBeInTheDocument()
+    expect(within(fundsPanel).queryByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).not.toBeInTheDocument()
 
     await user.click(depositTargetButton)
     const reopenedDepositDialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
@@ -999,7 +1001,7 @@ describe('App', () => {
     expect(within(reopenedDepositDialog).getByText(/1[\s\u00A0]500,00 руб\./)).toBeInTheDocument()
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
 
-    expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено в прототипе\./)).toHaveAttribute('role', 'status')
+    expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getAllByText(/1[\s\u00A0]500,00 руб\./).length).toBeGreaterThanOrEqual(1)
     expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toBeInTheDocument()
   })
@@ -5409,6 +5411,73 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     }),
     archiveTariff: async () => undefined,
     restoreTariff: async () => tariff,
+    ...overrides,
+  }
+}
+
+function createFund(overrides: Partial<FundDto> = {}): FundDto {
+  return {
+    id: 'fund-electricity',
+    name: 'Электроэнергия',
+    balance: 0,
+    sortOrder: 10,
+    allowOperations: true,
+    isSystem: true,
+    ...overrides,
+  }
+}
+
+function createFundOperation(overrides: Partial<FundOperationDto> = {}): FundOperationDto {
+  return {
+    id: 'fund-operation-1',
+    fundId: 'fund-electricity',
+    fundName: 'Электроэнергия',
+    operationKind: 'deposit',
+    amount: 1500,
+    balanceBefore: 0,
+    balanceAfter: 1500,
+    reason: 'Распределение средств',
+    createdAtUtc: '2026-06-30T10:00:00Z',
+    ...overrides,
+  }
+}
+
+function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
+  let funds = [
+    createFund({ id: 'fund-electricity', name: 'Электроэнергия', sortOrder: 10 }),
+    createFund({ id: 'fund-water', name: 'Водоснабжение', sortOrder: 20 }),
+    createFund({ id: 'fund-trash', name: 'Вывоз мусора', sortOrder: 30 }),
+    createFund({ id: 'fund-lighting', name: 'Наружное освещение', sortOrder: 40 }),
+    createFund({ id: 'fund-membership', name: 'Членские взносы', sortOrder: 50, allowOperations: false }),
+    createFund({ id: 'fund-target', name: 'Целевые взносы', sortOrder: 60 }),
+    createFund({ id: 'fund-other', name: 'Прочее', sortOrder: 70, allowOperations: false }),
+  ]
+
+  return {
+    getFunds: async () => funds,
+    createOperation: async (_token: string, fundId: string, request: CreateFundOperationRequest) => {
+      const fund = funds.find((item) => item.id === fundId)
+      if (!fund) {
+        throw new Error('Фонд не найден.')
+      }
+
+      const balanceBefore = fund.balance
+      const balanceAfter = request.operationKind === 'deposit' ? balanceBefore + request.amount : balanceBefore - request.amount
+      if (balanceAfter < 0) {
+        throw new Error('Недостаточно средств фонда.')
+      }
+
+      funds = funds.map((item) => (item.id === fundId ? { ...item, balance: balanceAfter } : item))
+      return createFundOperation({
+        fundId,
+        fundName: fund.name,
+        operationKind: request.operationKind,
+        amount: request.amount,
+        balanceBefore,
+        balanceAfter,
+        reason: request.reason,
+      })
+    },
     ...overrides,
   }
 }

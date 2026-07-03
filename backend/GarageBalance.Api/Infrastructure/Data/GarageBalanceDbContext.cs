@@ -27,6 +27,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Accrual> Accruals => Set<Accrual>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<Fund> Funds => Set<Fund>();
+    public DbSet<FundOperation> FundOperations => Set<FundOperation>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
     public DbSet<AccessImportRunLogEntry> AccessImportRunLogEntries => Set<AccessImportRunLogEntry>();
     public DbSet<AccessImportRowFingerprint> AccessImportRowFingerprints => Set<AccessImportRowFingerprint>();
@@ -328,6 +330,35 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(reading => reading.Garage)
                 .WithMany()
                 .HasForeignKey(reading => reading.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Fund>(entity =>
+        {
+            entity.ToTable("funds");
+            entity.HasKey(fund => fund.Id);
+            entity.Property(fund => fund.Name).HasMaxLength(200).IsRequired();
+            entity.Property(fund => fund.NormalizedName).HasMaxLength(200).IsRequired();
+            entity.Property(fund => fund.Balance).HasPrecision(18, 2);
+            entity.HasIndex(fund => fund.NormalizedName).IsUnique();
+            entity.HasIndex(fund => fund.SortOrder);
+        });
+
+        modelBuilder.Entity<FundOperation>(entity =>
+        {
+            entity.ToTable("fund_operations");
+            entity.HasKey(operation => operation.Id);
+            entity.Property(operation => operation.OperationKind).HasMaxLength(20).IsRequired();
+            entity.Property(operation => operation.Amount).HasPrecision(18, 2);
+            entity.Property(operation => operation.BalanceBefore).HasPrecision(18, 2);
+            entity.Property(operation => operation.BalanceAfter).HasPrecision(18, 2);
+            entity.Property(operation => operation.Reason).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(operation => operation.FundId);
+            entity.HasIndex(operation => operation.CreatedAtUtc);
+            entity.HasIndex(operation => operation.OperationKind);
+            entity.HasOne(operation => operation.Fund)
+                .WithMany(fund => fund.Operations)
+                .HasForeignKey(operation => operation.FundId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

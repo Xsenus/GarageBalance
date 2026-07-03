@@ -139,6 +139,28 @@ public sealed class ControllerAuthorizationCoverageTests
     }
 
     [Fact]
+    public void FundsActionsRequireReportsReadAndPaymentsWritePermissions()
+    {
+        var controllerPolicy = typeof(FundsController)
+            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.ReportsRead);
+        Assert.NotNull(controllerPolicy);
+
+        var mutatingActionsWithoutWritePolicy = typeof(FundsController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true).Any())
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true)
+                .SelectMany(attribute => attribute.HttpMethods)
+                .Any(httpMethod => !string.Equals(httpMethod, HttpMethods.Get, StringComparison.OrdinalIgnoreCase)))
+            .Where(method => !method.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => attribute.Policy == SystemPermissions.PaymentsWrite))
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Empty(mutatingActionsWithoutWritePolicy);
+    }
+
+    [Fact]
     public void DictionaryActionsRequireExpectedDictionaryPermissions()
     {
         var controllerPolicy = typeof(DictionariesController)
