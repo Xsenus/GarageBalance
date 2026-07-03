@@ -4172,6 +4172,7 @@ describe('App', () => {
     expect(detailDialog).toHaveAttribute('aria-modal', 'true')
 
     const detailCloseIconButton = within(detailDialog).getByRole('button', { name: 'Закрыть карточку события' })
+    const detailWorkspaceButton = within(detailDialog).getByRole('button', { name: 'Открыть раздел: Контрагенты' })
     const detailCloseButton = within(detailDialog).getByRole('button', { name: 'Закрыть' })
     await waitFor(() => expect(detailCloseIconButton).toHaveFocus())
     await user.keyboard('{Shift>}{Tab}{/Shift}')
@@ -4179,11 +4180,19 @@ describe('App', () => {
     await user.keyboard('{Tab}')
     expect(detailCloseIconButton).toHaveFocus()
     await user.keyboard('{Tab}')
+    expect(detailWorkspaceButton).toHaveFocus()
+    await user.keyboard('{Tab}')
     expect(detailCloseButton).toHaveFocus()
     await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
     await waitFor(() => expect(openDetailButton).toHaveFocus())
+
+    await user.click(openDetailButton)
+    const reopenedDetailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    await user.click(within(reopenedDetailDialog).getByRole('button', { name: 'Открыть раздел: Контрагенты' }))
+    expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
   })
 
   it('retries audit event detail loading inside the dialog', async () => {

@@ -501,7 +501,7 @@ function Workspace({
         )
       case 'audit':
         return canReadAudit ? (
-          <AuditPanel auth={auth} auditClient={auditClient} />
+          <AuditPanel auth={auth} auditClient={auditClient} onOpenSection={onOpenSection} />
         ) : (
           <AccessNotice label="История изменений недоступна" title="История изменений" permission={permissions.auditRead} description="История изменений доступна только пользователям с правом просмотра audit-событий." />
         )
@@ -3776,12 +3776,44 @@ function getAuditRelatedContext(auditEvent: AuditEventDto) {
   ].filter((item): item is [string, string] => Boolean(item))
 }
 
+function getAuditWorkspaceTarget(auth: AuthResponse, auditEvent: AuditEventDto): { section: WorkspaceSection; label: string } | null {
+  if (auditEvent.entityType === 'owner' || auditEvent.entityType === 'garage' || auditEvent.entityType === 'supplier') {
+    return hasPermission(auth, permissions.dictionariesRead) ? { section: 'contractors', label: 'Контрагенты' } : null
+  }
+
+  if (auditEvent.entityType === 'tariff' || auditEvent.section === 'dictionary') {
+    return hasPermission(auth, permissions.dictionariesRead) ? { section: 'tariffsAndFees', label: 'Тарифы и сборы' } : null
+  }
+
+  if (auditEvent.entityType === 'meter_reading') {
+    return hasPermission(auth, permissions.paymentsRead) ? { section: 'meterReadings', label: 'Показания' } : null
+  }
+
+  if (auditEvent.section === 'finance' || auditEvent.entityType === 'financial_operation' || auditEvent.entityType === 'accrual' || auditEvent.entityType === 'supplier_accrual') {
+    return hasPermission(auth, permissions.paymentsRead) ? { section: 'payments', label: 'Платежи' } : null
+  }
+
+  if (auditEvent.section === 'users' || auditEvent.entityType === 'app_user') {
+    return hasPermission(auth, permissions.usersManage) ? { section: 'users', label: 'Пользователи' } : null
+  }
+
+  if (auditEvent.section === 'import' || auditEvent.entityType === 'access_import_run') {
+    return hasPermission(auth, permissions.importRun) ? { section: 'import', label: 'Импорт' } : null
+  }
+
+  if (auditEvent.section === 'app_releases') {
+    return { section: 'releases', label: 'Что нового' }
+  }
+
+  return null
+}
+
 type AuditPanelError = {
   message: string
   recovery: 'load' | 'exportCsv' | 'exportXlsx'
 }
 
-function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: AuditClient }) {
+function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; auditClient: AuditClient; onOpenSection: (section: WorkspaceSection) => void }) {
   const [page, setPage] = useState<PagedItems<AuditEventDto>>(() => createEmptyPage<AuditEventDto>(25))
   const [search, setSearch] = useState('')
   const [section, setSection] = useState('')
@@ -3806,6 +3838,7 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   const detailCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(detailState))
   const detailDialogRef = useFocusTrap<HTMLElement>(Boolean(detailState))
   const detailRelatedContext = detailState ? getAuditRelatedContext(detailState.event) : []
+  const detailWorkspaceTarget = detailState ? getAuditWorkspaceTarget(auth, detailState.event) : null
   const resetAuditPageOffset = useCallback(() => {
     setPage((current) => current.offset === 0 ? current : { ...current, offset: 0 })
   }, [])
@@ -3843,6 +3876,11 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
   function closeAuditEventDetail() {
     detailRequestIdRef.current += 1
     setDetailState(null)
+  }
+
+  function openAuditWorkspaceTarget(section: WorkspaceSection) {
+    closeAuditEventDetail()
+    onOpenSection(section)
   }
 
   async function openAuditEventDetail(auditEvent: AuditEventDto) {
@@ -4194,6 +4232,12 @@ function AuditPanel({ auth, auditClient }: { auth: AuthResponse; auditClient: Au
               </div>
             ) : null}
             <div className="detail-dialog-actions">
+              {detailWorkspaceTarget ? (
+                <button className="ghost-button" type="button" onClick={() => openAuditWorkspaceTarget(detailWorkspaceTarget.section)}>
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  <span>Открыть раздел: {detailWorkspaceTarget.label}</span>
+                </button>
+              ) : null}
               <button className="secondary-button" type="button" onClick={closeAuditEventDetail}>Закрыть</button>
             </div>
           </section>
