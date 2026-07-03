@@ -2539,7 +2539,7 @@ function FinancePanel({
           <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
             <span>{getFinanceContextMenuLabel('edit')}</span>
           </button>
-          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
+          <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
             <span>{getFinanceContextMenuLabel('delete')}</span>
           </button>
         </div>
@@ -5380,7 +5380,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             <Save size={15} />
             <span>Изменить</span>
           </button>
-          <button type="button" role="menuitem" onClick={() => { openDeleteDialog(contextMenu.user); setContextMenu(null) }} disabled={!contextMenu.user.isActive}>
+          <button className="context-menu-danger" type="button" role="menuitem" onClick={() => { openDeleteDialog(contextMenu.user); setContextMenu(null) }} disabled={!contextMenu.user.isActive}>
             <Trash2 size={15} />
             <span>Удалить</span>
           </button>
@@ -8598,7 +8598,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
                 <Save size={15} />
                 <span>Изменить</span>
               </button>
-              <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
+              <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
                 openArchiveTarget(contextMenu.section, contextMenu.item)
                 setContextMenu(null)
               }}>
@@ -9781,7 +9781,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
               <button ref={archiveCancelButtonRef} className="ghost-button" type="button" onClick={() => closeArchiveDialog()} disabled={confirmingArchive}>
                 Отменить
               </button>
-              <button className="secondary-button" type="button" onClick={() => void confirmArchive()} disabled={confirmingArchive || !archiveReason.trim()}>
+              <button className="secondary-button danger-button" type="button" onClick={() => void confirmArchive()} disabled={confirmingArchive || !archiveReason.trim()}>
                 <Trash2 size={16} />
                 <span>{confirmingArchive ? 'Архивируем...' : 'Архивировать запись'}</span>
               </button>

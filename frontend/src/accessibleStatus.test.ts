@@ -162,6 +162,43 @@ describe('accessible dynamic messages', () => {
     expect(unstyledButtons).toEqual([])
   })
 
+  it('keeps destructive actions visually distinct without leaving the shared style system', () => {
+    const destructiveLabels = [
+      '>Удалить</span>',
+      '>Удалить запись</span>',
+      '>Удалить гараж</span>',
+      '>Удалить поставщика</span>',
+      '>Удалить сотрудника</span>',
+      '>Удалить нерегулярный платеж</span>',
+      '>Отменить запись</span>',
+      '>Архивировать запись</span>',
+      '>Перейти без сохранения</span>',
+      '>Отменить без сохранения</span>',
+      'aria-label={`Удалить нерегулярный платеж',
+    ]
+    const destructiveStyleClasses = [
+      'danger-button',
+      'context-menu-danger',
+      'contractors-delete-button',
+      'dictionary-row-action-danger',
+    ]
+
+    for (const className of destructiveStyleClasses) {
+      expect(appSource).toContain(className)
+    }
+
+    const buttonSources = [...appSource.matchAll(/<button\b[\s\S]*?<\/button>/g)]
+      .map((match) => match[0])
+      .filter((buttonSource) => destructiveLabels.some((label) => buttonSource.includes(label)))
+
+    expect(buttonSources.length).toBeGreaterThan(0)
+
+    const unmarkedDestructiveButtons = buttonSources
+      .filter((buttonSource) => !destructiveStyleClasses.some((className) => buttonSource.includes(className)))
+
+    expect(unmarkedDestructiveButtons).toEqual([])
+  })
+
   it('keeps form controls explicitly named', () => {
     const formControlIndexes = [...appSource.matchAll(/<(?:input|select|textarea)\b/g)].map((match) => match.index ?? -1)
 

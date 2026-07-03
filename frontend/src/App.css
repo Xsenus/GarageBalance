@@ -2755,6 +2755,15 @@ h1 {
   background: #f2f4f7;
 }
 
+.context-menu .context-menu-danger {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.context-menu .context-menu-danger:hover {
+  background: #fef3f2;
+}
+
 .context-menu button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
