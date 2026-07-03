@@ -34,6 +34,23 @@ public sealed class ApiEndpointDocumentationTests
         Assert.DoesNotContain($"GET {route}", roadmap, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProjectWideHistoryRoadmapDocumentsInventoryStatusSync()
+    {
+        var roadmap = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        const string inventoryStatusLine =
+            "Обновить этот roadmap по итогам инвентаризации: готовые пункты отмечены `[x]`, частично готовые оставлены `[~]`, спорные бизнес-решения оставлены `[decision]`, отсутствующая работа оставлена `[ ]`, ручная приемка оставлена `[acceptance]`.";
+
+        Assert.Contains($"- `[x]` {inventoryStatusLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "- `[ ]` Обновить этот roadmap по итогам инвентаризации",
+            roadmap,
+            StringComparison.Ordinal);
+        Assert.Contains("ProjectWideHistoryRoadmapDocumentsInventoryStatusSync", roadmap, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
