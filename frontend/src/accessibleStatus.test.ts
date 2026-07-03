@@ -95,6 +95,49 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('Введите год четырьмя цифрами от 1900 до 9999.')
   })
 
+  it('keeps select controls consistently styled and labeled', () => {
+    const singleSelectContainers = [
+      '.dictionary-form select',
+      '.dictionary-modal-form select',
+      '.dictionary-pagination select',
+      '.report-filter select',
+      '.balance-history-filters select',
+      '.audit-filter-grid select',
+    ]
+    const multipleSelectContainers = [
+      '.dictionary-form select[multiple]',
+      '.dictionary-modal-form select[multiple]',
+      '.report-filter select[multiple]',
+    ]
+
+    for (const selector of singleSelectContainers) {
+      expect(appCss).toContain(selector)
+      expect(appCss).toContain(`${selector}:disabled`)
+    }
+
+    for (const selector of multipleSelectContainers) {
+      expect(appCss).toContain(selector)
+    }
+
+    expect(appCss).toContain('appearance: none;')
+    expect(appCss).toContain('background-image:\n    linear-gradient(45deg, transparent 50%, #475467 50%),')
+    expect(appCss).toContain('padding-right: 34px;')
+    expect(appCss).toContain('appearance: auto;')
+    expect(appCss).toContain('background-image: none;')
+    expect(appCss).toContain('cursor: not-allowed;')
+    expect(appCss).toContain('background-color: #f8fafc;')
+
+    const selectOpeningTags = [...appSource.matchAll(/<select\b[\s\S]*?>/g)].map((match) => match[0])
+
+    expect(selectOpeningTags.length).toBeGreaterThan(0)
+    expect(selectOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+    expect(appSource).toContain('Выберите гараж')
+    expect(appSource).toContain('Выберите вид')
+    expect(appSource).toContain('Выберите поставщика')
+    expect(appSource).toContain('Выберите тариф')
+    expect(appSource).toContain('Все')
+  })
+
   it('keeps report export buttons out of filter form submission', () => {
     const reportExportButtons = [
       'Скачать сводный XLSX',
