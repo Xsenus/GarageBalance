@@ -4195,6 +4195,55 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
   })
 
+  it('hides audit event workspace links when the user cannot open the target section', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({
+      user: {
+        permissions: ['users.manage', 'audit.read'],
+      },
+    })
+    const authClient = createAuthClient({
+      login: async () => auth,
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [
+        createAuditEvent({
+          id: 'audit-detail-no-dictionary-access',
+          action: 'dictionary.owner_updated',
+          entityType: 'owner',
+          entityId: 'owner-1',
+          entityDisplayName: 'Garage 12',
+          summary: 'Изменен владелец.',
+          section: 'dictionary',
+          actionKind: 'update',
+        }),
+      ],
+      getEvent: async (_token, id) => createAuditEvent({
+        id,
+        action: 'dictionary.owner_updated',
+        entityType: 'owner',
+        entityId: 'owner-1',
+        entityDisplayName: 'Garage 12',
+        summary: 'Изменен владелец.',
+        section: 'dictionary',
+        actionKind: 'update',
+      }),
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+    const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+
+    expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
+    expect(within(detailDialog).queryByRole('button', { name: 'Открыть раздел: Контрагенты' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Контрагенты' })).toBeDisabled()
+  })
+
   it('retries audit event detail loading inside the dialog', async () => {
     const user = userEvent.setup()
     let detailLoadCount = 0
