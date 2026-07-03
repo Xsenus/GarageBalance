@@ -997,7 +997,7 @@ h1 {
 }
 
 .contractors-directory-table--suppliers .contractors-directory-row {
-  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(130px, 0.8fr) 96px;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(130px, 0.8fr) 132px;
   min-width: 1060px;
 }
 
@@ -1015,6 +1015,13 @@ h1 {
   font-size: 12px;
   font-weight: 750;
   text-transform: uppercase;
+}
+
+.contractors-directory-row--header > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .contractors-directory-header-cell {
@@ -1143,6 +1150,10 @@ h1 {
   width: min(820px, 100%);
 }
 
+.contractors-dialog--supplier {
+  width: min(900px, 100%);
+}
+
 .contractors-tariff-dialog {
   width: min(560px, 100%);
 }
@@ -1176,9 +1187,28 @@ h1 {
   border-radius: 8px;
 }
 
+.contractors-contacts-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .contractors-contacts-row {
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(160px, 1fr);
+}
+
+.contractors-contacts-row--editable {
+  grid-template-columns: 48px minmax(150px, 1fr) minmax(120px, 0.75fr) minmax(130px, 0.8fr) minmax(160px, 1fr) minmax(126px, 0.7fr) minmax(160px, 1fr);
+  min-width: 880px;
+}
+
+.contractors-contacts-row--empty {
+  grid-template-columns: 1fr;
 }
 
 .contractors-contacts-row--header {
@@ -1196,10 +1226,42 @@ h1 {
   background: #f9fbff;
 }
 
+.contractors-contacts-row--deleted {
+  background: #f9fafb;
+  color: #667085;
+}
+
 .contractors-contacts-row span {
   min-width: 0;
   border-bottom: 1px solid #eaecf0;
   padding: 8px 10px;
+}
+
+.contractors-contacts-row input,
+.contractors-contacts-row select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.contractors-contacts-row select {
+  appearance: none;
+  padding-right: 28px;
+  background-image: linear-gradient(45deg, transparent 50%, #475467 50%), linear-gradient(135deg, #475467 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+}
+
+.contractors-contacts-row input:disabled,
+.contractors-contacts-row select:disabled {
+  background: #f2f4f7;
+  color: #667085;
 }
 
 .contractors-contacts-row:last-child span {
@@ -3205,6 +3267,16 @@ h1 {
 .context-menu button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.context-menu-hint {
+  max-width: 240px;
+  margin: 0;
+  border-bottom: 1px solid #eaecf0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 8px;
 }
 
 .dictionary-editor-dialog {

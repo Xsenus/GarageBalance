@@ -5702,7 +5702,19 @@ type ContractorSupplierRow = {
   contactPerson: string
   phone: string
   email: string
+  contacts: ContractorSupplierContact[]
   debt: string
+  comment: string
+  isDeleted: boolean
+}
+
+type ContractorSupplierContact = {
+  id: string
+  fullName: string
+  position: string
+  phone: string
+  email: string
+  status: 'Работает' | 'Не работает'
   comment: string
   isDeleted: boolean
 }
@@ -5739,10 +5751,10 @@ const contractorGarageRows: ContractorGarageRow[] = [
 ]
 
 const contractorSupplierRows: ContractorSupplierRow[] = [
-  { id: 'supplier-electricity', name: 'Энергосбыт', service: 'Электроэнергия', inn: '5401000000', legalAddress: '', contactPerson: 'Петров И.А.', phone: '+7 900 100-10-10', email: 'energy@example.test', debt: '39 000', comment: '', isDeleted: false },
-  { id: 'supplier-water', name: 'Водоканал', service: 'Водоснабжение', inn: '5402000000', legalAddress: '', contactPerson: 'Иванов П.В.', phone: '+7 900 200-20-20', email: 'water@example.test', debt: '32 000', comment: '', isDeleted: false },
-  { id: 'supplier-waste', name: 'ЭкоВывоз', service: 'Вывоз мусора', inn: '', legalAddress: '', contactPerson: 'Орлова Мария', phone: '+7 900 300-30-30', email: '', debt: '15 000', comment: '', isDeleted: false },
-  { id: 'supplier-law', name: 'Правовой центр', service: 'Юридические услуги', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', debt: '', comment: '', isDeleted: false },
+  { id: 'supplier-electricity', name: 'Энергосбыт', service: 'Электроэнергия', inn: '5401000000', legalAddress: '', contactPerson: 'Петров И.А.', phone: '+7 900 100-10-10', email: 'energy@example.test', contacts: [{ id: 'supplier-electricity-contact-1', fullName: 'Петров И.А.', position: 'Директор', phone: '+7 900 100-10-10', email: 'energy@example.test', status: 'Работает', comment: '', isDeleted: false }], debt: '39 000', comment: '', isDeleted: false },
+  { id: 'supplier-water', name: 'Водоканал', service: 'Водоснабжение', inn: '5402000000', legalAddress: '', contactPerson: 'Иванов П.В.', phone: '+7 900 200-20-20', email: 'water@example.test', contacts: [{ id: 'supplier-water-contact-1', fullName: 'Иванов П.В.', position: 'Менеджер', phone: '+7 900 200-20-20', email: 'water@example.test', status: 'Работает', comment: '', isDeleted: false }], debt: '32 000', comment: '', isDeleted: false },
+  { id: 'supplier-waste', name: 'ЭкоВывоз', service: 'Вывоз мусора', inn: '', legalAddress: '', contactPerson: 'Орлова Мария', phone: '+7 900 300-30-30', email: '', contacts: [{ id: 'supplier-waste-contact-1', fullName: 'Орлова Мария', position: 'Специалист', phone: '+7 900 300-30-30', email: '', status: 'Работает', comment: '', isDeleted: false }], debt: '15 000', comment: '', isDeleted: false },
+  { id: 'supplier-law', name: 'Правовой центр', service: 'Юридические услуги', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', contacts: [], debt: '', comment: '', isDeleted: false },
 ]
 
 const contractorStaffRows: ContractorStaffRow[] = [
@@ -5781,6 +5793,51 @@ function getDefaultGarageColumnWidths() {
     widths[column.key] = column.defaultWidth
     return widths
   }, {} as Record<ContractorGarageColumnKey, number>)
+}
+
+function getSupplierServiceOptions(services: string[]) {
+  return Array.from(new Set(services.map((service) => service.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, 'ru'))
+}
+
+function getSupplierPrimaryContact(supplier: ContractorSupplierRow) {
+  return supplier.contacts.find((contact) => !contact.isDeleted && contact.status === 'Работает') ?? supplier.contacts.find((contact) => !contact.isDeleted) ?? null
+}
+
+function normalizeSupplierPrototype(supplier: ContractorSupplierRow): ContractorSupplierRow {
+  const primaryContact = getSupplierPrimaryContact(supplier)
+
+  return {
+    ...supplier,
+    contactPerson: primaryContact?.fullName ?? '',
+    phone: primaryContact?.phone ?? '',
+    email: primaryContact?.email ?? '',
+  }
+}
+
+function createEmptySupplierContact(): ContractorSupplierContact {
+  return {
+    id: `supplier-contact-${Date.now()}`,
+    fullName: '',
+    position: '',
+    phone: '',
+    email: '',
+    status: 'Работает',
+    comment: '',
+    isDeleted: false,
+  }
+}
+
+function formatSupplierContactSummary(contacts: ContractorSupplierContact[]) {
+  if (contacts.length === 0) {
+    return ''
+  }
+
+  return contacts
+    .map((contact, index) => {
+      const state = contact.isDeleted ? 'удален' : contact.status
+      return `${index + 1}. ${contact.fullName || 'Без ФИО'} / ${contact.position || 'Без должности'} / ${contact.phone || 'Без телефона'} / ${contact.email || 'Без почты'} / ${state} / ${contact.comment || 'Без комментария'}`
+    })
+    .join('; ')
 }
 
 function loadGarageColumnWidths() {
@@ -5830,21 +5887,30 @@ function ContractorsPrototypePanel() {
   const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>(contractorSupplierRows)
   const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
+  const [supplierServices, setSupplierServices] = useState(() => getSupplierServiceOptions(contractorSupplierRows.map((supplier) => supplier.service)))
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
   const [garageColumnWidths, setGarageColumnWidths] = useState(loadGarageColumnWidths)
   const [garageContextMenu, setGarageContextMenu] = useState<{ row: ContractorGarageRow; x: number; y: number } | null>(null)
   const [garageDeleteTarget, setGarageDeleteTarget] = useState<ContractorGarageRow | null>(null)
   const [garageDeleteReason, setGarageDeleteReason] = useState('')
+  const [supplierContextMenu, setSupplierContextMenu] = useState<{ row: ContractorSupplierRow; x: number; y: number } | null>(null)
+  const [supplierDeleteTarget, setSupplierDeleteTarget] = useState<ContractorSupplierRow | null>(null)
+  const [supplierDeleteReason, setSupplierDeleteReason] = useState('')
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
+  useRestoreFocusOnClose(Boolean(supplierDeleteTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
   const garageDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageDeleteTarget))
+  const supplierDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(supplierDeleteTarget))
+  const supplierDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(supplierDeleteTarget))
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
   useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
+  useEscapeKey(Boolean(supplierContextMenu), () => setSupplierContextMenu(null))
+  useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
 
   useEffect(() => {
     saveGarageColumnWidths(garageColumnWidths)
@@ -5935,18 +6001,63 @@ function ContractorsPrototypePanel() {
   }
 
   const saveSupplier = (supplier: ContractorSupplierRow) => {
-    const currentSupplier = suppliers.find((item) => item.id === supplier.id)
+    const normalizedSupplier = normalizeSupplierPrototype(supplier)
+    const currentSupplier = suppliers.find((item) => item.id === normalizedSupplier.id)
+
+    if (normalizedSupplier.service.trim()) {
+      setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, normalizedSupplier.service]))
+    }
 
     if (currentSupplier) {
-      setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? supplier : item)))
+      setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === normalizedSupplier.id ? normalizedSupplier : item)))
       return
     }
 
-    setSuppliers((currentSuppliers) => [...currentSuppliers, supplier])
+    setSuppliers((currentSuppliers) => [...currentSuppliers, normalizedSupplier])
   }
 
   const deleteSupplier = (supplier: ContractorSupplierRow) => {
     setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? { ...item, isDeleted: true } : item)))
+  }
+
+  function openSupplierContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorSupplierRow) {
+    event.preventDefault()
+    setSupplierContextMenu({ row, x: event.clientX, y: event.clientY })
+  }
+
+  function openSupplierEditor(row: ContractorSupplierRow) {
+    setSupplierContextMenu(null)
+    setModal({ type: 'supplier', item: row })
+  }
+
+  function openSupplierDeleteDialog(row: ContractorSupplierRow) {
+    setSupplierContextMenu(null)
+    setSupplierDeleteTarget(row)
+    setSupplierDeleteReason('')
+  }
+
+  function closeSupplierDeleteDialog() {
+    setSupplierDeleteTarget(null)
+    setSupplierDeleteReason('')
+  }
+
+  function confirmSupplierDeleteFromTable() {
+    if (!supplierDeleteTarget || !supplierDeleteReason.trim()) {
+      return
+    }
+
+    deleteSupplier(supplierDeleteTarget)
+    closeSupplierDeleteDialog()
+  }
+
+  function restoreSupplier(row: ContractorSupplierRow) {
+    setSupplierContextMenu(null)
+    setRestoreTarget({ type: 'supplier', item: row })
+  }
+
+  function openSupplierFinancialReport(row: ContractorSupplierRow) {
+    setSupplierContextMenu(null)
+    void row
   }
 
   const saveEmployee = (employee: ContractorStaffRow) => {
@@ -5985,7 +6096,8 @@ function ContractorsPrototypePanel() {
     setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
   }
 
-  const saveService = () => {
+  const saveService = (serviceName: string) => {
+    setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, serviceName]))
   }
 
   const visibleGarages = showDebtorsOnly
@@ -6093,27 +6205,42 @@ function ContractorsPrototypePanel() {
               <span role="columnheader">Телефон</span>
               <span role="columnheader">Почта</span>
               <span role="columnheader">Задолженность</span>
-              <span role="columnheader">Действие</span>
+              <span role="columnheader">Действия</span>
             </div>
-            {visibleSuppliers.map((row) => (
-              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id}>
-                <span role="cell">{row.name}</span>
-                <span role="cell">{row.service}</span>
-                <span role="cell">{row.contactPerson}</span>
-                <span role="cell">{row.phone}</span>
-                <span role="cell">{row.email}</span>
-                <span role="cell" className={row.debt ? 'money-expense' : undefined}>
-                  {row.isDeleted ? 'Удален' : row.debt || 'Нет'}
-                </span>
-                <span role="cell">
-                  {row.isDeleted ? (
-                    <button className="link-button" type="button" onClick={() => setRestoreTarget({ type: 'supplier', item: row })}>Вернуть</button>
-                  ) : (
-                    <button className="link-button" type="button" onClick={() => setModal({ type: 'supplier', item: row })}>Открыть</button>
-                  )}
-                </span>
-              </div>
-            ))}
+            {visibleSuppliers.map((row) => {
+              const primaryContact = getSupplierPrimaryContact(row)
+              return (
+                <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openSupplierContextMenu(event, row)}>
+                  <span role="cell">{row.name}</span>
+                  <span role="cell">{row.service}</span>
+                  <span role="cell">{primaryContact?.fullName ?? row.contactPerson}</span>
+                  <span role="cell">{primaryContact?.phone ?? row.phone}</span>
+                  <span role="cell">{primaryContact?.email ?? row.email}</span>
+                  <span role="cell" className={row.debt ? 'contractors-directory-cell--center money-expense' : 'contractors-directory-cell--center'}>
+                    {row.isDeleted ? 'Удален' : row.debt || 'Нет'}
+                  </span>
+                  <span role="cell" className="contractors-row-actions">
+                    {row.isDeleted ? (
+                      <button className="icon-button" type="button" aria-label={`Восстановить поставщика ${row.name}`} title="Восстановить" onClick={() => restoreSupplier(row)}>
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : (
+                      <>
+                        <button className="icon-button" type="button" aria-label={`Изменить поставщика ${row.name}`} title="Изменить" onClick={() => openSupplierEditor(row)}>
+                          <Pencil size={16} />
+                        </button>
+                        <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет поставщика ${row.name}`} title="Финансовый отчет" onClick={() => openSupplierFinancialReport(row)}>
+                          <FileText size={16} />
+                        </button>
+                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить поставщика ${row.name}`} title="Удалить" onClick={() => openSupplierDeleteDialog(row)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </section>
       ) : null}
@@ -6179,8 +6306,42 @@ function ContractorsPrototypePanel() {
         </div>
       ) : null}
 
+      {supplierContextMenu ? (
+        <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setSupplierContextMenu(null)}>
+          <div
+            className="context-menu contractors-context-menu"
+            role="menu"
+            aria-label={`Действия поставщика ${supplierContextMenu.row.name}`}
+            style={{ left: supplierContextMenu.x, top: supplierContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {supplierContextMenu.row.isDeleted ? (
+              <button type="button" role="menuitem" onClick={() => restoreSupplier(supplierContextMenu.row)}>
+                <RotateCcw size={16} />
+                <span>Восстановить</span>
+              </button>
+            ) : (
+              <>
+                <button type="button" role="menuitem" onClick={() => openSupplierEditor(supplierContextMenu.row)}>
+                  <Pencil size={16} />
+                  <span>Изменить</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => openSupplierFinancialReport(supplierContextMenu.row)}>
+                  <FileText size={16} />
+                  <span>Открыть финансовый отчет</span>
+                </button>
+                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openSupplierDeleteDialog(supplierContextMenu.row)}>
+                  <Trash2 size={16} />
+                  <span>Удалить</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteSupplier} onSave={saveSupplier} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} services={supplierServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onDelete={deleteEmployee} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
@@ -6244,6 +6405,41 @@ function ContractorsPrototypePanel() {
           </section>
         </div>
       ) : null}
+
+      {supplierDeleteTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeSupplierDeleteDialog}>
+          <section ref={supplierDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-table-delete-title" aria-describedby="supplier-table-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="supplier-table-delete-title">Удалить поставщика?</h3>
+                <p>{supplierDeleteTarget.name || 'Поставщик без названия'}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления поставщика" onClick={closeSupplierDeleteDialog}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="supplier-table-delete-description">Поставщик будет скрыт из рабочего списка, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <label className="field-label" htmlFor="supplier-table-delete-reason">Причина удаления</label>
+            <textarea
+              id="supplier-table-delete-reason"
+              aria-label="Причина удаления поставщика"
+              maxLength={1000}
+              value={supplierDeleteReason}
+              onChange={(event) => setSupplierDeleteReason(event.target.value)}
+              placeholder="Например: договор больше не действует"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button danger-button" type="button" onClick={confirmSupplierDeleteFromTable} disabled={!supplierDeleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить поставщика</span>
+              </button>
+              <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" onClick={closeSupplierDeleteDialog}>Отмена</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -6277,6 +6473,7 @@ function createEmptySupplierPrototype(): ContractorSupplierRow {
     contactPerson: '',
     phone: '',
     email: '',
+    contacts: [],
     debt: '',
     comment: '',
     isDeleted: false,
@@ -6332,9 +6529,7 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
     createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
     createPrototypeChangeEntry('Задолженность', previous.debt, next.debt),
     createPrototypeChangeEntry('Юридический адрес', previous.legalAddress, next.legalAddress),
-    createPrototypeChangeEntry('Контактное лицо', previous.contactPerson, next.contactPerson),
-    createPrototypeChangeEntry('Телефон', previous.phone, next.phone),
-    createPrototypeChangeEntry('Почта', previous.email, next.email),
+    createPrototypeChangeEntry('Контакты', formatSupplierContactSummary(previous.contacts), formatSupplierContactSummary(next.contacts)),
     createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
   ])
 }
@@ -6527,21 +6722,17 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
   )
 }
 
-function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: ContractorSupplierRow; onClose: () => void; onDelete: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
-  const [form, setForm] = useState<ContractorSupplierRow>(item ?? createEmptySupplierPrototype())
+function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialReport, onSave }: { item?: ContractorSupplierRow; services: string[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
+  const [form, setForm] = useState<ContractorSupplierRow>(item ?? { ...createEmptySupplierPrototype(), service: services[0] ?? '' })
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
-  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
-  const [deleteReason, setDeleteReason] = useState('')
+  const [contactContextMenu, setContactContextMenu] = useState<{ contact: ContractorSupplierContact; x: number; y: number } | null>(null)
   useRestoreFocusOnClose(true)
-  useRestoreFocusOnClose(Boolean(deleteConfirmationOpen))
-  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
-  const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
-  const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
-  useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
+  useEscapeKey(saveChanges.length === 0, onClose)
+  useEscapeKey(Boolean(contactContextMenu), () => setContactContextMenu(null))
 
   function saveAndClose() {
-    onSave(form)
+    onSave(normalizeSupplierPrototype(form))
     setSaveChanges([])
     onClose()
   }
@@ -6563,103 +6754,138 @@ function SupplierPrototypeDialog({ item, onClose, onDelete, onSave }: { item?: C
     setSaveChanges(changes)
   }
 
-  function closeDeleteConfirmation() {
-    setDeleteConfirmationOpen(false)
-    setDeleteReason('')
+  function addContact() {
+    setForm((currentForm) => ({ ...currentForm, contacts: [...currentForm.contacts, createEmptySupplierContact()] }))
   }
 
-  function confirmSupplierDelete() {
-    if (!item || !deleteReason.trim()) {
-      return
-    }
-
-    onDelete(item)
-    closeDeleteConfirmation()
-    onClose()
+  function updateContact(contactId: string, patch: Partial<ContractorSupplierContact>) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      contacts: currentForm.contacts.map((contact) => (contact.id === contactId ? { ...contact, ...patch } : contact)),
+    }))
   }
+
+  function openContactContextMenu(event: MouseEvent<HTMLDivElement>, contact: ContractorSupplierContact) {
+    event.preventDefault()
+    setContactContextMenu({ contact, x: event.clientX, y: event.clientY })
+  }
+
+  function deleteContact(contact: ContractorSupplierContact) {
+    setContactContextMenu(null)
+    updateContact(contact.id, { isDeleted: true, status: 'Не работает' })
+  }
+
+  function restoreContact(contact: ContractorSupplierContact) {
+    setContactContextMenu(null)
+    setForm((currentForm) => ({
+      ...currentForm,
+      isDeleted: false,
+      contacts: currentForm.contacts.map((itemContact) => (itemContact.id === contact.id ? { ...itemContact, isDeleted: false, status: 'Работает' } : itemContact)),
+    }))
+  }
+
+  const availableServices = getSupplierServiceOptions([...services, form.service])
 
   return (
     <>
       <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="supplier-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide contractors-dialog--supplier" role="dialog" aria-modal="true" aria-labelledby="supplier-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
-            <FormField label="Услуга"><input aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })} /></FormField>
+            <FormField label="Услуга">
+              <select aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })}>
+                <option value="">Выберите услугу</option>
+                {availableServices.map((service) => (
+                  <option value={service} key={service}>{service}</option>
+                ))}
+              </select>
+            </FormField>
             <div className="contractors-modal-grid">
               <FormField label="ИНН"><input aria-label="ИНН поставщика" value={form.inn} onChange={(event) => setForm({ ...form, inn: event.target.value })} /></FormField>
               <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt} onChange={(event) => setForm({ ...form, debt: event.target.value })} /></FormField>
             </div>
             <FormField label="Юр. адрес"><input aria-label="Юридический адрес поставщика" value={form.legalAddress} onChange={(event) => setForm({ ...form, legalAddress: event.target.value })} /></FormField>
-            <div className="contractors-contacts-preview" role="table" aria-label="Контакты поставщика">
-              <div className="contractors-contacts-row contractors-contacts-row--header" role="row">
+            <div className="contractors-contacts-toolbar">
+              <span>Контакты</span>
+              <button className="secondary-button" type="button" onClick={addContact}>Добавить контакт</button>
+            </div>
+            <div className="contractors-contacts-preview contractors-contacts-preview--editable" role="table" aria-label="Контакты поставщика">
+              <div className="contractors-contacts-row contractors-contacts-row--header contractors-contacts-row--editable" role="row">
+                <span role="columnheader">№</span>
                 <span role="columnheader">ФИО</span>
+                <span role="columnheader">Должность</span>
                 <span role="columnheader">Телефон</span>
                 <span role="columnheader">Почта</span>
+                <span role="columnheader">Статус</span>
+                <span role="columnheader">Комментарий</span>
               </div>
-              <div className="contractors-contacts-row" role="row">
-                <span role="cell">{form.contactPerson || 'Пусто'}</span>
-                <span role="cell">{form.phone || 'Пусто'}</span>
-                <span role="cell">{form.email || 'Пусто'}</span>
-              </div>
-            </div>
-            <button className="secondary-button contractors-inline-action" type="button">Добавить контакт</button>
-            <FormField label="Контактное лицо"><input aria-label="Контактное лицо поставщика" value={form.contactPerson} onChange={(event) => setForm({ ...form, contactPerson: event.target.value })} /></FormField>
-            <div className="contractors-modal-grid">
-              <FormField label="Телефон"><input aria-label="Телефон поставщика" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
-              <FormField label="Почта"><input aria-label="Почта поставщика" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
+              {form.contacts.length === 0 ? (
+                <div className="contractors-contacts-row contractors-contacts-row--editable contractors-contacts-row--empty" role="row">
+                  <span role="cell">Контакты пока не добавлены</span>
+                </div>
+              ) : form.contacts.map((contact, index) => (
+                <div className={contact.isDeleted ? 'contractors-contacts-row contractors-contacts-row--editable contractors-contacts-row--deleted' : 'contractors-contacts-row contractors-contacts-row--editable'} role="row" key={contact.id} onContextMenu={(event) => openContactContextMenu(event, contact)}>
+                  <span role="cell">{index + 1}</span>
+                  <span role="cell"><input aria-label={`Контакт ${index + 1}: ФИО`} value={contact.fullName} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { fullName: event.target.value })} /></span>
+                  <span role="cell"><input aria-label={`Контакт ${index + 1}: должность`} value={contact.position} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { position: event.target.value })} /></span>
+                  <span role="cell"><input aria-label={`Контакт ${index + 1}: телефон`} value={contact.phone} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { phone: event.target.value })} /></span>
+                  <span role="cell"><input aria-label={`Контакт ${index + 1}: почта`} value={contact.email} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { email: event.target.value })} /></span>
+                  <span role="cell">
+                    <select aria-label={`Контакт ${index + 1}: статус`} value={contact.status} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { status: event.target.value as ContractorSupplierContact['status'] })}>
+                      <option>Работает</option>
+                      <option>Не работает</option>
+                    </select>
+                  </span>
+                  <span role="cell"><input aria-label={`Контакт ${index + 1}: комментарий`} value={contact.comment} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { comment: event.target.value })} /></span>
+                </div>
+              ))}
             </div>
             <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button className="secondary-button" type="button">Открыть фин. отчет</button>
+            <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
+              <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                <FileText size={16} />
+                <span>Открыть фин. отчет</span>
+              </button>
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-              <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
-              {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить поставщика</button> : null}
+              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
             </div>
           </form>
         </section>
       </div>
 
-      {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Поставщик'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения поставщика" />
+      {contactContextMenu ? (
+        <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setContactContextMenu(null)}>
+          <div
+            className="context-menu contractors-context-menu"
+            role="menu"
+            aria-label={`Действия контакта ${contactContextMenu.contact.fullName || 'без ФИО'}`}
+            style={{ left: contactContextMenu.x, top: contactContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {contactContextMenu.contact.isDeleted ? (
+              <>
+                <p className="context-menu-hint">При восстановлении контакта будет восстановлен и поставщик.</p>
+                <button type="button" role="menuitem" onClick={() => restoreContact(contactContextMenu.contact)}>
+                  <RotateCcw size={16} />
+                  <span>Восстановить контакт</span>
+                </button>
+              </>
+            ) : (
+              <button className="context-menu-danger" type="button" role="menuitem" onClick={() => deleteContact(contactContextMenu.contact)}>
+                <Trash2 size={16} />
+                <span>Удалить контакт</span>
+              </button>
+            )}
+          </div>
+        </div>
       ) : null}
 
-      {item && deleteConfirmationOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
-          <section ref={deleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-delete-title" aria-describedby="supplier-delete-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Удаление</p>
-                <h3 id="supplier-delete-title">Удалить поставщика?</h3>
-                <p>{item.name}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления поставщика" onClick={closeDeleteConfirmation}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="supplier-delete-description">Поставщик будет скрыт из рабочего списка контрагентов. Укажите причину, чтобы действие можно было проверить позже.</p>
-            <label className="field-label" htmlFor="supplier-delete-reason">Причина удаления</label>
-            <textarea
-              id="supplier-delete-reason"
-              aria-label="Причина удаления поставщика"
-              maxLength={1000}
-              value={deleteReason}
-              onChange={(event) => setDeleteReason(event.target.value)}
-              placeholder="Например: договор больше не действует"
-              required
-            />
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmSupplierDelete} disabled={!deleteReason.trim()}>
-                <Trash2 size={16} />
-                <span>Удалить поставщика</span>
-              </button>
-            </div>
-          </section>
-        </div>
+      {item && saveChanges.length > 0 ? (
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Поставщик'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения поставщика" />
       ) : null}
     </>
   )
