@@ -591,6 +591,14 @@ public sealed class FinanceServiceTests
         Assert.Contains("стало 450,00 по гаражу 12 от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ PKO-new", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Исправлена сумма", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("financial_operation", metadata.RootElement.GetProperty("financeEntityType").GetString());
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Дата операции", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Сумма", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Документ", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
+        Assert.Equal("4", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]
@@ -785,6 +793,14 @@ public sealed class FinanceServiceTests
         Assert.Contains("стало 400,00 поставщику Vodokanal от 21.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ RKO-new", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Исправлена выплата", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("financial_operation", metadata.RootElement.GetProperty("financeEntityType").GetString());
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Дата операции", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Сумма", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Документ", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
+        Assert.Equal("4", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]
@@ -953,6 +969,13 @@ public sealed class FinanceServiceTests
         Assert.Contains("источник manual; комментарий Исходная ручная сумма", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("стало 750,00 по гаражу 12 за 07.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual; комментарий Исправили после сверки", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("accrual", metadata.RootElement.GetProperty("financeEntityType").GetString());
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Расчетный месяц", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Сумма", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
+        Assert.Equal("3", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]
@@ -1142,6 +1165,14 @@ public sealed class FinanceServiceTests
         Assert.Contains("источник manual; документ INV-old; комментарий Исходный счет", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("стало 1250,00 поставщику Vodokanal за 07.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual; документ INV-new; комментарий Уточненный счет", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("supplier_accrual", metadata.RootElement.GetProperty("financeEntityType").GetString());
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Расчетный месяц", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Сумма", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Документ", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
+        Assert.Equal("4", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]
@@ -1578,6 +1609,40 @@ public sealed class FinanceServiceTests
         Assert.Equal(15.556m, result.Value!.CurrentValue);
         Assert.Equal(10.001m, result.Value.PreviousValue);
         Assert.Equal(5.555m, result.Value.Consumption);
+    }
+
+    [Fact]
+    public async Task UpdateMeterReadingAsync_WritesChangedFieldsAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Первичное показание"),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateMeterReadingAsync(
+            created.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 18m, "Исправили после сверки"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(18m, result.Value!.CurrentValue);
+        Assert.Equal(8m, result.Value.Consumption);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("meter_reading", metadata.RootElement.GetProperty("financeEntityType").GetString());
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Текущее показание", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Расход", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
+        Assert.Equal("3", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]

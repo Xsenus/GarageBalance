@@ -16,6 +16,25 @@ public sealed class FinanceService(
     private const int MaxListLimit = 500;
     private const int MaxBalanceHistoryMonths = 60;
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
+    private static readonly IReadOnlyDictionary<string, string> FinanceFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["operationDate"] = "Дата операции",
+        ["accountingMonth"] = "Расчетный месяц",
+        ["amount"] = "Сумма",
+        ["documentNumber"] = "Документ",
+        ["comment"] = "Комментарий",
+        ["garage"] = "Гараж",
+        ["supplier"] = "Поставщик",
+        ["incomeType"] = "Вид поступления",
+        ["expenseType"] = "Вид выплаты",
+        ["source"] = "Источник",
+        ["meterKind"] = "Тип счетчика",
+        ["readingDate"] = "Дата показания",
+        ["currentValue"] = "Текущее показание",
+        ["previousValue"] = "Предыдущее показание",
+        ["consumption"] = "Расход",
+        ["hasGapWarning"] = "Разрыв истории"
+    };
 
     public FinanceService(GarageBalanceDbContext dbContext)
         : this(dbContext, new AuditEventWriter(dbContext))
@@ -414,6 +433,26 @@ public sealed class FinanceService(
         }
 
         var previousSnapshot = FormatIncomeOperationSnapshot(operation);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = operation.OperationDate,
+            ["accountingMonth"] = operation.AccountingMonth,
+            ["amount"] = operation.Amount,
+            ["documentNumber"] = operation.DocumentNumber,
+            ["comment"] = operation.Comment,
+            ["garage"] = operation.Garage?.Number,
+            ["incomeType"] = operation.IncomeType?.Name
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = request.OperationDate,
+            ["accountingMonth"] = accountingMonth,
+            ["amount"] = amount,
+            ["documentNumber"] = documentNumber,
+            ["comment"] = comment,
+            ["garage"] = garage.Number,
+            ["incomeType"] = incomeType.Name
+        };
         operation.OperationDate = request.OperationDate;
         operation.AccountingMonth = accountingMonth;
         operation.Amount = amount;
@@ -424,7 +463,7 @@ public sealed class FinanceService(
         operation.IncomeTypeId = incomeType.Id;
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.income_updated", operation, FormatIncomeUpdatedAuditSummary(previousSnapshot, operation));
+        AddAudit(actorUserId, "finance.income_updated", operation, FormatIncomeUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -477,6 +516,26 @@ public sealed class FinanceService(
         }
 
         var previousSnapshot = FormatExpenseOperationSnapshot(operation);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = operation.OperationDate,
+            ["accountingMonth"] = operation.AccountingMonth,
+            ["amount"] = operation.Amount,
+            ["documentNumber"] = operation.DocumentNumber,
+            ["comment"] = operation.Comment,
+            ["supplier"] = operation.Supplier?.Name,
+            ["expenseType"] = operation.ExpenseType?.Name
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = request.OperationDate,
+            ["accountingMonth"] = accountingMonth,
+            ["amount"] = amount,
+            ["documentNumber"] = documentNumber,
+            ["comment"] = comment,
+            ["supplier"] = supplier.Name,
+            ["expenseType"] = expenseType.Name
+        };
         operation.OperationDate = request.OperationDate;
         operation.AccountingMonth = accountingMonth;
         operation.Amount = amount;
@@ -487,7 +546,7 @@ public sealed class FinanceService(
         operation.ExpenseTypeId = expenseType.Id;
         operation.ExpenseType = expenseType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation));
+        AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -677,6 +736,24 @@ public sealed class FinanceService(
         }
 
         var before = AccrualAuditSnapshot.From(accrual);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["garage"] = accrual.Garage.Number,
+            ["incomeType"] = accrual.IncomeType.Name,
+            ["accountingMonth"] = accrual.AccountingMonth,
+            ["amount"] = accrual.Amount,
+            ["source"] = accrual.Source,
+            ["comment"] = accrual.Comment
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["garage"] = garage.Number,
+            ["incomeType"] = incomeType.Name,
+            ["accountingMonth"] = month,
+            ["amount"] = amount,
+            ["source"] = source,
+            ["comment"] = comment
+        };
 
         accrual.GarageId = garage.Id;
         accrual.Garage = garage;
@@ -687,7 +764,7 @@ public sealed class FinanceService(
         accrual.Source = source;
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.accrual_updated", accrual, FormatAccrualUpdatedAuditSummary(before, accrual));
+        AddAudit(actorUserId, "finance.accrual_updated", accrual, FormatAccrualUpdatedAuditSummary(before, accrual), oldValues, newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -818,6 +895,26 @@ public sealed class FinanceService(
         }
 
         var before = SupplierAccrualAuditSnapshot.From(accrual);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["supplier"] = accrual.Supplier.Name,
+            ["expenseType"] = accrual.ExpenseType.Name,
+            ["accountingMonth"] = accrual.AccountingMonth,
+            ["amount"] = accrual.Amount,
+            ["source"] = accrual.Source,
+            ["documentNumber"] = accrual.DocumentNumber,
+            ["comment"] = accrual.Comment
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["supplier"] = supplier.Name,
+            ["expenseType"] = expenseType.Name,
+            ["accountingMonth"] = month,
+            ["amount"] = amount,
+            ["source"] = source,
+            ["documentNumber"] = documentNumber,
+            ["comment"] = comment
+        };
 
         accrual.SupplierId = supplier.Id;
         accrual.Supplier = supplier;
@@ -829,7 +926,7 @@ public sealed class FinanceService(
         accrual.DocumentNumber = documentNumber;
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.supplier_accrual_updated", accrual, FormatSupplierAccrualUpdatedAuditSummary(before, accrual));
+        AddAudit(actorUserId, "finance.supplier_accrual_updated", accrual, FormatSupplierAccrualUpdatedAuditSummary(before, accrual), oldValues, newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -1228,6 +1325,31 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
         }
 
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["garage"] = reading.Garage.Number,
+            ["meterKind"] = reading.MeterKind,
+            ["accountingMonth"] = reading.AccountingMonth,
+            ["readingDate"] = reading.ReadingDate,
+            ["currentValue"] = reading.CurrentValue,
+            ["previousValue"] = reading.PreviousValue,
+            ["consumption"] = reading.Consumption,
+            ["hasGapWarning"] = reading.HasGapWarning,
+            ["comment"] = reading.Comment
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["garage"] = garage.Number,
+            ["meterKind"] = meterKind,
+            ["accountingMonth"] = month,
+            ["readingDate"] = request.ReadingDate,
+            ["currentValue"] = currentValue,
+            ["previousValue"] = previousValue,
+            ["consumption"] = consumption,
+            ["hasGapWarning"] = hasGapWarning,
+            ["comment"] = comment
+        };
+
         reading.GarageId = garage.Id;
         reading.Garage = garage;
         reading.MeterKind = meterKind;
@@ -1239,7 +1361,7 @@ public sealed class FinanceService(
         reading.HasGapWarning = hasGapWarning;
         reading.Comment = comment;
         reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddAudit(actorUserId, "finance.meter_reading_updated", reading, FormatMeterReadingUpdatedAuditSummary(reading));
+        AddAudit(actorUserId, "finance.meter_reading_updated", reading, FormatMeterReadingUpdatedAuditSummary(reading), oldValues, newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
@@ -1677,7 +1799,13 @@ public sealed class FinanceService(
             cancellationToken);
     }
 
-    private void AddAudit(Guid? actorUserId, string action, FinancialOperation operation, string summary)
+    private void AddAudit(
+        Guid? actorUserId,
+        string action,
+        FinancialOperation operation,
+        string summary,
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        IReadOnlyDictionary<string, object?>? newValues = null)
     {
         var relatedGarageId = operation.GarageId?.ToString();
         var relatedGarageNumber = operation.Garage?.Number;
@@ -1702,10 +1830,18 @@ public sealed class FinanceService(
                 ["operationKind"] = operation.OperationKind,
                 ["operationDate"] = operation.OperationDate,
                 ["amount"] = operation.Amount
-            });
+            },
+            oldValues,
+            newValues);
     }
 
-    private void AddAudit(Guid? actorUserId, string action, Accrual accrual, string summary)
+    private void AddAudit(
+        Guid? actorUserId,
+        string action,
+        Accrual accrual,
+        string summary,
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        IReadOnlyDictionary<string, object?>? newValues = null)
     {
         AddAudit(
             actorUserId,
@@ -1727,10 +1863,18 @@ public sealed class FinanceService(
                 ["incomeTypeName"] = accrual.IncomeType.Name,
                 ["source"] = accrual.Source,
                 ["amount"] = accrual.Amount
-            });
+            },
+            oldValues,
+            newValues);
     }
 
-    private void AddAudit(Guid? actorUserId, string action, SupplierAccrual accrual, string summary)
+    private void AddAudit(
+        Guid? actorUserId,
+        string action,
+        SupplierAccrual accrual,
+        string summary,
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        IReadOnlyDictionary<string, object?>? newValues = null)
     {
         AddAudit(
             actorUserId,
@@ -1752,10 +1896,18 @@ public sealed class FinanceService(
                 ["expenseTypeName"] = accrual.ExpenseType.Name,
                 ["source"] = accrual.Source,
                 ["amount"] = accrual.Amount
-            });
+            },
+            oldValues,
+            newValues);
     }
 
-    private void AddAudit(Guid? actorUserId, string action, MeterReading reading, string summary)
+    private void AddAudit(
+        Guid? actorUserId,
+        string action,
+        MeterReading reading,
+        string summary,
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        IReadOnlyDictionary<string, object?>? newValues = null)
     {
         AddAudit(
             actorUserId,
@@ -1778,7 +1930,9 @@ public sealed class FinanceService(
                 ["currentValue"] = reading.CurrentValue,
                 ["previousValue"] = reading.PreviousValue,
                 ["consumption"] = reading.Consumption
-            });
+            },
+            oldValues,
+            newValues);
     }
 
     private void AddAudit(
@@ -1794,7 +1948,9 @@ public sealed class FinanceService(
         string? relatedGarageNumber = null,
         string? relatedCounterpartyId = null,
         string? relatedCounterpartyName = null,
-        IReadOnlyDictionary<string, object?>? metadata = null)
+        IReadOnlyDictionary<string, object?>? metadata = null,
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        IReadOnlyDictionary<string, object?>? newValues = null)
     {
         var mergedMetadata = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -1816,6 +1972,9 @@ public sealed class FinanceService(
             Summary: summary,
             EntityDisplayName: NormalizeAuditDisplayName(summary),
             Reason: action.Contains("_canceled", StringComparison.Ordinal) ? "Отмена финансовой записи." : null,
+            OldValues: oldValues,
+            NewValues: newValues,
+            FieldLabels: oldValues is null || newValues is null ? null : FinanceFieldLabels,
             Metadata: mergedMetadata,
             RelatedGarageId: relatedGarageId,
             RelatedGarageNumber: relatedGarageNumber,
