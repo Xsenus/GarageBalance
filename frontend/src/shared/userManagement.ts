@@ -1,4 +1,6 @@
 import type { ManagedRoleDto, ManagedUserDto } from '../services/usersApi'
+import type { ChangePreview } from './changePreview'
+import { appendChangePreview, formatChangeText } from './changePreview'
 import { getManagedUserValidationErrors, getPasswordPolicyErrors } from './validation'
 
 export type UserFormState = {
@@ -10,11 +12,7 @@ export type UserFormState = {
   deactivationReason: string
 }
 
-export type UserEditChange = {
-  field: string
-  before: string
-  after: string
-}
+export type UserEditChange = ChangePreview
 
 export function getPrimaryRoleCode(user: ManagedUserDto | undefined, roles: ManagedRoleDto[]) {
   return user?.roles[0] ?? roles[0]?.code ?? ''
@@ -33,13 +31,7 @@ export function getUserEditorChanges(form: UserFormState, user: ManagedUserDto, 
   const nextDisplayName = form.displayName.trim()
   const currentRoleCode = getPrimaryRoleCode(user, roles)
 
-  if (nextDisplayName !== user.displayName) {
-    changes.push({
-      field: 'Имя',
-      before: user.displayName,
-      after: nextDisplayName,
-    })
-  }
+  appendChangePreview(changes, 'Имя', formatChangeText(user.displayName), formatChangeText(nextDisplayName))
 
   if (form.roleCode !== currentRoleCode) {
     changes.push({
@@ -49,20 +41,10 @@ export function getUserEditorChanges(form: UserFormState, user: ManagedUserDto, 
     })
   }
 
-  if (form.isActive !== user.isActive) {
-    changes.push({
-      field: 'Статус',
-      before: getUserStatusLabel(user.isActive),
-      after: getUserStatusLabel(form.isActive),
-    })
-  }
+  appendChangePreview(changes, 'Статус', getUserStatusLabel(user.isActive), getUserStatusLabel(form.isActive))
 
   if (form.password.trim()) {
-    changes.push({
-      field: 'Пароль',
-      before: 'Без изменения',
-      after: 'Будет задан новый пароль',
-    })
+    appendChangePreview(changes, 'Пароль', 'Без изменения', 'Будет задан новый пароль')
   }
 
   return changes
