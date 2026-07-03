@@ -208,6 +208,7 @@ describe('App', () => {
     expect(within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })).toBeInTheDocument()
     expect(within(roleMatrix).getByText('Администратор')).toBeInTheDocument()
     expect(within(roleMatrix).getByText('Бухгалтер')).toBeInTheDocument()
+    expect(within(roleMatrix).getByText('История изменений')).toBeInTheDocument()
     expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы - разрешено' })).toHaveTextContent('Да')
     expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
@@ -2140,7 +2141,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
     expect(archivedOwnerId).toBeNull()
     const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
-    expect(within(deleteDialog).getByText('Запись будет скрыта из рабочих таблиц, но останется в audit-журнале и связанной финансовой истории.')).toBeInTheDocument()
+    expect(within(deleteDialog).getByText('Запись будет скрыта из рабочих таблиц, но останется в истории изменений и связанной финансовой истории.')).toBeInTheDocument()
     const deleteCancelButton = within(deleteDialog).getByRole('button', { name: 'Отмена' })
     const deleteConfirmButton = within(deleteDialog).getByRole('button', { name: 'Удалить запись' })
     const deleteCloseButton = within(deleteDialog).getByRole('button', { name: 'Отменить удаление' })

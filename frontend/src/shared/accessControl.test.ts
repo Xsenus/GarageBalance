@@ -41,7 +41,7 @@ describe('accessControl', () => {
       { label: 'Платежи', permission: permissions.paymentsWrite },
       { label: 'Отчеты', permission: permissions.reportsRead },
       { label: 'Импорт', permission: permissions.importRun },
-      { label: 'Audit', permission: permissions.auditRead },
+      { label: 'История изменений', permission: permissions.auditRead },
       { label: 'Что нового', permission: permissions.appReleasesManage },
     ])
   })

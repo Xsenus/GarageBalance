@@ -13,6 +13,7 @@ public sealed class AdminOperationsGuideTests
         Assert.Contains("reports_viewer", document, StringComparison.Ordinal);
         Assert.Contains("users.manage", document, StringComparison.Ordinal);
         Assert.Contains("audit.read", document, StringComparison.Ordinal);
+        Assert.Contains("История изменений", document, StringComparison.Ordinal);
         Assert.Contains("GET /api/audit/events", document, StringComparison.Ordinal);
         Assert.Contains("GET /api/audit/events/export", document, StringComparison.Ordinal);
         Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);

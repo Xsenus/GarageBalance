@@ -8794,7 +8794,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="dictionary-archive-description">Запись будет скрыта из рабочих таблиц, но останется в audit-журнале и связанной финансовой истории.</p>
+            <p className="confirmation-text" id="dictionary-archive-description">Запись будет скрыта из рабочих таблиц, но останется в истории изменений и связанной финансовой истории.</p>
             <label className="field-label" htmlFor="dictionary-archive-reason">Причина удаления</label>
             <textarea
               id="dictionary-archive-reason"
@@ -9782,7 +9782,7 @@ function DictionaryList({ items, emptyText }: { items: DictionaryListItem[]; emp
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id={`archive-confirmation-description-${pendingArchive.id}`}>Запись исчезнет из рабочих списков, но останется в истории и audit-журнале.</p>
+            <p className="confirmation-text" id={`archive-confirmation-description-${pendingArchive.id}`}>Запись исчезнет из рабочих списков, но останется в истории изменений.</p>
             <label className="field-label" htmlFor={`archive-reason-${pendingArchive.id}`}>Причина архивирования</label>
             <textarea
               id={`archive-reason-${pendingArchive.id}`}

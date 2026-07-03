@@ -26,7 +26,7 @@ public sealed class SecurityDataProtectionPolicyTests
         Assert.Contains("30 календарных дней", document, StringComparison.Ordinal);
         Assert.Contains("Quarantine/error bucket", document, StringComparison.Ordinal);
         Assert.Contains("Bearer token", document, StringComparison.Ordinal);
-        Assert.Contains("CSV-экспорт audit", document, StringComparison.Ordinal);
+        Assert.Contains("CSV-экспорт истории изменений", document, StringComparison.Ordinal);
         Assert.Contains("зашифрованном виде", document, StringComparison.Ordinal);
         Assert.Contains("Rotation ключей", document, StringComparison.Ordinal);
         Assert.Contains("verify-package-privacy.ps1", document, StringComparison.Ordinal);

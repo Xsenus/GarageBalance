@@ -51,7 +51,7 @@ async function requestJson<TResponse>(accessToken: string, path: string): Promis
 
   if (!response.ok) {
     const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось загрузить audit-журнал.')
+    throw new Error(problem?.detail ?? 'Не удалось загрузить историю изменений.')
   }
 
   return response.json()
@@ -66,7 +66,7 @@ async function requestBlob(accessToken: string, path: string): Promise<Blob> {
 
   if (!response.ok) {
     const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось скачать audit-журнал.')
+    throw new Error(problem?.detail ?? 'Не удалось скачать историю изменений.')
   }
 
   return response.blob()

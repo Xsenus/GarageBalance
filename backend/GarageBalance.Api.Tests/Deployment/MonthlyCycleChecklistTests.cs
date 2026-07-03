@@ -26,7 +26,7 @@ public sealed class MonthlyCycleChecklistTests
         Assert.Contains("Скачать сводный XLSX", document, StringComparison.Ordinal);
         Assert.Contains("Скачать поступления XLSX/PDF", document, StringComparison.Ordinal);
         Assert.Contains("Скачать выплаты XLSX/PDF", document, StringComparison.Ordinal);
-        Assert.Contains("Audit-журнал", document, StringComparison.Ordinal);
+        Assert.Contains("История изменений", document, StringComparison.Ordinal);
         Assert.Contains("Что нового", document, StringComparison.Ordinal);
         Assert.Contains("расширенная приемка до одного месяца", document, StringComparison.Ordinal);
         Assert.Contains("Нельзя переносить данные вручную из Access", document, StringComparison.Ordinal);

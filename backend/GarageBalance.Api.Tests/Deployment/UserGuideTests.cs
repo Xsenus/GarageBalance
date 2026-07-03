@@ -23,7 +23,7 @@ public sealed class UserGuideTests
         Assert.Contains("Платежи", document, StringComparison.Ordinal);
         Assert.Contains("Импорт Access", document, StringComparison.Ordinal);
         Assert.Contains("Отчеты", document, StringComparison.Ordinal);
-        Assert.Contains("Audit-журнал", document, StringComparison.Ordinal);
+        Assert.Contains("История изменений", document, StringComparison.Ordinal);
         Assert.Contains("Что нового", document, StringComparison.Ordinal);
         Assert.Contains("Скачать отчет JSON", document, StringComparison.Ordinal);
         Assert.Contains("Скачать сводный XLSX", document, StringComparison.Ordinal);

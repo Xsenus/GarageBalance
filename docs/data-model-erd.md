@@ -265,7 +265,7 @@ erDiagram
 
 Рабочие endpoints закрываются permission policies; публичными остаются только bootstrap, login и health.
 
-## Audit И Импорт
+## История Изменений И Импорт
 
 - `audit_events` - журнал действий. Индексы: `CreatedAtUtc`, `EntityType + EntityId`. События не должны раскрывать пароли, токены, `.env`, дампы и персональные финансовые выгрузки.
 - `access_import_runs` - dry-run и будущие запуски импорта Access. Индексы: `StartedAtUtc`, `Status`, `ContentSha256`. Полный отчет хранится в `ReportJson` как `jsonb`.
