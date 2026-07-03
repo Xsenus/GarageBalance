@@ -80,12 +80,12 @@ public sealed class ControllerThinnessTests
     }
 
     [Fact]
-    public void DangerousControllerActions_RequireReasonRequest()
+    public void DangerousControllerActions_RequireConstrainedReasonRequest()
     {
         var offenders = GetControllerActionMethods()
             .Where(IsDangerousActionName)
-            .Where(method => !method.GetParameters().Any(parameter => RequestTypeHasRequiredReason(parameter.ParameterType)))
-            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must require a request body with required Reason.")
+            .Where(method => !method.GetParameters().Any(parameter => RequestTypeHasConstrainedRequiredReason(parameter.ParameterType)))
+            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must require a request body with required Reason limited to 1000 characters.")
             .Order(StringComparer.Ordinal)
             .ToArray();
 
@@ -159,7 +159,7 @@ public sealed class ControllerThinnessTests
             method.Name.StartsWith("Delete", StringComparison.Ordinal);
     }
 
-    private static bool RequestTypeHasRequiredReason(Type type)
+    private static bool RequestTypeHasConstrainedRequiredReason(Type type)
     {
         var requestType = Nullable.GetUnderlyingType(type) ?? type;
         var reasonProperty = requestType.GetProperty("Reason", BindingFlags.Instance | BindingFlags.Public);
@@ -168,9 +168,13 @@ public sealed class ControllerThinnessTests
             .SelectMany(ctor => ctor.GetParameters())
             .FirstOrDefault(parameter => parameter.Name?.Equals("Reason", StringComparison.OrdinalIgnoreCase) == true);
 
+        var maxLength = reasonProperty?.GetCustomAttribute<MaxLengthAttribute>() ??
+            reasonConstructorParameter?.GetCustomAttribute<MaxLengthAttribute>();
+
         return reasonProperty?.PropertyType == typeof(string) &&
             (reasonProperty.GetCustomAttribute<RequiredAttribute>() is not null ||
-                reasonConstructorParameter?.GetCustomAttribute<RequiredAttribute>() is not null);
+                reasonConstructorParameter?.GetCustomAttribute<RequiredAttribute>() is not null) &&
+            maxLength is { Length: > 0 and <= 1000 };
     }
 
     private static string FindApiProjectRoot()
