@@ -281,6 +281,7 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i }))
 
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Тариф на воду')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()

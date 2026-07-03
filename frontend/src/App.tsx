@@ -515,6 +515,8 @@ function Workspace({
     }
   }
 
+  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees'
+
   return (
     <>
       <header className={activeSection === 'dashboard' ? 'topbar topbar--dashboard' : 'topbar'}>
@@ -523,7 +525,7 @@ function Workspace({
             <ArrowLeft size={19} />
           </button>
         ) : null}
-        {activeSection !== 'dashboard' ? (
+        {showTopbarSearch ? (
           <div className="search">
             <Search size={18} />
             <span>Поиск по гаражу, владельцу или поставщику</span>
