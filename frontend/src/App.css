@@ -1002,8 +1002,8 @@ h1 {
 }
 
 .contractors-directory-table--staff .contractors-directory-row {
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(120px, 0.5fr) 96px;
-  min-width: 620px;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(120px, 0.5fr) 132px;
+  min-width: 660px;
 }
 
 .contractors-directory-row--header {

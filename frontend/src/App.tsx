@@ -5897,20 +5897,28 @@ function ContractorsPrototypePanel() {
   const [supplierContextMenu, setSupplierContextMenu] = useState<{ row: ContractorSupplierRow; x: number; y: number } | null>(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState<ContractorSupplierRow | null>(null)
   const [supplierDeleteReason, setSupplierDeleteReason] = useState('')
+  const [employeeContextMenu, setEmployeeContextMenu] = useState<{ row: ContractorStaffRow; x: number; y: number } | null>(null)
+  const [employeeDeleteTarget, setEmployeeDeleteTarget] = useState<ContractorStaffRow | null>(null)
+  const [employeeDeleteReason, setEmployeeDeleteReason] = useState('')
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(supplierDeleteTarget))
+  useRestoreFocusOnClose(Boolean(employeeDeleteTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
   const garageDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageDeleteTarget))
   const supplierDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(supplierDeleteTarget))
   const supplierDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(supplierDeleteTarget))
+  const employeeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(employeeDeleteTarget))
+  const employeeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(employeeDeleteTarget))
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
   useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
   useEscapeKey(Boolean(supplierContextMenu), () => setSupplierContextMenu(null))
   useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
+  useEscapeKey(Boolean(employeeContextMenu), () => setEmployeeContextMenu(null))
+  useEscapeKey(Boolean(employeeDeleteTarget), () => closeEmployeeDeleteDialog())
 
   useEffect(() => {
     saveGarageColumnWidths(garageColumnWidths)
@@ -6073,6 +6081,46 @@ function ContractorsPrototypePanel() {
 
   const deleteEmployee = (employee: ContractorStaffRow) => {
     setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
+  }
+
+  function openEmployeeContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorStaffRow) {
+    event.preventDefault()
+    setEmployeeContextMenu({ row, x: event.clientX, y: event.clientY })
+  }
+
+  function openEmployeeEditor(row: ContractorStaffRow) {
+    setEmployeeContextMenu(null)
+    setModal({ type: 'employee', item: row })
+  }
+
+  function openEmployeeDeleteDialog(row: ContractorStaffRow) {
+    setEmployeeContextMenu(null)
+    setEmployeeDeleteTarget(row)
+    setEmployeeDeleteReason('')
+  }
+
+  function closeEmployeeDeleteDialog() {
+    setEmployeeDeleteTarget(null)
+    setEmployeeDeleteReason('')
+  }
+
+  function confirmEmployeeDeleteFromTable() {
+    if (!employeeDeleteTarget || !employeeDeleteReason.trim()) {
+      return
+    }
+
+    deleteEmployee(employeeDeleteTarget)
+    closeEmployeeDeleteDialog()
+  }
+
+  function restoreEmployee(row: ContractorStaffRow) {
+    setEmployeeContextMenu(null)
+    setRestoreTarget({ type: 'employee', item: row })
+  }
+
+  function openEmployeeFinancialReport(row: ContractorStaffRow) {
+    setEmployeeContextMenu(null)
+    void row
   }
 
   const confirmRestore = () => {
@@ -6252,18 +6300,30 @@ function ContractorsPrototypePanel() {
               <span role="columnheader">ФИО</span>
               <span role="columnheader">Отдел</span>
               <span role="columnheader">Ставка</span>
-              <span role="columnheader">Действие</span>
+              <span role="columnheader">Действия</span>
             </div>
             {visibleStaff.map((row) => (
-              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id}>
+              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
                 <span role="cell">{row.fullName}</span>
                 <span role="cell">{row.department}</span>
                 <span role="cell">{row.isDeleted ? 'Удален' : row.rate}</span>
-                <span role="cell">
+                <span role="cell" className="contractors-row-actions">
                   {row.isDeleted ? (
-                    <button className="link-button" type="button" onClick={() => setRestoreTarget({ type: 'employee', item: row })}>Вернуть</button>
+                    <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
+                      <RotateCcw size={16} />
+                    </button>
                   ) : (
-                    <button className="link-button" type="button" onClick={() => setModal({ type: 'employee', item: row })}>Открыть</button>
+                    <>
+                      <button className="icon-button" type="button" aria-label={`Изменить сотрудника ${row.fullName}`} title="Изменить" onClick={() => openEmployeeEditor(row)}>
+                        <Pencil size={16} />
+                      </button>
+                      <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет сотрудника ${row.fullName}`} title="Финансовый отчет" onClick={() => openEmployeeFinancialReport(row)}>
+                        <FileText size={16} />
+                      </button>
+                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title="Удалить" onClick={() => openEmployeeDeleteDialog(row)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </>
                   )}
                 </span>
               </div>
@@ -6340,10 +6400,44 @@ function ContractorsPrototypePanel() {
         </div>
       ) : null}
 
+      {employeeContextMenu ? (
+        <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setEmployeeContextMenu(null)}>
+          <div
+            className="context-menu contractors-context-menu"
+            role="menu"
+            aria-label={`Действия сотрудника ${employeeContextMenu.row.fullName}`}
+            style={{ left: employeeContextMenu.x, top: employeeContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {employeeContextMenu.row.isDeleted ? (
+              <button type="button" role="menuitem" onClick={() => restoreEmployee(employeeContextMenu.row)}>
+                <RotateCcw size={16} />
+                <span>Восстановить</span>
+              </button>
+            ) : (
+              <>
+                <button type="button" role="menuitem" onClick={() => openEmployeeEditor(employeeContextMenu.row)}>
+                  <Pencil size={16} />
+                  <span>Изменить</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => openEmployeeFinancialReport(employeeContextMenu.row)}>
+                  <FileText size={16} />
+                  <span>Открыть финансовый отчет</span>
+                </button>
+                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openEmployeeDeleteDialog(employeeContextMenu.row)}>
+                  <Trash2 size={16} />
+                  <span>Удалить</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} services={supplierServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
-      {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onDelete={deleteEmployee} onSave={saveEmployee} /> : null}
+      {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 
       {restoreTarget ? (
@@ -6436,6 +6530,41 @@ function ContractorsPrototypePanel() {
                 <span>Удалить поставщика</span>
               </button>
               <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" onClick={closeSupplierDeleteDialog}>Отмена</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {employeeDeleteTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeEmployeeDeleteDialog}>
+          <section ref={employeeDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-table-delete-title" aria-describedby="employee-table-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="employee-table-delete-title">Удалить сотрудника?</h3>
+                <p>{employeeDeleteTarget.fullName || 'Сотрудник без имени'}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления сотрудника" onClick={closeEmployeeDeleteDialog}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="employee-table-delete-description">Сотрудник будет скрыт из рабочего списка персонала, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <label className="field-label" htmlFor="employee-table-delete-reason">Причина удаления</label>
+            <textarea
+              id="employee-table-delete-reason"
+              aria-label="Причина удаления сотрудника"
+              maxLength={1000}
+              value={employeeDeleteReason}
+              onChange={(event) => setEmployeeDeleteReason(event.target.value)}
+              placeholder="Например: сотрудник больше не работает"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button danger-button" type="button" onClick={confirmEmployeeDeleteFromTable} disabled={!employeeDeleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить сотрудника</span>
+              </button>
+              <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" onClick={closeEmployeeDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>
@@ -6604,7 +6733,7 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
   const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
+  useEscapeKey(saveChanges.length === 0, onClose)
   useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
 
   function saveAndClose() {
@@ -6929,18 +7058,12 @@ function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => 
   )
 }
 
-function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onDelete: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
+function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialReport, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onOpenFinancialReport: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
   const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(departments[0]?.name ?? ''))
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
-  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
-  const [deleteReason, setDeleteReason] = useState('')
   useRestoreFocusOnClose(true)
-  useRestoreFocusOnClose(Boolean(deleteConfirmationOpen))
-  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
-  const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
-  const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
-  useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
+  useEscapeKey(saveChanges.length === 0, onClose)
 
   function saveAndClose() {
     onSave(form)
@@ -6965,21 +7088,6 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
     setSaveChanges(changes)
   }
 
-  function closeDeleteConfirmation() {
-    setDeleteConfirmationOpen(false)
-    setDeleteReason('')
-  }
-
-  function confirmEmployeeDelete() {
-    if (!item || !deleteReason.trim()) {
-      return
-    }
-
-    onDelete(item)
-    closeDeleteConfirmation()
-    onClose()
-  }
-
   return (
     <>
       <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -6992,11 +7100,13 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
             <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
             <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{departments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
             <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button className="secondary-button" type="button">Открыть фин. отчет</button>
+            <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
+              <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                <FileText size={16} />
+                <span>Открыть фин. отчет</span>
+              </button>
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-              <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
-              {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить сотрудника</button> : null}
+              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
             </div>
           </form>
         </section>
@@ -7006,40 +7116,6 @@ function EmployeePrototypeDialog({ departments, item, onClose, onDelete, onSave 
         <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.fullName || 'Сотрудник'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения сотрудника" />
       ) : null}
 
-      {item && deleteConfirmationOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
-          <section ref={deleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-delete-title" aria-describedby="employee-delete-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Удаление</p>
-                <h3 id="employee-delete-title">Удалить сотрудника?</h3>
-                <p>{item.fullName}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления сотрудника" onClick={closeDeleteConfirmation}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="employee-delete-description">Сотрудник будет скрыт из рабочего списка персонала. Укажите причину, чтобы действие можно было проверить позже.</p>
-            <label className="field-label" htmlFor="employee-delete-reason">Причина удаления</label>
-            <textarea
-              id="employee-delete-reason"
-              aria-label="Причина удаления сотрудника"
-              maxLength={1000}
-              value={deleteReason}
-              onChange={(event) => setDeleteReason(event.target.value)}
-              placeholder="Например: сотрудник больше не работает"
-              required
-            />
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmEmployeeDelete} disabled={!deleteReason.trim()}>
-                <Trash2 size={16} />
-                <span>Удалить сотрудника</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
     </>
   )
 }
