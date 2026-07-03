@@ -3847,6 +3847,13 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
   const detailDialogRef = useFocusTrap<HTMLElement>(Boolean(detailState))
   const detailRelatedContext = detailState ? getAuditRelatedContext(detailState.event) : []
   const detailWorkspaceTarget = detailState ? getAuditWorkspaceTarget(auth, detailState.event) : null
+  const auditValidationErrors = useMemo(() => {
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      return ['Начало периода истории изменений не может быть позже конца.']
+    }
+
+    return []
+  }, [dateFrom, dateTo])
   const resetAuditPageOffset = useCallback(() => {
     setPage((current) => current.offset === 0 ? current : { ...current, offset: 0 })
   }, [])
@@ -3917,6 +3924,12 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
     let ignore = false
 
     async function load() {
+      if (auditValidationErrors.length > 0) {
+        setLoading(false)
+        setError(null)
+        return
+      }
+
       setLoading(true)
       setError(null)
       try {
@@ -3942,9 +3955,13 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, auditClient, auditQuery, reloadToken])
+  }, [auditValidationErrors, auth.accessToken, auditClient, auditQuery, reloadToken])
 
   async function exportCurrentEventsCsv() {
+    if (auditValidationErrors.length > 0) {
+      return
+    }
+
     setExporting(true)
     setError(null)
     setExportMessage(null)
@@ -3963,6 +3980,10 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
   }
 
   async function exportCurrentEventsXlsx() {
+    if (auditValidationErrors.length > 0) {
+      return
+    }
+
     setExporting(true)
     setError(null)
     setExportMessage(null)
@@ -4006,6 +4027,7 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
       : (loading ? 'Загружаем...' : 'Повторить загрузку')
   const auditVisibleRange = getPageVisibleRange(page)
   const auditNavigation = getPageNavigation(page)
+  const auditHasValidationErrors = auditValidationErrors.length > 0
 
   return (
     <section className="dictionary-panel" aria-label="История изменений">
@@ -4016,11 +4038,11 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
         </div>
         <div className="section-actions">
           <span>{loading ? 'Загрузка...' : `${page.totalCount} событий`}</span>
-          <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEventsCsv}>
+          <button className="secondary-button" type="button" disabled={exporting || auditHasValidationErrors} onClick={exportCurrentEventsCsv}>
             <FileSpreadsheet size={16} />
             Скачать CSV
           </button>
-          <button className="secondary-button" type="button" disabled={exporting} onClick={exportCurrentEventsXlsx}>
+          <button className="secondary-button" type="button" disabled={exporting || auditHasValidationErrors} onClick={exportCurrentEventsXlsx}>
             <FileSpreadsheet size={16} />
             Скачать XLSX
           </button>
@@ -4037,6 +4059,7 @@ function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; 
         </div>
       ) : null}
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
+      <FormValidationSummary title="Проверьте период истории" items={auditValidationErrors} />
 
       <form className="audit-filter-grid" onSubmit={(event) => event.preventDefault()} aria-label="Фильтры истории изменений">
         <FormField label="Поиск">

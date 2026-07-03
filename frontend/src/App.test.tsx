@@ -4188,6 +4188,75 @@ describe('App', () => {
     expect(within(auditTable).getByText('Сводный отчет XLSX')).toBeInTheDocument()
   })
 
+  it('does not call audit APIs when the date range is invalid', async () => {
+    const user = userEvent.setup()
+    let pageCalls = 0
+    const pageRequests: Array<Parameters<AuditClient['getEventsPage']>[1]> = []
+    let csvExportCalls = 0
+    let xlsxExportCalls = 0
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: {
+          ...auth.user,
+          permissions: [...auth.user.permissions, 'audit.read'],
+        },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEventsPage: async (_token, params) => {
+        pageCalls += 1
+        pageRequests.push(params)
+        const event = createAuditEvent({
+          id: 'audit-date-validation',
+          action: 'reports.consolidated_generated',
+          entityType: 'report',
+          summary: 'Сформирован сводный отчет.',
+          section: 'reports',
+          actionKind: 'generate',
+        })
+        return {
+          items: [event],
+          totalCount: 1,
+          offset: params?.offset ?? 0,
+          limit: params?.limit ?? 25,
+        }
+      },
+      exportEvents: async () => {
+        csvExportCalls += 1
+        return new Blob(['createdAtUtc,action\n'], { type: 'text/csv' })
+      },
+      exportEventsXlsx: async () => {
+        xlsxExportCalls += 1
+        return new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    await waitFor(() => expect(pageCalls).toBeGreaterThan(0))
+
+    fireEvent.change(within(auditPanel).getByLabelText('Конец периода истории изменений'), { target: { value: '2026-06-30' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Начало периода истории изменений'), { target: { value: '2026-07-01' } })
+
+    expect(await within(auditPanel).findByText('Проверьте период истории')).toBeInTheDocument()
+    expect(within(auditPanel).getByText('Начало периода истории изменений не может быть позже конца.')).toBeInTheDocument()
+    expect(pageRequests.some((request) => request?.dateFrom === '2026-07-01' && request?.dateTo === '2026-06-30')).toBe(false)
+    expect(within(auditPanel).getByRole('button', { name: /CSV/ })).toBeDisabled()
+    expect(within(auditPanel).getByRole('button', { name: /XLSX/ })).toBeDisabled()
+    expect(csvExportCalls).toBe(0)
+    expect(xlsxExportCalls).toBe(0)
+
+    fireEvent.change(within(auditPanel).getByLabelText('Конец периода истории изменений'), { target: { value: '2026-07-31' } })
+
+    await waitFor(() => expect(pageRequests.some((request) => request?.dateFrom === '2026-07-01' && request?.dateTo === '2026-07-31')).toBe(true))
+    expect(within(auditPanel).queryByText('Проверьте период истории')).not.toBeInTheDocument()
+  })
+
   it('opens audit event detail dialog from the journal table', async () => {
     const user = userEvent.setup()
     let loadedEventId: string | null = null
