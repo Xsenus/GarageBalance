@@ -5439,7 +5439,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
                 <h3 id="user-delete-title">Удалить пользователя</h3>
                 <p>{deleteTarget.displayName} будет отключен и не сможет входить в систему. История изменений сохранится.</p>
               </div>
-              <button ref={deleteCancelRef} className="icon-button" type="button" onClick={() => closeDeleteDialog()} aria-label="Закрыть подтверждение удаления">
+              <button className="icon-button" type="button" onClick={() => closeDeleteDialog()} aria-label="Закрыть подтверждение удаления">
                 <X size={18} />
               </button>
             </div>
@@ -5463,7 +5463,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
             />
             {deleteReasonError ? <p className="form-error" id="user-delete-reason-error">{deleteReasonError}</p> : null}
             <div className="detail-dialog-actions">
-              <button className="ghost-button" type="button" onClick={() => closeDeleteDialog()}>Отмена</button>
+              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={() => closeDeleteDialog()}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete' || !deleteReason.trim()}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
