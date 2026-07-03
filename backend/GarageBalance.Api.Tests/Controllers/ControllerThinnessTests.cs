@@ -108,6 +108,22 @@ public sealed class ControllerThinnessTests
         Assert.Empty(offenders);
     }
 
+    [Fact]
+    public void StateChangingControllerActions_DoNotUseSafeHttpMethods()
+    {
+        var safeHttpMethods = new[] { "GET", "HEAD", "OPTIONS", "TRACE" };
+        var offenders = GetControllerActionMethods()
+            .Where(IsStateChangingActionName)
+            .SelectMany(method => method.GetCustomAttributes<HttpMethodAttribute>(inherit: true)
+                .SelectMany(attribute => attribute.HttpMethods)
+                .Where(httpMethod => safeHttpMethods.Contains(httpMethod, StringComparer.OrdinalIgnoreCase))
+                .Select(httpMethod => $"{method.DeclaringType!.Name}.{method.Name} uses safe HTTP method {httpMethod}."))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
     private static IEnumerable<Type> GetControllerTypes()
     {
         return typeof(AuthController).Assembly
@@ -173,6 +189,27 @@ public sealed class ControllerThinnessTests
         return method.Name.StartsWith("Archive", StringComparison.Ordinal) ||
             method.Name.StartsWith("Cancel", StringComparison.Ordinal) ||
             method.Name.StartsWith("Delete", StringComparison.Ordinal);
+    }
+
+    private static bool IsStateChangingActionName(MethodInfo method)
+    {
+        var stateChangingPrefixes = new[]
+        {
+            "Archive",
+            "Bootstrap",
+            "Cancel",
+            "Change",
+            "Create",
+            "Delete",
+            "DryRun",
+            "Generate",
+            "Login",
+            "Resolve",
+            "Restore",
+            "Update"
+        };
+
+        return stateChangingPrefixes.Any(prefix => method.Name.StartsWith(prefix, StringComparison.Ordinal));
     }
 
     private static bool RequestParameterHasConstrainedRequiredReasonFromBody(ParameterInfo parameter)
