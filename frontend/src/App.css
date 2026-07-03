@@ -2153,11 +2153,25 @@ h1 {
   font-size: 16px;
 }
 
-.dictionary-form input,
+.dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file']),
 .dictionary-form select,
 .dictionary-form textarea,
-.audit-filter-grid input,
-.audit-filter-grid select {
+.dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.dictionary-modal-form select,
+.dictionary-modal-form textarea,
+.payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.payments-prototype-modal-form select,
+.payments-prototype-modal-form textarea,
+.report-filter input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.report-filter select,
+.balance-history-filters input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.balance-history-filters select,
+.finance-period-filter input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.audit-filter-grid select,
+.detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.detail-dialog textarea {
   width: 100%;
   min-height: 40px;
   border: 1px solid #d0d5dd;
@@ -2192,6 +2206,25 @@ h1 {
   appearance: auto;
   background-image: none;
   padding-right: 10px;
+}
+
+.dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.dictionary-form textarea:disabled,
+.dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.dictionary-modal-form textarea:disabled,
+.payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.payments-prototype-modal-form textarea:disabled,
+.report-filter input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.balance-history-filters input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.finance-period-filter input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
+.detail-dialog textarea:disabled {
+  cursor: not-allowed;
+  background-color: #f8fafc;
+  color: #667085;
+  opacity: 0.72;
 }
 
 .dictionary-form select:disabled,
@@ -2320,16 +2353,33 @@ h1 {
   overflow-wrap: anywhere;
 }
 
-.dictionary-form textarea {
+.dictionary-form textarea,
+.dictionary-modal-form textarea,
+.payments-prototype-modal-form textarea,
+.detail-dialog textarea {
   min-height: 74px;
   resize: vertical;
 }
 
-.dictionary-form input:focus,
+.dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
 .dictionary-form select:focus,
 .dictionary-form textarea:focus,
-.audit-filter-grid input:focus,
-.audit-filter-grid select:focus {
+.dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.dictionary-modal-form select:focus,
+.dictionary-modal-form textarea:focus,
+.payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.payments-prototype-modal-form select:focus,
+.payments-prototype-modal-form textarea:focus,
+.report-filter input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.report-filter select:focus,
+.balance-history-filters input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.balance-history-filters select:focus,
+.finance-period-filter input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.audit-filter-grid select:focus,
+.detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.detail-dialog textarea:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }

@@ -82,8 +82,10 @@ describe('accessible dynamic messages', () => {
       expect(appCss).toContain(`${selector}::-webkit-calendar-picker-indicator`)
     }
 
-    expect(appCss).toContain('.audit-filter-grid input,\n.audit-filter-grid select')
-    expect(appCss).toContain('.audit-filter-grid input:focus,\n.audit-filter-grid select:focus')
+    expect(appCss).toContain(".audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file'])")
+    expect(appCss).toContain('.audit-filter-grid select')
+    expect(appCss).toContain(".audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']):focus")
+    expect(appCss).toContain('.audit-filter-grid select:focus')
     expect(appCss).toContain('.meter-readings-control[aria-invalid=\'true\']')
 
     expect(appSource).toContain('function isValidMeterReadingYear(value: string)')
@@ -136,6 +138,54 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('Выберите поставщика')
     expect(appSource).toContain('Выберите тариф')
     expect(appSource).toContain('Все')
+  })
+
+  it('keeps text inputs and textareas consistently styled and labeled', () => {
+    const textInputStyleContainers = [
+      ".dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".report-filter input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".balance-history-filters input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".finance-period-filter input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+      ".detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file'])",
+    ]
+    const textareaStyleContainers = [
+      '.dictionary-form textarea',
+      '.dictionary-modal-form textarea',
+      '.payments-prototype-modal-form textarea',
+      '.detail-dialog textarea',
+    ]
+
+    for (const selector of [...textInputStyleContainers, ...textareaStyleContainers]) {
+      expect(appCss).toContain(selector)
+      expect(appCss).toContain(`${selector}:disabled`)
+      expect(appCss).toContain(`${selector}:focus`)
+    }
+
+    expect(appCss).toContain('min-height: 40px;')
+    expect(appCss).toContain('border: 1px solid #d0d5dd;')
+    expect(appCss).toContain('border-radius: 8px;')
+    expect(appCss).toContain('outline: 3px solid rgba(46, 144, 250, 0.16);')
+    expect(appCss).toContain('min-height: 74px;')
+    expect(appCss).toContain('resize: vertical;')
+    expect(appCss).toContain('cursor: not-allowed;')
+    expect(appCss).toContain('background-color: #f8fafc;')
+
+    const inputOpeningTags = [...appSource.matchAll(/<input\b[\s\S]*?>/g)].map((match) => match[0])
+    const textareaOpeningTags = [...appSource.matchAll(/<textarea\b[\s\S]*?>/g)].map((match) => match[0])
+
+    expect(inputOpeningTags.length).toBeGreaterThan(0)
+    expect(textareaOpeningTags.length).toBeGreaterThan(0)
+    expect(inputOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+    expect(textareaOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+
+    const fieldsWithPlaceholder = [...appSource.matchAll(/<(?:input|textarea)\b[\s\S]*?placeholder=/g)].map((match) => match[0])
+
+    expect(fieldsWithPlaceholder.length).toBeGreaterThan(0)
+    expect(fieldsWithPlaceholder.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
   })
 
   it('keeps report export buttons out of filter form submission', () => {
