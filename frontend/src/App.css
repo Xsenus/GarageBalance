@@ -705,6 +705,11 @@ h1 {
   max-width: 88px;
 }
 
+.contractors-editable-input--title {
+  max-width: 210px;
+  text-align: left;
+}
+
 .contractors-editable-input--day {
   max-width: 72px;
 }

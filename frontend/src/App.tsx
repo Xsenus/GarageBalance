@@ -6628,6 +6628,7 @@ function DepartmentPrototypeDialog({ onClose, onSave }: { onClose: () => void; o
 }
 
 type ContractorTariffDraft = {
+  title: string
   amount: string
   unit: string
   dateDay: string
@@ -6649,9 +6650,9 @@ const contractorTariffMonthOptions = [
   { value: 'дек', label: 'Декабрь', maxDay: 31 },
 ]
 
-function createEditableDrafts(rows: Array<{ id: string; amount?: string; unit?: string; dateDay?: string; dateMonth?: string }>) {
+function createEditableDrafts(rows: Array<{ id: string; title?: string; amount?: string; unit?: string; dateDay?: string; dateMonth?: string }>) {
   return rows.reduce<Record<string, ContractorTariffDraft>>((drafts, row) => {
-    drafts[row.id] = { amount: row.amount ?? '', unit: row.unit ?? '', dateDay: row.dateDay ?? '', dateMonth: row.dateMonth ?? '' }
+    drafts[row.id] = { title: row.title ?? '', amount: row.amount ?? '', unit: row.unit ?? '', dateDay: row.dateDay ?? '', dateMonth: row.dateMonth ?? '' }
     return drafts
   }, {})
 }
@@ -6691,7 +6692,7 @@ type TariffPrototypePendingChange =
   | {
     kind: 'tariff-text'
     rowId: string
-    field: 'amount' | 'unit'
+    field: 'title' | 'amount' | 'unit'
     objectName: string
     fieldLabel: string
     previousValue: string
@@ -6835,7 +6836,7 @@ function TariffsAndFeesPrototypePanel() {
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
-  const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit') => {
+  const commitTariffTextChange = (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') => {
     const nextValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
     const previousValue = row[field] ?? ''
 
@@ -6862,14 +6863,14 @@ function TariffsAndFeesPrototypePanel() {
       rowId: row.id,
       field,
       objectName: `${row.category}: ${row.title}`,
-      fieldLabel: field === 'amount' ? 'Значение' : 'Единица',
+      fieldLabel: field === 'title' ? 'Наименование порога' : field === 'amount' ? 'Значение' : 'Единица',
       previousValue,
       nextValue,
     })
   }
 
   const commitTariffDateChange = (row: ContractorTariffRow) => {
-    const draft = tariffDrafts[row.id] ?? { amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
+    const draft = tariffDrafts[row.id] ?? { title: row.title, amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
     const nextDay = draft.dateDay.trim().padStart(2, '0')
     const nextMonth = draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value
     const dateError = getContractorTariffDateError(nextDay, nextMonth)
@@ -7049,7 +7050,7 @@ function TariffsAndFeesPrototypePanel() {
         ...currentRows.slice(overdueIndex),
       ]
     })
-    setTariffDrafts((drafts) => ({ ...drafts, [nextRow.id]: { amount: '', unit: nextRow.unit ?? '', dateDay: '', dateMonth: '' } }))
+    setTariffDrafts((drafts) => ({ ...drafts, [nextRow.id]: { title: nextRow.title, amount: '', unit: nextRow.unit ?? '', dateDay: '', dateMonth: '' } }))
   }
 
   const lastElectricityThresholdRowId = [...tariffRows]
@@ -7088,7 +7089,17 @@ function TariffsAndFeesPrototypePanel() {
                 <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row">
                   <span role="cell">
                     {row.group ? <strong>{row.group}</strong> : null}
-                    <span>{row.title}</span>
+                    {row.threshold ? (
+                      <input
+                        aria-label={`${row.category}: ${row.title}: наименование`}
+                        className="contractors-editable-input contractors-editable-input--title"
+                        value={tariffDrafts[row.id]?.title ?? row.title}
+                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], title: event.target.value } }))}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'title'))}
+                      />
+                    ) : (
+                      <span>{row.title}</span>
+                    )}
                   </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.threshold ? <em>{row.threshold}</em> : null}
