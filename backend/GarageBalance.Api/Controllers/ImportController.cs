@@ -30,7 +30,7 @@ public sealed class ImportController(IImportService importService, IImportQuaran
         return Ok(await importQuarantineService.GetOpenItemsAsync(accessImportRunId, cancellationToken, limit));
     }
 
-    [HttpGet("runs/{id:guid}/report")]
+    [HttpPost("runs/{id:guid}/report")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ExportAccessImportRunReport(Guid id, CancellationToken cancellationToken)

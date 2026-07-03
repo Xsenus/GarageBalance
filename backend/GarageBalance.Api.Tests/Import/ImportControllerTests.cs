@@ -10,6 +10,17 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class ImportControllerTests
 {
     [Fact]
+    public void ExportAccessImportRunReport_UsesPostBecauseExportWritesAuditEvent()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.ExportAccessImportRunReport))!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var postAttribute = Assert.Single(attributes.OfType<HttpPostAttribute>());
+        Assert.Equal("runs/{id:guid}/report", postAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpGetAttribute>());
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsBadRequestWhenFileMissing()
     {
         var controller = CreateController(new FakeImportService());

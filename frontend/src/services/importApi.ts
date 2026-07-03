@@ -78,10 +78,12 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
-async function requestBlob(accessToken: string, path: string): Promise<Blob> {
+async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
     },
   })
 
@@ -114,7 +116,7 @@ export const importApi: ImportClient = {
     return requestJson(accessToken, '/api/import/access/dry-run', { method: 'POST', body: formData })
   },
   downloadAccessRunReport(accessToken, runId) {
-    return requestBlob(accessToken, `/api/import/access/runs/${runId}/report`)
+    return requestBlob(accessToken, `/api/import/access/runs/${runId}/report`, { method: 'POST' })
   },
   resolveQuarantineItem(accessToken, itemId, resolutionComment) {
     return requestJson(accessToken, `/api/import/access/quarantine/${itemId}/resolve`, {
