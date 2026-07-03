@@ -709,6 +709,8 @@ h1 {
 .contractors-prototype-tabs {
   display: inline-flex;
   width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
   gap: 4px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
@@ -731,8 +733,12 @@ h1 {
 .contractors-prototype-tabs button.is-active {
   background: #ffffff;
   color: #101828;
-  outline: 0;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.contractors-prototype-tabs button:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
 }
 
 .contractors-bottom-grid {
@@ -1211,6 +1217,8 @@ h1 {
 .meter-readings-tabs {
   display: inline-flex;
   width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
   gap: 4px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
@@ -1233,8 +1241,12 @@ h1 {
 .meter-readings-tabs button.is-active {
   background: #ffffff;
   color: #101828;
-  outline: 0;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.meter-readings-tabs button:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
 }
 
 .meter-readings-table-shell {
@@ -1659,6 +1671,13 @@ h1 {
   color: #ffffff;
 }
 
+.payments-prototype-tabs button:focus-visible {
+  background: #101828;
+  color: #ffffff;
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
+}
+
 .payments-prototype-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2076,6 +2095,14 @@ h1 {
   border-color: #2563eb;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.finance-tabs button:focus-visible {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
 }
 
 .finance-tabs button span {
@@ -2684,6 +2711,13 @@ h1 {
 .dictionary-subnav button.is-active {
   background: #eef4ff;
   color: #1849a9;
+}
+
+.dictionary-subnav button:focus-visible {
+  background: #eef4ff;
+  color: #1849a9;
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
 }
 
 .dictionary-table-shell {
@@ -3935,12 +3969,17 @@ button.operation-row:hover {
   }
 
   .payments-prototype-tabs,
+  .contractors-prototype-tabs,
+  .meter-readings-tabs,
   .payments-prototype-actions {
     display: grid;
     grid-template-columns: 1fr;
+    width: 100%;
   }
 
-  .payments-prototype-tabs button {
+  .payments-prototype-tabs button,
+  .contractors-prototype-tabs button,
+  .meter-readings-tabs button {
     width: 100%;
   }
 

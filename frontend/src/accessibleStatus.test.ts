@@ -226,6 +226,49 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('Все гаражи')
   })
 
+  it('keeps tabs active focused and responsive', () => {
+    const tabContainers = [
+      '.contractors-prototype-tabs',
+      '.meter-readings-tabs',
+      '.payments-prototype-tabs',
+      '.finance-tabs',
+      '.report-tabs',
+      '.import-tabs',
+    ]
+
+    for (const selector of tabContainers) {
+      expect(appCss).toContain(selector)
+      expect(appCss).toContain(`${selector} button`)
+      expect(appCss).toContain(`${selector} button:hover`)
+      expect(appCss).toContain(`${selector} button.is-active`)
+      expect(appCss).toContain(`${selector} button:focus-visible`)
+    }
+
+    expect(appCss).toContain('.dictionary-subnav button:focus-visible')
+    expect(appCss).toContain('outline: 3px solid rgba(46, 144, 250, 0.18);')
+    expect(appCss).toContain('.contractors-prototype-tabs,\n  .meter-readings-tabs,')
+    expect(appCss).toContain('.payments-prototype-tabs button,\n  .contractors-prototype-tabs button,\n  .meter-readings-tabs button')
+    expect(appCss).toContain('flex-wrap: wrap;')
+    expect(appCss).toContain('grid-template-columns: 1fr;')
+
+    const tabButtonIndexes = [...appSource.matchAll(/role="tab"/g)].map((match) => match.index ?? -1)
+
+    expect(tabButtonIndexes.length).toBeGreaterThan(0)
+
+    for (const roleIndex of tabButtonIndexes) {
+      const buttonStart = appSource.lastIndexOf('<button', roleIndex)
+      const buttonEnd = appSource.indexOf('</button>', roleIndex)
+
+      expect(buttonStart).toBeGreaterThan(-1)
+      expect(buttonEnd).toBeGreaterThan(roleIndex)
+
+      const buttonSource = appSource.slice(buttonStart, buttonEnd)
+      expect(buttonSource).toContain('type="button"')
+      expect(buttonSource).toContain('aria-selected=')
+      expect(buttonSource).toContain('onClick=')
+    }
+  })
+
   it('keeps report export buttons out of filter form submission', () => {
     const reportExportButtons = [
       'Скачать сводный XLSX',
