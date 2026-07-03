@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Controllers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
 
@@ -44,6 +45,20 @@ public sealed class AuditControllerTests
     }
 
     [Fact]
+    public async Task GetEvents_ReturnsBadRequestWhenDateRangeIsInvalid()
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+        var dateFrom = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var dateTo = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
+
+        var result = await controller.GetEvents(dateFrom, dateTo, null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+
+        AssertInvalidDateRangeProblem(result.Result);
+        Assert.Null(service.LastRequest);
+    }
+
+    [Fact]
     public async Task ExportEvents_ReturnsCsvFileAndPassesFiltersToService()
     {
         var service = new FakeAuditService
@@ -80,6 +95,20 @@ public sealed class AuditControllerTests
     }
 
     [Fact]
+    public async Task ExportEvents_ReturnsBadRequestWhenDateRangeIsInvalid()
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+        var dateFrom = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var dateTo = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
+
+        var result = await controller.ExportEvents(dateFrom, dateTo, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+
+        AssertInvalidDateRangeProblem(result);
+        Assert.Null(service.LastRequest);
+    }
+
+    [Fact]
     public async Task ExportEventsXlsx_ReturnsXlsxFileAndPassesFiltersToService()
     {
         var service = new FakeAuditService
@@ -113,6 +142,20 @@ public sealed class AuditControllerTests
         Assert.Equal("2026-06", service.LastRequest.RelatedAccountingMonth);
         Assert.Equal("supplier-1", service.LastRequest.RelatedCounterparty);
         Assert.Equal("PAY-1", service.LastRequest.RelatedDocument);
+    }
+
+    [Fact]
+    public async Task ExportEventsXlsx_ReturnsBadRequestWhenDateRangeIsInvalid()
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+        var dateFrom = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var dateTo = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
+
+        var result = await controller.ExportEventsXlsx(dateFrom, dateTo, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+
+        AssertInvalidDateRangeProblem(result);
+        Assert.Null(service.LastRequest);
     }
 
     [Fact]
@@ -179,6 +222,29 @@ public sealed class AuditControllerTests
         Assert.Equal("2026-06", service.LastRequest.RelatedAccountingMonth);
         Assert.Equal("supplier-1", service.LastRequest.RelatedCounterparty);
         Assert.Equal("PAY-1", service.LastRequest.RelatedDocument);
+    }
+
+    [Fact]
+    public async Task GetEventsPage_ReturnsBadRequestWhenDateRangeIsInvalid()
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+        var dateFrom = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero);
+        var dateTo = new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero);
+
+        var result = await controller.GetEventsPage(dateFrom, dateTo, null, null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+
+        AssertInvalidDateRangeProblem(result.Result);
+        Assert.Null(service.LastRequest);
+    }
+
+    private static void AssertInvalidDateRangeProblem(IActionResult? result)
+    {
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
+        Assert.Equal("Проверьте период истории", problem.Title);
+        Assert.Equal("Начало периода истории изменений не может быть позже конца.", problem.Detail);
     }
 
     private sealed class FakeAuditService : IAuditService
