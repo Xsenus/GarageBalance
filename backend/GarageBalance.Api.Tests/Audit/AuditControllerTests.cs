@@ -238,13 +238,33 @@ public sealed class AuditControllerTests
         Assert.Null(service.LastRequest);
     }
 
+    [Theory]
+    [InlineData(-1, 25, "Смещение страницы истории не может быть отрицательным.")]
+    [InlineData(0, 0, "Количество строк истории должно быть от 1 до 500.")]
+    [InlineData(0, 501, "Количество строк истории должно быть от 1 до 500.")]
+    public async Task GetEventsPage_ReturnsBadRequestWhenPagingIsInvalid(int offset, int limit, string expectedDetail)
+    {
+        var service = new FakeAuditService();
+        var controller = new AuditController(service);
+
+        var result = await controller.GetEventsPage(null, null, null, null, offset, limit, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+
+        AssertProblem(result.Result, "Проверьте пагинацию истории", expectedDetail);
+        Assert.Null(service.LastRequest);
+    }
+
     private static void AssertInvalidDateRangeProblem(IActionResult? result)
+    {
+        AssertProblem(result, "Проверьте период истории", "Начало периода истории изменений не может быть позже конца.");
+    }
+
+    private static void AssertProblem(IActionResult? result, string title, string detail)
     {
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
         Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
-        Assert.Equal("Проверьте период истории", problem.Title);
-        Assert.Equal("Начало периода истории изменений не может быть позже конца.", problem.Detail);
+        Assert.Equal(title, problem.Title);
+        Assert.Equal(detail, problem.Detail);
     }
 
     private sealed class FakeAuditService : IAuditService

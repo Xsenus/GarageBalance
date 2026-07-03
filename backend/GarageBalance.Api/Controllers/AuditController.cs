@@ -12,6 +12,8 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
 {
     private const string InvalidDateRangeTitle = "Проверьте период истории";
     private const string InvalidDateRangeDetail = "Начало периода истории изменений не может быть позже конца.";
+    private const string InvalidPaginationTitle = "Проверьте пагинацию истории";
+    private const int MaxPageLimit = 500;
 
     [HttpGet("events")]
     [ProducesResponseType<IReadOnlyList<AuditEventDto>>(StatusCodes.Status200OK)]
@@ -67,6 +69,12 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
         if (invalidDateRange is not null)
         {
             return invalidDateRange;
+        }
+
+        var invalidPaging = ValidatePaging(offset, limit);
+        if (invalidPaging is not null)
+        {
+            return invalidPaging;
         }
 
         return Ok(await auditService.GetEventsPageAsync(new AuditEventListRequest(dateFrom, dateTo, action, search, limit, section, actionKind, entityType, actorUserId, quickFilter, offset, relatedGarage, relatedAccountingMonth, relatedCounterparty, relatedDocument), cancellationToken));
@@ -143,14 +151,34 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
     {
         if (dateFrom.HasValue && dateTo.HasValue && dateFrom.Value > dateTo.Value)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Title = InvalidDateRangeTitle,
-                Detail = InvalidDateRangeDetail,
-                Status = StatusCodes.Status400BadRequest,
-            });
+            return CreateBadRequestProblem(InvalidDateRangeTitle, InvalidDateRangeDetail);
         }
 
         return null;
+    }
+
+    private BadRequestObjectResult? ValidatePaging(int? offset, int? limit)
+    {
+        if (offset is < 0)
+        {
+            return CreateBadRequestProblem(InvalidPaginationTitle, "Смещение страницы истории не может быть отрицательным.");
+        }
+
+        if (limit is <= 0 or > MaxPageLimit)
+        {
+            return CreateBadRequestProblem(InvalidPaginationTitle, $"Количество строк истории должно быть от 1 до {MaxPageLimit}.");
+        }
+
+        return null;
+    }
+
+    private BadRequestObjectResult CreateBadRequestProblem(string title, string detail)
+    {
+        return BadRequest(new ProblemDetails
+        {
+            Title = title,
+            Detail = detail,
+            Status = StatusCodes.Status400BadRequest,
+        });
     }
 }
