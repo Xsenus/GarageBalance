@@ -119,6 +119,49 @@ describe('accessible dynamic messages', () => {
     }
   })
 
+  it('keeps action buttons on the shared button style families', () => {
+    const sharedButtonClasses = [
+      'primary-button',
+      'secondary-button',
+      'ghost-button',
+      'icon-button',
+      'danger-button',
+      'link-button',
+      'dashboard-tile',
+      'topbar-back-button',
+      'nav-item',
+      'file-picker-button',
+      'operation-row',
+    ]
+
+    const containerStyledButtonPatterns = [
+      /\srole="(?:tab|menuitem|row)"/,
+      /className=\{activeTab ===/,
+      /className=\{activeSection === section/,
+      /className=\{section\.key === activeSection/,
+    ]
+
+    for (const className of sharedButtonClasses) {
+      expect(appSource).toContain(className)
+    }
+
+    const buttonIndexes = [...appSource.matchAll(/<button\b/g)].map((match) => match.index ?? -1)
+
+    expect(buttonIndexes.length).toBeGreaterThan(0)
+
+    const unstyledButtons = buttonIndexes
+      .map((buttonStart) => {
+        const openingTagEnd = appSource.indexOf('>', buttonStart)
+        expect(openingTagEnd).toBeGreaterThan(buttonStart)
+
+        return appSource.slice(buttonStart, openingTagEnd + 1)
+      })
+      .filter((openingTagSource) => !sharedButtonClasses.some((className) => openingTagSource.includes(className)))
+      .filter((openingTagSource) => !containerStyledButtonPatterns.some((pattern) => pattern.test(openingTagSource)))
+
+    expect(unstyledButtons).toEqual([])
+  })
+
   it('keeps form controls explicitly named', () => {
     const formControlIndexes = [...appSource.matchAll(/<(?:input|select|textarea)\b/g)].map((match) => match.index ?? -1)
 
