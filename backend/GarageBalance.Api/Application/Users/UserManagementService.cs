@@ -188,17 +188,17 @@ public sealed class UserManagementService(
             return UserManagementResult<ManagedUserDto>.Failure(reasonError.Code, reasonError.Message);
         }
 
+        var oldRoleCodes = FormatRoleCodes(user.UserRoles.Select(userRole => userRole.Role));
+        var newRoleCodes = FormatRoleCodes(rolesResult.Value!);
+        var newDisplayName = request.DisplayName.Trim();
         var oldValues = new Dictionary<string, object?>
         {
             ["displayName"] = user.DisplayName,
             ["isActive"] = user.IsActive,
-            ["roles"] = FormatRoleCodes(user.UserRoles.Select(userRole => userRole.Role)),
+            ["roles"] = oldRoleCodes,
             ["credentialsChanged"] = false
         };
         var passwordChanged = false;
-
-        user.DisplayName = request.DisplayName.Trim();
-        user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.NewPassword))
         {
             var passwordPolicy = passwordPolicyValidator.Validate(request.NewPassword);
@@ -207,8 +207,22 @@ public sealed class UserManagementService(
                 return UserManagementResult<ManagedUserDto>.Failure("password_policy_violation", passwordPolicy.ErrorMessage!);
             }
 
-            user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
             passwordChanged = true;
+        }
+
+        if (string.Equals(user.DisplayName, newDisplayName, StringComparison.Ordinal) &&
+            user.IsActive == request.IsActive &&
+            string.Equals(oldRoleCodes, newRoleCodes, StringComparison.Ordinal) &&
+            !passwordChanged)
+        {
+            return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
+        }
+
+        user.DisplayName = newDisplayName;
+        user.IsActive = request.IsActive;
+        if (passwordChanged)
+        {
+            user.PasswordHash = passwordHasher.HashPassword(request.NewPassword!);
         }
 
         user.UserRoles.Clear();
@@ -234,7 +248,7 @@ public sealed class UserManagementService(
             {
                 ["displayName"] = user.DisplayName,
                 ["isActive"] = user.IsActive,
-                ["roles"] = FormatRoleCodes(rolesResult.Value!),
+                ["roles"] = newRoleCodes,
                 ["credentialsChanged"] = passwordChanged
             },
             FieldLabels: UserAuditFieldLabels,
@@ -243,7 +257,7 @@ public sealed class UserManagementService(
             RelatedCounterpartyName: user.DisplayName,
             Metadata: new Dictionary<string, object?>
             {
-                ["roles"] = FormatRoleCodes(rolesResult.Value!),
+                ["roles"] = newRoleCodes,
                 ["isActive"] = user.IsActive,
                 ["credentialsChanged"] = passwordChanged
             }));

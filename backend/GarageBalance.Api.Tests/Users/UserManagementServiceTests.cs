@@ -145,6 +145,31 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task UpdateUserAsync_DoesNotWriteAuditWhenNormalizedValuesAreUnchanged()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("user@example.com", "User", "StrongPass123", [SystemRoles.Operator, SystemRoles.ReportsViewer]),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateUserAsync(
+            created.Value!.Id,
+            new UpdateManagedUserRequest(" User ", [SystemRoles.ReportsViewer, SystemRoles.Operator], true, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("User", result.Value!.DisplayName);
+        Assert.Contains(SystemRoles.Operator, result.Value.Roles);
+        Assert.Contains(SystemRoles.ReportsViewer, result.Value.Roles);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task UpdateUserAsync_PreventsDisablingLastActiveAdministrator()
     {
         await using var database = await TestDatabase.CreateAsync();
