@@ -58,6 +58,35 @@ public sealed class DatabaseMigrationPolicyTests
     }
 
     [Fact]
+    public void ProductionBackendCode_DoesNotPhysicallyDeleteDataOutsideMigrations()
+    {
+        var apiRoot = Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api");
+        var migrationRoot = Path.Combine(apiRoot, "Infrastructure", "Data", "Migrations");
+        var forbiddenDeletePatterns = new[]
+        {
+            ".Remove(",
+            ".RemoveRange(",
+            "ExecuteDelete(",
+            "ExecuteDeleteAsync(",
+            "DELETE FROM"
+        };
+
+        var offenders = EnumerateProductionSourceFiles(apiRoot)
+            .Where(path => !IsUnderDirectory(path, migrationRoot))
+            .SelectMany(path =>
+            {
+                var text = File.ReadAllText(path);
+
+                return forbiddenDeletePatterns
+                    .Where(pattern => text.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                    .Select(pattern => $"{Path.GetRelativePath(apiRoot, path)} contains physical delete pattern: {pattern}");
+            })
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void MigrationFolder_ContainsSnapshotAndConcreteMigrations()
     {
         var migrationRoot = Path.Combine(
