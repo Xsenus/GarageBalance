@@ -4144,7 +4144,8 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть' })
+    await user.click(openDetailButton)
 
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
     expect(loadedEventId).toBe('audit-detail-1')
@@ -4166,9 +4167,19 @@ describe('App', () => {
     expect(within(detailDialog).getByText('[секрет скрыт]')).toBeInTheDocument()
     expect(detailDialog).toHaveAttribute('aria-modal', 'true')
 
-    await user.click(within(detailDialog).getByRole('button', { name: 'Закрыть' }))
+    const detailCloseIconButton = within(detailDialog).getByRole('button', { name: 'Закрыть карточку события' })
+    const detailCloseButton = within(detailDialog).getByRole('button', { name: 'Закрыть' })
+    await waitFor(() => expect(detailCloseIconButton).toHaveFocus())
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(detailCloseButton).toHaveFocus()
+    await user.keyboard('{Tab}')
+    expect(detailCloseIconButton).toHaveFocus()
+    await user.keyboard('{Tab}')
+    expect(detailCloseButton).toHaveFocus()
+    await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
+    await waitFor(() => expect(openDetailButton).toHaveFocus())
   })
 
   it('retries audit event detail loading inside the dialog', async () => {
