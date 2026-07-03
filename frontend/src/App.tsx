@@ -7344,6 +7344,9 @@ function TariffsAndFeesPrototypePanel() {
 
 function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
   const [isRegular, setIsRegular] = useState(false)
+  const [isByMeter, setIsByMeter] = useState(true)
+  const [isTiered, setIsTiered] = useState(true)
+  const unitOptions = Array.from(new Set(contractorTariffRows.map((row) => row.unit).filter((unit): unit is string => Boolean(unit))))
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
@@ -7365,60 +7368,74 @@ function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
           <FormField label="Наименование услуги">
             <input aria-label="Наименование услуги" />
           </FormField>
-          <div className="contractors-form-row">
+          <label className="contractors-switch-row">
             <span>Регулярные платежи</span>
-            <label className="contractors-check-row contractors-check-row--compact">
+            <span className="contractors-switch-control">
               <input type="checkbox" aria-label="Регулярные платежи" checked={isRegular} onChange={(event) => setIsRegular(event.target.checked)} />
-            </label>
-          </div>
+            </span>
+          </label>
           {isRegular ? (
             <>
-              <FormField label="Периодичность">
-                <input aria-label="Периодичность" defaultValue="12" />
-              </FormField>
-              <FormField label="Учитывать платеж с">
-                <select aria-label="Учитывать платеж с" defaultValue="Январь">
-                  <option>Январь</option>
-                  <option>Июль</option>
-                </select>
-              </FormField>
-              <FormField label="Оплатить до">
-                <select aria-label="Оплатить до" defaultValue="Июль">
-                  <option>Июнь</option>
-                  <option>Июль</option>
-                  <option>Декабрь</option>
-                </select>
-              </FormField>
+              <div className="contractors-service-period-grid">
+                <FormField label="Периодичность">
+                  <input aria-label="Периодичность" defaultValue="12" />
+                </FormField>
+                <FormField label="Учитывать платеж с">
+                  <select aria-label="Учитывать платеж с" defaultValue="Январь">
+                    {contractorTariffMonthOptions.map((month) => (
+                      <option key={month.value} value={month.label}>{month.label}</option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label="Оплатить до">
+                  <select aria-label="Оплатить до" defaultValue="Июль">
+                    {contractorTariffMonthOptions.map((month) => (
+                      <option key={month.value} value={month.label}>{month.label}</option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
               <FormField label="Перенос долга в просроченный">
                 <div className="contractors-inline-field">
                   <input aria-label="Перенос долга в просроченный" defaultValue="30" />
                   <span>дн.</span>
                 </div>
               </FormField>
-              <label className="contractors-check-row">
-                <input type="checkbox" aria-label="По счетчику" defaultChecked />
-                <span>По счетчику</span>
-              </label>
-              <label className="contractors-check-row">
-                <input type="checkbox" aria-label="Пороговая тарификация" defaultChecked />
-                <span>Пороговая тарификация</span>
-              </label>
-              <FormField label="Единица измерения">
-                <input aria-label="Единица измерения" />
-              </FormField>
-              <div className="contractors-threshold-grid" aria-label="Пороги тарификации">
-                <span>Порог 1</span>
-                <input aria-label="Порог 1" />
-                <span>x</span>
-                <span>Цена за ед.</span>
-                <input aria-label="Цена за единицу 1" />
-                <span>Порог 2</span>
-                <input aria-label="Порог 2" />
-                <span>x</span>
-                <span>Цена за ед.</span>
-                <input aria-label="Цена за единицу 2" />
+              <div className="contractors-service-flags">
+                <label className="contractors-check-row">
+                  <input type="checkbox" aria-label="По счетчику" checked={isByMeter} onChange={(event) => setIsByMeter(event.target.checked)} />
+                  <span>По счетчику</span>
+                </label>
+                <label className="contractors-check-row">
+                  <input type="checkbox" aria-label="Пороговая тарификация" checked={isTiered} onChange={(event) => setIsTiered(event.target.checked)} />
+                  <span>Пороговая тарификация</span>
+                </label>
               </div>
-              <button className="link-button" type="button">Добавить порог</button>
+              <FormField label="Единица измерения">
+                <input aria-label="Единица измерения" list="contractor-service-unit-options" />
+              </FormField>
+              <datalist id="contractor-service-unit-options">
+                {unitOptions.map((unit) => (
+                  <option key={unit} value={unit} />
+                ))}
+              </datalist>
+              {isTiered ? (
+                <>
+                  <div className="contractors-threshold-grid" aria-label="Пороги тарификации">
+                    <span>Порог 1</span>
+                    <input aria-label="Порог 1" />
+                    <span>x</span>
+                    <span>Цена за ед.</span>
+                    <input aria-label="Цена за единицу 1" />
+                    <span>Порог 2</span>
+                    <input aria-label="Порог 2" />
+                    <span>x</span>
+                    <span>Цена за ед.</span>
+                    <input aria-label="Цена за единицу 2" />
+                  </div>
+                  <button className="link-button" type="button">Добавить порог</button>
+                </>
+              ) : null}
             </>
           ) : (
             <FormField label="Стоимость">
@@ -7434,7 +7451,7 @@ function AddServicePrototypeDialog({ onClose }: { onClose: () => void }) {
               <Save size={17} />
               <span>Сохранить</span>
             </button>
-            <button className="secondary-button" type="button" onClick={onClose}>
+            <button className="ghost-button" type="button" onClick={onClose}>
               Отмена
             </button>
           </div>

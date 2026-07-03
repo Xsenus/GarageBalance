@@ -1141,6 +1141,73 @@ h1 {
   padding: 8px 10px;
 }
 
+.contractors-switch-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) max-content;
+  min-height: 42px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.contractors-switch-control {
+  display: inline-grid;
+  place-items: center;
+}
+
+.contractors-switch-control input[type='checkbox'] {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  min-height: 22px;
+  appearance: none;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #f2f4f7;
+  cursor: pointer;
+  padding: 0;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.contractors-switch-control input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.18);
+  transition: transform 160ms ease;
+}
+
+.contractors-switch-control input[type='checkbox']:checked {
+  border-color: #155eef;
+  background: #155eef;
+}
+
+.contractors-switch-control input[type='checkbox']:checked::after {
+  transform: translateX(16px);
+}
+
+.contractors-switch-control input[type='checkbox']:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
+}
+
+.contractors-switch-row:hover {
+  border-color: #b2ccff;
+  background: #f8fbff;
+}
+
 .contractors-check-row--compact {
   justify-content: flex-start;
 }
@@ -1213,6 +1280,23 @@ h1 {
   color: #344054;
   font-size: 14px;
   font-weight: 700;
+}
+
+.contractors-service-period-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.65fr) repeat(2, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.contractors-service-flags {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.contractors-service-flags .contractors-check-row {
+  width: 100%;
 }
 
 .contractors-inline-field {
@@ -4228,6 +4312,11 @@ button.operation-row:focus-visible {
   }
 
   .contractors-threshold-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contractors-service-period-grid,
+  .contractors-service-flags {
     grid-template-columns: 1fr;
   }
 
