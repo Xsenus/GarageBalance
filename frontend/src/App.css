@@ -1539,6 +1539,14 @@ h1 {
   box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.08);
 }
 
+.meter-readings-fixed-type {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  color: #344054;
+  font-weight: 700;
+}
+
 .meter-readings-tabs {
   display: inline-flex;
   width: fit-content;

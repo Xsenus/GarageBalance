@@ -516,7 +516,7 @@ function Workspace({
     }
   }
 
-  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors'
+  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings'
 
   return (
     <>
@@ -8094,8 +8094,8 @@ type MeterReadingPrototypePendingChange = {
 }
 
 function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient }) {
-  const [year, setYear] = useState('2026')
-  const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
+  const [yearDraft, setYearDraft] = useState('2026')
+  const [appliedYear, setAppliedYear] = useState('2026')
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -8103,8 +8103,9 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
   const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
   const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
 
-  const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
-  const yearIsValid = isValidMeterReadingYear(year)
+  const meterType: MeterReadingTypeId = 'electricity'
+  const selectedMeterType = meterReadingTypes[0]
+  const yearIsValid = isValidMeterReadingYear(yearDraft)
 
   function cancelPendingReadingChange() {
     if (pendingReadingChange) {
@@ -8127,6 +8128,21 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
       [pendingReadingChange.cellKey]: pendingReadingChange.nextValue,
     }))
     setPendingReadingChange(null)
+  }
+
+  function updateYearDraft(value: string) {
+    const nextYear = value.replace(/\D/g, '').slice(0, 4)
+    setYearDraft(nextYear)
+
+    if (isValidMeterReadingYear(nextYear)) {
+      setAppliedYear(nextYear)
+    }
+  }
+
+  function applyYearDraft() {
+    if (isValidMeterReadingYear(yearDraft)) {
+      setAppliedYear(yearDraft)
+    }
   }
 
   useRestoreFocusOnClose(Boolean(pendingReadingChange))
@@ -8167,11 +8183,19 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
       return
     }
 
-    const cellKey = createMeterReadingCellKey(year, meterType, garage.id, month.key)
+    const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
     const nextValue = draftReadings[cellKey] ?? ''
     const previousValue = savedReadings[cellKey] ?? ''
 
     if (nextValue.trim() === previousValue.trim()) {
+      return
+    }
+
+    if (previousValue.trim() === '') {
+      setSavedReadings((currentReadings) => ({
+        ...currentReadings,
+        [cellKey]: nextValue,
+      }))
       return
     }
 
@@ -8200,16 +8224,18 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
               className="meter-readings-control"
               inputMode="numeric"
               maxLength={4}
-              value={year}
-              onChange={(event) => setYear(event.target.value.replace(/\D/g, '').slice(0, 4))}
+              value={yearDraft}
+              onChange={(event) => updateYearDraft(event.target.value)}
+              onBlur={applyYearDraft}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  applyYearDraft()
+                }
+              }}
             />
           </FormField>
           <FormField label="Тип">
-            <select aria-label="Тип показаний" className="meter-readings-control" value={meterType} onChange={(event) => setMeterType(event.target.value as MeterReadingTypeId)}>
-              {meterReadingTypes.map((item) => (
-                <option value={item.id} key={item.id}>{item.label}, {item.unit}</option>
-              ))}
-            </select>
+            <div className="meter-readings-control meter-readings-fixed-type" aria-label="Тип показаний">{selectedMeterType.label}, {selectedMeterType.unit}</div>
           </FormField>
         </div>
       </div>
@@ -8218,7 +8244,7 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
       {error ? <div className="form-error" role="alert">{error}</div> : null}
 
       <div className="meter-readings-table-shell">
-        <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${year} год`}>
+        <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${appliedYear} год`}>
             <div className="meter-readings-title-row" role="row">
               <span role="columnheader">Гараж</span>
               <span role="columnheader">Показания</span>
@@ -8240,7 +8266,7 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
               <div className="meter-readings-data-row" role="row" key={garage.id}>
                 <span role="rowheader">Гараж {garage.number}</span>
                 {meterReadingMonths.map((month) => {
-                  const cellKey = createMeterReadingCellKey(year, meterType, garage.id, month.key)
+                  const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
                   return (
                     <span role="cell" key={cellKey}>
                       <input
@@ -8278,26 +8304,28 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient }: { auth: AuthRes
               </button>
             </div>
             <p className="confirmation-text" id="meter-reading-change-description">Проверьте новое показание счетчика. После подключения backend это действие будет записываться в историю изменений по гаражу, месяцу и типу счетчика.</p>
-            <dl className="dictionary-change-list">
-              <div>
-                <dt>Счетчик</dt>
-                <dd>{`${pendingReadingChange.meterTypeLabel}, ${pendingReadingChange.unit}`}</dd>
+            <div className="tariff-change-summary" aria-label="Изменяемое поле показания">
+              <div className="tariff-change-field-row">
+                <span>Поле</span>
+                <strong>Показание</strong>
               </div>
-              <div>
-                <dt>Было</dt>
-                <dd>{formatPrototypeChangeValue(pendingReadingChange.previousValue)}</dd>
+              <div className="tariff-change-values-row">
+                <div>
+                  <span>Было</span>
+                  <strong>{formatPrototypeChangeValue(pendingReadingChange.previousValue)}</strong>
+                </div>
+                <div>
+                  <span>Стало</span>
+                  <strong>{formatPrototypeChangeValue(pendingReadingChange.nextValue)}</strong>
+                </div>
               </div>
-              <div>
-                <dt>Стало</dt>
-                <dd>{formatPrototypeChangeValue(pendingReadingChange.nextValue)}</dd>
-              </div>
-            </dl>
+            </div>
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingReadingChange}>
                 <Save size={16} />
-                <span>Сохранить показание</span>
+                <span>Сохранить</span>
               </button>
+              <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
             </div>
           </section>
         </div>
