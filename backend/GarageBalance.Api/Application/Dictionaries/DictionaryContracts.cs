@@ -118,3 +118,20 @@ public sealed record UpsertTariffRequest(
     [Range(0.0001, 999999999)] decimal? ElectricityFirstRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricitySecondRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null);
+
+public sealed record IrregularPaymentDto(
+    Guid Id,
+    string Name,
+    decimal Amount,
+    bool IsActive,
+    bool IsArchived,
+    bool IsUsed);
+
+public sealed record UpsertIrregularPaymentRequest(
+    [Required, MaxLength(200)] string Name,
+    [Range(0, 999999999)] decimal Amount,
+    bool IsActive = true);
+
+public sealed record UpdateIrregularPaymentStatusRequest(
+    bool IsActive,
+    [MaxLength(1000)] string? Reason);

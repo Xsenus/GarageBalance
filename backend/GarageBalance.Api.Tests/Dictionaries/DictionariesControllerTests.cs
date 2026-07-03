@@ -22,6 +22,7 @@ public sealed class DictionariesControllerTests
         await controller.GetIncomeTypes(44, true, CancellationToken.None);
         await controller.GetExpenseTypes(45, true, CancellationToken.None);
         await controller.GetTariffs("meter", 46, true, CancellationToken.None);
+        await controller.GetIrregularPayments("fine", 47, true, CancellationToken.None);
 
         Assert.Equal(("ivan", 40, true), service.LastOwnerListRequest);
         Assert.Equal(("12", 41, true), service.LastGarageListRequest);
@@ -30,6 +31,7 @@ public sealed class DictionariesControllerTests
         Assert.Equal((44, true), service.LastIncomeTypeListRequest);
         Assert.Equal((45, true), service.LastExpenseTypeListRequest);
         Assert.Equal(("meter", 46, true), service.LastTariffListRequest);
+        Assert.Equal(("fine", 47, true), service.LastIrregularPaymentListRequest);
     }
 
     [Fact]
@@ -63,6 +65,21 @@ public sealed class DictionariesControllerTests
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
         Assert.Equal("supplier_not_found", problem.Title);
+    }
+
+    [Fact]
+    public async Task ArchiveIrregularPayment_ReturnsConflictWhenPaymentIsUsed()
+    {
+        var controller = CreateController(new FakeDictionaryService
+        {
+            ArchiveIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_used", "Удаление недоступно.")
+        });
+
+        var result = await controller.ArchiveIrregularPayment(Guid.NewGuid(), new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("irregular_payment_used", problem.Title);
     }
 
     [Fact]
@@ -411,6 +428,7 @@ public sealed class DictionariesControllerTests
         public (int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -426,6 +444,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> RestoreTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<IrregularPaymentDto> ArchiveIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
@@ -669,6 +688,44 @@ public sealed class DictionariesControllerTests
             LastRestoreId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreTariffResult);
+        }
+
+        public Task<IReadOnlyList<IrregularPaymentDto>> GetIrregularPaymentsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        {
+            LastIrregularPaymentListRequest = (search, limit, includeArchived);
+            return Task.FromResult<IReadOnlyList<IrregularPaymentDto>>([]);
+        }
+
+        public Task<DictionaryResult<IrregularPaymentDto>> CreateIrregularPaymentAsync(UpsertIrregularPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+        }
+
+        public Task<DictionaryResult<IrregularPaymentDto>> UpdateIrregularPaymentAsync(Guid id, UpsertIrregularPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+        }
+
+        public Task<DictionaryResult<IrregularPaymentDto>> SetIrregularPaymentStatusAsync(Guid id, UpdateIrregularPaymentStatusRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+        }
+
+        public Task<DictionaryResult<IrregularPaymentDto>> ArchiveIrregularPaymentAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(ArchiveIrregularPaymentResult);
+        }
+
+        public Task<DictionaryResult<IrregularPaymentDto>> RestoreIrregularPaymentAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
         }
     }
 }

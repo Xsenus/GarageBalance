@@ -30,7 +30,7 @@ import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authAp
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
@@ -5738,6 +5738,7 @@ const contractorTariffRows: ContractorTariffRow[] = [
 
 type ContractorOneTimeRow = {
   id: string
+  backendPaymentId?: string
   name: string
   amount: string
   isActive: boolean
@@ -7293,6 +7294,24 @@ function formatTariffNumber(value: number | null | undefined) {
   return value == null ? '' : String(value)
 }
 
+function formatPrototypeAmount(value: number | null | undefined) {
+  if (value == null) {
+    return ''
+  }
+
+  return Number.isInteger(value) ? String(value) : String(value)
+}
+
+function parsePrototypeAmount(value: string) {
+  const normalized = value.replace(',', '.').trim()
+  if (!normalized) {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
 function parseTariffAmount(value: string) {
   const normalized = value.replace(',', '.').trim()
   if (!normalized) {
@@ -7345,6 +7364,38 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
       ? { ...row, backendTariffId: tariff.id, effectiveFrom: tariff.effectiveFrom, amount: formatTariffNumber(tariff.rate), title: tariff.name }
       : row
   })
+}
+
+function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], payments: IrregularPaymentDto[]) {
+  const mergedRows = rows.map((row) => {
+    const payment = payments.find((item) => item.name.toLocaleLowerCase('ru') === row.name.toLocaleLowerCase('ru'))
+    if (!payment) {
+      return row
+    }
+
+    return {
+      ...row,
+      backendPaymentId: payment.id,
+      amount: formatPrototypeAmount(payment.amount),
+      isActive: payment.isActive,
+      isDeleted: payment.isArchived,
+      isUsed: payment.isUsed,
+    }
+  })
+
+  const extraRows = payments
+    .filter((payment) => !rows.some((row) => row.name.toLocaleLowerCase('ru') === payment.name.toLocaleLowerCase('ru')))
+    .map((payment) => ({
+      id: `one-time-${payment.id}`,
+      backendPaymentId: payment.id,
+      name: payment.name,
+      amount: formatPrototypeAmount(payment.amount),
+      isActive: payment.isActive,
+      isDeleted: payment.isArchived,
+      isUsed: payment.isUsed,
+    }))
+
+  return [...mergedRows, ...extraRows].filter((row) => !row.isDeleted)
 }
 
 type TariffPrototypePendingChange =
@@ -7409,6 +7460,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
   const [tariffsLoading, setTariffsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
+  const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
   const [oneTimeContextMenu, setOneTimeContextMenu] = useState<{ row: ContractorOneTimeRow; x: number; y: number } | null>(null)
@@ -7418,20 +7470,26 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
   useEffect(() => {
     let ignore = false
 
-    async function loadTariffs() {
+    async function loadTariffsAndFees() {
       setTariffsLoading(true)
       setTariffPersistenceError(null)
       try {
-        const loadedTariffs = await dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit)
+        const [loadedTariffs, loadedIrregularPayments] = await Promise.all([
+          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        ])
         if (!ignore) {
           const mergedRows = mergeTariffsIntoPrototypeRows(contractorTariffRows, loadedTariffs)
+          const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows(contractorOneTimeRows, loadedIrregularPayments)
           setBackendTariffs(loadedTariffs)
           setTariffRows(mergedRows)
+          setOneTimeRows(mergedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
+          setOneTimeDrafts(createEditableDrafts(mergedOneTimeRows))
         }
       } catch (caught) {
         if (!ignore) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы.')
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы и сборы.')
         }
       } finally {
         if (!ignore) {
@@ -7440,7 +7498,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
       }
     }
 
-    void loadTariffs()
+    void loadTariffsAndFees()
 
     return () => {
       ignore = true
@@ -7520,13 +7578,15 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
         },
       }))
     } else if (pendingChange.kind === 'one-time-amount') {
-      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
-        currentRow.id === pendingChange.rowId ? { ...currentRow, amount: pendingChange.nextValue } : currentRow
-      )))
+      const sourceRow = oneTimeRows.find((currentRow) => currentRow.id === pendingChange.rowId)
+      if (sourceRow) {
+        await persistOneTimeRow(sourceRow, { amount: pendingChange.nextValue })
+      }
     } else {
-      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
-        currentRow.id === pendingChange.rowId ? { ...currentRow, isActive: pendingChange.nextValue === 'Активен' } : currentRow
-      )))
+      const sourceRow = oneTimeRows.find((currentRow) => currentRow.id === pendingChange.rowId)
+      if (sourceRow) {
+        await persistOneTimeStatus(sourceRow, pendingChange.nextValue === 'Активен')
+      }
     }
 
     setPendingChange(null)
@@ -7615,6 +7675,95 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить тариф.')
     } finally {
       setTariffSavingRowId(null)
+    }
+  }
+
+  async function persistOneTimeRow(row: ContractorOneTimeRow, overrides: Partial<Pick<ContractorOneTimeRow, 'amount' | 'isActive'>> = {}) {
+    if (!canManageTariffs) {
+      return null
+    }
+
+    const amountText = overrides.amount ?? row.amount
+    const amount = parsePrototypeAmount(amountText)
+    if (amount == null) {
+      setOneTimeActionMessage(`Укажите корректную сумму для нерегулярного платежа "${row.name}".`)
+      return null
+    }
+
+    const request: UpsertIrregularPaymentRequest = {
+      name: row.name,
+      amount,
+      isActive: overrides.isActive ?? row.isActive,
+    }
+
+    setOneTimeSavingRowId(row.id)
+    setTariffPersistenceError(null)
+    setOneTimeActionMessage(null)
+    try {
+      const savedPayment = row.backendPaymentId
+        ? await dictionaryClient.updateIrregularPayment(auth.accessToken, row.backendPaymentId, request)
+        : await dictionaryClient.createIrregularPayment(auth.accessToken, request)
+      const nextRows = oneTimeRows.map((currentRow) => (
+        currentRow.id === row.id
+          ? {
+            ...currentRow,
+            backendPaymentId: savedPayment.id,
+            amount: formatPrototypeAmount(savedPayment.amount),
+            isActive: savedPayment.isActive,
+            isDeleted: savedPayment.isArchived,
+            isUsed: savedPayment.isUsed,
+          }
+          : currentRow
+      ))
+      setOneTimeRows(nextRows)
+      setOneTimeDrafts(createEditableDrafts(nextRows))
+      return savedPayment
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось сохранить нерегулярный платеж.'
+      setOneTimeActionMessage(message)
+      return null
+    } finally {
+      setOneTimeSavingRowId(null)
+    }
+  }
+
+  async function persistOneTimeStatus(row: ContractorOneTimeRow, isActive: boolean) {
+    if (!canManageTariffs) {
+      return null
+    }
+
+    if (!row.backendPaymentId) {
+      return persistOneTimeRow(row, { amount: row.amount || '0', isActive })
+    }
+
+    setOneTimeSavingRowId(row.id)
+    setTariffPersistenceError(null)
+    setOneTimeActionMessage(null)
+    try {
+      const savedPayment = await dictionaryClient.setIrregularPaymentStatus(auth.accessToken, row.backendPaymentId, {
+        isActive,
+        reason: isActive ? 'Активация через меню нерегулярных платежей' : 'Деактивация через меню нерегулярных платежей',
+      })
+      const nextRows = oneTimeRows.map((currentRow) => (
+        currentRow.id === row.id
+          ? {
+            ...currentRow,
+            amount: formatPrototypeAmount(savedPayment.amount),
+            isActive: savedPayment.isActive,
+            isDeleted: savedPayment.isArchived,
+            isUsed: savedPayment.isUsed,
+          }
+          : currentRow
+      ))
+      setOneTimeRows(nextRows)
+      setOneTimeDrafts(createEditableDrafts(nextRows))
+      return savedPayment
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось изменить статус нерегулярного платежа.'
+      setOneTimeActionMessage(message)
+      return null
+    } finally {
+      setOneTimeSavingRowId(null)
     }
   }
 
@@ -7732,7 +7881,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
     })
   }
 
-  const commitOneTimeAmountChange = (row: ContractorOneTimeRow) => {
+  const commitOneTimeAmountChange = async (row: ContractorOneTimeRow) => {
     const nextValue = (oneTimeDrafts[row.id]?.amount ?? '').trim()
 
     if (nextValue.trim() === row.amount.trim()) {
@@ -7740,9 +7889,10 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
     }
 
     if (!row.amount.trim()) {
-      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+      const nextRows = oneTimeRows.map((currentRow) => (
         currentRow.id === row.id ? { ...currentRow, amount: nextValue } : currentRow
-      )))
+      ))
+      setOneTimeRows(nextRows)
       setOneTimeDrafts((drafts) => ({
         ...drafts,
         [row.id]: {
@@ -7750,6 +7900,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
           amount: nextValue,
         },
       }))
+      await persistOneTimeRow(row, { amount: nextValue })
       return
     }
 
@@ -7801,13 +7952,31 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
     setOneTimeDeleteReason('')
   }
 
-  const confirmOneTimeDelete = () => {
+  const confirmOneTimeDelete = async () => {
     if (!oneTimeDeleteTarget || !oneTimeDeleteReason.trim()) {
       return
     }
 
-    setOneTimeRows((currentRows) => currentRows.filter((currentRow) => currentRow.id !== oneTimeDeleteTarget.id))
-    closeOneTimeDeleteDialog()
+    if (!oneTimeDeleteTarget.backendPaymentId) {
+      setOneTimeRows((currentRows) => currentRows.filter((currentRow) => currentRow.id !== oneTimeDeleteTarget.id))
+      closeOneTimeDeleteDialog()
+      return
+    }
+
+    setOneTimeSavingRowId(oneTimeDeleteTarget.id)
+    setOneTimeActionMessage(null)
+    try {
+      await dictionaryClient.archiveIrregularPayment(auth.accessToken, oneTimeDeleteTarget.backendPaymentId, oneTimeDeleteReason.trim())
+      setOneTimeRows((currentRows) => currentRows.filter((currentRow) => currentRow.id !== oneTimeDeleteTarget.id))
+      closeOneTimeDeleteDialog()
+    } catch (caught) {
+      const message = caught instanceof DictionaryApiError && caught.code === 'irregular_payment_used'
+        ? 'Удаление недоступно: нерегулярный платеж уже используется в платежах или начислениях.'
+        : caught instanceof Error ? caught.message : 'Не удалось удалить нерегулярный платеж.'
+      setOneTimeActionMessage(message)
+    } finally {
+      setOneTimeSavingRowId(null)
+    }
   }
 
   const addElectricityThreshold = () => {
@@ -8025,7 +8194,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
                     <input
                       aria-label={`Сумма: ${row.name}`}
                       className="contractors-editable-input"
-                      disabled={row.isDeleted || !row.isActive}
+                      disabled={!canManageTariffs || row.isDeleted || !row.isActive || oneTimeSavingRowId === row.id}
                       value={oneTimeDrafts[row.id]?.amount ?? ''}
                       onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
                       onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
@@ -8087,7 +8256,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
               </div>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button className="secondary-button" type="button" onClick={confirmPendingChange}>
+              <button className="secondary-button" type="button" onClick={confirmPendingChange} disabled={oneTimeSavingRowId === pendingChange.rowId || tariffSavingRowId === pendingChange.rowId}>
                 <Save size={16} />
                 <span>Сохранить</span>
               </button>
@@ -8122,7 +8291,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim()}>
+              <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim() || oneTimeSavingRowId === oneTimeDeleteTarget.id}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
               </button>

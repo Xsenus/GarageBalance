@@ -5,7 +5,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -345,6 +345,20 @@ describe('App', () => {
         rate: request.rate,
         effectiveFrom: request.effectiveFrom,
         comment: request.comment ?? null,
+      }),
+      createIrregularPayment: async (_token, request) => createIrregularPayment({
+        id: `irregular-${request.name}`,
+        name: request.name,
+        amount: request.amount,
+        isActive: request.isActive ?? true,
+        isUsed: request.name === 'Вступительный взнос',
+      }),
+      updateIrregularPayment: async (_token, id, request) => createIrregularPayment({
+        id,
+        name: request.name,
+        amount: request.amount,
+        isActive: request.isActive ?? true,
+        isUsed: request.name === 'Вступительный взнос',
       }),
     })
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -5522,6 +5536,12 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     }),
     archiveTariff: async () => undefined,
     restoreTariff: async () => tariff,
+    getIrregularPayments: async () => [],
+    createIrregularPayment: async (_token, request) => createIrregularPayment({ id: 'irregular-payment-new', name: request.name, amount: request.amount, isActive: request.isActive ?? true }),
+    updateIrregularPayment: async (_token, id, request) => createIrregularPayment({ id, name: request.name, amount: request.amount, isActive: request.isActive ?? true }),
+    setIrregularPaymentStatus: async (_token, id, request) => createIrregularPayment({ id, isActive: request.isActive }),
+    archiveIrregularPayment: async () => undefined,
+    restoreIrregularPayment: async (_token, id) => createIrregularPayment({ id, isArchived: false }),
     ...overrides,
   }
 }
@@ -6031,6 +6051,7 @@ function createStatefulDictionaryClient(): DictionaryClient {
   let incomeTypes: AccountingTypeDto[] = []
   let expenseTypes: AccountingTypeDto[] = []
   let tariffs: TariffDto[] = []
+  let irregularPayments: IrregularPaymentDto[] = []
 
   return {
     getOwners: async () => lastOwner ? [lastOwner] : [],
@@ -6138,6 +6159,34 @@ function createStatefulDictionaryClient(): DictionaryClient {
       return tariff
     },
     archiveTariff: async () => undefined,
+    getIrregularPayments: async () => irregularPayments,
+    createIrregularPayment: async (_token, request) => {
+      const payment = createIrregularPayment({ id: crypto.randomUUID(), name: request.name, amount: request.amount, isActive: request.isActive ?? true })
+      irregularPayments = [payment, ...irregularPayments]
+      return payment
+    },
+    updateIrregularPayment: async (_token, id, request) => {
+      const payment = createIrregularPayment({ id, name: request.name, amount: request.amount, isActive: request.isActive ?? true })
+      irregularPayments = irregularPayments.map((item) => (item.id === id ? payment : item))
+      return payment
+    },
+    setIrregularPaymentStatus: async (_token, id, request) => {
+      const existing = irregularPayments.find((item) => item.id === id) ?? createIrregularPayment({ id })
+      const payment = { ...existing, isActive: request.isActive }
+      irregularPayments = irregularPayments.map((item) => (item.id === id ? payment : item))
+      return payment
+    },
+    archiveIrregularPayment: async (_token, id) => {
+      irregularPayments = irregularPayments.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreIrregularPayment: async (_token, id) => {
+      const existing = irregularPayments.find((item) => item.id === id) ?? createIrregularPayment({ id })
+      const payment = { ...existing, isArchived: false }
+      irregularPayments = irregularPayments.some((item) => item.id === id)
+        ? irregularPayments.map((item) => (item.id === id ? payment : item))
+        : [payment, ...irregularPayments]
+      return payment
+    },
   }
 }
 
@@ -6307,6 +6356,18 @@ function createTariff(overrides: Partial<TariffDto>): TariffDto {
     effectiveFrom: '2026-07-01',
     comment: null,
     isArchived: false,
+    ...overrides,
+  }
+}
+
+function createIrregularPayment(overrides: Partial<IrregularPaymentDto> = {}): IrregularPaymentDto {
+  return {
+    id: 'irregular-payment',
+    name: 'Нерегулярный платеж',
+    amount: 0,
+    isActive: true,
+    isArchived: false,
+    isUsed: false,
     ...overrides,
   }
 }

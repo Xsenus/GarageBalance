@@ -188,6 +188,7 @@ public sealed class ControllerAuthorizationCoverageTests
 
         var mutatingDictionaryActionsWithoutWritePolicy = mutatingActions
             .Where(method => !method.Name.Contains("Tariff", StringComparison.Ordinal))
+            .Where(method => !method.Name.Contains("IrregularPayment", StringComparison.Ordinal))
             .Where(method => !method.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => attribute.Policy == SystemPermissions.DictionariesWrite))
             .Select(method => method.Name)
             .Order(StringComparer.Ordinal)
@@ -195,7 +196,7 @@ public sealed class ControllerAuthorizationCoverageTests
         Assert.Empty(mutatingDictionaryActionsWithoutWritePolicy);
 
         var mutatingTariffActionsWithoutTariffPolicy = mutatingActions
-            .Where(method => method.Name.Contains("Tariff", StringComparison.Ordinal))
+            .Where(method => method.Name.Contains("Tariff", StringComparison.Ordinal) || method.Name.Contains("IrregularPayment", StringComparison.Ordinal))
             .Where(method => !method.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => attribute.Policy == SystemPermissions.TariffsManage))
             .Select(method => method.Name)
             .Order(StringComparer.Ordinal)

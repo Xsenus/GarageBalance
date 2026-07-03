@@ -47,7 +47,9 @@ public sealed class DictionaryService(
         ["electricityThirdTierName"] = "Наименование порога 3",
         ["electricityFirstRate"] = "Цена за ед. порога 1",
         ["electricitySecondRate"] = "Цена за ед. порога 2",
-        ["electricityThirdRate"] = "Цена сверх порога 2"
+        ["electricityThirdRate"] = "Цена сверх порога 2",
+        ["amount"] = "Сумма",
+        ["isActive"] = "Статус"
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
@@ -1274,6 +1276,157 @@ public sealed class DictionaryService(
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
+    public async Task<IReadOnlyList<IrregularPaymentDto>> GetIrregularPaymentsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        var query = dbContext.IrregularPayments.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+        }
+
+        var items = await query
+            .OrderBy(item => item.Name)
+            .Take(NormalizeListLimit(limit))
+            .ToListAsync(cancellationToken);
+        return await ToIrregularPaymentDtosAsync(items, cancellationToken);
+    }
+
+    public async Task<DictionaryResult<IrregularPaymentDto>> CreateIrregularPaymentAsync(UpsertIrregularPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var name = request.Name.Trim();
+        if (await dbContext.IrregularPayments.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_duplicate", "Нерегулярный платеж с таким наименованием уже существует.");
+        }
+
+        var payment = new IrregularPayment
+        {
+            Name = name,
+            Amount = MoneyMath.RoundMoney(request.Amount),
+            IsActive = request.IsActive
+        };
+
+        dbContext.IrregularPayments.Add(payment);
+        AddAudit(actorUserId, "dictionary.irregular_payment_created", "irregular_payment", payment.Id, $"Создан нерегулярный платеж {payment.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+    }
+
+    public async Task<DictionaryResult<IrregularPaymentDto>> UpdateIrregularPaymentAsync(Guid id, UpsertIrregularPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.IrregularPayments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (payment is null)
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.");
+        }
+
+        var name = request.Name.Trim();
+        if (await dbContext.IrregularPayments.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_duplicate", "Нерегулярный платеж с таким наименованием уже существует.");
+        }
+
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        if (StringEquals(payment.Name, name) && payment.Amount == amount && payment.IsActive == request.IsActive)
+        {
+            return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+        }
+
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["name"] = payment.Name,
+            ["amount"] = payment.Amount,
+            ["isActive"] = payment.IsActive
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["amount"] = amount,
+            ["isActive"] = request.IsActive
+        };
+
+        payment.Name = name;
+        payment.Amount = amount;
+        payment.IsActive = request.IsActive;
+        payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.irregular_payment_updated", "irregular_payment", payment.Id, $"Обновлен нерегулярный платеж {payment.Name}.", oldValues: oldValues, newValues: newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+    }
+
+    public async Task<DictionaryResult<IrregularPaymentDto>> SetIrregularPaymentStatusAsync(Guid id, UpdateIrregularPaymentStatusRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.IrregularPayments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (payment is null)
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.");
+        }
+
+        if (payment.IsActive == request.IsActive)
+        {
+            return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+        }
+
+        var oldValues = new Dictionary<string, object?> { ["isActive"] = payment.IsActive };
+        var newValues = new Dictionary<string, object?> { ["isActive"] = request.IsActive };
+        payment.IsActive = request.IsActive;
+        payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        var actionName = request.IsActive ? "активирован" : "деактивирован";
+        AddAudit(actorUserId, "dictionary.irregular_payment_status_changed", "irregular_payment", payment.Id, $"Нерегулярный платеж {payment.Name} {actionName}.", NormalizeOptional(request.Reason), oldValues, newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+    }
+
+    public async Task<DictionaryResult<IrregularPaymentDto>> ArchiveIrregularPaymentAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<IrregularPaymentDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var payment = await dbContext.IrregularPayments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (payment is null)
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.");
+        }
+
+        if (await IsIrregularPaymentUsedAsync(payment.Name, cancellationToken))
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_used", "Удаление недоступно: нерегулярный платеж уже используется в платежах или начислениях.");
+        }
+
+        payment.IsArchived = true;
+        payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.irregular_payment_archived", "irregular_payment", payment.Id, $"Удален нерегулярный платеж {payment.Name}.", archiveReason);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+    }
+
+    public async Task<DictionaryResult<IrregularPaymentDto>> RestoreIrregularPaymentAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.IrregularPayments.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (payment is null)
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден в архиве.");
+        }
+
+        if (await dbContext.IrregularPayments.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == payment.Name, cancellationToken))
+        {
+            return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_duplicate", "Активный нерегулярный платеж с таким наименованием уже существует.");
+        }
+
+        payment.IsArchived = false;
+        payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.irregular_payment_restored", "irregular_payment", payment.Id, $"Восстановлен нерегулярный платеж {payment.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+    }
+
     private async Task<Owner?> FindOwnerOrNullAsync(Guid? ownerId, CancellationToken cancellationToken)
     {
         return ownerId is null
@@ -1482,6 +1635,23 @@ public sealed class DictionaryService(
         return string.Equals(left, right, StringComparison.Ordinal);
     }
 
+    private async Task<bool> IsIrregularPaymentUsedAsync(string name, CancellationToken cancellationToken)
+    {
+        var incomeTypeIds = await dbContext.IncomeTypes.AsNoTracking()
+            .Where(item => item.Name == name)
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+        if (incomeTypeIds.Count == 0)
+        {
+            return false;
+        }
+
+        return await dbContext.Accruals.AsNoTracking()
+                .AnyAsync(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId), cancellationToken)
+            || await dbContext.FinancialOperations.AsNoTracking()
+                .AnyAsync(operation => !operation.IsCanceled && operation.IncomeTypeId.HasValue && incomeTypeIds.Contains(operation.IncomeTypeId.Value), cancellationToken);
+    }
+
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -1535,6 +1705,28 @@ public sealed class DictionaryService(
             supplier.StartingBalance,
             supplier.Comment,
             supplier.IsArchived);
+    }
+
+    private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)
+    {
+        var result = new List<IrregularPaymentDto>(payments.Count);
+        foreach (var payment in payments)
+        {
+            result.Add(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
+        }
+
+        return result;
+    }
+
+    private async Task<IrregularPaymentDto> ToIrregularPaymentDtoAsync(IrregularPayment payment, CancellationToken cancellationToken)
+    {
+        return new IrregularPaymentDto(
+            payment.Id,
+            payment.Name,
+            payment.Amount,
+            payment.IsActive,
+            payment.IsArchived,
+            await IsIrregularPaymentUsedAsync(payment.Name, cancellationToken));
     }
 
     private static TariffDto ToTariffDto(Tariff tariff)

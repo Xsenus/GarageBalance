@@ -1125,6 +1125,57 @@ public sealed class DictionaryServiceTests
         Assert.Equal(120m, result[0].Rate);
     }
 
+    [Fact]
+    public async Task IrregularPaymentAsync_SavesStatusAndBlocksArchiveWhenUsed()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Вступительный взнос", 1500m), actorUserId, CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Вступительный взнос", "entry"), null, CancellationToken.None);
+        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("1", 1, 1, null, 0m, null, null, null), null, CancellationToken.None);
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = garage.Value!.Id,
+            IncomeTypeId = incomeType.Value!.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 1500m,
+            Source = AccrualSources.Manual
+        });
+        await database.Context.SaveChangesAsync();
+
+        var status = await service.SetIrregularPaymentStatusAsync(created.Value!.Id, new UpdateIrregularPaymentStatusRequest(false, "Временно отключен"), actorUserId, CancellationToken.None);
+        var archive = await service.ArchiveIrregularPaymentAsync(created.Value.Id, "Больше не используется", actorUserId, CancellationToken.None);
+        var payments = await service.GetIrregularPaymentsAsync(null, CancellationToken.None);
+
+        Assert.True(status.Succeeded);
+        Assert.False(status.Value!.IsActive);
+        Assert.False(archive.Succeeded);
+        Assert.Equal("irregular_payment_used", archive.ErrorCode);
+        Assert.True(Assert.Single(payments).IsUsed);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_created" && item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_status_changed" && item.ActorUserId == actorUserId);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveIrregularPaymentAsync_HidesUnusedPaymentAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Штраф за пропуск", 300m), null, CancellationToken.None);
+
+        var archive = await service.ArchiveIrregularPaymentAsync(created.Value!.Id, "Больше не применяется", actorUserId, CancellationToken.None);
+        var activePayments = await service.GetIrregularPaymentsAsync(null, CancellationToken.None);
+        var archivedPayments = await service.GetIrregularPaymentsAsync(null, CancellationToken.None, includeArchived: true);
+
+        Assert.True(archive.Succeeded);
+        Assert.Empty(activePayments);
+        Assert.True(Assert.Single(archivedPayments).IsArchived);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_archived" && item.ActorUserId == actorUserId);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

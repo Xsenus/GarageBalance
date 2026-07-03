@@ -73,6 +73,15 @@ export type TariffDto = {
   isArchived: boolean
 }
 
+export type IrregularPaymentDto = {
+  id: string
+  name: string
+  amount: number
+  isActive: boolean
+  isArchived: boolean
+  isUsed: boolean
+}
+
 export type PagedResult<TItem> = {
   items: TItem[]
   totalCount: number
@@ -137,6 +146,12 @@ export type UpsertTariffRequest = {
   electricityThirdRate?: number
 }
 
+export type UpsertIrregularPaymentRequest = {
+  name: string
+  amount: number
+  isActive?: boolean
+}
+
 export type DictionaryClient = {
   getOwners(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<OwnerDto[]>
   getOwnersPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<OwnerDto>>
@@ -180,6 +195,12 @@ export type DictionaryClient = {
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff(accessToken: string, id: string, reason: string): Promise<void>
   restoreTariff(accessToken: string, id: string): Promise<TariffDto>
+  getIrregularPayments(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<IrregularPaymentDto[]>
+  createIrregularPayment(accessToken: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
+  updateIrregularPayment(accessToken: string, id: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
+  setIrregularPaymentStatus(accessToken: string, id: string, request: { isActive: boolean; reason?: string }): Promise<IrregularPaymentDto>
+  archiveIrregularPayment(accessToken: string, id: string, reason: string): Promise<void>
+  restoreIrregularPayment(accessToken: string, id: string): Promise<IrregularPaymentDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -358,5 +379,23 @@ export const dictionariesApi: DictionaryClient = {
   },
   restoreTariff(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}/restore`, { method: 'POST' })
+  },
+  getIrregularPayments(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/irregular-payments', { search, limit, includeArchived: includeArchived || undefined }))
+  },
+  createIrregularPayment(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/irregular-payments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateIrregularPayment(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/irregular-payments/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  setIrregularPaymentStatus(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/irregular-payments/${id}/status`, { method: 'POST', body: JSON.stringify(request) })
+  },
+  archiveIrregularPayment(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/irregular-payments/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreIrregularPayment(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/irregular-payments/${id}/restore`, { method: 'POST' })
   },
 }

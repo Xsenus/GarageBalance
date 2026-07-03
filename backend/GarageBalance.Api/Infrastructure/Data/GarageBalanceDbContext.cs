@@ -23,6 +23,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
+    public DbSet<IrregularPayment> IrregularPayments => Set<IrregularPayment>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
@@ -226,6 +227,16 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
+        });
+
+        modelBuilder.Entity<IrregularPayment>(entity =>
+        {
+            entity.ToTable("irregular_payments");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(item => item.IsActive);
         });
 
         modelBuilder.Entity<FinancialOperation>(entity =>
