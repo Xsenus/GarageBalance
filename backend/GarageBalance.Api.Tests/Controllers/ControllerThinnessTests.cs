@@ -84,8 +84,8 @@ public sealed class ControllerThinnessTests
     {
         var offenders = GetControllerActionMethods()
             .Where(IsDangerousActionName)
-            .Where(method => !method.GetParameters().Any(parameter => RequestTypeHasConstrainedRequiredReason(parameter.ParameterType)))
-            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must require a request body with required Reason limited to 1000 characters.")
+            .Where(method => !method.GetParameters().Any(RequestParameterHasConstrainedRequiredReasonFromBody))
+            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must require a body request with required Reason limited to 1000 characters.")
             .Order(StringComparer.Ordinal)
             .ToArray();
 
@@ -157,6 +157,12 @@ public sealed class ControllerThinnessTests
         return method.Name.StartsWith("Archive", StringComparison.Ordinal) ||
             method.Name.StartsWith("Cancel", StringComparison.Ordinal) ||
             method.Name.StartsWith("Delete", StringComparison.Ordinal);
+    }
+
+    private static bool RequestParameterHasConstrainedRequiredReasonFromBody(ParameterInfo parameter)
+    {
+        return parameter.GetCustomAttribute<FromBodyAttribute>() is not null &&
+            RequestTypeHasConstrainedRequiredReason(parameter.ParameterType);
     }
 
     private static bool RequestTypeHasConstrainedRequiredReason(Type type)

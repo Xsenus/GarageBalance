@@ -211,7 +211,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<FinancialOperationDto>> CancelOperation(Guid operationId, CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
+    public async Task<ActionResult<FinancialOperationDto>> CancelOperation(Guid operationId, [FromBody] CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
     {
         var requestError = ValidateCancelRequest<FinancialOperationDto>(request, "operation_cancel_reason_required", "Для отмены операции нужна причина.");
         if (requestError is not null)
@@ -255,7 +255,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<AccrualDto>> CancelAccrual(Guid accrualId, CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
+    public async Task<ActionResult<AccrualDto>> CancelAccrual(Guid accrualId, [FromBody] CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
     {
         var requestError = ValidateCancelRequest<AccrualDto>(request, "accrual_cancel_reason_required", "Для отмены начисления нужна причина.");
         if (requestError is not null)
@@ -299,7 +299,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<SupplierAccrualDto>> CancelSupplierAccrual(Guid supplierAccrualId, CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
+    public async Task<ActionResult<SupplierAccrualDto>> CancelSupplierAccrual(Guid supplierAccrualId, [FromBody] CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
     {
         var requestError = ValidateCancelRequest<SupplierAccrualDto>(request, "supplier_accrual_cancel_reason_required", "Для отмены начисления поставщику нужна причина.");
         if (requestError is not null)
@@ -371,7 +371,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<MeterReadingDto>> CancelMeterReading(Guid meterReadingId, CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
+    public async Task<ActionResult<MeterReadingDto>> CancelMeterReading(Guid meterReadingId, [FromBody] CancelFinanceEntryRequest? request, CancellationToken cancellationToken)
     {
         var requestError = ValidateCancelRequest<MeterReadingDto>(request, "meter_reading_cancel_reason_required", "Для отмены показания счетчика нужна причина.");
         if (requestError is not null)
