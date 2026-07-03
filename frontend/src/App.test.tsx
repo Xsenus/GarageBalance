@@ -4244,6 +4244,51 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Контрагенты' })).toBeDisabled()
   })
 
+  it('opens reports workspace from audit event detail when the user has report access', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({
+      user: {
+        permissions: ['users.manage', 'dictionaries.read', 'reports.read', 'audit.read'],
+      },
+    })
+    const authClient = createAuthClient({
+      login: async () => auth,
+    })
+    const reportAuditEvent = createAuditEvent({
+      id: 'audit-report-detail',
+      action: 'reports.consolidated_generated',
+      entityType: 'report',
+      entityId: 'consolidated',
+      entityDisplayName: 'Сводный отчет',
+      summary: 'Сформирован сводный отчет.',
+      section: 'reports',
+      actionKind: 'generate',
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [reportAuditEvent],
+      getEvent: async (_token, id) => ({
+        ...reportAuditEvent,
+        id,
+      }),
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+    const detailDialog = await screen.findByRole('dialog', { name: 'Формирование' })
+    const openReportsButton = within(detailDialog).getByRole('button', { name: 'Открыть раздел: Отчеты' })
+
+    expect(within(detailDialog).getByText('Сводный отчет')).toBeInTheDocument()
+    await user.click(openReportsButton)
+
+    expect(screen.queryByRole('dialog', { name: 'Формирование' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Отчеты' })).toBeInTheDocument()
+  })
+
   it('retries audit event detail loading inside the dialog', async () => {
     const user = userEvent.setup()
     let detailLoadCount = 0

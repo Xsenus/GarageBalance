@@ -3801,6 +3801,10 @@ function getAuditWorkspaceTarget(auth: AuthResponse, auditEvent: AuditEventDto):
     return hasPermission(auth, permissions.importRun) ? { section: 'import', label: 'Импорт' } : null
   }
 
+  if (auditEvent.section === 'reports' || auditEvent.section === 'report' || auditEvent.entityType === 'report' || auditEvent.entityType === 'report_export') {
+    return hasPermission(auth, permissions.reportsRead) && hasPermission(auth, permissions.dictionariesRead) ? { section: 'reports', label: 'Отчеты' } : null
+  }
+
   if (auditEvent.section === 'app_releases') {
     return { section: 'releases', label: 'Что нового' }
   }
