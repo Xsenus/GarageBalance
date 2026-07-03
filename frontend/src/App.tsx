@@ -45,6 +45,8 @@ import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmpty
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob, getFormValues } from './shared/fileExports'
+import type { ChangePreview } from './shared/changePreview'
+import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from './shared/changePreview'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
   formatAccrualSource,
@@ -159,11 +161,7 @@ function FormField({ label, hint, children, className }: { label: string; hint?:
 
 type DictionaryEditorState = { section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord }
 
-type DictionaryChangePreview = {
-  field: string
-  before: string
-  after: string
-}
+type DictionaryChangePreview = ChangePreview
 
 type NavigationItem = {
   section: WorkspaceSection
@@ -8251,31 +8249,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     )
   }
 
-  function normalizeChangeText(value: string | null | undefined) {
-    return value?.trim() ?? ''
-  }
-
-  function formatChangeText(value: string | null | undefined) {
-    const normalized = normalizeChangeText(value)
-    return normalized || 'пусто'
-  }
-
-  function formatChangeNumber(value: number | null | undefined) {
-    return value == null || Number.isNaN(value) ? 'пусто' : String(value)
-  }
-
-  function formatChangeMoney(value: number | null | undefined) {
-    return value == null || Number.isNaN(value) ? 'пусто' : formatMoney(value)
-  }
-
-  function formatChangeDate(value: string | null | undefined) {
-    return value ? formatDateOnly(value) : 'пусто'
-  }
-
   function addDictionaryChange(changes: DictionaryChangePreview[], field: string, before: string, after: string) {
-    if (before !== after) {
-      changes.push({ field, before, after })
-    }
+    appendChangePreview(changes, field, before, after)
   }
 
   function formatOwnerLabel(ownerId: string | null | undefined) {
