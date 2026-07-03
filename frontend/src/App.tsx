@@ -5619,6 +5619,8 @@ type ContractorTariffRow = {
   id: string
   title: string
   amount?: string
+  dateDay?: string
+  dateMonth?: string
   unit?: string
   threshold?: string
   byMeter: boolean
@@ -5637,15 +5639,15 @@ const contractorTariffRows: ContractorTariffRow[] = [
   { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
   { id: 'electricity-overdue-days', category: 'Электроэнергия', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
   { id: 'membership-fee', group: 'Членский взнос', category: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { id: 'membership-due-date', category: 'Членский взнос', title: 'Оплата до', amount: '30 июн', byMeter: false, tiered: false },
-  { id: 'membership-start-date', category: 'Членский взнос', title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { id: 'membership-due-date', category: 'Членский взнос', title: 'Оплата до', dateDay: '30', dateMonth: 'июн', byMeter: false, tiered: false },
+  { id: 'membership-start-date', category: 'Членский взнос', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'membership-overdue-days', category: 'Членский взнос', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
   { id: 'target-fee', group: 'Целевой взнос', category: 'Целевой взнос', title: 'Сумма целевого взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { id: 'target-due-date', category: 'Целевой взнос', title: 'Оплата за год до', amount: '30 июн', byMeter: false, tiered: false },
-  { id: 'target-start-date', category: 'Целевой взнос', title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { id: 'target-due-date', category: 'Целевой взнос', title: 'Оплата за год до', dateDay: '30', dateMonth: 'июн', byMeter: false, tiered: false },
+  { id: 'target-start-date', category: 'Целевой взнос', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'target-overdue-days', category: 'Целевой взнос', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'lighting-due-date', group: 'Наружное освещение', category: 'Наружное освещение', title: 'Оплата за год до', amount: '31 дек', byMeter: false, tiered: false },
-  { id: 'lighting-start-date', category: 'Наружное освещение', title: 'Учитывать платеж с', amount: '01 янв', byMeter: false, tiered: false },
+  { id: 'lighting-due-date', group: 'Наружное освещение', category: 'Наружное освещение', title: 'Оплата за год до', dateDay: '31', dateMonth: 'дек', byMeter: false, tiered: false },
+  { id: 'lighting-start-date', category: 'Наружное освещение', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'lighting-overdue-days', category: 'Наружное освещение', title: 'Перенос долга в просроченный', amount: '0', unit: 'дн.', byMeter: false, tiered: false },
   { id: 'salary-electricians', group: 'Зарплатный фонд', category: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false },
   { id: 'salary-accounting', category: 'Зарплатный фонд', title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false },
@@ -6621,18 +6623,64 @@ function DepartmentPrototypeDialog({ onClose, onSave }: { onClose: () => void; o
   )
 }
 
-function createEditableDrafts(rows: Array<{ id: string; amount?: string; unit?: string }>) {
-  return rows.reduce<Record<string, { amount: string; unit: string }>>((drafts, row) => {
-    drafts[row.id] = { amount: row.amount ?? '', unit: row.unit ?? '' }
+type ContractorTariffDraft = {
+  amount: string
+  unit: string
+  dateDay: string
+  dateMonth: string
+}
+
+const contractorTariffMonthOptions = [
+  { value: 'янв', label: 'Январь', maxDay: 31 },
+  { value: 'фев', label: 'Февраль', maxDay: 28 },
+  { value: 'мар', label: 'Март', maxDay: 31 },
+  { value: 'апр', label: 'Апрель', maxDay: 30 },
+  { value: 'май', label: 'Май', maxDay: 31 },
+  { value: 'июн', label: 'Июнь', maxDay: 30 },
+  { value: 'июл', label: 'Июль', maxDay: 31 },
+  { value: 'авг', label: 'Август', maxDay: 31 },
+  { value: 'сен', label: 'Сентябрь', maxDay: 30 },
+  { value: 'окт', label: 'Октябрь', maxDay: 31 },
+  { value: 'ноя', label: 'Ноябрь', maxDay: 30 },
+  { value: 'дек', label: 'Декабрь', maxDay: 31 },
+]
+
+function createEditableDrafts(rows: Array<{ id: string; amount?: string; unit?: string; dateDay?: string; dateMonth?: string }>) {
+  return rows.reduce<Record<string, ContractorTariffDraft>>((drafts, row) => {
+    drafts[row.id] = { amount: row.amount ?? '', unit: row.unit ?? '', dateDay: row.dateDay ?? '', dateMonth: row.dateMonth ?? '' }
     return drafts
   }, {})
 }
 
-function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement>, onCommit: () => void) {
+function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>, onCommit: () => void) {
   if (event.key === 'Enter') {
     event.preventDefault()
     onCommit()
   }
+}
+
+function formatContractorTariffDate(day: string, month: string) {
+  return `${day.padStart(2, '0')} ${month}`.trim()
+}
+
+function getContractorTariffDateError(day: string, month: string) {
+  const trimmedDay = day.trim()
+  const monthOption = contractorTariffMonthOptions.find((option) => option.value === month)
+
+  if (!/^\d{1,2}$/.test(trimmedDay)) {
+    return 'Укажите день числом от 1 до 31.'
+  }
+
+  if (!monthOption) {
+    return 'Выберите месяц.'
+  }
+
+  const numericDay = Number(trimmedDay)
+  if (numericDay < 1 || numericDay > monthOption.maxDay) {
+    return `В месяце "${monthOption.label}" можно указать день от 1 до ${monthOption.maxDay}.`
+  }
+
+  return null
 }
 
 type TariffPrototypePendingChange =
@@ -6655,6 +6703,16 @@ type TariffPrototypePendingChange =
     nextValue: string
   }
   | {
+    kind: 'tariff-date'
+    rowId: string
+    objectName: string
+    fieldLabel: string
+    previousValue: string
+    nextValue: string
+    nextDay: string
+    nextMonth: string
+  }
+  | {
     kind: 'one-time-amount'
     rowId: string
     objectName: string
@@ -6674,6 +6732,7 @@ function TariffsAndFeesPrototypePanel() {
   const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
   const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
+  const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
   const [oneTimeRestoreTarget, setOneTimeRestoreTarget] = useState<ContractorOneTimeRow | null>(null)
@@ -6694,6 +6753,16 @@ function TariffsAndFeesPrototypePanel() {
         [pendingChange.rowId]: {
           ...drafts[pendingChange.rowId],
           [pendingChange.field]: pendingChange.previousValue,
+        },
+      }))
+    } else if (pendingChange?.kind === 'tariff-date') {
+      const [previousDay = '', previousMonth = ''] = pendingChange.previousValue.split(' ')
+      setTariffDrafts((drafts) => ({
+        ...drafts,
+        [pendingChange.rowId]: {
+          ...drafts[pendingChange.rowId],
+          dateDay: previousDay,
+          dateMonth: previousMonth,
         },
       }))
     } else if (pendingChange?.kind === 'one-time-amount') {
@@ -6722,6 +6791,18 @@ function TariffsAndFeesPrototypePanel() {
       setTariffRows((currentRows) => currentRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue === 'Да' } : currentRow
       )))
+    } else if (pendingChange.kind === 'tariff-date') {
+      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === pendingChange.rowId ? { ...currentRow, dateDay: pendingChange.nextDay, dateMonth: pendingChange.nextMonth } : currentRow
+      )))
+      setTariffDrafts((drafts) => ({
+        ...drafts,
+        [pendingChange.rowId]: {
+          ...drafts[pendingChange.rowId],
+          dateDay: pendingChange.nextDay,
+          dateMonth: pendingChange.nextMonth,
+        },
+      }))
     } else {
       setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, amount: pendingChange.nextValue } : currentRow
@@ -6745,10 +6826,24 @@ function TariffsAndFeesPrototypePanel() {
   useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
 
   const commitTariffTextChange = (row: ContractorTariffRow, field: 'amount' | 'unit') => {
-    const nextValue = tariffDrafts[row.id]?.[field] ?? ''
+    const nextValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
     const previousValue = row[field] ?? ''
 
     if (nextValue.trim() === previousValue.trim()) {
+      return
+    }
+
+    if (!previousValue.trim()) {
+      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
+      )))
+      setTariffDrafts((drafts) => ({
+        ...drafts,
+        [row.id]: {
+          ...drafts[row.id],
+          [field]: nextValue,
+        },
+      }))
       return
     }
 
@@ -6760,6 +6855,65 @@ function TariffsAndFeesPrototypePanel() {
       fieldLabel: field === 'amount' ? 'Значение' : 'Единица',
       previousValue,
       nextValue,
+    })
+  }
+
+  const commitTariffDateChange = (row: ContractorTariffRow) => {
+    const draft = tariffDrafts[row.id] ?? { amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
+    const nextDay = draft.dateDay.trim().padStart(2, '0')
+    const nextMonth = draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value
+    const dateError = getContractorTariffDateError(nextDay, nextMonth)
+
+    if (dateError) {
+      setTariffDateErrors((errors) => ({ ...errors, [row.id]: dateError }))
+      return
+    }
+
+    setTariffDateErrors((errors) => {
+      const nextErrors = { ...errors }
+      delete nextErrors[row.id]
+      return nextErrors
+    })
+
+    const previousValue = formatContractorTariffDate(row.dateDay ?? '', row.dateMonth ?? '')
+    const nextValue = formatContractorTariffDate(nextDay, nextMonth)
+
+    if (nextValue === previousValue) {
+      setTariffDrafts((drafts) => ({
+        ...drafts,
+        [row.id]: {
+          ...drafts[row.id],
+          dateDay: nextDay,
+          dateMonth: nextMonth,
+        },
+      }))
+      return
+    }
+
+    if (!previousValue.trim()) {
+      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === row.id ? { ...currentRow, dateDay: nextDay, dateMonth: nextMonth } : currentRow
+      )))
+      setTariffDrafts((drafts) => ({
+        ...drafts,
+        [row.id]: {
+          ...drafts[row.id],
+          dateDay: nextDay,
+          dateMonth: nextMonth,
+        },
+      }))
+      return
+    }
+
+    setPendingChange({
+      kind: 'tariff-date',
+      rowId: row.id,
+      objectName: `${row.category}: ${row.title}`,
+      fieldLabel: 'Значение',
+      previousValue,
+      nextValue,
+      nextDay,
+      nextMonth,
     })
   }
 
@@ -6782,9 +6936,23 @@ function TariffsAndFeesPrototypePanel() {
   }
 
   const commitOneTimeAmountChange = (row: ContractorOneTimeRow) => {
-    const nextValue = oneTimeDrafts[row.id]?.amount ?? ''
+    const nextValue = (oneTimeDrafts[row.id]?.amount ?? '').trim()
 
     if (nextValue.trim() === row.amount.trim()) {
+      return
+    }
+
+    if (!row.amount.trim()) {
+      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === row.id ? { ...currentRow, amount: nextValue } : currentRow
+      )))
+      setOneTimeDrafts((drafts) => ({
+        ...drafts,
+        [row.id]: {
+          ...drafts[row.id],
+          amount: nextValue,
+        },
+      }))
       return
     }
 
@@ -6863,7 +7031,7 @@ function TariffsAndFeesPrototypePanel() {
         ...currentRows.slice(overdueIndex),
       ]
     })
-    setTariffDrafts((drafts) => ({ ...drafts, [nextRow.id]: { amount: '', unit: nextRow.unit ?? '' } }))
+    setTariffDrafts((drafts) => ({ ...drafts, [nextRow.id]: { amount: '', unit: nextRow.unit ?? '', dateDay: '', dateMonth: '' } }))
   }
 
   const lastElectricityThresholdRowId = [...tariffRows]
@@ -6906,22 +7074,67 @@ function TariffsAndFeesPrototypePanel() {
                   </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.threshold ? <em>{row.threshold}</em> : null}
-                    <input
-                      aria-label={`${row.category}: ${row.title}: значение`}
-                      className="contractors-editable-input"
-                      value={tariffDrafts[row.id]?.amount ?? ''}
-                      onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
-                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
-                    />
+                    {row.dateDay !== undefined ? (
+                      <div className="contractors-date-field">
+                        <input
+                          aria-label={`${row.category}: ${row.title}: день`}
+                          aria-invalid={Boolean(tariffDateErrors[row.id])}
+                          aria-describedby={tariffDateErrors[row.id] ? `${row.id}-date-error` : undefined}
+                          className="contractors-editable-input contractors-editable-input--day"
+                          inputMode="numeric"
+                          maxLength={2}
+                          value={tariffDrafts[row.id]?.dateDay ?? ''}
+                          onChange={(event) => {
+                            setTariffDateErrors((errors) => {
+                              const nextErrors = { ...errors }
+                              delete nextErrors[row.id]
+                              return nextErrors
+                            })
+                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], dateDay: event.target.value } }))
+                          }}
+                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
+                        />
+                        {tariffDateErrors[row.id] ? <span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span> : null}
+                      </div>
+                    ) : (
+                      <input
+                        aria-label={`${row.category}: ${row.title}: значение`}
+                        className="contractors-editable-input"
+                        value={tariffDrafts[row.id]?.amount ?? ''}
+                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
+                      />
+                    )}
                   </span>
                   <span role="cell">
-                    <input
-                      aria-label={`${row.category}: ${row.title}: единица`}
-                      className="contractors-editable-input contractors-editable-input--unit"
-                      value={tariffDrafts[row.id]?.unit ?? ''}
-                      onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
-                    />
+                    {row.dateDay !== undefined ? (
+                      <select
+                        aria-label={`${row.category}: ${row.title}: месяц`}
+                        className="contractors-editable-select contractors-editable-select--month"
+                        value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
+                        onChange={(event) => {
+                          setTariffDateErrors((errors) => {
+                            const nextErrors = { ...errors }
+                            delete nextErrors[row.id]
+                            return nextErrors
+                          })
+                          setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], dateMonth: event.target.value } }))
+                        }}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
+                      >
+                        {contractorTariffMonthOptions.map((month) => (
+                          <option key={month.value} value={month.value}>{month.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        aria-label={`${row.category}: ${row.title}: единица`}
+                        className="contractors-editable-input contractors-editable-input--unit"
+                        value={tariffDrafts[row.id]?.unit ?? ''}
+                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
+                      />
+                    )}
                   </span>
                   <span role="cell">
                     <select
@@ -7026,26 +7239,28 @@ function TariffsAndFeesPrototypePanel() {
               </button>
             </div>
             <p className="confirmation-text" id="tariff-prototype-change-description">Проверьте, что именно изменится. После подключения backend это действие будет записываться в историю изменений.</p>
-            <dl className="dictionary-change-list">
-              <div>
-                <dt>Поле</dt>
-                <dd>{pendingChange.fieldLabel}</dd>
+            <div className="tariff-change-summary" aria-label="Изменяемое поле тарифа">
+              <div className="tariff-change-field-row">
+                <span>Поле</span>
+                <strong>{pendingChange.fieldLabel}</strong>
               </div>
-              <div>
-                <dt>Было</dt>
-                <dd>{formatPrototypeChangeValue(pendingChange.previousValue)}</dd>
+              <div className="tariff-change-values-row">
+                <div>
+                  <span>Было</span>
+                  <strong>{formatPrototypeChangeValue(pendingChange.previousValue)}</strong>
+                </div>
+                <div>
+                  <span>Стало</span>
+                  <strong>{formatPrototypeChangeValue(pendingChange.nextValue)}</strong>
+                </div>
               </div>
-              <div>
-                <dt>Стало</dt>
-                <dd>{formatPrototypeChangeValue(pendingChange.nextValue)}</dd>
-              </div>
-            </dl>
+            </div>
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingChange}>
                 <Save size={16} />
-                <span>Сохранить изменение</span>
+                <span>Сохранить</span>
               </button>
+              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange}>Отмена</button>
             </div>
           </section>
         </div>

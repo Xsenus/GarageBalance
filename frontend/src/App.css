@@ -642,6 +642,17 @@ h1 {
   gap: 3px;
 }
 
+.contractors-sheet-header span:not(:first-child),
+.contractors-sheet-row > span:not(:first-child) {
+  text-align: center;
+}
+
+.contractors-sheet-row > span:not(:first-child) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .contractors-sheet-row strong {
   color: #101828;
   font-size: 12px;
@@ -662,6 +673,7 @@ h1 {
 .contractors-value-cell {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   color: #101828;
   font-weight: 700;
@@ -682,6 +694,7 @@ h1 {
   background: #ffffff;
   color: #101828;
   font: inherit;
+  text-align: center;
 }
 
 .contractors-editable-input {
@@ -692,8 +705,38 @@ h1 {
   max-width: 88px;
 }
 
+.contractors-editable-input--day {
+  max-width: 72px;
+}
+
 .contractors-editable-select {
-  padding: 6px 28px 6px 9px;
+  appearance: none;
+  padding: 6px 34px 6px 12px;
+  background-image: linear-gradient(45deg, transparent 50%, #475467 50%), linear-gradient(135deg, #475467 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  text-align-last: center;
+}
+
+.contractors-editable-select--month {
+  min-width: 118px;
+}
+
+.contractors-date-field {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.contractors-field-error {
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .contractors-editable-input:hover,
@@ -711,6 +754,12 @@ h1 {
 .contractors-editable-input:disabled {
   background: #f2f4f7;
   color: #667085;
+}
+
+.contractors-editable-input[aria-invalid='true'],
+.contractors-editable-select[aria-invalid='true'] {
+  border-color: #f04438;
+  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.12);
 }
 
 .contractors-prototype-tabs {
@@ -3736,6 +3785,58 @@ button.operation-row:focus-visible {
   font-weight: 700;
 }
 
+.tariff-change-summary {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.tariff-change-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.tariff-change-field-row span,
+.tariff-change-values-row span {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tariff-change-field-row strong,
+.tariff-change-values-row strong {
+  color: #101828;
+  overflow-wrap: anywhere;
+}
+
+.tariff-change-values-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tariff-change-values-row > div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.tariff-change-values-row > div:last-child {
+  border-color: #a4bcfd;
+  background: #eef4ff;
+}
+
 .detail-dialog-actions {
   position: sticky;
   z-index: 2;
@@ -3752,7 +3853,8 @@ button.operation-row:focus-visible {
 
 @media (max-width: 720px) {
   .dictionary-change-list li,
-  .dictionary-change-values {
+  .dictionary-change-values,
+  .tariff-change-values-row {
     grid-template-columns: 1fr;
   }
 
