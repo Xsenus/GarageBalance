@@ -61,11 +61,12 @@ public sealed class ImportControllerTests
     [Fact]
     public async Task ExportAccessImportRunReport_ReturnsFile()
     {
+        var actorUserId = Guid.NewGuid();
         var service = new FakeImportService
         {
             ExportResult = ImportResult<ImportReportFileDto>.Success(new ImportReportFileDto("report.json", "application/json; charset=utf-8", Encoding.UTF8.GetBytes("{}")))
         };
-        var controller = CreateController(service);
+        var controller = CreateController(service, actorUserId);
         var runId = Guid.NewGuid();
 
         var result = await controller.ExportAccessImportRunReport(runId, CancellationToken.None);
@@ -74,6 +75,7 @@ public sealed class ImportControllerTests
         Assert.Equal("report.json", file.FileDownloadName);
         Assert.Equal("application/json; charset=utf-8", file.ContentType);
         Assert.Equal(runId, service.LastExportRunId);
+        Assert.Equal(actorUserId, service.LastExportActorUserId);
     }
 
     [Fact]
@@ -289,6 +291,7 @@ public sealed class ImportControllerTests
         public Guid? LastActorUserId { get; private set; }
         public string? LastFileName { get; private set; }
         public Guid? LastExportRunId { get; private set; }
+        public Guid? LastExportActorUserId { get; private set; }
         public Guid? LastLogRunId { get; private set; }
         public AccessImportRunListRequest? LastRunRequest { get; private set; }
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
@@ -304,9 +307,10 @@ public sealed class ImportControllerTests
             return Task.FromResult(Runs);
         }
 
-        public Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, CancellationToken cancellationToken)
+        public Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastExportRunId = runId;
+            LastExportActorUserId = actorUserId;
             return Task.FromResult(ExportResult);
         }
 

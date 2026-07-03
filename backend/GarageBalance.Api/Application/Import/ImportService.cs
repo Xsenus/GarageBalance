@@ -79,7 +79,7 @@ public sealed class ImportService(
         return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success(entries.Select(ToLogEntryDto).ToList());
     }
 
-    public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, CancellationToken cancellationToken)
+    public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var run = await dbContext.AccessImportRuns.AsNoTracking().SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
         if (run is null)
@@ -111,9 +111,33 @@ public sealed class ImportService(
             .Replace(' ', '-')
             .ToLowerInvariant();
         var timestamp = dto.StartedAtUtc.ToString("yyyyMMdd-HHmmss");
+        var fileName = $"garagebalance-access-dry-run-{safeFileName}-{timestamp}.json";
+
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            ActorUserId: actorUserId,
+            Action: "import.access_dry_run_report_exported",
+            EntityType: "access_import_run",
+            EntityId: run.Id.ToString(),
+            Summary: $"Экспортирован отчет dry-run импорта Access: {dto.OriginalFileName}.",
+            ActionKind: "export",
+            EntityDisplayName: dto.OriginalFileName,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: dto.OriginalFileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["mode"] = run.Mode,
+                ["status"] = run.Status,
+                ["originalFileName"] = dto.OriginalFileName,
+                ["fileExtension"] = dto.FileExtension,
+                ["reportFileName"] = fileName,
+                ["totalChecks"] = dto.TotalChecks,
+                ["warningCount"] = dto.WarningCount,
+                ["errorCount"] = dto.ErrorCount
+            }));
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return ImportResult<ImportReportFileDto>.Success(new ImportReportFileDto(
-            $"garagebalance-access-dry-run-{safeFileName}-{timestamp}.json",
+            fileName,
             "application/json; charset=utf-8",
             content));
     }

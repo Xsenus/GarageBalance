@@ -92,9 +92,10 @@ public sealed class ImportServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
 
-        var result = await service.ExportAccessImportRunReportAsync(dryRun.Value!.Id, CancellationToken.None);
+        var result = await service.ExportAccessImportRunReportAsync(dryRun.Value!.Id, actorUserId, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("application/json; charset=utf-8", result.Value!.ContentType);
@@ -103,6 +104,19 @@ public sealed class ImportServiceTests
         Assert.Contains("\"originalFileName\": \"GSK archive.accdb\"", text);
         Assert.Contains("\"checks\":", text);
         Assert.Contains("\"schema_hints\"", text);
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.access_dry_run_report_exported");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("export", auditEvent.ActionKind);
+        Assert.Equal(dryRun.Value!.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("GSK archive.accdb", auditEvent.EntityDisplayName);
+        Assert.Equal(dryRun.Value.Id.ToString(), auditEvent.RelatedDocumentId);
+        Assert.Equal("GSK archive.accdb", auditEvent.RelatedDocumentNumber);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("dry_run", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal("GSK archive.accdb", metadata.RootElement.GetProperty("originalFileName").GetString());
+        Assert.Equal(result.Value.FileName, metadata.RootElement.GetProperty("reportFileName").GetString());
+        Assert.DoesNotContain("schema_hints", auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,10 +159,11 @@ public sealed class ImportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
 
-        var result = await service.ExportAccessImportRunReportAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await service.ExportAccessImportRunReportAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("import_run_not_found", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]

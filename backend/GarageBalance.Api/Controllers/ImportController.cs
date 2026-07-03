@@ -35,7 +35,7 @@ public sealed class ImportController(IImportService importService, IImportQuaran
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ExportAccessImportRunReport(Guid id, CancellationToken cancellationToken)
     {
-        var result = await importService.ExportAccessImportRunReportAsync(id, cancellationToken);
+        var result = await importService.ExportAccessImportRunReportAsync(id, GetActorUserId(), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
