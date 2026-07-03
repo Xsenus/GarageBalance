@@ -78,18 +78,83 @@ public sealed class FinanceServiceTests
         Assert.Equal("finance", createAudit.Section);
         Assert.Equal("create", createAudit.ActionKind);
         Assert.Contains("PKO-writer", createAudit.EntityDisplayName, StringComparison.Ordinal);
+        Assert.Equal(fixtures.Garage.Id.ToString(), createAudit.RelatedGarageId);
+        Assert.Equal("12", createAudit.RelatedGarageNumber);
+        Assert.Equal("2026-06", createAudit.RelatedAccountingMonth);
+        Assert.Equal(created.Value.Id.ToString(), createAudit.RelatedDocumentId);
+        Assert.Equal("PKO-writer", createAudit.RelatedDocumentNumber);
         using var createMetadata = JsonDocument.Parse(createAudit.MetadataJson!);
         Assert.Equal("financial_operation", createMetadata.RootElement.GetProperty("financeEntityType").GetString());
+        Assert.Equal("income", createMetadata.RootElement.GetProperty("operationKind").GetString());
+        Assert.Equal("500", createMetadata.RootElement.GetProperty("amount").GetString());
 
         var cancelAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled");
         Assert.Equal(actorUserId, cancelAudit.ActorUserId);
         Assert.Equal(created.Value.Id.ToString(), cancelAudit.EntityId);
         Assert.Equal("finance", cancelAudit.Section);
         Assert.Equal("cancel", cancelAudit.ActionKind);
+        Assert.Equal("2026-06", cancelAudit.RelatedAccountingMonth);
+        Assert.Equal(created.Value.Id.ToString(), cancelAudit.RelatedDocumentId);
+        Assert.Equal("PKO-writer", cancelAudit.RelatedDocumentNumber);
         Assert.Contains("duplicate document", cancelAudit.Summary, StringComparison.Ordinal);
         using var cancelMetadata = JsonDocument.Parse(cancelAudit.MetadataJson!);
         Assert.Equal("financial_operation", cancelMetadata.RootElement.GetProperty("financeEntityType").GetString());
         Assert.Equal("Отмена финансовой записи.", cancelMetadata.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task FinanceAudit_WritesRelatedContextForAccrualsSuppliersAndReadings()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var accrual = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Начисление"),
+            actorUserId,
+            CancellationToken.None);
+        var supplierAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 900m, "manual", "INV-audit", "Счет"),
+            actorUserId,
+            CancellationToken.None);
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 150m, "Показание"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(accrual.Succeeded);
+        Assert.True(supplierAccrual.Succeeded);
+        Assert.True(reading.Succeeded);
+
+        var accrualAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
+        Assert.Equal(fixtures.Garage.Id.ToString(), accrualAudit.RelatedGarageId);
+        Assert.Equal("12", accrualAudit.RelatedGarageNumber);
+        Assert.Equal("2026-06", accrualAudit.RelatedAccountingMonth);
+        Assert.Equal(accrual.Value!.Id.ToString(), accrualAudit.RelatedDocumentId);
+        using var accrualMetadata = JsonDocument.Parse(accrualAudit.MetadataJson!);
+        Assert.Equal("700", accrualMetadata.RootElement.GetProperty("amount").GetString());
+        Assert.Equal(fixtures.IncomeType.Name, accrualMetadata.RootElement.GetProperty("incomeTypeName").GetString());
+
+        var supplierAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_created");
+        Assert.Equal(fixtures.Supplier.Id.ToString(), supplierAudit.RelatedCounterpartyId);
+        Assert.Equal(fixtures.Supplier.Name, supplierAudit.RelatedCounterpartyName);
+        Assert.Equal("2026-06", supplierAudit.RelatedAccountingMonth);
+        Assert.Equal(supplierAccrual.Value!.Id.ToString(), supplierAudit.RelatedDocumentId);
+        Assert.Equal("INV-audit", supplierAudit.RelatedDocumentNumber);
+        using var supplierMetadata = JsonDocument.Parse(supplierAudit.MetadataJson!);
+        Assert.Equal("900", supplierMetadata.RootElement.GetProperty("amount").GetString());
+        Assert.Equal(fixtures.ExpenseType.Name, supplierMetadata.RootElement.GetProperty("expenseTypeName").GetString());
+
+        var readingAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+        Assert.Equal(fixtures.Garage.Id.ToString(), readingAudit.RelatedGarageId);
+        Assert.Equal("12", readingAudit.RelatedGarageNumber);
+        Assert.Equal("2026-06", readingAudit.RelatedAccountingMonth);
+        Assert.Equal(reading.Value!.Id.ToString(), readingAudit.RelatedDocumentId);
+        Assert.Equal("water", readingAudit.RelatedDocumentNumber);
+        using var readingMetadata = JsonDocument.Parse(readingAudit.MetadataJson!);
+        Assert.Equal("150", readingMetadata.RootElement.GetProperty("currentValue").GetString());
+        Assert.Equal("water", readingMetadata.RootElement.GetProperty("meterKind").GetString());
     }
 
     [Fact]
