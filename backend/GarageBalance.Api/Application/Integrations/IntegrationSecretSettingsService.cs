@@ -11,6 +11,14 @@ public sealed class IntegrationSecretSettingsService(
     ISensitiveDataProtector sensitiveDataProtector,
     IAuditEventWriter auditEventWriter) : IIntegrationSecretSettingsService
 {
+    private static readonly IReadOnlyDictionary<string, string> IntegrationSecretFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["provider"] = "Провайдер",
+        ["settingKey"] = "Ключ настройки",
+        ["purpose"] = "Назначение защиты",
+        ["protectedValueState"] = "Защищенное значение"
+    };
+
     public async Task<IntegrationSecretSettingResult<IntegrationSecretSettingDto>> UpsertSecretAsync(
         UpsertIntegrationSecretRequest request,
         Guid? actorUserId,
@@ -27,13 +35,34 @@ public sealed class IntegrationSecretSettingsService(
         var normalizedProvider = Normalize(provider);
         var normalizedSettingKey = Normalize(settingKey);
         var purpose = BuildPurpose(provider, settingKey);
-        var protectedValue = sensitiveDataProtector.Protect(request.PlaintextValue.Trim(), purpose);
+        var plaintextValue = request.PlaintextValue.Trim();
 
         var setting = await dbContext.IntegrationSecretSettings
             .FirstOrDefaultAsync(item =>
                 item.NormalizedProvider == normalizedProvider &&
                 item.NormalizedSettingKey == normalizedSettingKey,
                 cancellationToken);
+
+        var isNew = setting is null;
+        var oldProvider = setting?.Provider;
+        var oldSettingKey = setting?.SettingKey;
+        var oldPurpose = setting?.Purpose;
+        var oldProtectedValueState = string.IsNullOrWhiteSpace(setting?.ProtectedValue) ? null : "задано";
+        var existingPlaintext = setting is null || string.IsNullOrWhiteSpace(setting.ProtectedValue)
+            ? null
+            : sensitiveDataProtector.Unprotect(setting.ProtectedValue, setting.Purpose);
+        var protectedValueChanged = !string.Equals(existingPlaintext, plaintextValue, StringComparison.Ordinal);
+
+        if (!isNew &&
+            string.Equals(oldProvider, provider, StringComparison.Ordinal) &&
+            string.Equals(oldSettingKey, settingKey, StringComparison.Ordinal) &&
+            string.Equals(oldPurpose, purpose, StringComparison.Ordinal) &&
+            !protectedValueChanged)
+        {
+            return IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Success(ToDto(setting!));
+        }
+
+        var protectedValue = sensitiveDataProtector.Protect(plaintextValue, purpose);
 
         if (setting is null)
         {
@@ -57,19 +86,38 @@ public sealed class IntegrationSecretSettingsService(
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
         setting.UpdatedByUserId = actorUserId;
 
+        var protectedValueState = isNew ? "задано" : protectedValueChanged ? "обновлено" : "задано";
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "integration.secret_upserted",
             "integration_secret_setting",
             $"{provider}:{settingKey}",
-            Summary: $"Integration secret setting '{provider}:{settingKey}' updated.",
-            ActionKind: "update",
+            Summary: isNew
+                ? $"Создана защищенная настройка интеграции {provider}:{settingKey}."
+                : $"Обновлена защищенная настройка интеграции {provider}:{settingKey}.",
+            ActionKind: isNew ? "create" : "update",
             EntityDisplayName: $"{provider}:{settingKey}",
+            OldValues: new Dictionary<string, object?>
+            {
+                ["provider"] = oldProvider,
+                ["settingKey"] = oldSettingKey,
+                ["purpose"] = oldPurpose,
+                ["protectedValueState"] = oldProtectedValueState
+            },
+            NewValues: new Dictionary<string, object?>
+            {
+                ["provider"] = provider,
+                ["settingKey"] = settingKey,
+                ["purpose"] = purpose,
+                ["protectedValueState"] = protectedValueState
+            },
+            FieldLabels: IntegrationSecretFieldLabels,
             Metadata: new Dictionary<string, object?>
             {
                 ["provider"] = provider,
                 ["settingKey"] = settingKey,
-                ["purpose"] = purpose
+                ["purpose"] = purpose,
+                ["protectedValueState"] = protectedValueState
             }));
 
         await dbContext.SaveChangesAsync(cancellationToken);

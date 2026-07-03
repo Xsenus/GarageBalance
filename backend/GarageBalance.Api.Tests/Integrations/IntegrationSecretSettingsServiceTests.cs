@@ -5,6 +5,7 @@ using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Integrations;
 
@@ -34,11 +35,17 @@ public sealed class IntegrationSecretSettingsServiceTests
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "integration.secret_upserted");
         Assert.Equal(actorUserId, auditEvent.ActorUserId);
         Assert.Equal("integration", auditEvent.Section);
-        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Equal("create", auditEvent.ActionKind);
         Assert.Equal("OneCFresh:RefreshToken", auditEvent.EntityDisplayName);
         Assert.Contains("OneCFresh", auditEvent.MetadataJson, StringComparison.Ordinal);
         Assert.Contains("RefreshToken", auditEvent.MetadataJson, StringComparison.Ordinal);
         Assert.Contains("OneCFresh.RefreshToken", auditEvent.MetadataJson, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Провайдер", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Ключ настройки", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Защищенное значение", changedFields, StringComparison.Ordinal);
+        Assert.Equal("задано", metadata.RootElement.GetProperty("protectedValueState").GetString());
         Assert.DoesNotContain(secret, auditEvent.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain(secret, auditEvent.EntityId, StringComparison.Ordinal);
         Assert.DoesNotContain(secret, auditEvent.MetadataJson, StringComparison.Ordinal);
@@ -76,6 +83,26 @@ public sealed class IntegrationSecretSettingsServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("second-token", result.Value);
         Assert.Equal(2, await database.Context.AuditEvents.CountAsync(item => item.Action == "integration.secret_upserted"));
+        var updateAudit = database.Context.AuditEvents.Single(item => item.Action == "integration.secret_upserted" && item.ActionKind == "update");
+        using var metadata = JsonDocument.Parse(updateAudit.MetadataJson!);
+        Assert.Contains("Защищенное значение", metadata.RootElement.GetProperty("changedFields").GetString(), StringComparison.Ordinal);
+        Assert.Equal("обновлено", metadata.RootElement.GetProperty("protectedValueState").GetString());
+        Assert.DoesNotContain("first-token", updateAudit.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("second-token", updateAudit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpsertSecretAsync_DoesNotWriteAuditWhenSecretIsUnchanged()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        await service.UpsertSecretAsync(new UpsertIntegrationSecretRequest("OneCFresh", "RefreshToken", "same-token"), null, CancellationToken.None);
+        var result = await service.UpsertSecretAsync(new UpsertIntegrationSecretRequest("OneCFresh", "RefreshToken", "same-token"), Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, await database.Context.IntegrationSecretSettings.CountAsync());
+        Assert.Equal(1, await database.Context.AuditEvents.CountAsync(item => item.Action == "integration.secret_upserted"));
     }
 
     [Theory]
