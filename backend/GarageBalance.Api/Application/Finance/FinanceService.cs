@@ -404,12 +404,21 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var documentNumber = NormalizeOptional(request.DocumentNumber);
+        var comment = NormalizeOptional(request.Comment);
+        if (IncomeOperationMatches(operation, request.OperationDate, accountingMonth, amount, documentNumber, comment, garage.Id, incomeType.Id))
+        {
+            return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+        }
+
         var previousSnapshot = FormatIncomeOperationSnapshot(operation);
         operation.OperationDate = request.OperationDate;
-        operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
-        operation.Amount = MoneyMath.RoundMoney(request.Amount);
-        operation.DocumentNumber = NormalizeOptional(request.DocumentNumber);
-        operation.Comment = NormalizeOptional(request.Comment);
+        operation.AccountingMonth = accountingMonth;
+        operation.Amount = amount;
+        operation.DocumentNumber = documentNumber;
+        operation.Comment = comment;
         operation.GarageId = garage.Id;
         operation.Garage = garage;
         operation.IncomeTypeId = incomeType.Id;
@@ -458,12 +467,21 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var documentNumber = NormalizeOptional(request.DocumentNumber);
+        var comment = NormalizeOptional(request.Comment);
+        if (ExpenseOperationMatches(operation, request.OperationDate, accountingMonth, amount, documentNumber, comment, supplier.Id, expenseType.Id))
+        {
+            return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+        }
+
         var previousSnapshot = FormatExpenseOperationSnapshot(operation);
         operation.OperationDate = request.OperationDate;
-        operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
-        operation.Amount = MoneyMath.RoundMoney(request.Amount);
-        operation.DocumentNumber = NormalizeOptional(request.DocumentNumber);
-        operation.Comment = NormalizeOptional(request.Comment);
+        operation.AccountingMonth = accountingMonth;
+        operation.Amount = amount;
+        operation.DocumentNumber = documentNumber;
+        operation.Comment = comment;
         operation.SupplierId = supplier.Id;
         operation.Supplier = supplier;
         operation.ExpenseTypeId = expenseType.Id;
@@ -651,6 +669,13 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
         }
 
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var comment = NormalizeOptional(request.Comment);
+        if (AccrualMatches(accrual, garage.Id, incomeType.Id, month, amount, source, comment))
+        {
+            return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+        }
+
         var before = AccrualAuditSnapshot.From(accrual);
 
         accrual.GarageId = garage.Id;
@@ -658,9 +683,9 @@ public sealed class FinanceService(
         accrual.IncomeTypeId = incomeType.Id;
         accrual.IncomeType = incomeType;
         accrual.AccountingMonth = month;
-        accrual.Amount = MoneyMath.RoundMoney(request.Amount);
+        accrual.Amount = amount;
         accrual.Source = source;
-        accrual.Comment = NormalizeOptional(request.Comment);
+        accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.accrual_updated", "accrual", accrual.Id, FormatAccrualUpdatedAuditSummary(before, accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -785,6 +810,13 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
         }
 
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var comment = NormalizeOptional(request.Comment);
+        if (SupplierAccrualMatches(accrual, supplier.Id, expenseType.Id, month, amount, source, documentNumber, comment))
+        {
+            return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
+        }
+
         var before = SupplierAccrualAuditSnapshot.From(accrual);
 
         accrual.SupplierId = supplier.Id;
@@ -792,10 +824,10 @@ public sealed class FinanceService(
         accrual.ExpenseTypeId = expenseType.Id;
         accrual.ExpenseType = expenseType;
         accrual.AccountingMonth = month;
-        accrual.Amount = MoneyMath.RoundMoney(request.Amount);
+        accrual.Amount = amount;
         accrual.Source = source;
         accrual.DocumentNumber = documentNumber;
-        accrual.Comment = NormalizeOptional(request.Comment);
+        accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.supplier_accrual_updated", "supplier_accrual", accrual.Id, FormatSupplierAccrualUpdatedAuditSummary(before, accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -1151,6 +1183,13 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_sequence_invalid", "Показание не может быть больше следующего внесенного месяца.");
         }
 
+        var hasGapWarning = HasGapWarning(meterKind, month, previousReading);
+        var comment = NormalizeOptional(request.Comment);
+        if (MeterReadingMatches(reading, garage.Id, meterKind, month, request.ReadingDate, currentValue, previousValue, consumption, hasGapWarning, comment))
+        {
+            return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+        }
+
         reading.GarageId = garage.Id;
         reading.Garage = garage;
         reading.MeterKind = meterKind;
@@ -1159,8 +1198,8 @@ public sealed class FinanceService(
         reading.CurrentValue = currentValue;
         reading.PreviousValue = previousValue;
         reading.Consumption = consumption;
-        reading.HasGapWarning = HasGapWarning(meterKind, month, previousReading);
-        reading.Comment = NormalizeOptional(request.Comment);
+        reading.HasGapWarning = hasGapWarning;
+        reading.Comment = comment;
         reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.meter_reading_updated", "meter_reading", reading.Id, FormatMeterReadingUpdatedAuditSummary(reading));
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -1624,6 +1663,67 @@ public sealed class FinanceService(
     private static string NormalizeAuditDisplayName(string summary)
     {
         return summary.Trim().TrimEnd('.');
+    }
+
+    private static bool IncomeOperationMatches(FinancialOperation operation, DateOnly operationDate, DateOnly accountingMonth, decimal amount, string? documentNumber, string? comment, Guid garageId, Guid incomeTypeId)
+    {
+        return operation.OperationDate == operationDate &&
+            operation.AccountingMonth == accountingMonth &&
+            operation.Amount == amount &&
+            StringEquals(operation.DocumentNumber, documentNumber) &&
+            StringEquals(operation.Comment, comment) &&
+            operation.GarageId == garageId &&
+            operation.IncomeTypeId == incomeTypeId;
+    }
+
+    private static bool ExpenseOperationMatches(FinancialOperation operation, DateOnly operationDate, DateOnly accountingMonth, decimal amount, string? documentNumber, string? comment, Guid supplierId, Guid expenseTypeId)
+    {
+        return operation.OperationDate == operationDate &&
+            operation.AccountingMonth == accountingMonth &&
+            operation.Amount == amount &&
+            StringEquals(operation.DocumentNumber, documentNumber) &&
+            StringEquals(operation.Comment, comment) &&
+            operation.SupplierId == supplierId &&
+            operation.ExpenseTypeId == expenseTypeId;
+    }
+
+    private static bool AccrualMatches(Accrual accrual, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, decimal amount, string source, string? comment)
+    {
+        return accrual.GarageId == garageId &&
+            accrual.IncomeTypeId == incomeTypeId &&
+            accrual.AccountingMonth == accountingMonth &&
+            accrual.Amount == amount &&
+            StringEquals(accrual.Source, source) &&
+            StringEquals(accrual.Comment, comment);
+    }
+
+    private static bool SupplierAccrualMatches(SupplierAccrual accrual, Guid supplierId, Guid expenseTypeId, DateOnly accountingMonth, decimal amount, string source, string? documentNumber, string? comment)
+    {
+        return accrual.SupplierId == supplierId &&
+            accrual.ExpenseTypeId == expenseTypeId &&
+            accrual.AccountingMonth == accountingMonth &&
+            accrual.Amount == amount &&
+            StringEquals(accrual.Source, source) &&
+            StringEquals(accrual.DocumentNumber, documentNumber) &&
+            StringEquals(accrual.Comment, comment);
+    }
+
+    private static bool MeterReadingMatches(MeterReading reading, Guid garageId, string meterKind, DateOnly accountingMonth, DateOnly readingDate, decimal currentValue, decimal previousValue, decimal consumption, bool hasGapWarning, string? comment)
+    {
+        return reading.GarageId == garageId &&
+            StringEquals(reading.MeterKind, meterKind) &&
+            reading.AccountingMonth == accountingMonth &&
+            reading.ReadingDate == readingDate &&
+            reading.CurrentValue == currentValue &&
+            reading.PreviousValue == previousValue &&
+            reading.Consumption == consumption &&
+            reading.HasGapWarning == hasGapWarning &&
+            StringEquals(reading.Comment, comment);
+    }
+
+    private static bool StringEquals(string? left, string? right)
+    {
+        return string.Equals(left, right, StringComparison.Ordinal);
     }
 
     private static string? NormalizeOptional(string? value)

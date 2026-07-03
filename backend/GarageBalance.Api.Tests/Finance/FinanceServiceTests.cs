@@ -93,6 +93,66 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var income = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 15), 300.005m, "PKO-noop", "Платеж"),
+            null,
+            CancellationToken.None);
+        var expense = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 15), 200.005m, "RKO-noop", "Выплата"),
+            null,
+            CancellationToken.None);
+        var accrual = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 15), 1000.005m, "manual", "Начисление"),
+            null,
+            CancellationToken.None);
+        var supplierAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 15), 1200.005m, "manual", "INV-noop", "Счет"),
+            null,
+            CancellationToken.None);
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 15), new DateOnly(2026, 6, 20), 100.004m, "Показание"),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.UpdateIncomeAsync(
+            income.Value!.Id,
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 300.005m, " PKO-noop ", " Платеж "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateExpenseAsync(
+            expense.Value!.Id,
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200.005m, " RKO-noop ", " Выплата "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateAccrualAsync(
+            accrual.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000.005m, " manual ", " Начисление "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateSupplierAccrualAsync(
+            supplierAccrual.Value!.Id,
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200.005m, " manual ", " INV-noop ", " Счет "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateMeterReadingAsync(
+            reading.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, " water ", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 100.004m, " Показание "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateFinanceDocuments_RoundsManualMoneyAmountsAwayFromZero()
     {
         await using var database = await TestDatabase.CreateAsync();
