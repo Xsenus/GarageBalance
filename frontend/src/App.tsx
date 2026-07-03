@@ -121,6 +121,7 @@ const auditActionKindOptions = [
   { value: 'login', label: 'Вход' },
   { value: 'fail', label: 'Ошибки и отказы' },
   { value: 'generate', label: 'Формирование' },
+  { value: 'export', label: 'Выгрузка' },
   { value: 'import', label: 'Импорт' },
 ]
 
@@ -3723,6 +3724,7 @@ function getAuditEventActionKindLabel(auditEvent: AuditEventDto) {
   if (action.includes('_canceled') || action.includes('_cancelled')) return 'Отмена'
   if (action.includes('_failed') || action.includes('_rate_limited') || action.includes('_inactive')) return 'Ошибка'
   if (action.includes('_generated')) return 'Формирование'
+  if (action.includes('_exported') || action.includes('.export')) return 'Выгрузка'
   if (action.startsWith('auth.login')) return 'Вход'
   if (action.startsWith('import.')) return 'Импорт'
   return auditEvent.action
