@@ -94,12 +94,23 @@ public sealed class DictionaryService(
             return DictionaryResult<OwnerDto>.Failure("owner_not_found", "Владелец не найден.");
         }
 
-        owner.LastName = request.LastName.Trim();
-        owner.FirstName = request.FirstName.Trim();
-        owner.MiddleName = NormalizeOptional(request.MiddleName);
-        owner.Phone = NormalizeOptional(request.Phone);
-        owner.Address = NormalizeOptional(request.Address);
-        owner.MeterNotes = NormalizeOptional(request.MeterNotes);
+        var lastName = request.LastName.Trim();
+        var firstName = request.FirstName.Trim();
+        var middleName = NormalizeOptional(request.MiddleName);
+        var phone = NormalizeOptional(request.Phone);
+        var address = NormalizeOptional(request.Address);
+        var meterNotes = NormalizeOptional(request.MeterNotes);
+        if (OwnerMatches(owner, lastName, firstName, middleName, phone, address, meterNotes))
+        {
+            return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
+        }
+
+        owner.LastName = lastName;
+        owner.FirstName = firstName;
+        owner.MiddleName = middleName;
+        owner.Phone = phone;
+        owner.Address = address;
+        owner.MeterNotes = meterNotes;
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.owner_updated", "owner", owner.Id, $"Обновлен владелец {owner.FullName}.");
@@ -285,15 +296,24 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Failure("owner_not_found", "Владелец гаража не найден.");
         }
 
+        var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var initialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
+        var initialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
+        var comment = NormalizeOptional(request.Comment);
+        if (GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, initialWaterMeterValue, initialElectricityMeterValue, comment))
+        {
+            return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+        }
+
         garage.Number = number;
         garage.PeopleCount = request.PeopleCount;
         garage.FloorCount = request.FloorCount;
-        garage.StartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        garage.StartingBalance = startingBalance;
         garage.OwnerId = request.OwnerId;
         garage.Owner = owner;
-        garage.InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
-        garage.InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
-        garage.Comment = NormalizeOptional(request.Comment);
+        garage.InitialWaterMeterValue = initialWaterMeterValue;
+        garage.InitialElectricityMeterValue = initialElectricityMeterValue;
+        garage.Comment = comment;
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.");
@@ -401,6 +421,11 @@ public sealed class DictionaryService(
         if (await dbContext.SupplierGroups.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Группа поставщиков с таким названием уже существует.");
+        }
+
+        if (StringEquals(group.Name, name))
+        {
+            return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
         }
 
         group.Name = name;
@@ -556,16 +581,29 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.");
         }
 
-        supplier.Name = request.Name.Trim();
+        var name = request.Name.Trim();
+        var inn = NormalizeOptional(request.Inn);
+        var legalAddress = NormalizeOptional(request.LegalAddress);
+        var contactPerson = NormalizeOptional(request.ContactPerson);
+        var phone = NormalizeOptional(request.Phone);
+        var email = NormalizeOptional(request.Email);
+        var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var comment = NormalizeOptional(request.Comment);
+        if (SupplierMatches(supplier, name, group.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
+        {
+            return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+        }
+
+        supplier.Name = name;
         supplier.GroupId = group.Id;
         supplier.Group = group;
-        supplier.Inn = NormalizeOptional(request.Inn);
-        supplier.LegalAddress = NormalizeOptional(request.LegalAddress);
-        supplier.ContactPerson = NormalizeOptional(request.ContactPerson);
-        supplier.Phone = NormalizeOptional(request.Phone);
-        supplier.Email = NormalizeOptional(request.Email);
-        supplier.StartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
-        supplier.Comment = NormalizeOptional(request.Comment);
+        supplier.Inn = inn;
+        supplier.LegalAddress = legalAddress;
+        supplier.ContactPerson = contactPerson;
+        supplier.Phone = phone;
+        supplier.Email = email;
+        supplier.StartingBalance = startingBalance;
+        supplier.Comment = comment;
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_updated", "supplier", supplier.Id, $"Обновлен поставщик {supplier.Name}.");
@@ -680,8 +718,14 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
         }
 
+        var code = NormalizeOptional(request.Code);
+        if (AccountingTypeMatches(incomeType, name, code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+        }
+
         incomeType.Name = name;
-        incomeType.Code = NormalizeOptional(request.Code);
+        incomeType.Code = code;
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.income_type_updated", "income_type", incomeType.Id, $"Обновлен вид поступления {incomeType.Name}.");
@@ -801,8 +845,14 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
         }
 
+        var code = NormalizeOptional(request.Code);
+        if (AccountingTypeMatches(expenseType, name, code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
+        }
+
         expenseType.Name = name;
-        expenseType.Code = NormalizeOptional(request.Code);
+        expenseType.Code = code;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.expense_type_updated", "expense_type", expenseType.Id, $"Обновлен вид выплаты {expenseType.Name}.");
@@ -996,11 +1046,18 @@ public sealed class DictionaryService(
             }
         }
 
+        var rate = MoneyMath.RoundRate(request.Rate);
+        var comment = NormalizeOptional(request.Comment);
+        if (TariffMatches(tariff, name, calculationBase, rate, request.EffectiveFrom, comment, electricityTiers.Value))
+        {
+            return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
+        }
+
         tariff.Name = name;
         tariff.CalculationBase = calculationBase;
-        tariff.Rate = MoneyMath.RoundRate(request.Rate);
+        tariff.Rate = rate;
         tariff.EffectiveFrom = request.EffectiveFrom;
-        tariff.Comment = NormalizeOptional(request.Comment);
+        tariff.Comment = comment;
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
@@ -1173,6 +1230,70 @@ public sealed class DictionaryService(
             && tariff.ElectricityFirstRate.HasValue
             && tariff.ElectricitySecondRate.HasValue
             && tariff.ElectricityThirdRate.HasValue;
+    }
+
+    private static bool OwnerMatches(Owner owner, string lastName, string firstName, string? middleName, string? phone, string? address, string? meterNotes)
+    {
+        return StringEquals(owner.LastName, lastName) &&
+            StringEquals(owner.FirstName, firstName) &&
+            StringEquals(owner.MiddleName, middleName) &&
+            StringEquals(owner.Phone, phone) &&
+            StringEquals(owner.Address, address) &&
+            StringEquals(owner.MeterNotes, meterNotes);
+    }
+
+    private static bool GarageMatches(Garage garage, string number, int peopleCount, int floorCount, Guid? ownerId, decimal startingBalance, decimal? initialWaterMeterValue, decimal? initialElectricityMeterValue, string? comment)
+    {
+        return StringEquals(garage.Number, number) &&
+            garage.PeopleCount == peopleCount &&
+            garage.FloorCount == floorCount &&
+            garage.OwnerId == ownerId &&
+            garage.StartingBalance == startingBalance &&
+            garage.InitialWaterMeterValue == initialWaterMeterValue &&
+            garage.InitialElectricityMeterValue == initialElectricityMeterValue &&
+            StringEquals(garage.Comment, comment);
+    }
+
+    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)
+    {
+        return StringEquals(supplier.Name, name) &&
+            supplier.GroupId == groupId &&
+            StringEquals(supplier.Inn, inn) &&
+            StringEquals(supplier.LegalAddress, legalAddress) &&
+            StringEquals(supplier.ContactPerson, contactPerson) &&
+            StringEquals(supplier.Phone, phone) &&
+            StringEquals(supplier.Email, email) &&
+            supplier.StartingBalance == startingBalance &&
+            StringEquals(supplier.Comment, comment);
+    }
+
+    private static bool AccountingTypeMatches(IncomeType accountingType, string name, string? code)
+    {
+        return StringEquals(accountingType.Name, name) && StringEquals(accountingType.Code, code);
+    }
+
+    private static bool AccountingTypeMatches(ExpenseType accountingType, string name, string? code)
+    {
+        return StringEquals(accountingType.Name, name) && StringEquals(accountingType.Code, code);
+    }
+
+    private static bool TariffMatches(Tariff tariff, string name, string calculationBase, decimal rate, DateOnly effectiveFrom, string? comment, ElectricityTierConfig? tiers)
+    {
+        return StringEquals(tariff.Name, name) &&
+            StringEquals(tariff.CalculationBase, calculationBase) &&
+            tariff.Rate == rate &&
+            tariff.EffectiveFrom == effectiveFrom &&
+            StringEquals(tariff.Comment, comment) &&
+            tariff.ElectricityFirstThreshold == tiers?.FirstThreshold &&
+            tariff.ElectricitySecondThreshold == tiers?.SecondThreshold &&
+            tariff.ElectricityFirstRate == tiers?.FirstRate &&
+            tariff.ElectricitySecondRate == tiers?.SecondRate &&
+            tariff.ElectricityThirdRate == tiers?.ThirdRate;
+    }
+
+    private static bool StringEquals(string? left, string? right)
+    {
+        return string.Equals(left, right, StringComparison.Ordinal);
     }
 
     private static string? NormalizeOptional(string? value)
