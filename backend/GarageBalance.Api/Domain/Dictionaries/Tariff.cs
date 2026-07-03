@@ -8,6 +8,9 @@ public sealed class Tariff
     public decimal Rate { get; set; }
     public decimal? ElectricityFirstThreshold { get; set; }
     public decimal? ElectricitySecondThreshold { get; set; }
+    public string? ElectricityFirstTierName { get; set; }
+    public string? ElectricitySecondTierName { get; set; }
+    public string? ElectricityThirdTierName { get; set; }
     public decimal? ElectricityFirstRate { get; set; }
     public decimal? ElectricitySecondRate { get; set; }
     public decimal? ElectricityThirdRate { get; set; }

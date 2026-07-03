@@ -835,11 +835,11 @@ public sealed class DictionaryServiceTests
                 4.5m,
                 new DateOnly(2026, 7, 1),
                 "Три зоны",
-                50.55555m,
-                100.77777m,
-                3.11111m,
-                4.22222m,
-                5.33333m),
+                ElectricityFirstThreshold: 50.55555m,
+                ElectricitySecondThreshold: 100.77777m,
+                ElectricityFirstRate: 3.11111m,
+                ElectricitySecondRate: 4.22222m,
+                ElectricityThirdRate: 5.33333m),
             actorUserId,
             CancellationToken.None);
 
@@ -851,9 +851,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(5.3333m, result.Value.ElectricityThirdRate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("электричество: до 50.556 кВт по 3.1111", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("до 100.778 кВт по 4.2222", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("свыше по 5.3333", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("электричество: От 0 кВт до 50.556 кВт по 3.1111", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("От 50.556 кВт до 100.778 кВт по 4.2222", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("От 100.778 кВт по 5.3333", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -926,11 +926,11 @@ public sealed class DictionaryServiceTests
                 4.5m,
                 new DateOnly(2026, 7, 1),
                 null,
-                50m,
-                100m,
-                3m,
-                4m,
-                5m),
+                ElectricityFirstThreshold: 50m,
+                ElectricitySecondThreshold: 100m,
+                ElectricityFirstRate: 3m,
+                ElectricitySecondRate: 4m,
+                ElectricityThirdRate: 5m),
             null,
             CancellationToken.None);
 

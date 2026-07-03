@@ -216,6 +216,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.Rate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricityFirstThreshold).HasPrecision(18, 4);
             entity.Property(item => item.ElectricitySecondThreshold).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricityFirstTierName).HasMaxLength(120);
+            entity.Property(item => item.ElectricitySecondTierName).HasMaxLength(120);
+            entity.Property(item => item.ElectricityThirdTierName).HasMaxLength(120);
             entity.Property(item => item.ElectricityFirstRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricitySecondRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricityThirdRate).HasPrecision(18, 4);

@@ -62,6 +62,9 @@ export type TariffDto = {
   rate: number
   electricityFirstThreshold: number | null
   electricitySecondThreshold: number | null
+  electricityFirstTierName: string | null
+  electricitySecondTierName: string | null
+  electricityThirdTierName: string | null
   electricityFirstRate: number | null
   electricitySecondRate: number | null
   electricityThirdRate: number | null
@@ -126,6 +129,9 @@ export type UpsertTariffRequest = {
   comment?: string
   electricityFirstThreshold?: number
   electricitySecondThreshold?: number
+  electricityFirstTierName?: string
+  electricitySecondTierName?: string
+  electricityThirdTierName?: string
   electricityFirstRate?: number
   electricitySecondRate?: number
   electricityThirdRate?: number

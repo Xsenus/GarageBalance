@@ -5,7 +5,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -284,7 +284,7 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
-    expect(within(tariffsPanel).getByText('Тариф на воду')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Тариф воды')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()
 
     const addTariffServiceButton = within(tariffsPanel).getAllByRole('button', { name: 'Добавить услугу' })[0]
@@ -328,7 +328,26 @@ describe('App', () => {
 
   it('edits tariffs and one-time payments without local history access', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [],
+      createTariff: async (_token, request) => createTariff({
+        id: 'tariff-water-created',
+        name: request.name,
+        calculationBase: request.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+        comment: request.comment ?? null,
+      }),
+      updateTariff: async (_token, id, request) => createTariff({
+        id,
+        name: request.name,
+        calculationBase: request.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+        comment: request.comment ?? null,
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -708,6 +727,88 @@ describe('App', () => {
 
     expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов', hidden: true })).not.toBeInTheDocument()
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
+  })
+
+  it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
+    const user = userEvent.setup()
+    let createdTariffRequest: UpsertTariffRequest | null = null
+    let updatedTariffRequest: UpsertTariffRequest | null = null
+    const electricityTariff = createTariff({
+      id: 'tariff-electricity',
+      name: 'Электроэнергия',
+      calculationBase: 'meter_electricity',
+      rate: 4,
+      electricityFirstThreshold: 1,
+      electricitySecondThreshold: 3,
+      electricityFirstTierName: 'От 0 кВт',
+      electricitySecondTierName: 'От 1 кВт',
+      electricityThirdTierName: 'От 3 кВт',
+      electricityFirstRate: 2,
+      electricitySecondRate: 3,
+      electricityThirdRate: 5,
+      effectiveFrom: '2026-01-01',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [electricityTariff],
+      createTariff: async (_token, request) => {
+        createdTariffRequest = request
+        return createTariff({
+          id: 'tariff-created',
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+          comment: request.comment ?? null,
+        })
+      },
+      updateTariff: async (_token, id, request) => {
+        updatedTariffRequest = request
+        return createTariff({
+          id,
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+          comment: request.comment ?? null,
+          electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+          electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+          electricityFirstTierName: request.electricityFirstTierName ?? null,
+          electricitySecondTierName: request.electricitySecondTierName ?? null,
+          electricityThirdTierName: request.electricityThirdTierName ?? null,
+          electricityFirstRate: request.electricityFirstRate ?? null,
+          electricitySecondRate: request.electricitySecondRate ?? null,
+          electricityThirdRate: request.electricityThirdRate ?? null,
+        })
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    const waterAmount = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
+    await user.type(waterAmount, '42{Enter}')
+    await waitFor(() => expect(createdTariffRequest).toMatchObject({ name: 'Тариф на воду', calculationBase: 'meter_water', rate: 42 }))
+
+    const firstTierName = within(tariffsPanel).getByLabelText('Электроэнергия: От 0 кВт: наименование')
+    await user.clear(firstTierName)
+    await user.type(firstTierName, 'Льготный порог{Enter}')
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updatedTariffRequest).toMatchObject({
+      name: 'Электроэнергия',
+      calculationBase: 'meter_electricity',
+      electricityFirstTierName: 'Льготный порог',
+      electricitySecondTierName: 'От 1 кВт',
+      electricityThirdTierName: 'От 3 кВт',
+      electricityFirstRate: 2,
+      electricitySecondRate: 3,
+      electricityThirdRate: 5,
+    }))
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
@@ -5412,6 +5513,9 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       comment: request.comment ?? null,
       electricityFirstThreshold: request.electricityFirstThreshold ?? null,
       electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+      electricityFirstTierName: request.electricityFirstTierName ?? null,
+      electricitySecondTierName: request.electricitySecondTierName ?? null,
+      electricityThirdTierName: request.electricityThirdTierName ?? null,
       electricityFirstRate: request.electricityFirstRate ?? null,
       electricitySecondRate: request.electricitySecondRate ?? null,
       electricityThirdRate: request.electricityThirdRate ?? null,
@@ -6194,6 +6298,9 @@ function createTariff(overrides: Partial<TariffDto>): TariffDto {
     rate: 1,
     electricityFirstThreshold: null,
     electricitySecondThreshold: null,
+    electricityFirstTierName: null,
+    electricitySecondTierName: null,
+    electricityThirdTierName: null,
     electricityFirstRate: null,
     electricitySecondRate: null,
     electricityThirdRate: null,

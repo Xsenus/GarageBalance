@@ -97,6 +97,9 @@ public sealed record TariffDto(
     bool IsArchived,
     decimal? ElectricityFirstThreshold = null,
     decimal? ElectricitySecondThreshold = null,
+    string? ElectricityFirstTierName = null,
+    string? ElectricitySecondTierName = null,
+    string? ElectricityThirdTierName = null,
     decimal? ElectricityFirstRate = null,
     decimal? ElectricitySecondRate = null,
     decimal? ElectricityThirdRate = null);
@@ -109,6 +112,9 @@ public sealed record UpsertTariffRequest(
     [MaxLength(1000)] string? Comment,
     [Range(0.0001, 999999999)] decimal? ElectricityFirstThreshold = null,
     [Range(0.0001, 999999999)] decimal? ElectricitySecondThreshold = null,
+    [MaxLength(120)] string? ElectricityFirstTierName = null,
+    [MaxLength(120)] string? ElectricitySecondTierName = null,
+    [MaxLength(120)] string? ElectricityThirdTierName = null,
     [Range(0.0001, 999999999)] decimal? ElectricityFirstRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricitySecondRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null);

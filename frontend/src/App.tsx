@@ -465,7 +465,7 @@ function Workspace({
         )
       case 'tariffsAndFees':
         return canReadDictionaries ? (
-          <TariffsAndFeesPrototypePanel />
+          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} />
         ) : (
           <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )
@@ -5694,6 +5694,7 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
 
 type ContractorTariffRow = {
   id: string
+  backendTariffId?: string
   title: string
   amount?: string
   dateDay?: string
@@ -5704,31 +5705,35 @@ type ContractorTariffRow = {
   tiered: boolean
   group?: string
   category: string
+  calculationBase?: string
+  effectiveFrom?: string
+  electricityFirstThreshold?: number | null
+  electricitySecondThreshold?: number | null
 }
 
 const contractorTariffRows: ContractorTariffRow[] = [
-  { id: 'water-rate', group: 'Вода', category: 'Вода', title: 'Тариф на воду', amount: '', unit: 'руб.', byMeter: true, tiered: false },
+  { id: 'water-rate', group: 'Вода', category: 'Вода', title: 'Тариф на воду', amount: '', unit: 'руб.', byMeter: true, tiered: false, calculationBase: 'meter_water' },
   { id: 'water-overdue-days', category: 'Вода', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: false },
-  { id: 'waste-rate', group: 'Мусор', category: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'waste-rate', group: 'Мусор', category: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'people' },
   { id: 'waste-overdue-days', category: 'Мусор', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'От 0 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
-  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
-  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true },
+  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'От 0 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1, electricitySecondThreshold: 3 },
+  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1, electricitySecondThreshold: 3 },
+  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1, electricitySecondThreshold: 3 },
   { id: 'electricity-overdue-days', category: 'Электроэнергия', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
-  { id: 'membership-fee', group: 'Членский взнос', category: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'membership-fee', group: 'Членский взнос', category: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
   { id: 'membership-due-date', category: 'Членский взнос', title: 'Оплата до', dateDay: '30', dateMonth: 'июн', byMeter: false, tiered: false },
   { id: 'membership-start-date', category: 'Членский взнос', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'membership-overdue-days', category: 'Членский взнос', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'target-fee', group: 'Целевой взнос', category: 'Целевой взнос', title: 'Сумма целевого взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'target-fee', group: 'Целевой взнос', category: 'Целевой взнос', title: 'Сумма целевого взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
   { id: 'target-due-date', category: 'Целевой взнос', title: 'Оплата за год до', dateDay: '30', dateMonth: 'июн', byMeter: false, tiered: false },
   { id: 'target-start-date', category: 'Целевой взнос', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'target-overdue-days', category: 'Целевой взнос', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
   { id: 'lighting-due-date', group: 'Наружное освещение', category: 'Наружное освещение', title: 'Оплата за год до', dateDay: '31', dateMonth: 'дек', byMeter: false, tiered: false },
   { id: 'lighting-start-date', category: 'Наружное освещение', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'lighting-overdue-days', category: 'Наружное освещение', title: 'Перенос долга в просроченный', amount: '0', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'salary-electricians', group: 'Зарплатный фонд', category: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { id: 'salary-accounting', category: 'Зарплатный фонд', title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false },
-  { id: 'salary-management', category: 'Зарплатный фонд', title: 'Руководство', amount: '', unit: 'руб.', byMeter: false, tiered: false },
+  { id: 'salary-electricians', group: 'Зарплатный фонд', category: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
+  { id: 'salary-accounting', category: 'Зарплатный фонд', title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
+  { id: 'salary-management', category: 'Зарплатный фонд', title: 'Руководство', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
 ]
 
 type ContractorOneTimeRow = {
@@ -7253,10 +7258,10 @@ function createEditableDrafts(rows: Array<{ id: string; title?: string; amount?:
   }, {})
 }
 
-function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>, onCommit: () => void) {
+function handleEditableInputKeyDown(event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>, onCommit: () => void | Promise<void>) {
   if (event.key === 'Enter') {
     event.preventDefault()
-    onCommit()
+    void onCommit()
   }
 }
 
@@ -7282,6 +7287,64 @@ function getContractorTariffDateError(day: string, month: string) {
   }
 
   return null
+}
+
+function formatTariffNumber(value: number | null | undefined) {
+  return value == null ? '' : String(value)
+}
+
+function parseTariffAmount(value: string) {
+  const normalized = value.replace(',', '.').trim()
+  if (!normalized) {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function findTariffForPrototypeRow(tariffs: TariffDto[], row: ContractorTariffRow) {
+  const lowerTitle = row.title.toLocaleLowerCase('ru')
+  if (row.calculationBase === 'meter_electricity') {
+    return tariffs.find((tariff) => tariff.calculationBase === 'meter_electricity') ?? null
+  }
+
+  if (row.id === 'water-rate') {
+    return tariffs.find((tariff) => tariff.calculationBase === 'meter_water') ?? null
+  }
+
+  if (row.id === 'waste-rate') {
+    return tariffs.find((tariff) => tariff.calculationBase === 'people' || tariff.name.toLocaleLowerCase('ru').includes('мусор')) ?? null
+  }
+
+  return tariffs.find((tariff) => tariff.name.toLocaleLowerCase('ru') === lowerTitle || tariff.name.toLocaleLowerCase('ru').includes(row.category.toLocaleLowerCase('ru'))) ?? null
+}
+
+function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: TariffDto[]) {
+  const electricityTariff = tariffs.find((tariff) => tariff.calculationBase === 'meter_electricity')
+  return rows.map((row) => {
+    if (row.calculationBase === 'meter_electricity' && electricityTariff) {
+      const base = {
+        ...row,
+        backendTariffId: electricityTariff.id,
+        effectiveFrom: electricityTariff.effectiveFrom,
+        electricityFirstThreshold: electricityTariff.electricityFirstThreshold,
+        electricitySecondThreshold: electricityTariff.electricitySecondThreshold,
+      }
+      if (row.id === 'electricity-tier-0') {
+        return { ...base, title: electricityTariff.electricityFirstTierName ?? row.title, amount: formatTariffNumber(electricityTariff.electricityFirstRate) }
+      }
+      if (row.id === 'electricity-tier-1') {
+        return { ...base, title: electricityTariff.electricitySecondTierName ?? row.title, amount: formatTariffNumber(electricityTariff.electricitySecondRate) }
+      }
+      return { ...base, title: electricityTariff.electricityThirdTierName ?? row.title, amount: formatTariffNumber(electricityTariff.electricityThirdRate) }
+    }
+
+    const tariff = findTariffForPrototypeRow(tariffs, row)
+    return tariff && row.calculationBase
+      ? { ...row, backendTariffId: tariff.id, effectiveFrom: tariff.effectiveFrom, amount: formatTariffNumber(tariff.rate), title: tariff.name }
+      : row
+  })
 }
 
 type TariffPrototypePendingChange =
@@ -7334,18 +7397,55 @@ function formatPrototypeChangeValue(value: string) {
   return value.trim() || 'Пусто'
 }
 
-function TariffsAndFeesPrototypePanel() {
+function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
+  const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
   const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
   const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
+  const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
+  const [tariffsLoading, setTariffsLoading] = useState(false)
+  const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
   const [oneTimeContextMenu, setOneTimeContextMenu] = useState<{ row: ContractorOneTimeRow; x: number; y: number } | null>(null)
   const [oneTimeActionMessage, setOneTimeActionMessage] = useState<string | null>(null)
+  const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadTariffs() {
+      setTariffsLoading(true)
+      setTariffPersistenceError(null)
+      try {
+        const loadedTariffs = await dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit)
+        if (!ignore) {
+          const mergedRows = mergeTariffsIntoPrototypeRows(contractorTariffRows, loadedTariffs)
+          setBackendTariffs(loadedTariffs)
+          setTariffRows(mergedRows)
+          setTariffDrafts(createEditableDrafts(mergedRows))
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы.')
+        }
+      } finally {
+        if (!ignore) {
+          setTariffsLoading(false)
+        }
+      }
+    }
+
+    void loadTariffs()
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, dictionaryClient])
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
@@ -7384,19 +7484,29 @@ function TariffsAndFeesPrototypePanel() {
     setPendingChange(null)
   }
 
-  function confirmPendingChange() {
+  async function confirmPendingChange() {
     if (!pendingChange) {
       return
     }
 
     if (pendingChange.kind === 'tariff-text') {
-      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+      const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
+      const nextRows = tariffRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue } : currentRow
-      )))
+      ))
+      setTariffRows(nextRows)
+      if (sourceRow && pendingChange.field !== 'unit') {
+        await persistTariffRow(sourceRow, nextRows)
+      }
     } else if (pendingChange.kind === 'tariff-boolean') {
-      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+      const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
+      const nextRows = tariffRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue === 'Да' } : currentRow
-      )))
+      ))
+      setTariffRows(nextRows)
+      if (sourceRow) {
+        await persistTariffRow(sourceRow, nextRows)
+      }
     } else if (pendingChange.kind === 'tariff-date') {
       setTariffRows((currentRows) => currentRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, dateDay: pendingChange.nextDay, dateMonth: pendingChange.nextMonth } : currentRow
@@ -7432,7 +7542,83 @@ function TariffsAndFeesPrototypePanel() {
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
-  const commitTariffTextChange = (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') => {
+  async function persistTariffRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[]) {
+    if (!canManageTariffs || !row.calculationBase) {
+      return
+    }
+
+    const targetRow = nextRows.find((item) => item.id === row.id) ?? row
+    const backendTariff = targetRow.backendTariffId
+      ? backendTariffs.find((tariff) => tariff.id === targetRow.backendTariffId)
+      : findTariffForPrototypeRow(backendTariffs, targetRow)
+    const effectiveFrom = targetRow.effectiveFrom ?? backendTariff?.effectiveFrom ?? getLocalDateInputValue()
+    const amount = parseTariffAmount(targetRow.amount ?? '')
+    if (amount == null) {
+      return
+    }
+
+    let request: UpsertTariffRequest
+    if (targetRow.calculationBase === 'meter_electricity') {
+      const electricityRows = nextRows.filter((item) => item.calculationBase === 'meter_electricity' && item.threshold)
+      const firstRow = electricityRows[0] ?? targetRow
+      const secondRow = electricityRows[1] ?? targetRow
+      const thirdRow = electricityRows[2] ?? targetRow
+      const firstRate = parseTariffAmount(firstRow.amount ?? '')
+      const secondRate = parseTariffAmount(secondRow.amount ?? '')
+      const thirdRate = parseTariffAmount(thirdRow.amount ?? '')
+      const firstThreshold = targetRow.electricityFirstThreshold ?? backendTariff?.electricityFirstThreshold ?? 1
+      const secondThreshold = targetRow.electricitySecondThreshold ?? backendTariff?.electricitySecondThreshold ?? 3
+      request = {
+        name: backendTariff?.name ?? 'Электроэнергия',
+        calculationBase: 'meter_electricity',
+        rate: firstRate ?? amount,
+        effectiveFrom,
+        comment: backendTariff?.comment ?? '',
+      }
+      if (firstRate != null && secondRate != null && thirdRate != null) {
+        request = {
+          ...request,
+          electricityFirstThreshold: firstThreshold,
+          electricitySecondThreshold: secondThreshold,
+          electricityFirstTierName: firstRow.title,
+          electricitySecondTierName: secondRow.title,
+          electricityThirdTierName: thirdRow.title,
+          electricityFirstRate: firstRate,
+          electricitySecondRate: secondRate,
+          electricityThirdRate: thirdRate,
+        }
+      }
+    } else {
+      request = {
+        name: targetRow.title,
+        calculationBase: targetRow.calculationBase ?? row.calculationBase,
+        rate: amount,
+        effectiveFrom,
+        comment: backendTariff?.comment ?? '',
+      }
+    }
+
+    setTariffSavingRowId(targetRow.id)
+    setTariffPersistenceError(null)
+    try {
+      const savedTariff = backendTariff
+        ? await dictionaryClient.updateTariff(auth.accessToken, backendTariff.id, request)
+        : await dictionaryClient.createTariff(auth.accessToken, request)
+      const nextTariffs = backendTariffs.some((tariff) => tariff.id === savedTariff.id)
+        ? backendTariffs.map((tariff) => (tariff.id === savedTariff.id ? savedTariff : tariff))
+        : [...backendTariffs, savedTariff]
+      const mergedRows = mergeTariffsIntoPrototypeRows(nextRows, nextTariffs)
+      setBackendTariffs(nextTariffs)
+      setTariffRows(mergedRows)
+      setTariffDrafts(createEditableDrafts(mergedRows))
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить тариф.')
+    } finally {
+      setTariffSavingRowId(null)
+    }
+  }
+
+  const commitTariffTextChange = async (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') => {
     const nextValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
     const previousValue = row[field] ?? ''
 
@@ -7441,9 +7627,10 @@ function TariffsAndFeesPrototypePanel() {
     }
 
     if (!previousValue.trim()) {
-      setTariffRows((currentRows) => currentRows.map((currentRow) => (
+      const nextRows = tariffRows.map((currentRow) => (
         currentRow.id === row.id ? { ...currentRow, [field]: nextValue } : currentRow
-      )))
+      ))
+      setTariffRows(nextRows)
       setTariffDrafts((drafts) => ({
         ...drafts,
         [row.id]: {
@@ -7451,6 +7638,9 @@ function TariffsAndFeesPrototypePanel() {
           [field]: nextValue,
         },
       }))
+      if (field !== 'unit') {
+        await persistTariffRow(row, nextRows)
+      }
       return
     }
 
@@ -7658,6 +7848,9 @@ function TariffsAndFeesPrototypePanel() {
       <div className="contractors-heading">
         <div>
           <h1>Тарифы и сборы</h1>
+          {tariffsLoading ? <p className="form-hint" role="status">Загружаем тарифы...</p> : null}
+          {!canManageTariffs ? <p className="form-hint">Режим просмотра: для изменения тарифов нужно право tariffs.manage.</p> : null}
+          {tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
         </div>
         <div className="contractors-actions">
           <button className="secondary-button" type="button" onClick={() => setModal('service')}>
@@ -7689,6 +7882,7 @@ function TariffsAndFeesPrototypePanel() {
                       <input
                         aria-label={`${row.category}: ${row.title}: наименование`}
                         className="contractors-editable-input contractors-editable-input--title"
+                        disabled={!canManageTariffs || tariffSavingRowId === row.id}
                         value={tariffDrafts[row.id]?.title ?? row.title}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], title: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'title'))}
@@ -7706,6 +7900,7 @@ function TariffsAndFeesPrototypePanel() {
                           aria-invalid={Boolean(tariffDateErrors[row.id])}
                           aria-describedby={tariffDateErrors[row.id] ? `${row.id}-date-error` : undefined}
                           className="contractors-editable-input contractors-editable-input--day"
+                          disabled={!canManageTariffs}
                           inputMode="numeric"
                           maxLength={2}
                           value={tariffDrafts[row.id]?.dateDay ?? ''}
@@ -7725,6 +7920,7 @@ function TariffsAndFeesPrototypePanel() {
                       <input
                         aria-label={`${row.category}: ${row.title}: значение`}
                         className="contractors-editable-input"
+                        disabled={!canManageTariffs || tariffSavingRowId === row.id}
                         value={tariffDrafts[row.id]?.amount ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
@@ -7736,6 +7932,7 @@ function TariffsAndFeesPrototypePanel() {
                       <select
                         aria-label={`${row.category}: ${row.title}: месяц`}
                         className="contractors-editable-select contractors-editable-select--month"
+                        disabled={!canManageTariffs}
                         value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
                         onChange={(event) => {
                           setTariffDateErrors((errors) => {
@@ -7755,6 +7952,7 @@ function TariffsAndFeesPrototypePanel() {
                       <input
                         aria-label={`${row.category}: ${row.title}: единица`}
                         className="contractors-editable-input contractors-editable-input--unit"
+                        disabled={!canManageTariffs || tariffSavingRowId === row.id}
                         value={tariffDrafts[row.id]?.unit ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
@@ -7765,6 +7963,7 @@ function TariffsAndFeesPrototypePanel() {
                     <select
                       aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
                       className="contractors-editable-select"
+                      disabled={!canManageTariffs || tariffSavingRowId === row.id}
                       value={row.tiered ? 'Да' : 'Нет'}
                     onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да')}
                     >
@@ -7776,6 +7975,7 @@ function TariffsAndFeesPrototypePanel() {
                     <select
                       aria-label={`${row.category}: ${row.title}: по счетчику`}
                       className="contractors-editable-select"
+                      disabled={!canManageTariffs || tariffSavingRowId === row.id}
                       value={row.byMeter ? 'Да' : 'Нет'}
                     onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да')}
                     >
@@ -7787,7 +7987,7 @@ function TariffsAndFeesPrototypePanel() {
                 {row.id === lastElectricityThresholdRowId ? (
                   <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                     <span role="cell">
-                      <button className="link-button" type="button" onClick={addElectricityThreshold}>
+                      <button className="link-button" type="button" onClick={addElectricityThreshold} disabled={!canManageTariffs}>
                         Добавить порог
                       </button>
                     </span>

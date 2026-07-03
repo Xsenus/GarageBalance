@@ -42,6 +42,9 @@ public sealed class DictionaryService(
         ["effectiveFrom"] = "Дата начала",
         ["electricityFirstThreshold"] = "Порог 1",
         ["electricitySecondThreshold"] = "Порог 2",
+        ["electricityFirstTierName"] = "Наименование порога 1",
+        ["electricitySecondTierName"] = "Наименование порога 2",
+        ["electricityThirdTierName"] = "Наименование порога 3",
         ["electricityFirstRate"] = "Цена за ед. порога 1",
         ["electricitySecondRate"] = "Цена за ед. порога 2",
         ["electricityThirdRate"] = "Цена сверх порога 2"
@@ -1192,6 +1195,9 @@ public sealed class DictionaryService(
             ["comment"] = tariff.Comment,
             ["electricityFirstThreshold"] = tariff.ElectricityFirstThreshold,
             ["electricitySecondThreshold"] = tariff.ElectricitySecondThreshold,
+            ["electricityFirstTierName"] = tariff.ElectricityFirstTierName,
+            ["electricitySecondTierName"] = tariff.ElectricitySecondTierName,
+            ["electricityThirdTierName"] = tariff.ElectricityThirdTierName,
             ["electricityFirstRate"] = tariff.ElectricityFirstRate,
             ["electricitySecondRate"] = tariff.ElectricitySecondRate,
             ["electricityThirdRate"] = tariff.ElectricityThirdRate
@@ -1205,6 +1211,9 @@ public sealed class DictionaryService(
             ["comment"] = comment,
             ["electricityFirstThreshold"] = electricityTiers.Value?.FirstThreshold,
             ["electricitySecondThreshold"] = electricityTiers.Value?.SecondThreshold,
+            ["electricityFirstTierName"] = electricityTiers.Value?.FirstTierName,
+            ["electricitySecondTierName"] = electricityTiers.Value?.SecondTierName,
+            ["electricityThirdTierName"] = electricityTiers.Value?.ThirdTierName,
             ["electricityFirstRate"] = electricityTiers.Value?.FirstRate,
             ["electricitySecondRate"] = electricityTiers.Value?.SecondRate,
             ["electricityThirdRate"] = electricityTiers.Value?.ThirdRate
@@ -1328,7 +1337,7 @@ public sealed class DictionaryService(
             return baseDetails;
         }
 
-        return $"{baseDetails}, электричество: до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {tariff.ElectricityFirstRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}, до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {tariff.ElectricitySecondRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}, свыше по {tariff.ElectricityThirdRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}";
+        return $"{baseDetails}, электричество: {tariff.ElectricityFirstTierName ?? "Порог 1"} до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {tariff.ElectricityFirstRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}, {tariff.ElectricitySecondTierName ?? "Порог 2"} до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {tariff.ElectricitySecondRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}, {tariff.ElectricityThirdTierName ?? "Порог 3"} по {tariff.ElectricityThirdRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}";
     }
 
     private static DictionaryResult<ElectricityTierConfig?> ValidateElectricityTiers(string calculationBase, UpsertTariffRequest request)
@@ -1361,6 +1370,9 @@ public sealed class DictionaryService(
 
         var firstThreshold = MoneyMath.RoundMeterValue(request.ElectricityFirstThreshold!.Value);
         var secondThreshold = MoneyMath.RoundMeterValue(request.ElectricitySecondThreshold!.Value);
+        var firstTierName = NormalizeOptional(request.ElectricityFirstTierName) ?? "От 0 кВт";
+        var secondTierName = NormalizeOptional(request.ElectricitySecondTierName) ?? $"От {firstThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт";
+        var thirdTierName = NormalizeOptional(request.ElectricityThirdTierName) ?? $"От {secondThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт";
         var firstRate = MoneyMath.RoundRate(request.ElectricityFirstRate!.Value);
         var secondRate = MoneyMath.RoundRate(request.ElectricitySecondRate!.Value);
         var thirdRate = MoneyMath.RoundRate(request.ElectricityThirdRate!.Value);
@@ -1379,13 +1391,16 @@ public sealed class DictionaryService(
                 "Второй порог электроэнергии должен быть больше первого.");
         }
 
-        return DictionaryResult<ElectricityTierConfig?>.Success(new ElectricityTierConfig(firstThreshold, secondThreshold, firstRate, secondRate, thirdRate));
+        return DictionaryResult<ElectricityTierConfig?>.Success(new ElectricityTierConfig(firstThreshold, secondThreshold, firstTierName, secondTierName, thirdTierName, firstRate, secondRate, thirdRate));
     }
 
     private static void ApplyElectricityTiers(Tariff tariff, ElectricityTierConfig? tiers)
     {
         tariff.ElectricityFirstThreshold = tiers?.FirstThreshold;
         tariff.ElectricitySecondThreshold = tiers?.SecondThreshold;
+        tariff.ElectricityFirstTierName = tiers?.FirstTierName;
+        tariff.ElectricitySecondTierName = tiers?.SecondTierName;
+        tariff.ElectricityThirdTierName = tiers?.ThirdTierName;
         tariff.ElectricityFirstRate = tiers?.FirstRate;
         tariff.ElectricitySecondRate = tiers?.SecondRate;
         tariff.ElectricityThirdRate = tiers?.ThirdRate;
@@ -1454,6 +1469,9 @@ public sealed class DictionaryService(
             StringEquals(tariff.Comment, comment) &&
             tariff.ElectricityFirstThreshold == tiers?.FirstThreshold &&
             tariff.ElectricitySecondThreshold == tiers?.SecondThreshold &&
+            StringEquals(tariff.ElectricityFirstTierName, tiers?.FirstTierName) &&
+            StringEquals(tariff.ElectricitySecondTierName, tiers?.SecondTierName) &&
+            StringEquals(tariff.ElectricityThirdTierName, tiers?.ThirdTierName) &&
             tariff.ElectricityFirstRate == tiers?.FirstRate &&
             tariff.ElectricitySecondRate == tiers?.SecondRate &&
             tariff.ElectricityThirdRate == tiers?.ThirdRate;
@@ -1531,6 +1549,9 @@ public sealed class DictionaryService(
             tariff.IsArchived,
             tariff.ElectricityFirstThreshold,
             tariff.ElectricitySecondThreshold,
+            tariff.ElectricityFirstTierName,
+            tariff.ElectricitySecondTierName,
+            tariff.ElectricityThirdTierName,
             tariff.ElectricityFirstRate,
             tariff.ElectricitySecondRate,
             tariff.ElectricityThirdRate);
@@ -1539,6 +1560,9 @@ public sealed class DictionaryService(
     private sealed record ElectricityTierConfig(
         decimal FirstThreshold,
         decimal SecondThreshold,
+        string FirstTierName,
+        string SecondTierName,
+        string ThirdTierName,
         decimal FirstRate,
         decimal SecondRate,
         decimal ThirdRate);
