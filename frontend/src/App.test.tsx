@@ -6,7 +6,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from './services/dictionariesApi'
-import type { AccrualDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { ConsolidatedReportDto, ExpenseReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -711,13 +711,50 @@ describe('App', () => {
 
   it('shows meter readings prototype as a yearly garage table', async () => {
     const user = userEvent.setup()
+    let createdMeterReadingRequest: CreateMeterReadingRequest | null = null
+    let updatedMeterReadingRequest: CreateMeterReadingRequest | null = null
+    let updatedMeterReadingId: string | null = null
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [
         createGarage({ id: 'garage-27', number: '27' }),
         createGarage({ id: 'garage-12', number: '12' }),
       ],
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const financeClient = createFinanceClient({
+      getMeterReadingsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 6000 }),
+      createMeterReading: async (_token, request) => {
+        createdMeterReadingRequest = request
+        return createMeterReading({
+          id: 'meter-reading-jan',
+          garageId: request.garageId,
+          garageNumber: '12',
+          meterKind: request.meterKind,
+          accountingMonth: request.accountingMonth,
+          readingDate: request.readingDate,
+          currentValue: request.currentValue,
+          previousValue: 0,
+          consumption: request.currentValue,
+          comment: request.comment ?? null,
+        })
+      },
+      updateMeterReading: async (_token, meterReadingId, request) => {
+        updatedMeterReadingId = meterReadingId
+        updatedMeterReadingRequest = request
+        return createMeterReading({
+          id: meterReadingId,
+          garageId: request.garageId,
+          garageNumber: '12',
+          meterKind: request.meterKind,
+          accountingMonth: request.accountingMonth,
+          readingDate: request.readingDate,
+          currentValue: request.currentValue,
+          previousValue: 4654,
+          consumption: request.currentValue - 4654,
+          comment: request.comment ?? null,
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -748,7 +785,9 @@ describe('App', () => {
     const januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
     await user.type(januaryInput, '4654{Enter}')
     expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument()
-    expect(januaryInput).toHaveValue('4654')
+    await waitFor(() => expect(createdMeterReadingRequest?.currentValue).toBe(4654))
+    expect(createdMeterReadingRequest).toMatchObject({ garageId: 'garage-12', meterKind: 'electricity', accountingMonth: '2026-01-01' })
+    await waitFor(() => expect(januaryInput).toHaveValue('4654'))
 
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
@@ -779,7 +818,10 @@ describe('App', () => {
     await user.type(januaryInput, '4660{Enter}')
     const reopenedReadingConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить показание?' })
     await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(januaryInput).toHaveValue('4660')
+    await waitFor(() => expect(updatedMeterReadingRequest?.currentValue).toBe(4660))
+    expect(updatedMeterReadingId).toBe('meter-reading-jan')
+    expect(updatedMeterReadingRequest).toMatchObject({ garageId: 'garage-12', meterKind: 'electricity', accountingMonth: '2026-01-01' })
+    await waitFor(() => expect(januaryInput).toHaveValue('4660'))
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
