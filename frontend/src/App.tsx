@@ -775,8 +775,8 @@ const paymentsPrototypeGarages: PaymentsPrototypeGarage[] = [
   { id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', phone: '+7 900 000-00-27', peopleCount: 2, floorCount: 1, balance: -1700, overdueDebt: 1700 },
 ]
 
-function createGarageIncomePrototypeRows(garageId: string): GarageIncomePrototypeRow[] {
-  if (garageId === 'garage-12') {
+function createGarageIncomePrototypeRows(garageNumber: string): GarageIncomePrototypeRow[] {
+  if (garageNumber === '12') {
     return [
       { id: 'garage-12-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 42, difference: 8, payable: 1840, paymentDraft: '', paid: 1840, debt: 0 },
       { id: 'garage-12-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: 16, difference: 2, payable: 900, paymentDraft: '', paid: 900, debt: 0 },
@@ -785,7 +785,7 @@ function createGarageIncomePrototypeRows(garageId: string): GarageIncomePrototyp
     ]
   }
 
-  if (garageId === 'garage-27') {
+  if (garageNumber === '27') {
     return [
       { id: 'garage-27-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 74, difference: 13, payable: 4210, paymentDraft: '', paid: 2510, debt: 1700 },
       { id: 'garage-27-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: null, difference: 0, payable: 1800, paymentDraft: '', paid: 1800, debt: 0, meterRequired: true },
@@ -2166,7 +2166,7 @@ function FinancePanel({
       {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
-      <PaymentsPrototypePanel onOpenDialog={openPaymentsPrototypeDialog} />
+      <PaymentsPrototypePanel garages={garages} onOpenDialog={openPaymentsPrototypeDialog} />
 
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
@@ -2798,15 +2798,40 @@ function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
 }
 
-function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
+function PaymentsPrototypePanel({ garages, onOpenDialog }: { garages: GarageDto[]; onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
-  const selectedGarage = paymentsPrototypeGarages.find((garage) => garage.id === selectedGarageId) ?? null
+  const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
+    const loadedGarages = garages
+      .filter((garage) => !garage.isArchived)
+      .map((garage) => {
+        const prototypeGarage = paymentsPrototypeGarages.find((item) => item.number === garage.number)
+        return {
+          id: garage.id,
+          number: garage.number,
+          ownerName: garage.ownerName?.trim() || 'Владелец не указан',
+          phone: prototypeGarage?.phone ?? '',
+          peopleCount: garage.peopleCount,
+          floorCount: garage.floorCount,
+          balance: garage.startingBalance,
+          overdueDebt: prototypeGarage?.overdueDebt ?? 0,
+        }
+      })
+    const loadedNumbers = new Set(loadedGarages.map((garage) => garage.number))
+    const loadedIds = new Set(loadedGarages.map((garage) => garage.id))
+    return [
+      ...loadedGarages,
+      ...paymentsPrototypeGarages
+        .filter((garage) => !loadedNumbers.has(garage.number))
+        .map((garage) => loadedIds.has(garage.id) ? { ...garage, id: `prototype-${garage.id}` } : garage),
+    ]
+  }, [garages])
+  const selectedGarage = garageOptions.find((garage) => garage.id === selectedGarageId) ?? null
   const normalizedSearch = garageSearch.trim().toLowerCase()
-  const garageSearchResults = paymentsPrototypeGarages
+  const garageSearchResults = garageOptions
     .filter((garage) => !normalizedSearch || garage.number.toLowerCase().includes(normalizedSearch) || garage.ownerName.toLowerCase().includes(normalizedSearch))
     .slice(0, 6)
   const shouldShowGarageResults = garageSearch.length > 0 && (!selectedGarage || garageSearch !== `Гараж ${selectedGarage.number} - ${selectedGarage.ownerName}`)
@@ -2820,8 +2845,8 @@ function PaymentsPrototypePanel({ onOpenDialog }: { onOpenDialog: (dialog: Payme
   function selectGarage(garage: PaymentsPrototypeGarage) {
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
-    setGarageRows(createGarageIncomePrototypeRows(garage.id))
-    setHistoryRows(garage.id === 'garage-1' ? garagePaymentHistoryRows : [])
+    setGarageRows(createGarageIncomePrototypeRows(garage.number))
+    setHistoryRows(garage.number === '1' ? garagePaymentHistoryRows : [])
   }
 
   function selectFirstGarageResult() {

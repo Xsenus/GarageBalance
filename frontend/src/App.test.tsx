@@ -872,6 +872,28 @@ describe('App', () => {
     expect(bankButton).toHaveFocus()
   })
 
+  it('uses garages from the dictionary in the payments search', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const garageSearchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(garageSearchInput, '77')
+    const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ })
+    await user.click(garageOption)
+
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Кузнецова Мария')
+    expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('4')
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
+  })
+
   it('shows funds management prototype from dashboard tile', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
