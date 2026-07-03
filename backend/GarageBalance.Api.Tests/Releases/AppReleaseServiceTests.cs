@@ -67,6 +67,22 @@ public sealed class AppReleaseServiceTests
         Assert.Equal("releases_file_missing", result.ErrorCode);
     }
 
+    [Theory]
+    [InlineData("GET /api/import/access/runs/{id}/report")]
+    [InlineData("GET /api/reports/consolidated/export/xlsx")]
+    [InlineData("GET /api/reports/consolidated/export/pdf")]
+    [InlineData("GET /api/reports/income/export/xlsx")]
+    [InlineData("GET /api/reports/income/export/pdf")]
+    [InlineData("GET /api/reports/expense/export/xlsx")]
+    [InlineData("GET /api/reports/expense/export/pdf")]
+    public void ReleaseNotes_DoNotDescribeAuditWritingExportsAsGet(string staleEndpoint)
+    {
+        var releasesJson = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        Assert.DoesNotContain(staleEndpoint, releasesJson, StringComparison.Ordinal);
+    }
+
     private sealed class TempContentRoot : IDisposable
     {
         private readonly string _path = Path.Combine(Path.GetTempPath(), $"garagebalance-releases-{Guid.NewGuid():N}");
@@ -93,6 +109,24 @@ public sealed class AppReleaseServiceTests
                 Directory.Delete(_path, recursive: true);
             }
         }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
+                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Repository root was not found.");
     }
 
     private sealed class FakeWebHostEnvironment(string contentRootPath) : IWebHostEnvironment

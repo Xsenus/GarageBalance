@@ -7443,7 +7443,7 @@
     "items": [
       {
         "type": "new",
-        "text": "Добавлен endpoint GET /api/import/access/runs/{id}/report для скачивания отчета конкретного запуска dry-run."
+        "text": "Отчет конкретного запуска dry-run можно скачать из экрана импорта; успешная выгрузка фиксируется в истории изменений."
       },
       {
         "type": "new",
@@ -7485,7 +7485,7 @@
     "items": [
       {
         "type": "new",
-        "text": "Добавлены endpoints GET /api/reports/consolidated/export/xlsx и GET /api/reports/consolidated/export/pdf."
+        "text": "Сводный отчет можно скачать в XLSX и PDF прямо из раздела \"Отчеты\"; успешные выгрузки фиксируются в истории изменений."
       },
       {
         "type": "new",
@@ -7506,7 +7506,7 @@
     "items": [
       {
         "type": "new",
-        "text": "Добавлены endpoints GET /api/reports/income/export/pdf и GET /api/reports/expense/export/pdf под правом reports.read."
+        "text": "Отчеты по поступлениям и выплатам можно скачать в PDF пользователям с доступом к разделу отчетов."
       },
       {
         "type": "new",
@@ -7548,7 +7548,7 @@
     "items": [
       {
         "type": "new",
-        "text": "Добавлены endpoints GET /api/reports/income/export/xlsx и GET /api/reports/expense/export/xlsx под правом reports.read."
+        "text": "Отчеты по поступлениям и выплатам можно выгружать в XLSX с теми же фильтрами, которые выбраны на экране."
       },
       {
         "type": "new",
