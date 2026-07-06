@@ -202,6 +202,7 @@ public sealed class ReportServiceTests
         Assert.Equal(2, result.Value.RowCount);
         Assert.Contains(result.Value.Rows, row => row.RowType == "accruals" && row.AccrualAmount == 2000m && row.GarageNumber == "12");
         Assert.Contains(result.Value.Rows, row => row.RowType == "payments" && row.IncomeAmount == 1500m && row.DocumentNumber == "PKO-1");
+        Assert.Contains(result.Value.Rows, row => row.RowType == "payments" && row.CreatedAtUtc is not null);
     }
 
     [Fact]

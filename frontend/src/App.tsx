@@ -2997,7 +2997,11 @@ function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
 }
 
-function formatPaymentPrototypeOperationTime(value: string) {
+function formatPaymentPrototypeOperationTime(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return ''
@@ -7170,6 +7174,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             dateFrom: incomeFilter.dateFrom,
             dateTo: incomeFilter.dateTo,
             search: incomeGarageFilter.trim() || undefined,
+            rowMode: 'payments',
             limit: 100,
           }),
           reportClient.getCashPaymentReport(auth.accessToken, {
@@ -7464,10 +7469,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
 
     if (activeReportTab === 'income') {
-      const incomeRows = incomeReport?.rows.map((row) => [
+      const incomeRows = incomeReport?.rows.filter((row) => row.rowType === 'payments').map((row) => [
         row.garageNumber,
         row.date,
-        '',
+        formatPaymentPrototypeOperationTime(row.createdAtUtc),
         formatMoney(row.incomeAmount),
         row.incomeTypeName,
       ]) ?? []

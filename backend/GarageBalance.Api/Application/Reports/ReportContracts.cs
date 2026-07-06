@@ -112,7 +112,8 @@ public sealed record IncomeReportRowDto(
     decimal IncomeAmount,
     decimal Debt,
     string? DocumentNumber,
-    string? Comment);
+    string? Comment,
+    DateTimeOffset? CreatedAtUtc = null);
 
 public sealed record ExpenseReportDto(
     DateOnly DateFrom,

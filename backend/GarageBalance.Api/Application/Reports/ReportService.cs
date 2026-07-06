@@ -391,7 +391,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.Amount,
                 -operation.Amount,
                 operation.DocumentNumber,
-                operation.Comment)));
+                operation.Comment,
+                operation.CreatedAtUtc)));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -1502,7 +1503,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.Amount,
                 -operation.Amount,
                 operation.DocumentNumber,
-                operation.Comment)));
+                operation.Comment,
+                operation.CreatedAtUtc)));
         }
 
         var visibleRows = ApplyRowLimit(

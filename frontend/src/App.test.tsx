@@ -5967,7 +5967,11 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сегодня' }))
     expect(incomeDateFrom).toHaveValue(today)
     expect(incomeDateTo).toHaveValue(today)
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })).toBeInTheDocument()
+    const incomeReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })
+    expect(incomeReportTable).toBeInTheDocument()
+    expect(incomeReportTable).toHaveTextContent('10:24')
+    expect(incomeReportTable).toHaveTextContent('1 500,00')
+    expect(incomeReportTable).not.toHaveTextContent('Начисление за июнь')
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()
@@ -8074,6 +8078,7 @@ function createIncomeReport(overrides: Partial<IncomeReportDto> = {}): IncomeRep
         debt: 2000,
         documentNumber: null,
         comment: 'Начисление за июнь',
+        createdAtUtc: null,
       },
       {
         rowType: 'payments',
@@ -8090,6 +8095,7 @@ function createIncomeReport(overrides: Partial<IncomeReportDto> = {}): IncomeRep
         debt: -1500,
         documentNumber: 'PKO-1',
         comment: 'Оплата за июнь',
+        createdAtUtc: '2026-06-10T10:24:00+07:00',
       },
     ],
     ...overrides,
