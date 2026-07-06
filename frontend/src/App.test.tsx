@@ -20,7 +20,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1046,6 +1046,7 @@ describe('App', () => {
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateAccrualRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
+    const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
       getIncomeTypes: async () => incomeTypes,
@@ -1100,6 +1101,21 @@ describe('App', () => {
           comment: request.comment ?? null,
           supplierDebtBefore: 39000,
           supplierDebtAfter: 37800,
+        })
+      },
+      createSupplierAccrual: async (_token, request) => {
+        savedSupplierAccrualRequests.push(request)
+        return createSupplierAccrual({
+          id: `supplier-accrual-${savedSupplierAccrualRequests.length}`,
+          supplierId: request.supplierId,
+          supplierName: 'Водоканал',
+          expenseTypeId: request.expenseTypeId,
+          expenseTypeName: 'Электроэнергия',
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          source: request.source,
+          documentNumber: request.documentNumber ?? null,
+          comment: request.comment ?? null,
         })
       },
     })
@@ -1216,10 +1232,24 @@ describe('App', () => {
     const addAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление' })
     await user.click(addAccrualButton)
     const accrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
-    expect(within(accrualDialog).getByLabelText('Основание начисления')).toBeInTheDocument()
-    const accrualCancelButton = within(accrualDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(accrualCancelButton).toHaveFocus())
-    await user.click(accrualCancelButton)
+    expect(within(accrualDialog).getByLabelText('Поставщик начисления')).toHaveValue('supplier-1')
+    expect(within(accrualDialog).getByLabelText('Вид начисления поставщику')).toHaveValue('expense-type-1')
+    expect(within(accrualDialog).getByLabelText('Месяц начисления поставщику')).toHaveValue('2026-06')
+    await user.type(within(accrualDialog).getByLabelText('Сумма начисления поставщику'), '850')
+    await user.type(within(accrualDialog).getByLabelText('Документ начисления поставщику'), 'ACT-prototype')
+    await user.type(within(accrualDialog).getByLabelText('Комментарий начисления поставщику'), 'Начисление из формы выплат')
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(savedSupplierAccrualRequests).toHaveLength(1))
+    expect(savedSupplierAccrualRequests[0]).toMatchObject({
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      accountingMonth: '2026-06-01',
+      amount: 850,
+      source: 'manual',
+      documentNumber: 'ACT-prototype',
+      comment: 'Начисление из формы выплат',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addAccrualButton).toHaveFocus())
 
     const bankButton = within(prototype).getByRole('button', { name: 'Сдать кассу в банк' })

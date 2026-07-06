@@ -728,7 +728,7 @@ type CancelFinanceTarget = {
   record: FinanceRecord
   reason: string
 }
-type PaymentsPrototypeDialogKey = 'bank' | 'accrual'
+type PaymentsPrototypeDialogKey = 'bank'
 
 type PaymentPrototypeRow = {
   item: string
@@ -826,6 +826,15 @@ type ExpensePrototypeSubmitRequest = {
   documentNumber: string
   comment: string
   rowIndex?: number
+}
+
+type SupplierAccrualPrototypeSubmitRequest = {
+  supplierId: string
+  expenseTypeId: string
+  accountingMonth: string
+  amount: number
+  documentNumber: string
+  comment: string
 }
 
 type PaymentsPrototypeSavedState = {
@@ -2863,7 +2872,6 @@ function FinancePanel({
         </div>
       ) : null}
       {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
-      {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
 }
@@ -2917,6 +2925,8 @@ function PaymentsPrototypePanel({
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
+  const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [expenseDialogPreset, setExpenseDialogPreset] = useState<ExpensePrototypeDialogPreset | null>(null)
   const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
@@ -3038,6 +3048,23 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       garageAccrualTriggerRef.current = null
+    }, 0)
+  }
+
+  function openSupplierAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
+    supplierAccrualTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setSupplierAccrualDialogOpen(true)
+  }
+
+  function closeSupplierAccrualDialog() {
+    const trigger = supplierAccrualTriggerRef.current
+    setSupplierAccrualDialogOpen(false)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      supplierAccrualTriggerRef.current = null
     }, 0)
   }
 
@@ -3301,6 +3328,61 @@ function PaymentsPrototypePanel({
     return null
   }
 
+  async function commitSupplierAccrual(request: SupplierAccrualPrototypeSubmitRequest) {
+    const supplier = suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
+    if (!supplier) {
+      return 'Выберите поставщика из справочника.'
+    }
+
+    const expenseType = expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived) ?? null
+    if (!expenseType) {
+      return 'Выберите вид начисления из справочника выплат.'
+    }
+
+    const accrual = await financeClient.createSupplierAccrual(auth.accessToken, {
+      supplierId: supplier.id,
+      expenseTypeId: expenseType.id,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: 'manual',
+      documentNumber: request.documentNumber.trim() || undefined,
+      comment: request.comment.trim() || undefined,
+    })
+
+    setExpenseRows((currentRows) => {
+      let updated = false
+      const nextRows = currentRows.map((row) => {
+        if (row.item.trim().toLocaleLowerCase('ru-RU') !== accrual.expenseTypeName.trim().toLocaleLowerCase('ru-RU')) {
+          return row
+        }
+
+        updated = true
+        const cost = (typeof row.cost === 'number' ? row.cost : 0) + accrual.amount
+        const paid = typeof row.paid === 'number' ? row.paid : 0
+        return { ...row, cost, balance: Math.max(cost - paid, 0) }
+      })
+
+      if (updated) {
+        return nextRows
+      }
+
+      return [
+        ...nextRows,
+        {
+          item: accrual.expenseTypeName,
+          cost: accrual.amount,
+          paid: 0,
+          balance: accrual.amount,
+          collected: '',
+          difference: '',
+          action: true,
+        },
+      ]
+    })
+
+    return null
+  }
+
   const groupedGarageRows = garageRows.reduce<Array<{ month: string; monthLabel: string; rows: GarageIncomePrototypeRow[] }>>((groups, row) => {
     const existingGroup = groups.find((group) => group.month === row.month)
     if (existingGroup) {
@@ -3528,7 +3610,7 @@ function PaymentsPrototypePanel({
       ) : (
         <>
           <div className="payments-prototype-actions payments-prototype-actions--sheet">
-            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'accrual')}>
+            <button className="secondary-button" type="button" onClick={(event) => openSupplierAccrualDialog(event)}>
               <Plus size={16} aria-hidden="true" />
               <span>Добавить начисление</span>
             </button>
@@ -3648,6 +3730,14 @@ function PaymentsPrototypePanel({
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
           onClose={closeExpenseDialog}
           onSubmit={commitExpensePayment}
+        />
+      ) : null}
+      {supplierAccrualDialogOpen ? (
+        <NewAccrualPrototypeDialog
+          expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
+          suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
+          onClose={closeSupplierAccrualDialog}
+          onSubmit={commitSupplierAccrual}
         />
       ) : null}
     </section>
@@ -3838,10 +3928,71 @@ function NewExpensePrototypeDialog({
   )
 }
 
-function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
+function NewAccrualPrototypeDialog({
+  expenseTypes,
+  suppliers,
+  onClose,
+  onSubmit,
+}: {
+  expenseTypes: AccountingTypeDto[]
+  suppliers: SupplierDto[]
+  onClose: () => void
+  onSubmit: (request: SupplierAccrualPrototypeSubmitRequest) => Promise<string | null>
+}) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
+  const [expenseTypeId, setExpenseTypeId] = useState(expenseTypes[0]?.id ?? '')
+  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
+  const [amount, setAmount] = useState('')
+  const [documentNumber, setDocumentNumber] = useState('')
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!supplierId) {
+      setError('Выберите поставщика из справочника.')
+      return
+    }
+    if (!expenseTypeId) {
+      setError('Выберите вид начисления из справочника выплат.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError('Укажите месяц начисления.')
+      return
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму начисления больше нуля.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        supplierId,
+        expenseTypeId,
+        accountingMonth: `${accountingMonth}-01`,
+        amount: parsedAmount,
+        documentNumber,
+        comment,
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось сохранить начисление. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3854,22 +4005,49 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onClose()
-        }}>
-          <FormField label="Основание">
-            <input aria-label="Основание начисления" />
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Поставщик">
+            <select aria-label="Поставщик начисления" value={supplierId} onChange={(event) => {
+              setSupplierId(event.target.value)
+              setError(null)
+            }}>
+              {suppliers.length > 0 ? suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+              )) : <option value="">Нет поставщиков</option>}
+            </select>
+          </FormField>
+          <FormField label="Вид начисления">
+            <select aria-label="Вид начисления поставщику" value={expenseTypeId} onChange={(event) => {
+              setExpenseTypeId(event.target.value)
+              setError(null)
+            }}>
+              {expenseTypes.length > 0 ? expenseTypes.map((expenseType) => (
+                <option key={expenseType.id} value={expenseType.id}>{expenseType.name}</option>
+              )) : <option value="">Нет видов выплат</option>}
+            </select>
+          </FormField>
+          <FormField label="Месяц">
+            <input aria-label="Месяц начисления поставщику" type="month" value={accountingMonth} onChange={(event) => {
+              setAccountingMonth(event.target.value)
+              setError(null)
+            }} />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма начисления" inputMode="decimal" />
+            <input aria-label="Сумма начисления поставщику" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Документ">
+            <input aria-label="Документ начисления поставщику" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к начислению" rows={5} />
+            <textarea aria-label="Комментарий начисления поставщику" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
+          {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit">Ок</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>
