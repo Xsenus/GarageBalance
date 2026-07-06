@@ -533,7 +533,29 @@ describe('App', () => {
 
   it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const contractorOwner = createOwner({
+      id: 'owner-1',
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      phone: '+7 900 000-00-01',
+      address: 'ГСК, ряд 1',
+    })
+    const contractorGarage = createGarage({
+      id: 'garage-contractors-1',
+      number: '1',
+      ownerId: contractorOwner.id,
+      ownerName: contractorOwner.fullName,
+      peopleCount: 3,
+      floorCount: 1,
+      startingBalance: 5300,
+      initialWaterMeterValue: 59,
+      initialElectricityMeterValue: 49,
+    })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [contractorOwner],
+      getGarages: async () => [contractorGarage],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5565,6 +5587,8 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   const incomeType = createAccountingType({ id: 'income-type-1', name: 'Членский взнос', code: 'membership' })
   const expenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
   const tariff = createTariff({ id: 'tariff-1', name: 'Тариф воды', calculationBase: 'meter_water', rate: 50, effectiveFrom: '2026-07-01' })
+  let owners = [owner]
+  let garages = [garage]
   let supplierGroups = [group]
   let suppliers = [supplier]
   let supplierContacts = [supplierContact]
@@ -5572,14 +5596,80 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   let staffMembers = [staffMember]
 
   return {
-    getOwners: async () => [owner],
-    createOwner: async () => owner,
+    getOwners: async () => owners,
+    createOwner: async (_token, request) => {
+      const createdOwner = createOwner({
+        id: `owner-${owners.length + 1}`,
+        lastName: request.lastName,
+        firstName: request.firstName,
+        middleName: request.middleName || null,
+        phone: request.phone || null,
+        address: request.address || null,
+        meterNotes: request.meterNotes || null,
+      })
+      owners = [createdOwner, ...owners]
+      return createdOwner
+    },
+    updateOwner: async (_token, id, request) => {
+      const updatedOwner = createOwner({
+        id,
+        lastName: request.lastName,
+        firstName: request.firstName,
+        middleName: request.middleName || null,
+        phone: request.phone || null,
+        address: request.address || null,
+        meterNotes: request.meterNotes || null,
+      })
+      owners = owners.map((item) => (item.id === id ? updatedOwner : item))
+      return updatedOwner
+    },
     archiveOwner: async () => undefined,
     restoreOwner: async () => owner,
-    getGarages: async () => [garage],
-    createGarage: async () => garage,
-    archiveGarage: async () => undefined,
-    restoreGarage: async () => garage,
+    getGarages: async () => garages,
+    createGarage: async (_token, request) => {
+      const garageOwner = owners.find((item) => item.id === request.ownerId) ?? null
+      const createdGarage = createGarage({
+        id: `garage-${garages.length + 1}`,
+        number: request.number,
+        peopleCount: request.peopleCount,
+        floorCount: request.floorCount,
+        ownerId: garageOwner?.id ?? null,
+        ownerName: garageOwner?.fullName ?? null,
+        startingBalance: request.startingBalance,
+        initialWaterMeterValue: request.initialWaterMeterValue ?? null,
+        initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
+        comment: request.comment ?? null,
+      })
+      garages = [createdGarage, ...garages]
+      return createdGarage
+    },
+    updateGarage: async (_token, id, request) => {
+      const garageOwner = owners.find((item) => item.id === request.ownerId) ?? null
+      const updatedGarage = createGarage({
+        id,
+        number: request.number,
+        peopleCount: request.peopleCount,
+        floorCount: request.floorCount,
+        ownerId: garageOwner?.id ?? null,
+        ownerName: garageOwner?.fullName ?? null,
+        startingBalance: request.startingBalance,
+        initialWaterMeterValue: request.initialWaterMeterValue ?? null,
+        initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
+        comment: request.comment ?? null,
+      })
+      garages = garages.map((item) => (item.id === id ? updatedGarage : item))
+      return updatedGarage
+    },
+    archiveGarage: async (_token, id) => {
+      garages = garages.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreGarage: async (_token, id) => {
+      const restoredGarage = garages.find((item) => item.id === id) ?? createGarage({ id, isArchived: false })
+      garages = garages.some((item) => item.id === id)
+        ? garages.map((item) => (item.id === id ? { ...restoredGarage, isArchived: false } : item))
+        : [{ ...restoredGarage, isArchived: false }, ...garages]
+      return { ...restoredGarage, isArchived: false }
+    },
     getSupplierGroups: async () => supplierGroups,
     createSupplierGroup: async (_token, request) => {
       const createdGroup = createGroup({ id: `group-${supplierGroups.length + 1}`, name: request.name })
@@ -6295,7 +6385,25 @@ function createStatefulDictionaryClient(): DictionaryClient {
       lastOwner = owner
       return owner
     },
+    updateOwner: async (_token, id, request) => {
+      const owner = createOwner({
+        id,
+        lastName: request.lastName,
+        firstName: request.firstName,
+        middleName: request.middleName || null,
+        phone: request.phone ?? null,
+        address: request.address ?? null,
+        meterNotes: request.meterNotes ?? null,
+      })
+      lastOwner = owner
+      return owner
+    },
     archiveOwner: async () => undefined,
+    restoreOwner: async (_token, id) => {
+      const owner = lastOwner?.id === id ? { ...lastOwner, isArchived: false } : createOwner({ id, isArchived: false })
+      lastOwner = owner
+      return owner
+    },
     getGarages: async (_token, search) => {
       const normalized = search?.trim().toLowerCase()
       if (!normalized) {
@@ -6321,7 +6429,34 @@ function createStatefulDictionaryClient(): DictionaryClient {
       garages = [garage, ...garages]
       return garage
     },
-    archiveGarage: async () => undefined,
+    updateGarage: async (_token, id, request) => {
+      const owner = lastOwner?.id === request.ownerId ? lastOwner : null
+      const garage = createGarage({
+        id,
+        number: request.number,
+        peopleCount: request.peopleCount,
+        floorCount: request.floorCount,
+        ownerId: owner?.id ?? null,
+        ownerName: owner?.fullName ?? null,
+        startingBalance: request.startingBalance,
+        initialWaterMeterValue: request.initialWaterMeterValue ?? null,
+        initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
+        comment: request.comment ?? null,
+      })
+      garages = garages.map((item) => (item.id === id ? garage : item))
+      return garage
+    },
+    archiveGarage: async (_token, id) => {
+      garages = garages.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreGarage: async (_token, id) => {
+      const garage = garages.find((item) => item.id === id) ?? createGarage({ id, isArchived: false })
+      const restored = { ...garage, isArchived: false }
+      garages = garages.some((item) => item.id === id)
+        ? garages.map((item) => (item.id === id ? restored : item))
+        : [restored, ...garages]
+      return restored
+    },
     getSupplierGroups: async () => lastGroup ? [lastGroup] : [],
     createSupplierGroup: async (_token, request) => {
       const group = createGroup({ id: crypto.randomUUID(), name: request.name })

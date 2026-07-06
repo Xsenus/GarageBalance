@@ -5912,6 +5912,7 @@ type ContractorSection = 'garages' | 'suppliers' | 'staff'
 
 type ContractorGarageRow = {
   id: string
+  ownerId?: string | null
   number: string
   peopleCount: string
   floorCount: string
@@ -5979,9 +5980,9 @@ type ContractorRestoreTarget =
   | { type: 'employee'; item: ContractorStaffRow }
 
 const contractorGarageRows: ContractorGarageRow[] = [
-  { id: 'garage-1', number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
-  { id: 'garage-12', number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
-  { id: 'garage-27', number: '27', peopleCount: '2', floorCount: '1', owner: 'Сидорова Анна', phone: '+7 900 000-00-27', address: 'ГСК, ряд 4', balance: '1700', overdueDebt: '1700 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-1', ownerId: null, number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-12', ownerId: null, number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-27', ownerId: null, number: '27', peopleCount: '2', floorCount: '1', owner: 'Сидорова Анна', phone: '+7 900 000-00-27', address: 'ГСК, ряд 4', balance: '1700', overdueDebt: '1700 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
 ]
 
 const contractorSupplierRows: ContractorSupplierRow[] = [
@@ -6066,6 +6067,117 @@ function parsePrototypeMoney(value: string) {
   const normalized = value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function formatPrototypeNumber(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 }).format(value)
+}
+
+function parsePrototypeInteger(value: string, fallback = 0) {
+  const parsed = Number.parseInt(value.trim(), 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function parsePrototypeNullableNumber(value: string) {
+  const normalized = value.replace(/\s/g, '').replace(',', '.')
+  if (!normalized) {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeOwnerName(value: string) {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function splitOwnerName(value: string) {
+  const [lastName = '', firstName = '', ...middleNameParts] = normalizeOwnerName(value).split(' ')
+  return {
+    lastName,
+    firstName: firstName || 'Без имени',
+    middleName: middleNameParts.join(' '),
+  }
+}
+
+function createOwnerRequestFromGarage(row: ContractorGarageRow): UpsertOwnerRequest {
+  const parsedName = splitOwnerName(row.owner)
+
+  return {
+    lastName: parsedName.lastName || 'Без фамилии',
+    firstName: parsedName.firstName,
+    middleName: parsedName.middleName,
+    phone: row.phone.trim(),
+    address: row.address.trim(),
+  }
+}
+
+function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): ContractorGarageRow {
+  const owner = garage.ownerId ? owners.find((item) => item.id === garage.ownerId) : null
+  const startingBalance = garage.startingBalance ?? 0
+
+  return {
+    id: garage.id,
+    ownerId: garage.ownerId,
+    number: garage.number,
+    peopleCount: String(garage.peopleCount),
+    floorCount: String(garage.floorCount),
+    owner: garage.ownerName ?? owner?.fullName ?? '',
+    phone: owner?.phone ?? '',
+    address: owner?.address ?? '',
+    balance: formatPrototypeMoney(startingBalance),
+    overdueDebt: startingBalance < 0 ? `${formatPrototypeMoney(Math.abs(startingBalance))} руб.` : '',
+    initialWater: formatPrototypeNumber(garage.initialWaterMeterValue),
+    initialElectricity: formatPrototypeNumber(garage.initialElectricityMeterValue),
+    meters: owner?.meterNotes ?? '',
+    comment: garage.comment ?? '',
+    isDeleted: garage.isArchived,
+  }
+}
+
+function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | null): UpsertGarageRequest {
+  return {
+    number: row.number.trim(),
+    peopleCount: parsePrototypeInteger(row.peopleCount, 0),
+    floorCount: parsePrototypeInteger(row.floorCount, 0),
+    ownerId,
+    startingBalance: parsePrototypeMoney(row.balance),
+    initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
+    initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
+    comment: row.comment.trim(),
+  }
+}
+
+async function resolveGarageOwner(
+  dictionaryClient: DictionaryClient,
+  accessToken: string,
+  owners: OwnerDto[],
+  row: ContractorGarageRow,
+) {
+  const ownerName = normalizeOwnerName(row.owner)
+  if (!ownerName) {
+    return null
+  }
+
+  const existing = owners.find((owner) => owner.id === row.ownerId)
+    ?? owners.find((owner) => normalizeOwnerName(owner.fullName).localeCompare(ownerName, 'ru', { sensitivity: 'accent' }) === 0)
+  const request = createOwnerRequestFromGarage(row)
+
+  if (existing) {
+    const shouldUpdate = existing.phone !== (request.phone || null) || existing.address !== (request.address || null) || normalizeOwnerName(existing.fullName) !== ownerName
+    if (!shouldUpdate) {
+      return existing
+    }
+
+    return dictionaryClient.updateOwner(accessToken, existing.id, request)
+  }
+
+  return dictionaryClient.createOwner(accessToken, request)
 }
 
 function createSupplierContactFromDto(contact: SupplierContactDto): ContractorSupplierContact {
@@ -6247,6 +6359,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
   const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
+  const [owners, setOwners] = useState<OwnerDto[]>([])
   const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>(contractorSupplierRows)
   const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
@@ -6325,7 +6438,9 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
 
     async function loadContractorsFromDictionaries() {
       try {
-        const [groups, supplierRows, supplierContactRows, departmentRows, staffRows] = await Promise.all([
+        const [ownerRows, garageRows, groups, supplierRows, supplierContactRows, departmentRows, staffRows] = await Promise.all([
+          dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+          dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getSupplierGroups(auth.accessToken, contractorsDictionaryListLimit, true),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
@@ -6335,6 +6450,11 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
 
         if (cancelled) {
           return
+        }
+
+        setOwners(ownerRows)
+        if (garageRows.length > 0) {
+          setGarages(garageRows.map((garage) => createGarageRowFromDto(garage, ownerRows)))
         }
 
         setSupplierGroups(groups)
@@ -6352,7 +6472,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
           setStaff(staffRows.map(createStaffRowFromDto))
         }
 
-        if (supplierRows.length > 0 || departmentRows.length > 0 || staffRows.length > 0) {
+        if (garageRows.length > 0 || supplierRows.length > 0 || departmentRows.length > 0 || staffRows.length > 0) {
           setBackendContractorsLoaded(true)
         }
       } catch (error) {
@@ -6419,18 +6539,51 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
     document.addEventListener('mouseup', handleMouseUp)
   }
 
-  const saveGarage = (garage: ContractorGarageRow) => {
+  const saveGarage = async (garage: ContractorGarageRow) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
 
-    if (currentGarage) {
-      setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? garage : item)))
+    try {
+      const savedOwner = await resolveGarageOwner(dictionaryClient, auth.accessToken, owners, garage)
+      if (savedOwner) {
+        setOwners((currentOwners) => {
+          if (currentOwners.some((owner) => owner.id === savedOwner.id)) {
+            return currentOwners.map((owner) => (owner.id === savedOwner.id ? savedOwner : owner))
+          }
+
+          return [...currentOwners, savedOwner]
+        })
+      }
+
+      const request = createGarageRequestFromRow(garage, savedOwner?.id ?? null)
+      const savedGarage = isBackendDictionaryId(garage.id)
+        ? await dictionaryClient.updateGarage(auth.accessToken, garage.id, request)
+        : await dictionaryClient.createGarage(auth.accessToken, request)
+      const nextGarage = createGarageRowFromDto(savedGarage, savedOwner ? [...owners.filter((owner) => owner.id !== savedOwner.id), savedOwner] : owners)
+
+      setGarages((currentGarages) => {
+        if (currentGarage) {
+          return currentGarages.map((item) => (item.id === garage.id ? nextGarage : item))
+        }
+
+        return [...currentGarages, nextGarage]
+      })
+      return
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить гараж.')
+      return
+    }
+  }
+
+  const deleteGarage = async (garage: ContractorGarageRow, reason = 'Гараж удален из таблицы контрагентов.') => {
+    try {
+      if (isBackendDictionaryId(garage.id)) {
+        await dictionaryClient.archiveGarage(auth.accessToken, garage.id, reason)
+      }
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить гараж.')
       return
     }
 
-    setGarages((currentGarages) => [...currentGarages, garage])
-  }
-
-  const deleteGarage = (garage: ContractorGarageRow) => {
     setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? { ...item, isDeleted: true } : item)))
   }
 
@@ -6460,7 +6613,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
       return
     }
 
-    deleteGarage(garageDeleteTarget)
+    void deleteGarage(garageDeleteTarget, garageDeleteReason.trim())
     closeGarageDeleteDialog()
   }
 
@@ -6699,7 +6852,13 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
 
     try {
       if (restoreTarget.type === 'garage') {
-        setGarages((currentGarages) => currentGarages.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+        if (isBackendDictionaryId(restoreTarget.item.id)) {
+          const restoredGarage = await dictionaryClient.restoreGarage(auth.accessToken, restoreTarget.item.id)
+          const nextGarage = createGarageRowFromDto(restoredGarage, owners)
+          setGarages((currentGarages) => currentGarages.map((item) => (item.id === restoreTarget.item.id ? nextGarage : item)))
+        } else {
+          setGarages((currentGarages) => currentGarages.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+        }
       } else if (restoreTarget.type === 'supplier') {
         if (isBackendDictionaryId(restoreTarget.item.id)) {
           const restoredSupplier = await dictionaryClient.restoreSupplier(auth.accessToken, restoreTarget.item.id)
@@ -7169,6 +7328,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
 function createEmptyGaragePrototype(): ContractorGarageRow {
   return {
     id: `garage-${Date.now()}`,
+    ownerId: null,
     number: '',
     peopleCount: '',
     floorCount: '',
@@ -7316,7 +7476,7 @@ function PrototypeChangeConfirmationDialog({
   )
 }
 
-function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow) => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow, reason?: string) => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
@@ -7362,7 +7522,7 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
       return
     }
 
-    onDelete(item)
+    onDelete(item, deleteReason.trim())
     closeDeleteConfirmation()
     onClose()
   }
