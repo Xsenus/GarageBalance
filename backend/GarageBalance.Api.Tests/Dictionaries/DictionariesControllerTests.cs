@@ -296,6 +296,58 @@ public sealed class DictionariesControllerTests
         Assert.Equal("tariff_calculation_base_invalid", problem.Title);
     }
 
+    [Fact]
+    public async Task GetChargeServiceSettings_PassesFiltersToService()
+    {
+        var service = new FakeDictionaryService();
+        var controller = CreateController(service);
+
+        var result = await controller.GetChargeServiceSettings("электро", 25, true, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(("электро", 25, true), service.LastChargeServiceListRequest);
+    }
+
+    [Fact]
+    public async Task CreateChargeServiceSetting_ReturnsCreatedAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateChargeServiceSetting(
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var dto = Assert.IsType<ChargeServiceSettingDto>(created.Value);
+        Assert.Equal(serviceId, dto.Id);
+        Assert.Equal(nameof(DictionariesController.GetChargeServiceSettings), created.ActionName);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceSetting_ReturnsBadRequestForInvalidPaymentDay()
+    {
+        var controller = CreateController(new FakeDictionaryService
+        {
+            UpdateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_payment_day_invalid", "В выбранном месяце нельзя указать день больше 28.")
+        });
+
+        var result = await controller.UpdateChargeServiceSetting(
+            Guid.NewGuid(),
+            new UpsertChargeServiceSettingRequest("Членский взнос", true, 1, 1, 29, 2, 30, false, false, "руб."),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("charge_service_payment_day_invalid", problem.Title);
+    }
+
     private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
     {
         var controller = new DictionariesController(service);
@@ -428,6 +480,7 @@ public sealed class DictionariesControllerTests
         public (int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -444,6 +497,9 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> RestoreTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<ChargeServiceSettingDto> CreateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<ChargeServiceSettingDto> UpdateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<ChargeServiceSettingDto> RestoreChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> ArchiveIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -688,6 +744,38 @@ public sealed class DictionariesControllerTests
             LastRestoreId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreTariffResult);
+        }
+
+        public Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        {
+            LastChargeServiceListRequest = (search, limit, includeArchived);
+            return Task.FromResult<IReadOnlyList<ChargeServiceSettingDto>>([]);
+        }
+
+        public Task<DictionaryResult<ChargeServiceSettingDto>> CreateChargeServiceSettingAsync(UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateChargeServiceSettingResult);
+        }
+
+        public Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateChargeServiceSettingResult);
+        }
+
+        public Task<DictionaryResult<ChargeServiceSettingDto>> ArchiveChargeServiceSettingAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreChargeServiceSettingResult);
         }
 
         public Task<IReadOnlyList<IrregularPaymentDto>> GetIrregularPaymentsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)

@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
@@ -19,7 +19,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -308,8 +308,9 @@ describe('App', () => {
     expect(within(serviceDialog).queryByLabelText('Периодичность')).not.toBeInTheDocument()
     await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
     expect(within(serviceDialog).getByLabelText('Периодичность')).toHaveValue('12')
-    expect(within(serviceDialog).getByLabelText('Учитывать платеж с')).toHaveValue('Январь')
-    expect(within(serviceDialog).getByLabelText('Оплатить до')).toHaveValue('Июль')
+    expect(within(serviceDialog).getByLabelText('Учитывать платеж с')).toHaveValue('янв')
+    expect(within(serviceDialog).getByLabelText('День оплаты')).toHaveValue('30')
+    expect(within(serviceDialog).getByLabelText('Месяц оплаты')).toHaveValue('июл')
     expect(within(serviceDialog).getByRole('combobox', { name: 'Учитывать платеж с' })).toHaveTextContent('Декабрь')
     expect(within(serviceDialog).getByRole('combobox', { name: 'Учитывать платеж с' }).querySelectorAll('option')).toHaveLength(12)
     expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('30')
@@ -837,6 +838,63 @@ describe('App', () => {
       electricitySecondRate: 3,
       electricityThirdRate: 5,
     }))
+  })
+
+  it('creates a charge service setting from tariffs screen and renders saved rows', async () => {
+    const user = userEvent.setup()
+    let createdServiceRequest: unknown = null
+    const dictionaryClient = createDictionaryClient({
+      getChargeServiceSettings: async () => [],
+      createChargeServiceSetting: async (_token, request) => {
+        createdServiceRequest = request
+        return createChargeServiceSetting({
+          id: 'service-security',
+          name: request.name,
+          isRegular: request.isRegular,
+          periodicityMonths: request.periodicityMonths ?? null,
+          accrualStartMonth: request.accrualStartMonth ?? null,
+          paymentDueDay: request.paymentDueDay ?? null,
+          paymentDueMonth: request.paymentDueMonth ?? null,
+          overdueGraceDays: request.overdueGraceDays,
+          isMetered: request.isMetered,
+          hasTieredTariff: request.hasTieredTariff,
+          unitName: request.unitName ?? null,
+        })
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' }))
+    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Охрана')
+    await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
+    await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
+    await user.type(within(serviceDialog).getByLabelText('День оплаты'), '28')
+    await user.selectOptions(within(serviceDialog).getByLabelText('Месяц оплаты'), 'фев')
+    await user.clear(within(serviceDialog).getByLabelText('Единица измерения'))
+    await user.type(within(serviceDialog).getByLabelText('Единица измерения'), 'руб.')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createdServiceRequest).toMatchObject({
+      name: 'Охрана',
+      isRegular: true,
+      periodicityMonths: 12,
+      accrualStartMonth: 1,
+      paymentDueDay: 28,
+      paymentDueMonth: 2,
+      overdueGraceDays: 30,
+      isMetered: true,
+      hasTieredTariff: true,
+      unitName: 'руб.',
+    }))
+    await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
+    expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
@@ -5550,6 +5608,35 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     }),
     archiveTariff: async () => undefined,
     restoreTariff: async () => tariff,
+    getChargeServiceSettings: async () => [],
+    createChargeServiceSetting: async (_token, request) => createChargeServiceSetting({
+      id: 'charge-service-new',
+      name: request.name,
+      isRegular: request.isRegular,
+      periodicityMonths: request.periodicityMonths ?? null,
+      accrualStartMonth: request.accrualStartMonth ?? null,
+      paymentDueDay: request.paymentDueDay ?? null,
+      paymentDueMonth: request.paymentDueMonth ?? null,
+      overdueGraceDays: request.overdueGraceDays,
+      isMetered: request.isMetered,
+      hasTieredTariff: request.hasTieredTariff,
+      unitName: request.unitName ?? null,
+    }),
+    updateChargeServiceSetting: async (_token, id, request) => createChargeServiceSetting({
+      id,
+      name: request.name,
+      isRegular: request.isRegular,
+      periodicityMonths: request.periodicityMonths ?? null,
+      accrualStartMonth: request.accrualStartMonth ?? null,
+      paymentDueDay: request.paymentDueDay ?? null,
+      paymentDueMonth: request.paymentDueMonth ?? null,
+      overdueGraceDays: request.overdueGraceDays,
+      isMetered: request.isMetered,
+      hasTieredTariff: request.hasTieredTariff,
+      unitName: request.unitName ?? null,
+    }),
+    archiveChargeServiceSetting: async () => undefined,
+    restoreChargeServiceSetting: async (_token, id) => createChargeServiceSetting({ id, isArchived: false }),
     getIrregularPayments: async () => [],
     createIrregularPayment: async (_token, request) => createIrregularPayment({ id: 'irregular-payment-new', name: request.name, amount: request.amount, isActive: request.isActive ?? true }),
     updateIrregularPayment: async (_token, id, request) => createIrregularPayment({ id, name: request.name, amount: request.amount, isActive: request.isActive ?? true }),
@@ -6383,6 +6470,24 @@ function createIrregularPayment(overrides: Partial<IrregularPaymentDto> = {}): I
     isActive: true,
     isArchived: false,
     isUsed: false,
+    ...overrides,
+  }
+}
+
+function createChargeServiceSetting(overrides: Partial<ChargeServiceSettingDto> = {}): ChargeServiceSettingDto {
+  return {
+    id: 'charge-service',
+    name: 'Услуга',
+    isRegular: false,
+    periodicityMonths: null,
+    accrualStartMonth: null,
+    paymentDueDay: null,
+    paymentDueMonth: null,
+    overdueGraceDays: 0,
+    isMetered: false,
+    hasTieredTariff: false,
+    unitName: 'руб.',
+    isArchived: false,
     ...overrides,
   }
 }

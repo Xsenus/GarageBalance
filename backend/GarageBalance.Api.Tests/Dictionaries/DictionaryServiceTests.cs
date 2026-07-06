@@ -973,6 +973,98 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceSettingAsync_SavesServiceSettingsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Электроэнергия", result.Value!.Name);
+        Assert.True(result.Value.IsRegular);
+        Assert.Equal(1, result.Value.PeriodicityMonths);
+        Assert.Equal(1, result.Value.AccrualStartMonth);
+        Assert.Equal(30, result.Value.PaymentDueDay);
+        Assert.Equal(6, result.Value.PaymentDueMonth);
+        Assert.Equal(30, result.Value.OverdueGraceDays);
+        Assert.True(result.Value.IsMetered);
+        Assert.True(result.Value.HasTieredTariff);
+        Assert.Equal("кВт", result.Value.UnitName);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Электроэнергия", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceSettingAsync_WritesChangedFieldsAndSkipsNoOp()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var created = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м3"),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var actorUserId = Guid.NewGuid();
+        var result = await service.UpdateChargeServiceSettingAsync(
+            created.Value!.Id,
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб."),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Водоснабжение", result.Value!.Name);
+        Assert.Equal(12, result.Value.PeriodicityMonths);
+        Assert.Equal(31, result.Value.PaymentDueDay);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Наименование", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Периодичность", changedFields, StringComparison.Ordinal);
+        Assert.Contains("День оплаты", changedFields, StringComparison.Ordinal);
+
+        var noOp = await service.UpdateChargeServiceSettingAsync(
+            created.Value.Id,
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб."),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(noOp.Succeeded);
+        Assert.Single(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateChargeServiceSettingAsync_RejectsInvalidFebruaryDayAndTieredWithoutMeter()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+
+        var februaryResult = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Членский взнос", true, 1, 1, 29, 2, 30, false, false, "руб."),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var tieredResult = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Порог без счетчика", true, 1, 1, 30, 6, 30, false, true, "руб."),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(februaryResult.Succeeded);
+        Assert.Equal("charge_service_payment_day_invalid", februaryResult.ErrorCode);
+        Assert.False(tieredResult.Succeeded);
+        Assert.Equal("charge_service_tiered_requires_meter", tieredResult.ErrorCode);
+        Assert.Empty(database.Context.ChargeServiceSettings);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();

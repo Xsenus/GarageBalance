@@ -48,6 +48,15 @@ public sealed class DictionaryService(
         ["electricityFirstRate"] = "Цена за ед. порога 1",
         ["electricitySecondRate"] = "Цена за ед. порога 2",
         ["electricityThirdRate"] = "Цена сверх порога 2",
+        ["isRegular"] = "Регулярные платежи",
+        ["periodicityMonths"] = "Периодичность",
+        ["accrualStartMonth"] = "Учитывать платеж с",
+        ["paymentDueDay"] = "День оплаты",
+        ["paymentDueMonth"] = "Месяц оплаты",
+        ["overdueGraceDays"] = "Перенос долга в просроченный",
+        ["isMetered"] = "По счетчику",
+        ["hasTieredTariff"] = "Пороговая тарификация",
+        ["unitName"] = "Единица измерения",
         ["amount"] = "Сумма",
         ["isActive"] = "Статус"
     };
@@ -1276,6 +1285,122 @@ public sealed class DictionaryService(
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
+    public async Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        var query = dbContext.ChargeServiceSettings.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+        }
+
+        return await query
+            .OrderBy(item => item.Name)
+            .Take(NormalizeListLimit(limit))
+            .Select(item => ToChargeServiceSettingDto(item))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<ChargeServiceSettingDto>> CreateChargeServiceSettingAsync(UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var validation = ValidateChargeServiceSettingRequest(request);
+        if (!validation.Succeeded)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        var name = request.Name.Trim();
+        if (await dbContext.ChargeServiceSettings.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
+        }
+
+        var setting = new ChargeServiceSetting { Name = name };
+        ApplyChargeServiceSetting(setting, request);
+
+        dbContext.ChargeServiceSettings.Add(setting);
+        AddAudit(actorUserId, "dictionary.charge_service_created", "charge_service", setting.Id, $"Создана настройка услуги {setting.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
+    }
+
+    public async Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var setting = await dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (setting is null)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
+        }
+
+        var validation = ValidateChargeServiceSettingRequest(request);
+        if (!validation.Succeeded)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        var name = request.Name.Trim();
+        if (await dbContext.ChargeServiceSettings.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
+        }
+
+        if (ChargeServiceSettingMatches(setting, request))
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
+        }
+
+        var oldValues = ToChargeServiceAuditValues(setting);
+        ApplyChargeServiceSetting(setting, request);
+        setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var newValues = ToChargeServiceAuditValues(setting);
+
+        AddAudit(actorUserId, "dictionary.charge_service_updated", "charge_service", setting.Id, $"Изменена настройка услуги {setting.Name}.", oldValues: oldValues, newValues: newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
+    }
+
+    public async Task<DictionaryResult<ChargeServiceSettingDto>> ArchiveChargeServiceSettingAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<ChargeServiceSettingDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var setting = await dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (setting is null)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
+        }
+
+        setting.IsArchived = true;
+        setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.charge_service_archived", "charge_service", setting.Id, $"Архивирована настройка услуги {setting.Name}.", archiveReason);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
+    }
+
+    public async Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var setting = await dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (setting is null)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена в архиве.");
+        }
+
+        if (await dbContext.ChargeServiceSettings.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == setting.Name, cancellationToken))
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Активная услуга с таким наименованием уже существует.");
+        }
+
+        setting.IsArchived = false;
+        setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.charge_service_restored", "charge_service", setting.Id, $"Восстановлена настройка услуги {setting.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
+    }
+
     public async Task<IReadOnlyList<IrregularPaymentDto>> GetIrregularPaymentsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var query = dbContext.IrregularPayments.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
@@ -1559,6 +1684,99 @@ public sealed class DictionaryService(
         tariff.ElectricityThirdRate = tiers?.ThirdRate;
     }
 
+    private static DictionaryResult<object> ValidateChargeServiceSettingRequest(UpsertChargeServiceSettingRequest request)
+    {
+        var name = request.Name.Trim();
+        if (name.Length == 0)
+        {
+            return DictionaryResult<object>.Failure("charge_service_name_required", "Укажите наименование услуги.");
+        }
+
+        if (request.IsRegular)
+        {
+            if (!request.PeriodicityMonths.HasValue || request.PeriodicityMonths.Value <= 0)
+            {
+                return DictionaryResult<object>.Failure("charge_service_periodicity_required", "Для регулярной услуги укажите периодичность.");
+            }
+
+            if (!request.AccrualStartMonth.HasValue)
+            {
+                return DictionaryResult<object>.Failure("charge_service_accrual_start_month_required", "Для регулярной услуги укажите месяц начала учета.");
+            }
+        }
+
+        if (request.AccrualStartMonth is < 1 or > 12 || request.PaymentDueMonth is < 1 or > 12)
+        {
+            return DictionaryResult<object>.Failure("charge_service_month_invalid", "Месяц должен быть от 1 до 12.");
+        }
+
+        if (request.PaymentDueDay.HasValue != request.PaymentDueMonth.HasValue)
+        {
+            return DictionaryResult<object>.Failure("charge_service_payment_date_incomplete", "Для даты оплаты заполните и день, и месяц.");
+        }
+
+        if (request.PaymentDueDay.HasValue && request.PaymentDueMonth.HasValue)
+        {
+            var maxDay = DateTime.DaysInMonth(2026, request.PaymentDueMonth.Value);
+            if (request.PaymentDueDay.Value < 1 || request.PaymentDueDay.Value > maxDay)
+            {
+                return DictionaryResult<object>.Failure("charge_service_payment_day_invalid", $"В выбранном месяце нельзя указать день больше {maxDay}.");
+            }
+        }
+
+        if (request.HasTieredTariff && !request.IsMetered)
+        {
+            return DictionaryResult<object>.Failure("charge_service_tiered_requires_meter", "Пороговая тарификация доступна только для услуг по счетчику.");
+        }
+
+        return DictionaryResult<object>.Success(new object());
+    }
+
+    private static void ApplyChargeServiceSetting(ChargeServiceSetting setting, UpsertChargeServiceSettingRequest request)
+    {
+        setting.Name = request.Name.Trim();
+        setting.IsRegular = request.IsRegular;
+        setting.PeriodicityMonths = request.IsRegular ? request.PeriodicityMonths : null;
+        setting.AccrualStartMonth = request.IsRegular ? request.AccrualStartMonth : null;
+        setting.PaymentDueDay = request.PaymentDueDay;
+        setting.PaymentDueMonth = request.PaymentDueMonth;
+        setting.OverdueGraceDays = request.OverdueGraceDays;
+        setting.IsMetered = request.IsMetered;
+        setting.HasTieredTariff = request.HasTieredTariff;
+        setting.UnitName = NormalizeOptional(request.UnitName);
+    }
+
+    private static bool ChargeServiceSettingMatches(ChargeServiceSetting setting, UpsertChargeServiceSettingRequest request)
+    {
+        return StringEquals(setting.Name, request.Name.Trim()) &&
+            setting.IsRegular == request.IsRegular &&
+            setting.PeriodicityMonths == (request.IsRegular ? request.PeriodicityMonths : null) &&
+            setting.AccrualStartMonth == (request.IsRegular ? request.AccrualStartMonth : null) &&
+            setting.PaymentDueDay == request.PaymentDueDay &&
+            setting.PaymentDueMonth == request.PaymentDueMonth &&
+            setting.OverdueGraceDays == request.OverdueGraceDays &&
+            setting.IsMetered == request.IsMetered &&
+            setting.HasTieredTariff == request.HasTieredTariff &&
+            StringEquals(setting.UnitName, NormalizeOptional(request.UnitName));
+    }
+
+    private static Dictionary<string, object?> ToChargeServiceAuditValues(ChargeServiceSetting setting)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["name"] = setting.Name,
+            ["isRegular"] = setting.IsRegular,
+            ["periodicityMonths"] = setting.PeriodicityMonths,
+            ["accrualStartMonth"] = setting.AccrualStartMonth,
+            ["paymentDueDay"] = setting.PaymentDueDay,
+            ["paymentDueMonth"] = setting.PaymentDueMonth,
+            ["overdueGraceDays"] = setting.OverdueGraceDays,
+            ["isMetered"] = setting.IsMetered,
+            ["hasTieredTariff"] = setting.HasTieredTariff,
+            ["unitName"] = setting.UnitName
+        };
+    }
+
     private static bool HasElectricityTiers(Tariff tariff)
     {
         return tariff.ElectricityFirstThreshold.HasValue
@@ -1705,6 +1923,23 @@ public sealed class DictionaryService(
             supplier.StartingBalance,
             supplier.Comment,
             supplier.IsArchived);
+    }
+
+    private static ChargeServiceSettingDto ToChargeServiceSettingDto(ChargeServiceSetting setting)
+    {
+        return new ChargeServiceSettingDto(
+            setting.Id,
+            setting.Name,
+            setting.IsRegular,
+            setting.PeriodicityMonths,
+            setting.AccrualStartMonth,
+            setting.PaymentDueDay,
+            setting.PaymentDueMonth,
+            setting.OverdueGraceDays,
+            setting.IsMetered,
+            setting.HasTieredTariff,
+            setting.UnitName,
+            setting.IsArchived);
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)

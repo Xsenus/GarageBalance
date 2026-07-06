@@ -24,6 +24,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
+    public DbSet<ChargeServiceSetting> ChargeServiceSettings => Set<ChargeServiceSetting>();
     public DbSet<IrregularPayment> IrregularPayments => Set<IrregularPayment>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
@@ -229,6 +230,18 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
+        });
+
+        modelBuilder.Entity<ChargeServiceSetting>(entity =>
+        {
+            entity.ToTable("charge_service_settings");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.UnitName).HasMaxLength(40);
+            entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(item => item.IsRegular);
+            entity.HasIndex(item => item.IsMetered);
+            entity.HasIndex(item => item.HasTieredTariff);
         });
 
         modelBuilder.Entity<IrregularPayment>(entity =>

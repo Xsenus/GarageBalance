@@ -1455,6 +1455,14 @@ h1 {
   flex: 1;
 }
 
+.contractors-inline-field--date input {
+  flex: 0 0 64px;
+}
+
+.contractors-inline-field--date select {
+  flex: 1;
+}
+
 .contractors-inline-field span {
   color: #475467;
   font-size: 13px;

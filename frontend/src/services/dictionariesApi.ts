@@ -82,6 +82,21 @@ export type IrregularPaymentDto = {
   isUsed: boolean
 }
 
+export type ChargeServiceSettingDto = {
+  id: string
+  name: string
+  isRegular: boolean
+  periodicityMonths: number | null
+  accrualStartMonth: number | null
+  paymentDueDay: number | null
+  paymentDueMonth: number | null
+  overdueGraceDays: number
+  isMetered: boolean
+  hasTieredTariff: boolean
+  unitName: string | null
+  isArchived: boolean
+}
+
 export type PagedResult<TItem> = {
   items: TItem[]
   totalCount: number
@@ -152,6 +167,19 @@ export type UpsertIrregularPaymentRequest = {
   isActive?: boolean
 }
 
+export type UpsertChargeServiceSettingRequest = {
+  name: string
+  isRegular: boolean
+  periodicityMonths?: number | null
+  accrualStartMonth?: number | null
+  paymentDueDay?: number | null
+  paymentDueMonth?: number | null
+  overdueGraceDays: number
+  isMetered: boolean
+  hasTieredTariff: boolean
+  unitName?: string | null
+}
+
 export type DictionaryClient = {
   getOwners(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<OwnerDto[]>
   getOwnersPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<OwnerDto>>
@@ -195,6 +223,11 @@ export type DictionaryClient = {
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff(accessToken: string, id: string, reason: string): Promise<void>
   restoreTariff(accessToken: string, id: string): Promise<TariffDto>
+  getChargeServiceSettings(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<ChargeServiceSettingDto[]>
+  createChargeServiceSetting(accessToken: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
+  updateChargeServiceSetting(accessToken: string, id: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
+  archiveChargeServiceSetting(accessToken: string, id: string, reason: string): Promise<void>
+  restoreChargeServiceSetting(accessToken: string, id: string): Promise<ChargeServiceSettingDto>
   getIrregularPayments(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<IrregularPaymentDto[]>
   createIrregularPayment(accessToken: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
   updateIrregularPayment(accessToken: string, id: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
@@ -379,6 +412,21 @@ export const dictionariesApi: DictionaryClient = {
   },
   restoreTariff(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}/restore`, { method: 'POST' })
+  },
+  getChargeServiceSettings(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/charge-services', { search, limit, includeArchived: includeArchived || undefined }))
+  },
+  createChargeServiceSetting(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/charge-services', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateChargeServiceSetting(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  archiveChargeServiceSetting(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreChargeServiceSetting(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/restore`, { method: 'POST' })
   },
   getIrregularPayments(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/irregular-payments', { search, limit, includeArchived: includeArchived || undefined }))

@@ -60,6 +60,10 @@ public sealed class ControllerAuthorizationCoverageTests
     [InlineData(nameof(DictionariesController.UpdateTariff))]
     [InlineData(nameof(DictionariesController.ArchiveTariff))]
     [InlineData(nameof(DictionariesController.RestoreTariff))]
+    [InlineData(nameof(DictionariesController.CreateChargeServiceSetting))]
+    [InlineData(nameof(DictionariesController.UpdateChargeServiceSetting))]
+    [InlineData(nameof(DictionariesController.ArchiveChargeServiceSetting))]
+    [InlineData(nameof(DictionariesController.RestoreChargeServiceSetting))]
     public void TariffWriteActionsRequireTariffManagementPermission(string actionName)
     {
         var action = typeof(DictionariesController).GetMethod(actionName);
@@ -189,6 +193,7 @@ public sealed class ControllerAuthorizationCoverageTests
         var mutatingDictionaryActionsWithoutWritePolicy = mutatingActions
             .Where(method => !method.Name.Contains("Tariff", StringComparison.Ordinal))
             .Where(method => !method.Name.Contains("IrregularPayment", StringComparison.Ordinal))
+            .Where(method => !method.Name.Contains("ChargeService", StringComparison.Ordinal))
             .Where(method => !method.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => attribute.Policy == SystemPermissions.DictionariesWrite))
             .Select(method => method.Name)
             .Order(StringComparer.Ordinal)
@@ -196,7 +201,7 @@ public sealed class ControllerAuthorizationCoverageTests
         Assert.Empty(mutatingDictionaryActionsWithoutWritePolicy);
 
         var mutatingTariffActionsWithoutTariffPolicy = mutatingActions
-            .Where(method => method.Name.Contains("Tariff", StringComparison.Ordinal) || method.Name.Contains("IrregularPayment", StringComparison.Ordinal))
+            .Where(method => method.Name.Contains("Tariff", StringComparison.Ordinal) || method.Name.Contains("IrregularPayment", StringComparison.Ordinal) || method.Name.Contains("ChargeService", StringComparison.Ordinal))
             .Where(method => !method.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => attribute.Policy == SystemPermissions.TariffsManage))
             .Select(method => method.Name)
             .Order(StringComparer.Ordinal)

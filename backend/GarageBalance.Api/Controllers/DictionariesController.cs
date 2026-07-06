@@ -480,6 +480,68 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("charge-services")]
+    [ProducesResponseType<IReadOnlyList<ChargeServiceSettingDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ChargeServiceSettingDto>>> GetChargeServiceSettings([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetChargeServiceSettingsAsync(search, cancellationToken, limit, includeArchived));
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("charge-services")]
+    [ProducesResponseType<ChargeServiceSettingDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ChargeServiceSettingDto>> CreateChargeServiceSetting(UpsertChargeServiceSettingRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateChargeServiceSettingAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetChargeServiceSettings), new { search = result.Value!.Name }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPut("charge-services/{id:guid}")]
+    [ProducesResponseType<ChargeServiceSettingDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ChargeServiceSettingDto>> UpdateChargeServiceSetting(Guid id, UpsertChargeServiceSettingRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateChargeServiceSettingAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpDelete("charge-services/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveChargeServiceSetting(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveChargeServiceSettingAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("charge-services/{id:guid}/restore")]
+    [ProducesResponseType<ChargeServiceSettingDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ChargeServiceSettingDto>> RestoreChargeServiceSetting(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreChargeServiceSettingAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("irregular-payments")]
     [ProducesResponseType<IReadOnlyList<IrregularPaymentDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<IrregularPaymentDto>>> GetIrregularPayments([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
@@ -570,8 +632,8 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         return result.ErrorCode switch
         {
-            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "irregular_payment_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "irregular_payment_duplicate" or "irregular_payment_used" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

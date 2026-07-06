@@ -119,6 +119,32 @@ public sealed record UpsertTariffRequest(
     [Range(0.0001, 999999999)] decimal? ElectricitySecondRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null);
 
+public sealed record ChargeServiceSettingDto(
+    Guid Id,
+    string Name,
+    bool IsRegular,
+    int? PeriodicityMonths,
+    int? AccrualStartMonth,
+    int? PaymentDueDay,
+    int? PaymentDueMonth,
+    int OverdueGraceDays,
+    bool IsMetered,
+    bool HasTieredTariff,
+    string? UnitName,
+    bool IsArchived);
+
+public sealed record UpsertChargeServiceSettingRequest(
+    [Required, MaxLength(200)] string Name,
+    bool IsRegular,
+    [Range(1, 120)] int? PeriodicityMonths,
+    [Range(1, 12)] int? AccrualStartMonth,
+    [Range(1, 31)] int? PaymentDueDay,
+    [Range(1, 12)] int? PaymentDueMonth,
+    [Range(0, 366)] int OverdueGraceDays,
+    bool IsMetered,
+    bool HasTieredTariff,
+    [MaxLength(40)] string? UnitName);
+
 public sealed record IrregularPaymentDto(
     Guid Id,
     string Name,
