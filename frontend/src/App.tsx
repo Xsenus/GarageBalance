@@ -3484,11 +3484,7 @@ function PaymentsPrototypePanel({
     if (rowsToPay.length === 0 || totalDebtToPay <= 0) {
       return 'По выбранному периоду нет задолженности для оплаты.'
     }
-    if (request.amount > totalDebtToPay) {
-      return `Сумма полной оплаты не должна превышать задолженность ${formatPaymentPrototypeValue(totalDebtToPay)}.`
-    }
-
-    let remainingAmount = request.amount
+    let remainingAmount = totalDebtToPay
     const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: AccountingTypeDto; amount: number }> = []
     for (const row of rowsToPay) {
       if (remainingAmount <= 0) {
@@ -5422,10 +5418,7 @@ function FullPaymentPrototypeDialog({
             </select>
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма полной оплаты" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
-              setError(null)
-            }} />
+            <input aria-label="Сумма полной оплаты" inputMode="decimal" value={amount} readOnly />
           </FormField>
           <FormField label="Комментарий">
             <textarea aria-label="Комментарий к полной оплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
