@@ -846,6 +846,13 @@ type SalaryAccrualPrototypeSubmitRequest = {
   comment: string
 }
 
+type RegularAccrualPrototypeSubmitRequest = {
+  incomeTypeId: string
+  tariffId: string
+  accountingMonth: string
+  comment: string
+}
+
 type PaymentsPrototypeSavedState = {
   selectedGarageId: string | null
   garageSearch: string
@@ -2263,6 +2270,7 @@ function FinancePanel({
         incomeTypes={incomeTypes}
         supplierGroups={supplierGroups}
         suppliers={suppliers}
+        tariffs={tariffs}
         onOpenDialog={openPaymentsPrototypeDialog}
       />
 
@@ -2913,6 +2921,7 @@ function PaymentsPrototypePanel({
   incomeTypes,
   supplierGroups,
   suppliers,
+  tariffs,
   onOpenDialog,
 }: {
   auth: AuthResponse
@@ -2923,6 +2932,7 @@ function PaymentsPrototypePanel({
   incomeTypes: AccountingTypeDto[]
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
+  tariffs: TariffDto[]
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
@@ -2939,6 +2949,8 @@ function PaymentsPrototypePanel({
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [regularAccrualDialogOpen, setRegularAccrualDialogOpen] = useState(false)
+  const regularAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
   const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [salaryDialogOpen, setSalaryDialogOpen] = useState(false)
@@ -3064,6 +3076,23 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       garageAccrualTriggerRef.current = null
+    }, 0)
+  }
+
+  function openRegularAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
+    regularAccrualTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setRegularAccrualDialogOpen(true)
+  }
+
+  function closeRegularAccrualDialog() {
+    const trigger = regularAccrualTriggerRef.current
+    setRegularAccrualDialogOpen(false)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      regularAccrualTriggerRef.current = null
     }, 0)
   }
 
@@ -3324,6 +3353,69 @@ function PaymentsPrototypePanel({
     return null
   }
 
+  async function commitRegularAccruals(request: RegularAccrualPrototypeSubmitRequest) {
+    const incomeType = incomeTypes.find((item) => item.id === request.incomeTypeId && !item.isArchived) ?? null
+    if (!incomeType) {
+      return 'Выберите вид начисления из справочника поступлений.'
+    }
+
+    const tariff = tariffs.find((item) => item.id === request.tariffId && !item.isArchived) ?? null
+    if (!tariff) {
+      return 'Выберите тариф для начисления.'
+    }
+
+    const result = await financeClient.generateRegularAccruals(auth.accessToken, {
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+      accountingMonth: request.accountingMonth,
+      comment: request.comment.trim() || undefined,
+    })
+
+    const selectedGarageAccruals = selectedGarage
+      ? result.createdAccruals.filter((accrual) => accrual.garageId === selectedGarage.id)
+      : result.createdAccruals
+
+    setGarageRows((currentRows) => {
+      let nextRows = currentRows
+      selectedGarageAccruals.forEach((accrual) => {
+        const month = accrual.accountingMonth.slice(0, 7)
+        const existingRowId = `garage-${accrual.garageId}-${month}-${accrual.incomeTypeId}`
+        let updated = false
+        nextRows = nextRows.map((row) => {
+          const matchesRow = row.id === existingRowId || (row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === accrual.incomeTypeName.trim().toLocaleLowerCase('ru-RU'))
+          if (!matchesRow) {
+            return row
+          }
+
+          updated = true
+          return { ...row, payable: row.payable + accrual.amount, debt: row.debt + accrual.amount }
+        })
+
+        if (!updated) {
+          nextRows = [
+            ...nextRows,
+            {
+              id: existingRowId,
+              month,
+              monthLabel: formatPaymentPrototypeMonthLabel(accrual.accountingMonth),
+              service: accrual.incomeTypeName,
+              meter: null,
+              difference: null,
+              payable: accrual.amount,
+              paymentDraft: '',
+              paid: 0,
+              debt: accrual.amount,
+            },
+          ]
+        }
+      })
+
+      return nextRows
+    })
+
+    return null
+  }
+
   async function commitExpensePayment(request: ExpensePrototypeSubmitRequest) {
     const supplier = suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
     if (!supplier) {
@@ -3564,6 +3656,10 @@ function PaymentsPrototypePanel({
               <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <Plus size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
+              </button>
+              <button className="secondary-button" type="button" onClick={openRegularAccrualDialog}>
+                <Plus size={16} aria-hidden="true" />
+                <span>Сформировать начисления</span>
               </button>
               <button className="secondary-button" type="button" onClick={openFullPaymentDialog}>
                 <span>Полная оплата</span>
@@ -3814,6 +3910,14 @@ function PaymentsPrototypePanel({
           incomeTypes={incomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={closeGarageAccrualDialog}
           onSubmit={commitGarageAccrual}
+        />
+      ) : null}
+      {regularAccrualDialogOpen ? (
+        <RegularAccrualPrototypeDialog
+          incomeTypes={incomeTypes.filter((incomeType) => !incomeType.isArchived)}
+          tariffs={tariffs.filter((tariff) => !tariff.isArchived)}
+          onClose={closeRegularAccrualDialog}
+          onSubmit={commitRegularAccruals}
         />
       ) : null}
       {expenseDialogPreset ? (
@@ -4352,6 +4456,119 @@ function SalaryAccrualPrototypeDialog({
           </FormField>
           <FormField label="Комментарий">
             <textarea aria-label="Комментарий начисления зарплаты" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
+          </FormField>
+          {error ? <FormError>{error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function RegularAccrualPrototypeDialog({
+  incomeTypes,
+  tariffs,
+  onClose,
+  onSubmit,
+}: {
+  incomeTypes: AccountingTypeDto[]
+  tariffs: TariffDto[]
+  onClose: () => void
+  onSubmit: (request: RegularAccrualPrototypeSubmitRequest) => Promise<string | null>
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [incomeTypeId, setIncomeTypeId] = useState(incomeTypes[0]?.id ?? '')
+  const [tariffId, setTariffId] = useState(() => chooseRegularTariffId(incomeTypes[0]?.id ?? '', '', incomeTypes, tariffs))
+  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
+  useEscapeKey(true, onClose)
+
+  function handleIncomeTypeChange(nextIncomeTypeId: string) {
+    setIncomeTypeId(nextIncomeTypeId)
+    setTariffId(chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs))
+    setError(null)
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!incomeTypeId) {
+      setError('Выберите вид начисления из справочника поступлений.')
+      return
+    }
+    if (!tariffId) {
+      setError('Выберите тариф для начисления.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError('Укажите месяц начисления.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        incomeTypeId,
+        tariffId,
+        accountingMonth: `${accountingMonth}-01`,
+        comment,
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось сформировать начисления. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="regular-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="regular-accrual-title">Сформировать начисления</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть формирование начислений" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Вид начисления">
+            <select aria-label="Вид регулярного начисления" value={incomeTypeId} onChange={(event) => handleIncomeTypeChange(event.target.value)}>
+              {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
+                <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
+              )) : <option value="">Нет видов поступлений</option>}
+            </select>
+          </FormField>
+          <FormField label="Тариф">
+            <select aria-label="Тариф регулярного начисления" value={tariffId} onChange={(event) => {
+              setTariffId(event.target.value)
+              setError(null)
+            }}>
+              {compatibleTariffs.length > 0 ? compatibleTariffs.map((tariff) => (
+                <option key={tariff.id} value={tariff.id}>{tariff.name}</option>
+              )) : <option value="">Нет совместимых тарифов</option>}
+            </select>
+          </FormField>
+          <FormField label="Месяц">
+            <input aria-label="Месяц регулярного начисления" type="month" value={accountingMonth} onChange={(event) => {
+              setAccountingMonth(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий регулярного начисления" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">

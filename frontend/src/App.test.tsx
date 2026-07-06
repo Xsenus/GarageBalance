@@ -20,7 +20,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1045,6 +1045,7 @@ describe('App', () => {
     const incomeTypes = [incomeType, waterIncomeType]
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateAccrualRequest[] = []
+    const savedRegularAccrualRequests: GenerateRegularAccrualsRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
@@ -1085,6 +1086,33 @@ describe('App', () => {
           amount: request.amount,
           source: request.source,
           comment: request.comment ?? null,
+        })
+      },
+      generateRegularAccruals: async (_token, request) => {
+        savedRegularAccrualRequests.push(request)
+        return createRegularAccrualGenerationResult({
+          accountingMonth: request.accountingMonth,
+          incomeTypeId: request.incomeTypeId,
+          incomeTypeName: 'Водоснабжение',
+          tariffId: request.tariffId,
+          tariffName: 'Тариф воды',
+          calculationBase: 'meter_water',
+          createdCount: 1,
+          totalAmount: 1250,
+          createdAccruals: [
+            createAccrual({
+              id: `regular-accrual-${savedRegularAccrualRequests.length}`,
+              garageId: garage.id,
+              garageNumber: garage.number,
+              ownerName: garage.ownerName,
+              incomeTypeId: request.incomeTypeId,
+              incomeTypeName: 'Водоснабжение',
+              accountingMonth: request.accountingMonth,
+              amount: 1250,
+              source: 'regular',
+              comment: request.comment ?? null,
+            }),
+          ],
         })
       },
       createExpense: async (_token, request) => {
@@ -1221,11 +1249,29 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addGarageAccrualButton).toHaveFocus())
 
+    const regularAccrualButton = within(prototype).getByRole('button', { name: 'Сформировать начисления' })
+    await user.click(regularAccrualButton)
+    const regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
+    await user.selectOptions(within(regularAccrualDialog).getByLabelText('Вид регулярного начисления'), waterIncomeType.id)
+    expect(within(regularAccrualDialog).getByLabelText('Тариф регулярного начисления')).toHaveValue('tariff-1')
+    expect(within(regularAccrualDialog).getByLabelText('Месяц регулярного начисления')).toHaveValue('2026-06')
+    await user.type(within(regularAccrualDialog).getByLabelText('Комментарий регулярного начисления'), 'Автоначисление воды')
+    await user.click(within(regularAccrualDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(savedRegularAccrualRequests).toHaveLength(1))
+    expect(savedRegularAccrualRequests[0]).toMatchObject({
+      incomeTypeId: waterIncomeType.id,
+      tariffId: 'tariff-1',
+      accountingMonth: '2026-06-01',
+      comment: 'Автоначисление воды',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать начисления' })).not.toBeInTheDocument())
+    await waitFor(() => expect(regularAccrualButton).toHaveFocus())
+
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(within(fullPaymentDialog).getByLabelText('Период полной оплаты')).toHaveValue('full')
-    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('3250')
+    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('4500')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
     await waitFor(() => expect(savedIncomeRequests).toHaveLength(2))
@@ -1234,7 +1280,7 @@ describe('App', () => {
       incomeTypeId: waterIncomeType.id,
       operationDate: '2026-06-30',
       accountingMonth: '2026-06-01',
-      amount: 3250,
+      amount: 4500,
       comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
