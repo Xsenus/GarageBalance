@@ -805,6 +805,20 @@ type FullPaymentPrototypeSubmitRequest = {
   comment: string
 }
 
+type DebtTransferPrototypePeriodOption = {
+  value: string
+  label: string
+  debt: number
+  defaultTargetMonth: string
+}
+
+type DebtTransferPrototypeSubmitRequest = {
+  sourceMonth: string
+  targetMonth: string
+  amount: number
+  comment: string
+}
+
 type GarageAccrualPrototypeSubmitRequest = {
   incomeTypeId: string
   accountingMonth: string
@@ -2912,6 +2926,18 @@ function formatPaymentPrototypeMonthLabel(value: string) {
   return `${monthLabel}.${match[1].slice(2)}`
 }
 
+function addPaymentPrototypeMonths(value: string, offset: number) {
+  const match = /^(\d{4})-(\d{2})/.exec(value)
+  if (!match) {
+    return value
+  }
+
+  const date = new Date(Number(match[1]), Number(match[2]) - 1 + offset, 1)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
+
 function PaymentsPrototypePanel({
   auth,
   expenseTypes,
@@ -2947,6 +2973,8 @@ function PaymentsPrototypePanel({
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [debtTransferDialogOpen, setDebtTransferDialogOpen] = useState(false)
+  const debtTransferTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [regularAccrualDialogOpen, setRegularAccrualDialogOpen] = useState(false)
@@ -3059,6 +3087,23 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       fullPaymentTriggerRef.current = null
+    }, 0)
+  }
+
+  function openDebtTransferDialog(event: MouseEvent<HTMLButtonElement>) {
+    debtTransferTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setDebtTransferDialogOpen(true)
+  }
+
+  function closeDebtTransferDialog() {
+    const trigger = debtTransferTriggerRef.current
+    setDebtTransferDialogOpen(false)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      debtTransferTriggerRef.current = null
     }, 0)
   }
 
@@ -3298,6 +3343,94 @@ function PaymentsPrototypePanel({
           debtAfter: operation.garageDebtAfter ?? Math.max(plan.row.debt - plan.amount, 0),
         }
       }),
+      ...currentRows,
+    ])
+
+    return null
+  }
+
+  async function commitDebtTransfer(request: DebtTransferPrototypeSubmitRequest) {
+    if (!selectedGarage) {
+      return 'Выберите гараж, чтобы перенести задолженность между месяцами.'
+    }
+
+    if (request.sourceMonth === request.targetMonth) {
+      return 'Месяц переноса должен отличаться от исходного месяца.'
+    }
+
+    const sourceRows = garageRows.filter((row) => row.month === request.sourceMonth && row.debt > 0)
+    const availableDebt = sourceRows.reduce((sum, row) => sum + row.debt, 0)
+    if (availableDebt <= 0) {
+      return 'В исходном месяце нет задолженности для переноса.'
+    }
+
+    if (request.amount <= 0 || request.amount > availableDebt) {
+      return `Сумма переноса должна быть больше нуля и не выше долга ${formatPaymentPrototypeValue(availableDebt)}.`
+    }
+
+    const transferDate = getLocalDateInputValue()
+    const transferTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    const sourceLabel = formatPaymentPrototypeMonthLabel(request.sourceMonth)
+    const targetLabel = formatPaymentPrototypeMonthLabel(request.targetMonth)
+    const allocations: Array<{ sourceRowId: string; service: string; amount: number }> = []
+    let remainingAmount = request.amount
+
+    sourceRows.forEach((row) => {
+      if (remainingAmount <= 0) {
+        return
+      }
+
+      const amount = Math.min(row.debt, remainingAmount)
+      allocations.push({ sourceRowId: row.id, service: row.service, amount })
+      remainingAmount -= amount
+    })
+
+    setGarageRows((currentRows) => {
+      let nextRows = currentRows.map((row) => {
+        const allocation = allocations.find((item) => item.sourceRowId === row.id)
+        return allocation ? { ...row, debt: Math.max(row.debt - allocation.amount, 0) } : row
+      })
+
+      allocations.forEach((allocation) => {
+        const transferService = `Перенос задолженности: ${allocation.service}`
+        const existingTransfer = nextRows.find((row) => row.month === request.targetMonth && row.service === transferService)
+        if (existingTransfer) {
+          nextRows = nextRows.map((row) => row.id === existingTransfer.id
+            ? { ...row, payable: row.payable + allocation.amount, debt: row.debt + allocation.amount }
+            : row)
+          return
+        }
+
+        nextRows = [
+          ...nextRows,
+          {
+            id: `garage-transfer-${selectedGarage.id}-${request.sourceMonth}-${request.targetMonth}-${allocation.sourceRowId}`,
+            month: request.targetMonth,
+            monthLabel: targetLabel,
+            service: transferService,
+            meter: null,
+            difference: null,
+            payable: allocation.amount,
+            paymentDraft: '',
+            paid: 0,
+            debt: allocation.amount,
+          },
+        ]
+      })
+
+      return nextRows
+    })
+
+    setHistoryRows((currentRows) => [
+      {
+        date: formatDateOnly(transferDate),
+        time: transferTime,
+        amount: request.amount,
+        purpose: request.comment.trim()
+          ? `Перенос задолженности ${sourceLabel} -> ${targetLabel}: ${request.comment.trim()}`
+          : `Перенос задолженности ${sourceLabel} -> ${targetLabel}`,
+        debtAfter: debtTotal,
+      },
       ...currentRows,
     ])
 
@@ -3581,6 +3714,20 @@ function PaymentsPrototypePanel({
     { value: 'full', label: 'Полный расчет', debt: debtTotal },
     ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: group.rows.reduce((sum, row) => sum + row.debt, 0) })),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
+  const debtTransferSourceOptions: DebtTransferPrototypePeriodOption[] = groupedGarageRows
+    .map((group) => ({
+      value: group.month,
+      label: group.monthLabel,
+      debt: group.rows.reduce((sum, row) => sum + row.debt, 0),
+      defaultTargetMonth: addPaymentPrototypeMonths(group.month, 1),
+    }))
+    .filter((option) => option.debt > 0)
+  const debtTransferTargetMonths = Array.from(new Set([
+    ...groupedGarageRows.map((group) => group.month),
+    ...debtTransferSourceOptions.map((option) => option.defaultTargetMonth),
+  ]))
+    .sort()
+    .map((month) => ({ value: month, label: formatPaymentPrototypeMonthLabel(month) }))
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -3660,6 +3807,9 @@ function PaymentsPrototypePanel({
               <button className="secondary-button" type="button" onClick={openRegularAccrualDialog}>
                 <Plus size={16} aria-hidden="true" />
                 <span>Сформировать начисления</span>
+              </button>
+              <button className="secondary-button" type="button" onClick={openDebtTransferDialog}>
+                <span>Перенести задолженность</span>
               </button>
               <button className="secondary-button" type="button" onClick={openFullPaymentDialog}>
                 <span>Полная оплата</span>
@@ -3903,6 +4053,14 @@ function PaymentsPrototypePanel({
           periodOptions={fullPaymentPeriodOptions}
           onClose={closeFullPaymentDialog}
           onSubmit={commitFullGaragePayment}
+        />
+      ) : null}
+      {debtTransferDialogOpen ? (
+        <DebtTransferPrototypeDialog
+          sourceOptions={debtTransferSourceOptions}
+          targetOptions={debtTransferTargetMonths}
+          onClose={closeDebtTransferDialog}
+          onSubmit={commitDebtTransfer}
         />
       ) : null}
       {garageAccrualDialogOpen ? (
@@ -4677,6 +4835,122 @@ function GarageAccrualPrototypeDialog({
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function DebtTransferPrototypeDialog({
+  sourceOptions,
+  targetOptions,
+  onClose,
+  onSubmit,
+}: {
+  sourceOptions: DebtTransferPrototypePeriodOption[]
+  targetOptions: Array<{ value: string; label: string }>
+  onClose: () => void
+  onSubmit: (request: DebtTransferPrototypeSubmitRequest) => Promise<string | null>
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const initialSource = sourceOptions[0] ?? null
+  const [sourceMonth, setSourceMonth] = useState(initialSource?.value ?? '')
+  const [targetMonth, setTargetMonth] = useState(initialSource?.defaultTargetMonth ?? targetOptions[0]?.value ?? '')
+  const [amount, setAmount] = useState(() => String(initialSource?.debt ?? 0))
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(sourceOptions.length === 0 ? 'Нет задолженности для переноса.' : null)
+  useEscapeKey(true, onClose)
+
+  function handleSourceChange(value: string) {
+    const nextSource = sourceOptions.find((option) => option.value === value) ?? null
+    setSourceMonth(value)
+    setAmount(String(nextSource?.debt ?? 0))
+    setTargetMonth(nextSource?.defaultTargetMonth ?? targetOptions.find((option) => option.value !== value)?.value ?? '')
+    setError(null)
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!sourceMonth || !targetMonth) {
+      setError('Выберите исходный и целевой месяц переноса.')
+      return
+    }
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму переноса больше нуля.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({ sourceMonth, targetMonth, amount: parsedAmount, comment })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось перенести задолженность. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const availableTargets = targetOptions.filter((option) => option.value !== sourceMonth)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="debt-transfer-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="debt-transfer-title">Перенести задолженность</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть перенос задолженности" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <div className="form-grid two-columns">
+            <FormField label="Месяц с">
+              <select aria-label="Исходный месяц переноса задолженности" value={sourceMonth} onChange={(event) => handleSourceChange(event.target.value)} disabled={sourceOptions.length === 0}>
+                {sourceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} · долг {formatPaymentPrototypeValue(option.debt)}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Месяц по">
+              <select aria-label="Целевой месяц переноса задолженности" value={targetMonth} onChange={(event) => {
+                setTargetMonth(event.target.value)
+                setError(null)
+              }} disabled={availableTargets.length === 0}>
+                {availableTargets.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Сумма">
+            <input aria-label="Сумма переноса задолженности" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к переносу задолженности" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
+          </FormField>
+          {error ? <FormError>{error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit" disabled={saving || sourceOptions.length === 0}>{saving ? 'Сохраняем...' : 'Принять'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>

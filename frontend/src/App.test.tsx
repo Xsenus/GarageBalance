@@ -16,6 +16,7 @@ vi.mock('./services/formStatesApi', () => ({
 }))
 
 import App from './App'
+import { formStatesApi } from './services/formStatesApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
@@ -1398,6 +1399,47 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Кузнецова Мария')
     expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('4')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
+  })
+
+  it('moves garage debt to the next month and saves the transfer in form history', async () => {
+    const user = userEvent.setup()
+    const saveStateMock = vi.mocked(formStatesApi.saveState)
+    saveStateMock.mockClear()
+    const garage = createGarage({ id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', peopleCount: 2, floorCount: 1, startingBalance: -1700 })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '27')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*27\s*Сидорова Анна/ }))
+
+    const transferButton = within(prototype).getByRole('button', { name: 'Перенести задолженность' })
+    await user.click(transferButton)
+    const transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
+    expect(within(transferDialog).getByLabelText('Исходный месяц переноса задолженности')).toHaveValue('2026-06')
+    expect(within(transferDialog).getByLabelText('Целевой месяц переноса задолженности')).toHaveValue('2026-07')
+    expect(within(transferDialog).getByLabelText('Сумма переноса задолженности')).toHaveValue('1700')
+    await user.type(within(transferDialog).getByLabelText('Комментарий к переносу задолженности'), 'Проверка переноса')
+    await user.click(within(transferDialog).getByRole('button', { name: 'Принять' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
+    expect(transferButton).toHaveFocus()
+    expect(within(prototype).getByText('июл.26')).toBeInTheDocument()
+    expect(within(prototype).getByText('Перенос задолженности: Электроэнергия')).toBeInTheDocument()
+    expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toHaveTextContent('Перенос задолженности июн.26 -> июл.26: Проверка переноса')
+
+    await waitFor(() => {
+      const savedPayloads = saveStateMock.mock.calls.map((call) => call[2].payload as {
+        garageRows?: Array<{ month: string; service: string; debt: number }>
+        historyRows?: Array<{ purpose: string }>
+      })
+      expect(savedPayloads.some((payload) => payload.garageRows?.some((row) => row.month === '2026-07' && row.service === 'Перенос задолженности: Электроэнергия' && row.debt === 1700))).toBe(true)
+      expect(savedPayloads.some((payload) => payload.historyRows?.some((row) => row.purpose.includes('Перенос задолженности июн.26 -> июл.26')))).toBe(true)
+    })
   })
 
   it('shows funds management prototype from dashboard tile', async () => {
