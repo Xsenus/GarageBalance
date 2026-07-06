@@ -10,6 +10,7 @@ using GarageBalance.Api.Application.Releases;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Application.Security;
 using GarageBalance.Api.Application.Users;
+using GarageBalance.Api.Application.Workflows;
 using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
@@ -49,6 +50,7 @@ builder.Services.AddScoped<IIntegrationSecretSettingsService, IntegrationSecretS
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IFormStateService, FormStateService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IAuditEventWriter, AuditEventWriter>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();

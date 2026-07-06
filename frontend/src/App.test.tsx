@@ -1,6 +1,20 @@
 ﻿import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
+
+vi.mock('./services/formStatesApi', () => ({
+  FormStateApiError: class FormStateApiError extends Error {},
+  formStatesApi: {
+    getState: vi.fn(async () => null),
+    saveState: vi.fn(async (_accessToken: string, scope: string, request: { payload: unknown }) => ({
+      scope,
+      payload: request.payload,
+      updatedAtUtc: '2026-06-30T03:00:00Z',
+      updatedByUserId: 'admin-user',
+    })),
+  },
+}))
+
 import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
@@ -5087,7 +5101,7 @@ describe('App', () => {
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи') as HTMLInputElement
     await waitFor(() => expect(reportsPanel.querySelector('datalist option[value="Гараж 12"]')).not.toBeNull())
     await user.type(garageFilter, 'Гараж 99')
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).toHaveTextContent('Гараж 99')
+    await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).toHaveTextContent('Петров Петр'))
 
     await openReportTab(user, reportsPanel, 'По выплатам')
     expect(within(reportsPanel).getByText('Отчёт по выплатам')).toBeInTheDocument()
@@ -5727,12 +5741,13 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
   return {
     getConsolidatedReport: async (_token, params) => {
       const report = createConsolidatedReport()
-      if (params?.search?.toLowerCase().includes('петров')) {
+      const search = params?.search?.toLowerCase() ?? ''
+      if (search.includes('петров') || search.includes('99')) {
         return createConsolidatedReport({
           garageRows: [
             {
               garageId: 'garage-21',
-              garageNumber: '21',
+              garageNumber: search.includes('99') ? '99' : '21',
               ownerName: 'Петров Петр',
               incomeTotal: 0,
               accrualTotal: 1000,

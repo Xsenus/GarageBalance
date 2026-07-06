@@ -35,10 +35,12 @@ import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
 import type { FundDto, FundsClient } from './services/fundsApi'
+import { formStatesApi } from './services/formStatesApi'
+import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
-import type { FundChangeReportDto, ReportClient } from './services/reportsApi'
+import type { ConsolidatedReportDto, ExpenseReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
@@ -89,6 +91,7 @@ type AppProps = {
   dictionaryClient?: DictionaryClient
   financeClient?: FinanceClient
   fundsClient?: FundsClient
+  formStateClient?: FormStateClient
   importClient?: ImportClient
   reportClient?: ReportClient
   releaseClient?: ReleaseClient
@@ -104,6 +107,9 @@ const sidebarExpandedStorageKey = 'garagebalance.sidebar.expanded'
 const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
 const importQuarantineScreenRequestLimit = 50
+const contractorsFormStateScope = 'contractors-prototype'
+const tariffsFormStateScope = 'tariffs-and-fees-prototype'
+const paymentsFormStateScope = 'payments-prototype'
 
 const auditSectionOptions = [
   { value: '', label: 'Все разделы' },
@@ -218,7 +224,7 @@ function saveStoredSidebarExpanded(key: string, expanded: boolean) {
   }
 }
 
-function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, formStateClient = formStatesApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [isSidebarExpanded, setSidebarExpanded] = useState(() => loadStoredSidebarExpanded(sidebarExpandedStorageKey))
@@ -317,7 +323,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -389,6 +395,7 @@ function Workspace({
   dictionaryClient,
   financeClient,
   fundsClient,
+  formStateClient,
   importClient,
   reportClient,
   releaseClient,
@@ -404,6 +411,7 @@ function Workspace({
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   fundsClient: FundsClient
+  formStateClient: FormStateClient
   importClient: ImportClient
   reportClient: ReportClient
   releaseClient: ReleaseClient
@@ -459,19 +467,19 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel />
+          <ContractorsPrototypePanel auth={auth} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
       case 'tariffsAndFees':
         return canReadDictionaries ? (
-          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} />
+          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
-          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
         )
@@ -774,6 +782,13 @@ type GaragePaymentHistoryPrototypeRow = {
   debtAfter: number
 }
 
+type PaymentsPrototypeSavedState = {
+  selectedGarageId: string | null
+  garageSearch: string
+  garageRows: GarageIncomePrototypeRow[]
+  historyRows: GaragePaymentHistoryPrototypeRow[]
+}
+
 const paymentsPrototypeGarages: PaymentsPrototypeGarage[] = [
   { id: 'garage-1', number: '1', ownerName: 'Иванов Иван', phone: '+7 900 000-00-01', peopleCount: 3, floorCount: 1, balance: -5300, overdueDebt: 1300 },
   { id: 'garage-12', number: '12', ownerName: 'Петров Петр', phone: '+7 900 000-00-12', peopleCount: 1, floorCount: 2, balance: 2500, overdueDebt: 0 },
@@ -816,10 +831,12 @@ function FinancePanel({
   auth,
   dictionaryClient,
   financeClient,
+  formStateClient,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
+  formStateClient: FormStateClient
 }) {
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
@@ -2171,7 +2188,7 @@ function FinancePanel({
       {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
-      <PaymentsPrototypePanel garages={garages} onOpenDialog={openPaymentsPrototypeDialog} />
+      <PaymentsPrototypePanel auth={auth} formStateClient={formStateClient} garages={garages} onOpenDialog={openPaymentsPrototypeDialog} />
 
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
@@ -2803,12 +2820,14 @@ function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
 }
 
-function PaymentsPrototypePanel({ garages, onOpenDialog }: { garages: GarageDto[]; onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
+function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }: { auth: AuthResponse; formStateClient: FormStateClient; garages: GarageDto[]; onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
+  const [formStateLoaded, setFormStateLoaded] = useState(false)
+  const [formStateError, setFormStateError] = useState<string | null>(null)
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
       .filter((garage) => !garage.isArchived)
@@ -2841,6 +2860,55 @@ function PaymentsPrototypePanel({ garages, onOpenDialog }: { garages: GarageDto[
     .slice(0, 6)
   const shouldShowGarageResults = garageSearch.length > 0 && (!selectedGarage || garageSearch !== `Гараж ${selectedGarage.number} - ${selectedGarage.ownerName}`)
   const garageSearchListId = useId()
+
+  useEffect(() => {
+    let cancelled = false
+    formStateClient
+      .getState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope)
+      .then((state) => {
+        if (cancelled) {
+          return
+        }
+
+        if (state?.payload) {
+          setSelectedGarageId(state.payload.selectedGarageId ?? null)
+          setGarageSearch(state.payload.garageSearch ?? '')
+          setGarageRows(Array.isArray(state.payload.garageRows) ? state.payload.garageRows : [])
+          setHistoryRows(Array.isArray(state.payload.historyRows) ? state.payload.historyRows : [])
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние платежей.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setFormStateLoaded(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth.accessToken, formStateClient])
+
+  useEffect(() => {
+    if (!formStateLoaded) {
+      return
+    }
+
+    const handle = window.setTimeout(() => {
+      void formStateClient
+        .saveState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope, {
+          payload: { selectedGarageId, garageSearch, garageRows, historyRows },
+          summary: 'Сохранено состояние формы платежей и последние введенные значения.'
+        })
+        .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние платежей.'))
+    }, 400)
+
+    return () => window.clearTimeout(handle)
+  }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, selectedGarageId])
 
   function openDialogFromButton(event: MouseEvent<HTMLButtonElement>, dialog: PaymentsPrototypeDialogKey) {
     event.currentTarget.focus()
@@ -2945,6 +3013,7 @@ function PaymentsPrototypePanel({ garages, onOpenDialog }: { garages: GarageDto[
           </section>
         ) : null}
       </div>
+      {formStateError ? <FormError>{formStateError}</FormError> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -4632,8 +4701,14 @@ function getPreviousMonthInputValue(monthValue: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function getReportMonthLabel(monthValue: string) {
-  return formatMonth(`${monthValue}-01`)
+function getReportMonthStart(monthValue: string) {
+  return `${monthValue}-01`
+}
+
+function getReportMonthEnd(monthValue: string) {
+  const [yearText, monthText] = monthValue.split('-')
+  const endDate = new Date(Number(yearText), Number(monthText), 0)
+  return `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
 }
 
 function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
@@ -4664,6 +4739,11 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
+  const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
+  const [garageReport, setGarageReport] = useState<ConsolidatedReportDto | null>(null)
+  const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
+  const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
+  const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
@@ -4702,6 +4782,64 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       ignore = true
     }
   }, [auth.accessToken, dictionaryClient])
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadWorkbookReports() {
+      setReportDataError(null)
+      try {
+        const consolidatedFilter = monthlyFilters.consolidated
+        const garageFilterRange = monthlyFilters.garages
+        const payoutFilter = monthlyFilters.payouts
+        const incomeFilter = dateFilters.income
+        const [loadedConsolidated, loadedGarages, loadedPayouts, loadedIncome] = await Promise.all([
+          reportClient.getConsolidatedReport(auth.accessToken, {
+            monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            monthTo: getReportMonthStart(consolidatedFilter.monthTo),
+            limit: 100,
+          }),
+          reportClient.getConsolidatedReport(auth.accessToken, {
+            monthFrom: getReportMonthStart(garageFilterRange.monthFrom),
+            monthTo: getReportMonthStart(garageFilterRange.monthTo),
+            search: garageFilter.trim() || undefined,
+            limit: 100,
+          }),
+          reportClient.getExpenseReport(auth.accessToken, {
+            dateFrom: getReportMonthStart(payoutFilter.monthFrom),
+            dateTo: getReportMonthEnd(payoutFilter.monthTo),
+            search: counterpartyFilter.trim() || undefined,
+            limit: 100,
+          }),
+          reportClient.getIncomeReport(auth.accessToken, {
+            dateFrom: incomeFilter.dateFrom,
+            dateTo: incomeFilter.dateTo,
+            search: incomeGarageFilter.trim() || undefined,
+            limit: 100,
+          }),
+        ])
+
+        if (ignore) {
+          return
+        }
+
+        setConsolidatedReport(loadedConsolidated)
+        setGarageReport(loadedGarages)
+        setPayoutReport(loadedPayouts)
+        setIncomeReport(loadedIncome)
+      } catch (caught) {
+        if (!ignore) {
+          setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
+        }
+      }
+    }
+
+    void loadWorkbookReports()
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, counterpartyFilter, dateFilters.income, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'funds') {
@@ -4841,29 +4979,38 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
   function renderActiveReport() {
     if (activeReportTab === 'consolidated') {
-      const filter = monthlyFilters.consolidated
+      const reportRows = consolidatedReport?.monthlyRows.map((row) => [
+        formatMonth(row.accountingMonth),
+        'Поступления',
+        formatMoney(row.incomeTotal),
+        'Выплаты',
+        formatMoney(row.expenseTotal),
+        formatMoney(row.balance),
+        formatMoney(row.debt),
+        formatMoney(row.balance),
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
           {renderReportTable(
             'Консолидированный отчет',
             ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
-            [
-              [getReportMonthLabel(filter.monthTo), 'Электроэнергия', formatMoney(95000), 'Электроэнергия', formatMoney(89000), formatMoney(6000), formatMoney(98000), formatMoney(32500)],
-              ['', 'Водоснабжение', formatMoney(64000), 'Водоснабжение', formatMoney(63000), formatMoney(1000), '', ''],
-              ['', 'Вывоз мусора', formatMoney(38000), 'Вывоз мусора', formatMoney(37500), formatMoney(500), '', ''],
-              ['', 'Наружное освещение', formatMoney(10000), 'Наружное освещение', formatMoney(9800), formatMoney(200), '', ''],
-              ['', 'Членские взносы', '', 'Юридические услуги', formatMoney(12000), '', '', ''],
-              ['', 'Целевые взносы', formatMoney(167000), 'Авансовые выплаты', formatMoney(65000), formatMoney(65750), '', ''],
-            ],
-            ['ИТОГО', '', formatMoney(374000), '', formatMoney(300550), formatMoney(73450), formatMoney(98000), formatMoney(32500)],
+            reportRows.length > 0 ? reportRows : [['', 'Данных за период нет', '', '', '', '', '', '']],
+            consolidatedReport ? ['ИТОГО', '', formatMoney(consolidatedReport.incomeTotal), '', formatMoney(consolidatedReport.expenseTotal), formatMoney(consolidatedReport.balance), formatMoney(consolidatedReport.debt), formatMoney(consolidatedReport.balance)] : undefined,
           )}
         </ReportWorkbookSheet>
       )
     }
 
     if (activeReportTab === 'garages') {
-      const filter = monthlyFilters.garages
+      const reportRows = garageReport?.garageRows.map((row) => [
+        `${monthlyFilters.garages.monthFrom} - ${monthlyFilters.garages.monthTo}`,
+        row.garageNumber,
+        formatMoney(row.accrualTotal),
+        row.ownerName ?? 'Владелец не указан',
+        formatMoney(row.incomeTotal),
+        formatMoney(row.debt),
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по гаражам">
           {renderMonthlyFilter('garages', {
@@ -4884,21 +5031,22 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           {renderReportTable(
             'Отчет по гаражам',
             ['Месяц', 'Гараж', 'Начисления', 'Услуга', 'Поступления', 'Разница'],
-            [
-              [getReportMonthLabel(filter.monthTo), garageFilterLabel, formatMoney(9000), 'Электроэнергия', formatMoney(53300), formatMoney(0)],
-              ['', garageFilterLabel, formatMoney(4500), 'Водоснабжение', '', ''],
-              ['', garageFilterLabel, formatMoney(300), 'Вывоз мусора', '', ''],
-              ['', garageFilterLabel, formatMoney(500), 'Наружное освещение', '', ''],
-              ['', garageFilterLabel, formatMoney(16000), 'Членские взносы', '', ''],
-              ['', garageFilterLabel, formatMoney(23000), 'Целевые взносы', '', ''],
-            ],
+            reportRows.length > 0 ? reportRows : [['', garageFilterLabel, '', 'Данных за период нет', '', '']],
+            garageReport ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), '', formatMoney(garageReport.incomeTotal), formatMoney(garageReport.debt)] : undefined,
           )}
         </ReportWorkbookSheet>
       )
     }
 
     if (activeReportTab === 'payouts') {
-      const filter = monthlyFilters.payouts
+      const reportRows = payoutReport?.rows.map((row) => [
+        formatMonth(row.accountingMonth),
+        row.expenseTypeName,
+        row.supplierName,
+        formatMoney(row.accrualAmount),
+        formatMoney(row.expenseAmount),
+        formatMoney(row.difference),
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по выплатам">
           {renderMonthlyFilter('payouts', {
@@ -4919,23 +5067,21 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           {renderReportTable(
             'Отчет по выплатам',
             ['Месяц', 'Услуга', 'Сотрудник', 'Начисления', 'Выплаты', 'Разница'],
-            [
-              [getReportMonthLabel(filter.monthTo), 'Электричество', counterpartyFilterLabel, '', '', ''],
-              ['', 'Н/О', counterpartyFilterLabel, '', '', ''],
-              ['', 'Вода', counterpartyFilterLabel, '', '', ''],
-              ['', 'Мусор', counterpartyFilterLabel, '', '', ''],
-              ['', 'Юридические услуги', counterpartyFilterLabel, '', '', ''],
-              ['', 'Прочие услуги', counterpartyFilterLabel, '', '', ''],
-              ['', '', 'Юрист', '', '', ''],
-              ['', '', 'Электрик', '', '', ''],
-              ['', '', 'Председатель', '', '', ''],
-            ],
+            reportRows.length > 0 ? reportRows : [['', '', counterpartyFilterLabel, 'Данных за период нет', '', '']],
+            payoutReport ? ['ИТОГО', '', '', formatMoney(payoutReport.accrualTotal), formatMoney(payoutReport.expenseTotal), formatMoney(payoutReport.difference)] : undefined,
           )}
         </ReportWorkbookSheet>
       )
     }
 
     if (activeReportTab === 'income') {
+      const incomeRows = incomeReport?.rows.map((row) => [
+        row.garageNumber,
+        row.date,
+        '',
+        formatMoney(row.incomeAmount),
+        row.incomeTypeName,
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчет по поступлениям">
           {renderDateFilter('income', {
@@ -4949,7 +5095,12 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             ),
           })}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
-          {renderReportTable('Отчет по поступлениям', ['Гараж', 'Дата', 'Время', 'Сумма платежа', 'Назначение платежа'], [[incomeGarageFilterLabel, today, '09:00', formatMoney(0), 'Членский взнос']])}
+          {renderReportTable(
+            'Отчет по поступлениям',
+            ['Гараж', 'Дата', 'Время', 'Сумма платежа', 'Назначение платежа'],
+            incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '']],
+            incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), ''] : undefined,
+          )}
         </ReportWorkbookSheet>
       )
     }
@@ -5038,6 +5189,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       </div>
 
       {dictionaryError ? <FormError>{dictionaryError}</FormError> : null}
+      {reportDataError ? <FormError>{reportDataError}</FormError> : null}
 
       <datalist id={garageOptionsId}>
         {garages.map((garage) => <option value={`Гараж ${garage.number}`} key={garage.id} />)}
@@ -5960,7 +6112,15 @@ function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   return target.item.fullName || 'Сотрудник без имени'
 }
 
-function ContractorsPrototypePanel() {
+type ContractorsPrototypeSavedState = {
+  garages: ContractorGarageRow[]
+  suppliers: ContractorSupplierRow[]
+  staff: ContractorStaffRow[]
+  departments: ContractorDepartmentRow[]
+  supplierServices: string[]
+}
+
+function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthResponse; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
   const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
@@ -5968,6 +6128,8 @@ function ContractorsPrototypePanel() {
   const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
   const [supplierServices, setSupplierServices] = useState(() => getSupplierServiceOptions(contractorSupplierRows.map((supplier) => supplier.service)))
+  const [formStateLoaded, setFormStateLoaded] = useState(false)
+  const [formStateError, setFormStateError] = useState<string | null>(null)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
   const [garageColumnWidths, setGarageColumnWidths] = useState(loadGarageColumnWidths)
@@ -5999,6 +6161,56 @@ function ContractorsPrototypePanel() {
   useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
   useEscapeKey(Boolean(employeeContextMenu), () => setEmployeeContextMenu(null))
   useEscapeKey(Boolean(employeeDeleteTarget), () => closeEmployeeDeleteDialog())
+
+  useEffect(() => {
+    let cancelled = false
+    formStateClient
+      .getState<ContractorsPrototypeSavedState>(auth.accessToken, contractorsFormStateScope)
+      .then((state) => {
+        if (cancelled) {
+          return
+        }
+
+        if (state?.payload) {
+          setGarages(Array.isArray(state.payload.garages) ? state.payload.garages : contractorGarageRows)
+          setSuppliers(Array.isArray(state.payload.suppliers) ? state.payload.suppliers : contractorSupplierRows)
+          setStaff(Array.isArray(state.payload.staff) ? state.payload.staff : contractorStaffRows)
+          setDepartments(Array.isArray(state.payload.departments) ? state.payload.departments : contractorDepartmentRows)
+          setSupplierServices(Array.isArray(state.payload.supplierServices) ? getSupplierServiceOptions(state.payload.supplierServices) : getSupplierServiceOptions(contractorSupplierRows.map((supplier) => supplier.service)))
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние контрагентов.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setFormStateLoaded(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth.accessToken, formStateClient])
+
+  useEffect(() => {
+    if (!formStateLoaded) {
+      return
+    }
+
+    const handle = window.setTimeout(() => {
+      void formStateClient
+        .saveState<ContractorsPrototypeSavedState>(auth.accessToken, contractorsFormStateScope, {
+          payload: { garages, suppliers, staff, departments, supplierServices },
+          summary: 'Сохранено состояние раздела контрагентов.'
+        })
+        .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние контрагентов.'))
+    }, 400)
+
+    return () => window.clearTimeout(handle)
+  }, [auth.accessToken, departments, formStateClient, formStateLoaded, garages, staff, supplierServices, suppliers])
 
   useEffect(() => {
     saveGarageColumnWidths(garageColumnWidths)
@@ -6261,6 +6473,7 @@ function ContractorsPrototypePanel() {
           ) : null}
         </div>
       </div>
+      {formStateError ? <FormError>{formStateError}</FormError> : null}
 
       <div className="contractors-prototype-tabs" role="tablist" aria-label="Разделы контрагентов">
         {Object.entries(contractorSectionLabels).map(([section, label]) => (
@@ -7448,13 +7661,19 @@ function formatPrototypeChangeValue(value: string) {
   return value.trim() || 'Пусто'
 }
 
-function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient }) {
+type TariffsPrototypeSavedState = {
+  tariffRows: ContractorTariffRow[]
+  oneTimeRows: ContractorOneTimeRow[]
+}
+
+function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; formStateClient: FormStateClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
   const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
   const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
+  const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
@@ -7504,6 +7723,57 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient }: { auth: AuthRe
       ignore = true
     }
   }, [auth.accessToken, dictionaryClient])
+
+  useEffect(() => {
+    let ignore = false
+    formStateClient
+      .getState<TariffsPrototypeSavedState>(auth.accessToken, tariffsFormStateScope)
+      .then((state) => {
+        if (ignore) {
+          return
+        }
+
+        if (state?.payload) {
+          const savedTariffRows = Array.isArray(state.payload.tariffRows) ? state.payload.tariffRows : contractorTariffRows
+          const savedOneTimeRows = Array.isArray(state.payload.oneTimeRows) ? state.payload.oneTimeRows : contractorOneTimeRows
+          setTariffRows(savedTariffRows)
+          setOneTimeRows(savedOneTimeRows)
+          setTariffDrafts(createEditableDrafts(savedTariffRows))
+          setOneTimeDrafts(createEditableDrafts(savedOneTimeRows))
+        }
+      })
+      .catch((error: unknown) => {
+        if (!ignore) {
+          setTariffPersistenceError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние тарифов.')
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setFormStateLoaded(true)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, formStateClient])
+
+  useEffect(() => {
+    if (!formStateLoaded) {
+      return
+    }
+
+    const handle = window.setTimeout(() => {
+      void formStateClient
+        .saveState<TariffsPrototypeSavedState>(auth.accessToken, tariffsFormStateScope, {
+          payload: { tariffRows, oneTimeRows },
+          summary: 'Сохранено состояние формы тарифов и сборов.'
+        })
+        .catch((error: unknown) => setTariffPersistenceError(error instanceof Error ? error.message : 'Не удалось сохранить состояние тарифов.'))
+    }, 400)
+
+    return () => window.clearTimeout(handle)
+  }, [auth.accessToken, formStateClient, formStateLoaded, oneTimeRows, tariffRows])
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
