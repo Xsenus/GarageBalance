@@ -20,7 +20,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateIncomeOperationRequest, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1044,6 +1044,7 @@ describe('App', () => {
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
     const incomeTypes = [incomeType, waterIncomeType]
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
+    const savedAccrualRequests: CreateAccrualRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
       getIncomeTypes: async () => incomeTypes,
@@ -1064,6 +1065,22 @@ describe('App', () => {
           amount: request.amount,
           garageDebtBefore: 5674,
           garageDebtAfter: 0,
+        })
+      },
+      createAccrual: async (_token, request) => {
+        savedAccrualRequests.push(request)
+        const requestIncomeType = incomeTypes.find((item) => item.id === request.incomeTypeId) ?? incomeType
+        return createAccrual({
+          id: `garage-accrual-${savedAccrualRequests.length}`,
+          garageId: request.garageId,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          incomeTypeId: request.incomeTypeId,
+          incomeTypeName: requestIncomeType.name,
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          source: request.source,
+          comment: request.comment ?? null,
         })
       },
     })
@@ -1111,17 +1128,30 @@ describe('App', () => {
     const addGarageAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление гаражу' })
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
-    expect(within(garageAccrualDialog).getByLabelText('Тип начисления гаража')).toHaveValue('late')
-    const garageAccrualCancelButton = within(garageAccrualDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(garageAccrualCancelButton).toHaveFocus())
-    await user.click(garageAccrualCancelButton)
+    expect(within(garageAccrualDialog).getByLabelText('Вид начисления гаража')).toHaveValue(incomeType.id)
+    await user.selectOptions(within(garageAccrualDialog).getByLabelText('Вид начисления гаража'), waterIncomeType.id)
+    await user.clear(within(garageAccrualDialog).getByLabelText('Сумма начисления гаража'))
+    await user.type(within(garageAccrualDialog).getByLabelText('Сумма начисления гаража'), '750')
+    expect(within(garageAccrualDialog).getByLabelText('Месяц начисления гаража')).toHaveValue('2026-06')
+    await user.type(within(garageAccrualDialog).getByLabelText('Комментарий к начислению гаража'), 'Доначисление воды')
+    await user.click(within(garageAccrualDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(savedAccrualRequests).toHaveLength(1))
+    expect(savedAccrualRequests[0]).toMatchObject({
+      garageId: garage.id,
+      incomeTypeId: waterIncomeType.id,
+      accountingMonth: '2026-06-01',
+      amount: 750,
+      source: 'manual',
+      comment: 'Доначисление воды',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addGarageAccrualButton).toHaveFocus())
 
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(within(fullPaymentDialog).getByLabelText('Период полной оплаты')).toHaveValue('full')
-    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('2500')
+    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('3250')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
     await waitFor(() => expect(savedIncomeRequests).toHaveLength(2))
@@ -1130,7 +1160,7 @@ describe('App', () => {
       incomeTypeId: waterIncomeType.id,
       operationDate: '2026-06-30',
       accountingMonth: '2026-06-01',
-      amount: 2500,
+      amount: 3250,
       comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())

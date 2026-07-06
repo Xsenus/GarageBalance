@@ -728,7 +728,7 @@ type CancelFinanceTarget = {
   record: FinanceRecord
   reason: string
 }
-type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual' | 'garageAccrual'
+type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual'
 
 const paymentPrototypeRows = [
   { item: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
@@ -790,6 +790,13 @@ type FullPaymentPrototypePeriodOption = {
 
 type FullPaymentPrototypeSubmitRequest = {
   period: string
+  amount: number
+  comment: string
+}
+
+type GarageAccrualPrototypeSubmitRequest = {
+  incomeTypeId: string
+  accountingMonth: string
   amount: number
   comment: string
 }
@@ -2822,13 +2829,24 @@ function FinancePanel({
       {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
       {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
       {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
-      {paymentsPrototypeDialog === 'garageAccrual' ? <GarageAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
 }
 
 function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
+}
+
+function formatPaymentPrototypeMonthLabel(value: string) {
+  const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value)
+  if (!match) {
+    return value
+  }
+
+  const monthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+  const monthIndex = Number(match[2]) - 1
+  const monthLabel = monthLabels[monthIndex] ?? match[2]
+  return `${monthLabel}.${match[1].slice(2)}`
 }
 
 function PaymentsPrototypePanel({
@@ -2857,6 +2875,8 @@ function PaymentsPrototypePanel({
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
+  const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
@@ -2959,6 +2979,23 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       fullPaymentTriggerRef.current = null
+    }, 0)
+  }
+
+  function openGarageAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
+    garageAccrualTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setGarageAccrualDialogOpen(true)
+  }
+
+  function closeGarageAccrualDialog() {
+    const trigger = garageAccrualTriggerRef.current
+    setGarageAccrualDialogOpen(false)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      garageAccrualTriggerRef.current = null
     }, 0)
   }
 
@@ -3119,6 +3156,55 @@ function PaymentsPrototypePanel({
     return null
   }
 
+  async function commitGarageAccrual(request: GarageAccrualPrototypeSubmitRequest) {
+    if (!selectedGarage || !realGarageIds.has(selectedGarage.id)) {
+      return 'Выберите гараж из справочника, чтобы сохранить начисление в истории операций.'
+    }
+
+    const incomeType = incomeTypes.find((item) => item.id === request.incomeTypeId && !item.isArchived) ?? null
+    if (!incomeType) {
+      return 'Выберите вид начисления из справочника поступлений.'
+    }
+
+    const savedAccrual = await financeClient.createAccrual(auth.accessToken, {
+      garageId: selectedGarage.id,
+      incomeTypeId: incomeType.id,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: 'manual',
+      comment: request.comment.trim() || undefined,
+    })
+    const month = savedAccrual.accountingMonth.slice(0, 7)
+    const monthLabel = formatPaymentPrototypeMonthLabel(savedAccrual.accountingMonth)
+
+    setGarageRows((currentRows) => {
+      const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === savedAccrual.incomeTypeName.trim().toLocaleLowerCase('ru-RU'))
+      if (existingRow) {
+        return currentRows.map((row) => row.id === existingRow.id
+          ? { ...row, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
+          : row)
+      }
+
+      return [
+        ...currentRows,
+        {
+          id: `garage-accrual-${savedAccrual.id}`,
+          month,
+          monthLabel,
+          service: savedAccrual.incomeTypeName,
+          meter: null,
+          difference: null,
+          payable: savedAccrual.amount,
+          paymentDraft: '',
+          paid: 0,
+          debt: savedAccrual.amount,
+        },
+      ]
+    })
+
+    return null
+  }
+
   const groupedGarageRows = garageRows.reduce<Array<{ month: string; monthLabel: string; rows: GarageIncomePrototypeRow[] }>>((groups, row) => {
     const existingGroup = groups.find((group) => group.month === row.month)
     if (existingGroup) {
@@ -3208,7 +3294,7 @@ function PaymentsPrototypePanel({
             <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
             <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
             <div className="payments-prototype-actions payments-prototype-actions--stacked">
-              <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={(event) => openDialogFromButton(event, 'garageAccrual')}>
+              <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <Plus size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
               </button>
@@ -3452,6 +3538,13 @@ function PaymentsPrototypePanel({
           onSubmit={commitFullGaragePayment}
         />
       ) : null}
+      {garageAccrualDialogOpen ? (
+        <GarageAccrualPrototypeDialog
+          incomeTypes={incomeTypes.filter((incomeType) => !incomeType.isArchived)}
+          onClose={closeGarageAccrualDialog}
+          onSubmit={commitGarageAccrual}
+        />
+      ) : null}
     </section>
   )
 }
@@ -3582,10 +3675,61 @@ function NewAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
+function GarageAccrualPrototypeDialog({
+  incomeTypes,
+  onClose,
+  onSubmit,
+}: {
+  incomeTypes: AccountingTypeDto[]
+  onClose: () => void
+  onSubmit: (request: GarageAccrualPrototypeSubmitRequest) => Promise<string | null>
+}) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [incomeTypeId, setIncomeTypeId] = useState(incomeTypes[0]?.id ?? '')
+  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
+  const [amount, setAmount] = useState('')
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!incomeTypeId) {
+      setError('Выберите вид начисления из справочника поступлений.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError('Укажите месяц начисления.')
+      return
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму начисления больше нуля.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        incomeTypeId,
+        accountingMonth: `${accountingMonth}-01`,
+        amount: parsedAmount,
+        comment,
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось сохранить начисление. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3598,29 +3742,36 @@ function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onClose()
-        }}>
-          <FormField label="Тип">
-            <select aria-label="Тип начисления гаража" defaultValue="late">
-              <option value="late">Пени</option>
-              <option value="service">Услуга</option>
-              <option value="correction">Корректировка</option>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Вид начисления">
+            <select aria-label="Вид начисления гаража" value={incomeTypeId} onChange={(event) => {
+              setIncomeTypeId(event.target.value)
+              setError(null)
+            }}>
+              {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
+                <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
+              )) : <option value="">Нет видов поступлений</option>}
             </select>
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма начисления гаража" inputMode="decimal" />
+            <input aria-label="Сумма начисления гаража" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} />
           </FormField>
-          <FormField label="Дата">
-            <input aria-label="Дата начисления гаража" type="date" />
+          <FormField label="Месяц">
+            <input aria-label="Месяц начисления гаража" type="month" value={accountingMonth} onChange={(event) => {
+              setAccountingMonth(event.target.value)
+              setError(null)
+            }} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к начислению гаража" rows={5} />
+            <textarea aria-label="Комментарий к начислению гаража" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
+          {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit">Ок</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>
