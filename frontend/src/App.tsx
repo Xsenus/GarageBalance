@@ -32,7 +32,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
 import type { FundDto, FundsClient } from './services/fundsApi'
 import { formStatesApi } from './services/formStatesApi'
@@ -731,6 +731,9 @@ type CancelFinanceTarget = {
 type PaymentsPrototypeDialogKey = 'bank'
 
 type PaymentPrototypeRow = {
+  rowKind?: 'supplier' | 'staff' | string
+  supplierId?: string | null
+  staffMemberId?: string | null
   item: string
   counterparty?: string
   cost: number | string
@@ -747,9 +750,9 @@ const paymentPrototypeRows: PaymentPrototypeRow[] = [
   { item: 'Водоснабжение', cost: 32000, paid: 0, balance: '', collected: 29000, difference: -3000, action: true },
   { item: 'Вывоз мусора', cost: 15000, paid: 0, balance: '', collected: 13300, difference: -1700, action: true },
   { item: 'Юридические услуги', cost: 8500, paid: 0, balance: '', collected: '', difference: '', action: true },
-  { item: 'Электрик', counterparty: 'Иванов', cost: 20000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { item: 'Бухгалтерия', counterparty: 'Петрова', cost: 40000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { item: 'Председатель', counterparty: 'Сидоров', cost: 50000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { rowKind: 'staff', item: 'Электрик', counterparty: 'Иванов', cost: 20000, paid: '', balance: '', collected: 156800, difference: '', action: true },
+  { rowKind: 'staff', item: 'Бухгалтерия', counterparty: 'Петрова', cost: 40000, paid: '', balance: '', collected: '', difference: '', action: true },
+  { rowKind: 'staff', item: 'Председатель', counterparty: 'Сидоров', cost: 50000, paid: '', balance: '', collected: '', difference: '', action: true },
   { item: 'Прочие выплаты', cost: 10000, paid: '', balance: '', collected: '', difference: '', action: true },
   { item: 'Авансовые выплаты', cost: '', paid: 16500, balance: '', collected: '', difference: '', action: true },
   { item: 'Выплата без чека', cost: 16500, paid: '', balance: '', collected: '', difference: '', action: true },
@@ -946,6 +949,22 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
       meterRequired: row.meterKind !== null && row.meterValue === null,
     }
   })
+}
+
+function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): PaymentPrototypeRow[] {
+  return worksheet.rows.map((row) => ({
+    rowKind: row.rowKind,
+    supplierId: row.supplierId,
+    staffMemberId: row.staffMemberId,
+    counterparty: row.counterpartyName ?? '',
+    item: row.expenseTypeName,
+    cost: row.accrualAmount,
+    paid: row.expenseAmount,
+    balance: row.balance,
+    collected: row.collectedAmount ?? '',
+    difference: row.difference ?? '',
+    action: true,
+  }))
 }
 
 function FinancePanel({
@@ -3011,11 +3030,14 @@ function PaymentsPrototypePanel({
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>(() => paymentPrototypeRows.map((row) => ({ ...row })))
+  const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState('2026-06')
+  const [expenseBankAmount, setExpenseBankAmount] = useState(234000)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
+  const [expenseWorksheetLoading, setExpenseWorksheetLoading] = useState(false)
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -3115,6 +3137,50 @@ function PaymentsPrototypePanel({
 
     return () => window.clearTimeout(handle)
   }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, selectedGarageId])
+
+  useEffect(() => {
+    if (activeTab !== 'expense') {
+      return
+    }
+
+    let cancelled = false
+    financeClient
+      .getExpenseWorksheet(auth.accessToken, { accountingMonth: `${expenseWorksheetMonth}-01` })
+      .then((worksheet) => {
+        if (!cancelled) {
+          setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
+          setExpenseBankAmount(worksheet.bankAmount)
+          setPaymentError(null)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму выплат.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setExpenseWorksheetLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, auth.accessToken, expenseWorksheetMonth, financeClient])
+
+  function activateExpenseTab() {
+    if (activeTab !== 'expense') {
+      setExpenseWorksheetLoading(true)
+    }
+
+    setActiveTab('expense')
+  }
+
+  function handleExpenseWorksheetMonthChange(value: string) {
+    setExpenseWorksheetLoading(true)
+    setExpenseWorksheetMonth(value)
+  }
 
   function openDialogFromButton(event: MouseEvent<HTMLButtonElement>, dialog: PaymentsPrototypeDialogKey) {
     event.currentTarget.focus()
@@ -3851,6 +3917,19 @@ function PaymentsPrototypePanel({
   ]))
     .sort()
     .map((month) => ({ value: month, label: formatPaymentPrototypeMonthLabel(month) }))
+  const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
+  const expensePaidTotal = expenseRows.reduce((sum, row) => sum + (typeof row.paid === 'number' ? row.paid : 0), 0)
+  const expenseBalanceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.balance === 'number' ? row.balance : 0), 0)
+  const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
+  const expenseDifferenceTotal = expenseCollectedTotal - expenseAccrualTotal
+  const expenseCashTotal = expenseCollectedTotal - expensePaidTotal
+  const expenseMonthLabel = expenseWorksheetMonth === '2026-06'
+    ? 'июнь 2026'
+    : expenseWorksheetMonth === '2026-05'
+      ? 'май 2026'
+      : expenseWorksheetMonth === '2026-04'
+        ? 'апрель 2026'
+        : formatMonth(`${expenseWorksheetMonth}-01`)
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -3909,7 +3988,7 @@ function PaymentsPrototypePanel({
           <button type="button" role="tab" aria-selected={activeTab === 'income'} className={activeTab === 'income' ? 'is-active' : undefined} onClick={() => setActiveTab('income')}>
             Поступления
           </button>
-          <button type="button" role="tab" aria-selected={activeTab === 'expense'} className={activeTab === 'expense' ? 'is-active' : undefined} onClick={() => setActiveTab('expense')}>
+          <button type="button" role="tab" aria-selected={activeTab === 'expense'} className={activeTab === 'expense' ? 'is-active' : undefined} onClick={activateExpenseTab}>
             Выплаты
           </button>
         </div>
@@ -4087,15 +4166,16 @@ function PaymentsPrototypePanel({
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц</span>
-                <select aria-label="Месяц выплат" defaultValue="2026-06">
+                <select aria-label="Месяц выплат" value={expenseWorksheetMonth} onChange={(event) => handleExpenseWorksheetMonthChange(event.target.value)}>
                   <option value="2026-06">июнь 2026</option>
                   <option value="2026-05">май 2026</option>
                   <option value="2026-04">апрель 2026</option>
                 </select>
               </label>
             </div>
+            {expenseWorksheetLoading ? <p className="form-status" role="status">Загружаем форму выплат...</p> : null}
             <div className="payments-prototype-table-scroll">
-              <table className="payments-prototype-table" aria-label="Форма выплат за июнь 2026">
+              <table className="payments-prototype-table" aria-label={`Форма выплат за ${expenseMonthLabel}`}>
                 <thead>
                   <tr>
                     <th scope="col">Поставщик</th>
@@ -4111,7 +4191,7 @@ function PaymentsPrototypePanel({
                 <tbody>
                   {expenseRows.map((row, index) => {
                     const supplier = row.counterparty ?? ''
-                    const isStaffPaymentRow = Boolean(row.counterparty && !suppliers.some((item) => item.name.trim().toLocaleLowerCase('ru-RU') === row.counterparty?.trim().toLocaleLowerCase('ru-RU')))
+                    const isStaffPaymentRow = row.rowKind === 'staff'
                     const suggestedAmount = typeof row.balance === 'number' && row.balance > 0 ? row.balance : typeof row.cost === 'number' ? row.cost : undefined
                     return (
                       <tr key={`${row.item}-${index}`}>
@@ -4120,13 +4200,7 @@ function PaymentsPrototypePanel({
                         <td className={row.cost ? 'money-income' : undefined}>{formatPaymentPrototypeValue(row.cost)}</td>
                         <td>{formatPaymentPrototypeValue(row.paid)}</td>
                         <td>{formatPaymentPrototypeValue(row.balance)}</td>
-                        {index === 5 ? (
-                          <td className="payments-prototype-merged-total" rowSpan={6}>
-                            156 800
-                          </td>
-                        ) : index < 5 ? (
-                          <td>{formatPaymentPrototypeValue(row.collected)}</td>
-                        ) : null}
+                        <td>{formatPaymentPrototypeValue(row.collected)}</td>
                         <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
                           {formatPaymentPrototypeValue(row.difference)}
                         </td>
@@ -4150,11 +4224,11 @@ function PaymentsPrototypePanel({
                   <tr className="payments-prototype-total-row">
                     <td>ИТОГО</td>
                     <td />
-                    <td>235 000</td>
-                    <td>55 500</td>
-                    <td />
-                    <td>257 100</td>
-                    <td className="money-income">22 100</td>
+                    <td>{formatPaymentPrototypeValue(expenseAccrualTotal)}</td>
+                    <td>{formatPaymentPrototypeValue(expensePaidTotal)}</td>
+                    <td>{formatPaymentPrototypeValue(expenseBalanceTotal)}</td>
+                    <td>{formatPaymentPrototypeValue(expenseCollectedTotal)}</td>
+                    <td className={expenseDifferenceTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentPrototypeValue(expenseDifferenceTotal)}</td>
                     <td />
                   </tr>
                 </tbody>
@@ -4165,15 +4239,15 @@ function PaymentsPrototypePanel({
           <div className="payments-prototype-footer" aria-label="Итоги кассы и банка">
             <div>
               <span>Сумма в банке</span>
-              <strong>234 000</strong>
+              <strong>{formatPaymentPrototypeValue(expenseBankAmount)}</strong>
             </div>
             <div>
               <span>Касса</span>
-              <strong>23 100</strong>
+              <strong>{formatPaymentPrototypeValue(expenseCashTotal)}</strong>
             </div>
             <div>
               <span>ИТОГО</span>
-              <strong className="money-income">257 100</strong>
+              <strong className={expenseCollectedTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentPrototypeValue(expenseCollectedTotal)}</strong>
             </div>
             <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
               Сдать кассу в банк

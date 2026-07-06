@@ -155,6 +155,17 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("expenses-worksheet")]
+    [ProducesResponseType<ExpenseWorksheetDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ExpenseWorksheetDto>> GetExpenseWorksheet(
+        [FromQuery] DateOnly? accountingMonth,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(accountingMonth), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType<FinanceSummaryDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinanceSummaryDto>> GetSummary(

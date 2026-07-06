@@ -401,6 +401,134 @@ public sealed class FinanceService(
             rows));
     }
 
+    public async Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken)
+    {
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
+
+        var supplierAccruals = await dbContext.SupplierAccruals.AsNoTracking()
+            .Include(accrual => accrual.Supplier)
+            .Include(accrual => accrual.ExpenseType)
+            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth == accountingMonth)
+            .ToListAsync(cancellationToken);
+
+        var expenseOperations = await dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.Supplier)
+            .Include(operation => operation.StaffMember)
+                .ThenInclude(staffMember => staffMember!.Department)
+            .Include(operation => operation.ExpenseType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.AccountingMonth == accountingMonth)
+            .ToListAsync(cancellationToken);
+
+        var incomeBuckets = await dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.IncomeType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.AccountingMonth == accountingMonth &&
+                operation.IncomeTypeId != null)
+            .ToListAsync(cancellationToken);
+
+        var activeStaffMembers = await dbContext.StaffMembers.AsNoTracking()
+            .Include(staffMember => staffMember.Department)
+            .Where(staffMember => !staffMember.IsArchived)
+            .OrderBy(staffMember => staffMember.FullName)
+            .ToListAsync(cancellationToken);
+
+        var collectedByIncomeKey = incomeBuckets
+            .Where(operation => operation.IncomeType is not null)
+            .GroupBy(operation => NormalizeFinanceLookupKey(operation.IncomeType!.Code ?? operation.IncomeType.Name))
+            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(operation => operation.Amount)), StringComparer.Ordinal);
+
+        var rows = new List<ExpenseWorksheetRowDto>();
+        var supplierKeys = supplierAccruals
+            .Select(accrual => (accrual.SupplierId, accrual.ExpenseTypeId))
+            .Concat(expenseOperations
+                .Where(operation => operation.SupplierId is not null && operation.ExpenseTypeId is not null)
+                .Select(operation => (SupplierId: operation.SupplierId!.Value, ExpenseTypeId: operation.ExpenseTypeId!.Value)))
+            .Distinct()
+            .ToList();
+
+        foreach (var key in supplierKeys)
+        {
+            var accrualGroup = supplierAccruals
+                .Where(accrual => accrual.SupplierId == key.SupplierId && accrual.ExpenseTypeId == key.ExpenseTypeId)
+                .ToList();
+            var expenseGroup = expenseOperations
+                .Where(operation => operation.SupplierId == key.SupplierId && operation.ExpenseTypeId == key.ExpenseTypeId)
+                .ToList();
+            var sampleAccrual = accrualGroup.FirstOrDefault();
+            var sampleExpense = expenseGroup.FirstOrDefault();
+            var supplierId = sampleAccrual?.SupplierId ?? sampleExpense!.SupplierId!.Value;
+            var supplierName = sampleAccrual?.Supplier.Name ?? sampleExpense!.Supplier!.Name;
+            var expenseTypeId = sampleAccrual?.ExpenseTypeId ?? sampleExpense!.ExpenseTypeId!.Value;
+            var expenseTypeName = sampleAccrual?.ExpenseType.Name ?? sampleExpense!.ExpenseType!.Name;
+            var expenseTypeCode = sampleAccrual?.ExpenseType.Code ?? sampleExpense!.ExpenseType?.Code;
+            var accrualAmount = MoneyMath.RoundMoney(accrualGroup.Sum(accrual => accrual.Amount));
+            var expenseAmount = MoneyMath.RoundMoney(expenseGroup.Sum(operation => operation.Amount));
+            var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
+            var collected = TryGetCollectedAmount(collectedByIncomeKey, expenseTypeName, expenseTypeCode);
+            decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - accrualAmount) : null;
+            rows.Add(new ExpenseWorksheetRowDto(
+                "supplier",
+                supplierId,
+                null,
+                supplierName,
+                expenseTypeId,
+                expenseTypeName,
+                accrualAmount,
+                expenseAmount,
+                balance,
+                collected,
+                difference));
+        }
+
+        foreach (var staffMember in activeStaffMembers)
+        {
+            var payments = expenseOperations.Where(operation => operation.StaffMemberId == staffMember.Id).ToList();
+            var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate);
+            var expenseAmount = MoneyMath.RoundMoney(payments.Sum(operation => operation.Amount));
+            rows.Add(new ExpenseWorksheetRowDto(
+                "staff",
+                null,
+                staffMember.Id,
+                staffMember.FullName,
+                null,
+                staffMember.Department.Name,
+                accrualAmount,
+                expenseAmount,
+                MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m)),
+                null,
+                null));
+        }
+
+        rows = rows
+            .OrderBy(row => row.RowKind == "supplier" ? 0 : 1)
+            .ThenBy(row => row.CounterpartyName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.ExpenseTypeName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var accrualTotal = MoneyMath.RoundMoney(rows.Sum(row => row.AccrualAmount));
+        var expenseTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ExpenseAmount));
+        var balanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Balance));
+        var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
+        var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
+        var cashAmount = MoneyMath.RoundMoney(collectedTotal - expenseTotal);
+
+        return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
+            accountingMonth,
+            accrualTotal,
+            expenseTotal,
+            balanceTotal,
+            collectedTotal,
+            differenceTotal,
+            0m,
+            cashAmount,
+            rows));
+    }
+
     private static int NormalizeListLimit(int? limit)
     {
         if (limit is null or <= 0)
@@ -2698,6 +2826,21 @@ public sealed class FinanceService(
         }
 
         return null;
+    }
+
+    private static decimal? TryGetCollectedAmount(IReadOnlyDictionary<string, decimal> collectedByIncomeKey, string expenseTypeName, string? expenseTypeCode)
+    {
+        if (!string.IsNullOrWhiteSpace(expenseTypeCode) && collectedByIncomeKey.TryGetValue(NormalizeFinanceLookupKey(expenseTypeCode), out var byCode))
+        {
+            return byCode;
+        }
+
+        return collectedByIncomeKey.TryGetValue(NormalizeFinanceLookupKey(expenseTypeName), out var byName) ? byName : null;
+    }
+
+    private static string NormalizeFinanceLookupKey(string value)
+    {
+        return value.Trim().ToLower(RussianCulture);
     }
 
     private sealed record IncomeWorksheetBucket(DateOnly AccountingMonth, Guid IncomeTypeId, string IncomeTypeName, string? IncomeTypeCode, decimal Amount);

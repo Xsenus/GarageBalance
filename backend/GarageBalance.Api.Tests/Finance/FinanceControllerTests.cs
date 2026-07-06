@@ -94,6 +94,32 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheet_PassesAccountingMonthToService()
+    {
+        var worksheet = new ExpenseWorksheetDto(
+            new DateOnly(2026, 6, 1),
+            1000m,
+            400m,
+            600m,
+            1200m,
+            200m,
+            0m,
+            800m,
+            []);
+        var service = new FakeFinanceService
+        {
+            ExpenseWorksheetResult = FinanceResult<ExpenseWorksheetDto>.Success(worksheet)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetExpenseWorksheet(new DateOnly(2026, 6, 1), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(worksheet, ok.Value);
+        Assert.Equal(new DateOnly(2026, 6, 1), service.LastExpenseWorksheetRequest?.AccountingMonth);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -696,8 +722,10 @@ public sealed class FinanceControllerTests
         public MissingMeterReadingListRequest? LastMissingMeterReadingListRequest { get; private set; }
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
+        public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -783,6 +811,12 @@ public sealed class FinanceControllerTests
             LastGarageIncomeWorksheetGarageId = garageId;
             LastGarageIncomeWorksheetRequest = request;
             return Task.FromResult(GarageIncomeWorksheetResult);
+        }
+
+        public Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken)
+        {
+            LastExpenseWorksheetRequest = request;
+            return Task.FromResult(ExpenseWorksheetResult);
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)

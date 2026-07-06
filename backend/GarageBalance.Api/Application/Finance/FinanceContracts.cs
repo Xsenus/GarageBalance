@@ -271,6 +271,33 @@ public sealed record GarageIncomeWorksheetDto(
     decimal DebtTotal,
     IReadOnlyList<GarageIncomeWorksheetRowDto> Rows);
 
+public sealed record ExpenseWorksheetRequest(
+    DateOnly? AccountingMonth);
+
+public sealed record ExpenseWorksheetRowDto(
+    string RowKind,
+    Guid? SupplierId,
+    Guid? StaffMemberId,
+    string? CounterpartyName,
+    Guid? ExpenseTypeId,
+    string ExpenseTypeName,
+    decimal AccrualAmount,
+    decimal ExpenseAmount,
+    decimal Balance,
+    decimal? CollectedAmount,
+    decimal? Difference);
+
+public sealed record ExpenseWorksheetDto(
+    DateOnly AccountingMonth,
+    decimal AccrualTotal,
+    decimal ExpenseTotal,
+    decimal BalanceTotal,
+    decimal CollectedTotal,
+    decimal DifferenceTotal,
+    decimal BankAmount,
+    decimal CashAmount,
+    IReadOnlyList<ExpenseWorksheetRowDto> Rows);
+
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,
     decimal ExpenseTotal,
