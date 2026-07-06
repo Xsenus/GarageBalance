@@ -2017,9 +2017,11 @@ public sealed class FinanceServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(fixtures.Garage.Id, result.Value!.GarageId);
+        Assert.Equal(0m, result.Value.OpeningDebt);
         Assert.Equal(5674m, result.Value.AccrualTotal);
         Assert.Equal(1500m, result.Value.IncomeTotal);
-        Assert.Equal(4674m, result.Value.DebtTotal);
+        Assert.Equal(4174m, result.Value.DebtTotal);
+        Assert.Equal(4174m, result.Value.ClosingDebt);
         Assert.Equal(2, result.Value.Rows.Count);
 
         var electricity = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == electricityType.Id);
@@ -2034,6 +2036,46 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, membership.AccrualAmount);
         Assert.Equal(500m, membership.IncomeAmount);
         Assert.Equal(0m, membership.Debt);
+    }
+
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_CarriesOpeningDebtIntoPeriodTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        fixtures.Garage.StartingBalance = 200m;
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 5, 1), 1000m, "manual", "Старое начисление"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 5, 20), new DateOnly(2026, 5, 1), 300m, "PKO-old", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "regular", "Текущее начисление"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 100m, "PKO-current", null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(900m, result.Value!.OpeningDebt);
+        Assert.Equal(500m, result.Value.AccrualTotal);
+        Assert.Equal(100m, result.Value.IncomeTotal);
+        Assert.Equal(1300m, result.Value.DebtTotal);
+        Assert.Equal(1300m, result.Value.ClosingDebt);
     }
 
     [Fact]

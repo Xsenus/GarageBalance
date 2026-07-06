@@ -1660,6 +1660,11 @@ describe('App', () => {
       garageId,
       garageNumber: '77',
       ownerName: 'Кузнецова Мария',
+      openingDebt: 900,
+      accrualTotal: 5674,
+      incomeTotal: 1000,
+      debtTotal: 5574,
+      closingDebt: 5574,
       rows: [
         {
           accountingMonth: '2026-06-01',
@@ -1704,6 +1709,15 @@ describe('App', () => {
     expect(within(incomeTable).getByText('86')).toBeInTheDocument()
     expect(within(incomeTable).getByText('18')).toBeInTheDocument()
     expect(within(incomeTable).getAllByText('4 674').length).toBeGreaterThan(0)
+    const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
+    expect(periodSummary).toHaveTextContent('Долг на начало')
+    expect(periodSummary).toHaveTextContent('900')
+    expect(periodSummary).toHaveTextContent('Начислено')
+    expect(periodSummary).toHaveTextContent('5 674')
+    expect(periodSummary).toHaveTextContent('Оплачено')
+    expect(periodSummary).toHaveTextContent('1 000')
+    expect(periodSummary).toHaveTextContent('Долг на конец')
+    expect(periodSummary).toHaveTextContent('5 574')
   })
 
   it('loads selected garage payment history from finance backend', async () => {
@@ -7862,9 +7876,11 @@ function createGarageIncomeWorksheet(overrides: Partial<GarageIncomeWorksheetDto
     ownerName: 'Иванов Иван',
     monthFrom: '2026-06-01',
     monthTo: '2026-06-01',
+    openingDebt: 0,
     accrualTotal: 5674,
     incomeTotal: 1000,
     debtTotal: 4674,
+    closingDebt: 4674,
     rows: [
       {
         accountingMonth: '2026-06-01',

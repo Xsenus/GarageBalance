@@ -788,6 +788,13 @@ type GarageIncomePrototypeRow = {
   meterRequired?: boolean
 }
 
+type GarageIncomeWorksheetPeriodSummary = {
+  openingDebt: number
+  accrualTotal: number
+  incomeTotal: number
+  closingDebt: number
+}
+
 type GaragePaymentHistoryPrototypeRow = {
   id: string
   date: string
@@ -3094,6 +3101,7 @@ function PaymentsPrototypePanel({
   const [incomeWorksheetMonthFrom, setIncomeWorksheetMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
   const [incomeWorksheetMonthTo, setIncomeWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
+  const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>(() => paymentPrototypeRows.map((row) => ({ ...row })))
   const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState('2026-06')
   const [expenseBankAmount, setExpenseBankAmount] = useState(234000)
@@ -3415,6 +3423,12 @@ function PaymentsPrototypePanel({
       })
       const rows = createGarageIncomeRowsFromWorksheet(worksheet)
       setGarageRows(rows)
+      setGarageWorksheetSummary({
+        openingDebt: worksheet.openingDebt,
+        accrualTotal: worksheet.accrualTotal,
+        incomeTotal: worksheet.incomeTotal,
+        closingDebt: worksheet.closingDebt,
+      })
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
     } finally {
@@ -3541,6 +3555,7 @@ function PaymentsPrototypePanel({
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
     setGarageRows(createGarageIncomePrototypeRows(garage.number))
+    setGarageWorksheetSummary(null)
     setHistoryRows(realGarageIds.has(garage.id) ? [] : garage.number === '1' ? garagePaymentHistoryRows : [])
     setPaymentError(null)
     void loadGarageIncomeWorksheet(garage)
@@ -4158,6 +4173,7 @@ function PaymentsPrototypePanel({
               onChange={(event) => {
                 setGarageSearch(event.target.value)
                 setSelectedGarageId(null)
+                setGarageWorksheetSummary(null)
                 setGarageRows([])
                 setHistoryRows([])
               }}
@@ -4297,6 +4313,26 @@ function PaymentsPrototypePanel({
               </label>
               <button className="link-button" type="button" onClick={setCurrentIncomeWorksheetMonth}>Текущий</button>
             </div>
+            {garageWorksheetSummary ? (
+              <div className="payments-prototype-period-summary" aria-label="Итоги периода поступлений">
+                <div>
+                  <span>Долг на начало</span>
+                  <strong className={garageWorksheetSummary.openingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(garageWorksheetSummary.openingDebt)}</strong>
+                </div>
+                <div>
+                  <span>Начислено</span>
+                  <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.accrualTotal)}</strong>
+                </div>
+                <div>
+                  <span>Оплачено</span>
+                  <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.incomeTotal)}</strong>
+                </div>
+                <div>
+                  <span>Долг на конец</span>
+                  <strong className={garageWorksheetSummary.closingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(garageWorksheetSummary.closingDebt)}</strong>
+                </div>
+              </div>
+            ) : null}
             <div className="payments-prototype-table-scroll">
               <table className="payments-prototype-table payments-prototype-table--garage" aria-label={`Поступления гаража ${selectedGarage.number}`}>
                 <thead>

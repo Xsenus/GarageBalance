@@ -154,9 +154,11 @@ export type GarageIncomeWorksheetDto = {
   ownerName: string | null
   monthFrom: string
   monthTo: string
+  openingDebt: number
   accrualTotal: number
   incomeTotal: number
   debtTotal: number
+  closingDebt: number
   rows: GarageIncomeWorksheetRowDto[]
 }
 

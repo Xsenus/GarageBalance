@@ -297,6 +297,21 @@ public sealed class FinanceService(
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для формы поступлений не найден.");
         }
 
+        var previousAccrualTotal = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.AccountingMonth < monthFrom)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.AccountingMonth < monthFrom)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+        var openingDebt = MoneyMath.RoundMoney(Math.Max(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal, 0m));
+
         var accrualBuckets = await dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
                 !accrual.IsCanceled &&
@@ -388,16 +403,19 @@ public sealed class FinanceService(
 
         var accrualTotal = MoneyMath.RoundMoney(rows.Sum(row => row.AccrualAmount));
         var incomeTotal = MoneyMath.RoundMoney(rows.Sum(row => row.IncomeAmount));
-        var debtTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Debt));
+        var closingDebt = MoneyMath.RoundMoney(Math.Max(openingDebt + accrualTotal - incomeTotal, 0m));
+        var debtTotal = closingDebt;
         return FinanceResult<GarageIncomeWorksheetDto>.Success(new GarageIncomeWorksheetDto(
             garage.Id,
             garage.Number,
             garage.Owner?.FullName,
             monthFrom,
             monthTo,
+            openingDebt,
             accrualTotal,
             incomeTotal,
             debtTotal,
+            closingDebt,
             rows));
     }
 

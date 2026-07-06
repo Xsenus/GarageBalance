@@ -281,9 +281,11 @@ public sealed record GarageIncomeWorksheetDto(
     string? OwnerName,
     DateOnly MonthFrom,
     DateOnly MonthTo,
+    decimal OpeningDebt,
     decimal AccrualTotal,
     decimal IncomeTotal,
     decimal DebtTotal,
+    decimal ClosingDebt,
     IReadOnlyList<GarageIncomeWorksheetRowDto> Rows);
 
 public sealed record ExpenseWorksheetRequest(

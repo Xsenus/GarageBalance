@@ -2318,6 +2318,34 @@ h1 {
   font: inherit;
 }
 
+.payments-prototype-period-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #e4e7ec;
+}
+
+.payments-prototype-period-summary div {
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.payments-prototype-period-summary span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.payments-prototype-period-summary strong {
+  color: #101828;
+  font-size: 15px;
+}
+
 .payments-prototype-payment-input {
   width: min(130px, 100%);
   min-height: 32px;
@@ -4745,7 +4773,17 @@ button.operation-row:focus-visible {
   }
 }
 
+@media (min-width: 641px) and (max-width: 900px) {
+  .payments-prototype-period-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
+  .payments-prototype-period-summary {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell,
   .sidebar,
   .workspace,

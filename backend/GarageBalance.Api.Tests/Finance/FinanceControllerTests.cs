@@ -74,9 +74,11 @@ public sealed class FinanceControllerTests
             "Иванов Иван",
             new DateOnly(2026, 6, 1),
             new DateOnly(2026, 7, 1),
+            250m,
             1000m,
             400m,
             600m,
+            850m,
             []);
         var service = new FakeFinanceService
         {
