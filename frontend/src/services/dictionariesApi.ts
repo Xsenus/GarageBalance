@@ -250,7 +250,7 @@ export type DictionaryClient = {
   getSupplierGroups(accessToken: string, limit?: number, includeArchived?: boolean): Promise<SupplierGroupDto[]>
   getSupplierGroupsPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<SupplierGroupDto>>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
-  updateSupplierGroup?(accessToken: string, id: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
+  updateSupplierGroup(accessToken: string, id: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   archiveSupplierGroup(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplierGroup(accessToken: string, id: string): Promise<SupplierGroupDto>
   getSuppliers(accessToken: string, groupId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierDto[]>
@@ -277,13 +277,13 @@ export type DictionaryClient = {
   getIncomeTypes(accessToken: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
   getIncomeTypesPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
   createIncomeType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
-  updateIncomeType?(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
+  updateIncomeType(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveIncomeType(accessToken: string, id: string, reason: string): Promise<void>
   restoreIncomeType(accessToken: string, id: string): Promise<AccountingTypeDto>
   getExpenseTypes(accessToken: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
   getExpenseTypesPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
   createExpenseType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
-  updateExpenseType?(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
+  updateExpenseType(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveExpenseType(accessToken: string, id: string, reason: string): Promise<void>
   restoreExpenseType(accessToken: string, id: string): Promise<AccountingTypeDto>
   getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<TariffDto[]>

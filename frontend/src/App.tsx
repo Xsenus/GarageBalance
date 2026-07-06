@@ -12983,9 +12983,6 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
     } else if (currentEditor.section === 'supplierGroups') {
       const request = { name: supplierGroupName }
       if (currentEditor.mode === 'edit' && currentEditor.item) {
-        if (!dictionaryClient.updateSupplierGroup) {
-          throw new Error('Изменение групп поставщиков недоступно в текущем клиенте.')
-        }
         await dictionaryClient.updateSupplierGroup(auth.accessToken, (currentEditor.item as SupplierGroupDto).id, request)
       } else {
         await dictionaryClient.createSupplierGroup(auth.accessToken, request)
@@ -12999,18 +12996,12 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       }
     } else if (currentEditor.section === 'incomeTypes') {
       if (currentEditor.mode === 'edit' && currentEditor.item) {
-        if (!dictionaryClient.updateIncomeType) {
-          throw new Error('Изменение видов поступлений недоступно в текущем клиенте.')
-        }
         await dictionaryClient.updateIncomeType(auth.accessToken, (currentEditor.item as AccountingTypeDto).id, accountingTypeForm)
       } else {
         await dictionaryClient.createIncomeType(auth.accessToken, accountingTypeForm)
       }
     } else if (currentEditor.section === 'expenseTypes') {
       if (currentEditor.mode === 'edit' && currentEditor.item) {
-        if (!dictionaryClient.updateExpenseType) {
-          throw new Error('Изменение видов выплат недоступно в текущем клиенте.')
-        }
         await dictionaryClient.updateExpenseType(auth.accessToken, (currentEditor.item as AccountingTypeDto).id, accountingTypeForm)
       } else {
         await dictionaryClient.createExpenseType(auth.accessToken, accountingTypeForm)

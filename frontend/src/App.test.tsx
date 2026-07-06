@@ -3059,6 +3059,102 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
   }, 30_000)
 
+  it('edits supplier groups and accounting operation types from dictionary dialogs', async () => {
+    const user = userEvent.setup()
+    const statefulDictionaryClient = createStatefulDictionaryClient()
+    const updatedSupplierGroups: UpsertSupplierGroupRequest[] = []
+    const updatedIncomeTypes: UpsertAccountingTypeRequest[] = []
+    const updatedExpenseTypes: UpsertAccountingTypeRequest[] = []
+    const dictionaryClient: DictionaryClient = {
+      ...statefulDictionaryClient,
+      updateSupplierGroup: async (...args) => {
+        updatedSupplierGroups.push(args[2])
+        return statefulDictionaryClient.updateSupplierGroup(...args)
+      },
+      updateIncomeType: async (...args) => {
+        updatedIncomeTypes.push(args[2])
+        return statefulDictionaryClient.updateIncomeType(...args)
+      },
+      updateExpenseType: async (...args) => {
+        updatedExpenseTypes.push(args[2])
+        return statefulDictionaryClient.updateExpenseType(...args)
+      },
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    const createDictionaryRecord = async (fill: (dialog: HTMLElement) => Promise<void>) => {
+      const dialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+      await fill(dialog)
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    }
+
+    const openRowEditor = async (tableLabel: RegExp, rowText: string) => {
+      const table = await within(dictionaryPanel).findByRole('table', { name: tableLabel })
+      const row = within(table).getByText(rowText).closest('tr')
+      if (!row) {
+        throw new Error(`Строка справочника "${rowText}" не найдена.`)
+      }
+
+      fireEvent.doubleClick(row)
+      return screen.findByRole('dialog')
+    }
+
+    const saveEditorChange = async () => {
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }))
+      const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+      expect(within(confirmationDialog).getByText('Название')).toBeInTheDocument()
+      await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    }
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    await createDictionaryRecord(async (dialog) => {
+      await user.type(within(dialog).getByLabelText('Группа поставщиков'), 'Коммунальные услуги')
+    })
+    let editDialog = await openRowEditor(/Таблица: Группы поставщиков/, 'Коммунальные услуги')
+    await user.clear(within(editDialog).getByLabelText('Группа поставщиков'))
+    await user.type(within(editDialog).getByLabelText('Группа поставщиков'), 'Коммунальные подрядчики')
+    await saveEditorChange()
+    expect(updatedSupplierGroups).toEqual([{ name: 'Коммунальные подрядчики' }])
+    expect(await within(dictionaryPanel).findByText('Коммунальные подрядчики')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
+    await createDictionaryRecord(async (dialog) => {
+      await user.type(within(dialog).getByLabelText('Название вида операции'), 'Членский взнос')
+      await user.type(within(dialog).getByLabelText('Код вида операции'), 'membership')
+    })
+    editDialog = await openRowEditor(/Таблица: Виды поступлений/, 'Членский взнос')
+    await user.clear(within(editDialog).getByLabelText('Название вида операции'))
+    await user.type(within(editDialog).getByLabelText('Название вида операции'), 'Членский сбор')
+    await user.clear(within(editDialog).getByLabelText('Код вида операции'))
+    await user.type(within(editDialog).getByLabelText('Код вида операции'), 'membership_fee')
+    await saveEditorChange()
+    expect(updatedIncomeTypes).toEqual([{ name: 'Членский сбор', code: 'membership_fee' }])
+    expect(await within(dictionaryPanel).findByText('Членский сбор')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('membership_fee')).toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    await createDictionaryRecord(async (dialog) => {
+      await user.type(within(dialog).getByLabelText('Название вида операции'), 'Электроэнергия')
+      await user.type(within(dialog).getByLabelText('Код вида операции'), 'electricity')
+    })
+    editDialog = await openRowEditor(/Таблица: Виды выплат/, 'Электроэнергия')
+    await user.clear(within(editDialog).getByLabelText('Название вида операции'))
+    await user.type(within(editDialog).getByLabelText('Название вида операции'), 'Электроэнергия поставщику')
+    await user.clear(within(editDialog).getByLabelText('Код вида операции'))
+    await user.type(within(editDialog).getByLabelText('Код вида операции'), 'electricity_supplier')
+    await saveEditorChange()
+    expect(updatedExpenseTypes).toEqual([{ name: 'Электроэнергия поставщику', code: 'electricity_supplier' }])
+    expect(await within(dictionaryPanel).findByText('Электроэнергия поставщику')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('electricity_supplier')).toBeInTheDocument()
+  }, 30_000)
+
   it('shows dictionary list truncation counter when there are more rows', async () => {
     const user = userEvent.setup()
     const owners = Array.from({ length: 6 }, (_, index) => createOwner({ id: `owner-${index + 1}`, lastName: `Владелец${index + 1}`, firstName: 'Тест' }))
@@ -6544,6 +6640,11 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       supplierGroups = [createdGroup, ...supplierGroups]
       return createdGroup
     },
+    updateSupplierGroup: async (_token, id, request) => {
+      const updatedGroup = createGroup({ id, name: request.name })
+      supplierGroups = supplierGroups.map((item) => (item.id === id ? updatedGroup : item))
+      return updatedGroup
+    },
     archiveSupplierGroup: async () => undefined,
     restoreSupplierGroup: async () => group,
     getSuppliers: async () => suppliers,
@@ -6670,10 +6771,12 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     },
     getIncomeTypes: async () => [incomeType],
     createIncomeType: async () => incomeType,
+    updateIncomeType: async (_token, id, request) => createAccountingType({ id, name: request.name, code: request.code ?? null }),
     archiveIncomeType: async () => undefined,
     restoreIncomeType: async () => incomeType,
     getExpenseTypes: async () => [expenseType],
     createExpenseType: async () => expenseType,
+    updateExpenseType: async (_token, id, request) => createAccountingType({ id, name: request.name, code: request.code ?? null }),
     archiveExpenseType: async () => undefined,
     restoreExpenseType: async () => expenseType,
     getTariffs: async () => [tariff],
@@ -7393,7 +7496,17 @@ function createStatefulDictionaryClient(): DictionaryClient {
       lastGroup = group
       return group
     },
+    updateSupplierGroup: async (_token, id, request) => {
+      const group = createGroup({ id, name: request.name })
+      lastGroup = group
+      return group
+    },
     archiveSupplierGroup: async () => undefined,
+    restoreSupplierGroup: async (_token, id) => {
+      const group = lastGroup?.id === id ? { ...lastGroup, isArchived: false } : createGroup({ id, isArchived: false })
+      lastGroup = group
+      return group
+    },
     getSuppliers: async () => suppliers,
     createSupplier: async (_token, request) => {
       const group = lastGroup?.id === request.groupId ? lastGroup : createGroup({ id: request.groupId, name: 'Поставщики' })
@@ -7543,14 +7656,40 @@ function createStatefulDictionaryClient(): DictionaryClient {
       incomeTypes = [incomeType, ...incomeTypes]
       return incomeType
     },
+    updateIncomeType: async (_token, id, request) => {
+      const incomeType = createAccountingType({ id, name: request.name, code: request.code ?? null })
+      incomeTypes = incomeTypes.map((item) => (item.id === id ? incomeType : item))
+      return incomeType
+    },
     archiveIncomeType: async () => undefined,
+    restoreIncomeType: async (_token, id) => {
+      const incomeType = incomeTypes.find((item) => item.id === id) ?? createAccountingType({ id, isArchived: false })
+      const restored = { ...incomeType, isArchived: false }
+      incomeTypes = incomeTypes.some((item) => item.id === id)
+        ? incomeTypes.map((item) => (item.id === id ? restored : item))
+        : [restored, ...incomeTypes]
+      return restored
+    },
     getExpenseTypes: async () => expenseTypes,
     createExpenseType: async (_token, request) => {
       const expenseType = createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null })
       expenseTypes = [expenseType, ...expenseTypes]
       return expenseType
     },
+    updateExpenseType: async (_token, id, request) => {
+      const expenseType = createAccountingType({ id, name: request.name, code: request.code ?? null })
+      expenseTypes = expenseTypes.map((item) => (item.id === id ? expenseType : item))
+      return expenseType
+    },
     archiveExpenseType: async () => undefined,
+    restoreExpenseType: async (_token, id) => {
+      const expenseType = expenseTypes.find((item) => item.id === id) ?? createAccountingType({ id, isArchived: false })
+      const restored = { ...expenseType, isArchived: false }
+      expenseTypes = expenseTypes.some((item) => item.id === id)
+        ? expenseTypes.map((item) => (item.id === id ? restored : item))
+        : [restored, ...expenseTypes]
+      return restored
+    },
     getTariffs: async () => tariffs,
     createTariff: async (_token, request) => {
       const tariff = createTariff({
