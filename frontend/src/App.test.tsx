@@ -5909,7 +5909,12 @@ describe('App', () => {
     }
 
     expect(within(reportsPanel).getByText('Консолидированный отчёт')).toBeInTheDocument()
-    expect(within(reportsPanel).getByRole('table', { name: 'Консолидированный отчет' })).toBeInTheDocument()
+    const consolidatedTable = within(reportsPanel).getByRole('table', { name: 'Консолидированный отчет' })
+    expect(consolidatedTable).toBeInTheDocument()
+    await waitFor(() => expect(consolidatedTable).toHaveTextContent('Членский взнос'))
+    expect(consolidatedTable).toHaveTextContent('Вода')
+    expect(consolidatedTable).toHaveTextContent('На начало месяца')
+    expect(consolidatedTable).toHaveTextContent('На конец месяца')
     expect(within(reportsPanel).queryByRole('button', { name: /Скачать сводный/ })).not.toBeInTheDocument()
 
     const consolidatedMonthFrom = within(reportsPanel).getByLabelText('Месяц с') as HTMLInputElement
@@ -5927,14 +5932,20 @@ describe('App', () => {
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи') as HTMLInputElement
     await waitFor(() => expect(reportsPanel.querySelector('datalist option[value="Гараж 12"]')).not.toBeNull())
     await user.type(garageFilter, 'Гараж 99')
-    await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).toHaveTextContent('Петров Петр'))
+    const garageReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
+    await waitFor(() => expect(garageReportTable).toHaveTextContent('99'))
+    expect(garageReportTable).toHaveTextContent('Членский взнос')
+    expect(garageReportTable).toHaveTextContent('Начисления')
+    expect(garageReportTable).toHaveTextContent('Поступления')
 
     await openReportTab(user, reportsPanel, 'По выплатам')
     expect(within(reportsPanel).getByText('Отчёт по выплатам')).toBeInTheDocument()
     const counterpartyFilter = within(reportsPanel).getByLabelText('Поставщики или сотрудники') as HTMLInputElement
     await waitFor(() => expect(reportsPanel.querySelector('datalist option[value="Водоканал"]')).not.toBeNull())
     await user.type(counterpartyFilter, 'Водоканал')
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })).toHaveTextContent('Водоканал')
+    const payoutReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })
+    expect(payoutReportTable).toHaveTextContent('Поставщик/сотрудник')
+    expect(payoutReportTable).toHaveTextContent('Водоканал')
   })
 
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
@@ -6849,6 +6860,18 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     exportConsolidatedReportPdf: async () => new Blob(['consolidated pdf'], { type: 'application/pdf' }),
     getIncomeReport: async (_token, params) => {
       const report = createIncomeReport()
+      const search = params?.search?.toLowerCase() ?? ''
+      if (search.includes('петров') || search.includes('99')) {
+        return createIncomeReport({
+          rows: report.rows.map((row) => ({
+            ...row,
+            garageId: 'garage-21',
+            garageNumber: search.includes('99') ? '99' : '21',
+            ownerId: 'owner-21',
+            ownerName: 'Петров Петр',
+          })),
+        })
+      }
       if (params?.rowMode === 'payments') {
         return createIncomeReport({
           accrualTotal: 0,

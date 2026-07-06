@@ -6950,6 +6950,20 @@ type ReportDateRange = {
   dateTo: string
 }
 
+type ReportNamedAmountRow = {
+  name: string
+  amount: number
+}
+
+type ReportGarageServiceRow = {
+  monthLabel: string
+  garageNumber: string
+  serviceName: string
+  accrualAmount: number
+  incomeAmount: number
+  debt: number
+}
+
 const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; meta: string }> = [
   { key: 'consolidated', label: 'Консолидированный', meta: 'месяцы' },
   { key: 'garages', label: 'По гаражам', meta: 'гаражи' },
@@ -6981,6 +6995,51 @@ function getReportMonthEnd(monthValue: string) {
   return `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
 }
 
+function aggregateIncomePaymentsByName(report: IncomeReportDto | null): ReportNamedAmountRow[] {
+  const totals = new Map<string, number>()
+  report?.rows
+    .filter((row) => row.incomeAmount !== 0)
+    .forEach((row) => {
+      totals.set(row.incomeTypeName, (totals.get(row.incomeTypeName) ?? 0) + row.incomeAmount)
+    })
+  return Array.from(totals.entries())
+    .map(([name, amount]) => ({ name, amount }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ru'))
+}
+
+function aggregateExpensePaymentsByName(report: ExpenseReportDto | null): ReportNamedAmountRow[] {
+  const totals = new Map<string, number>()
+  report?.rows
+    .filter((row) => row.expenseAmount !== 0)
+    .forEach((row) => {
+      totals.set(row.expenseTypeName, (totals.get(row.expenseTypeName) ?? 0) + row.expenseAmount)
+    })
+  return Array.from(totals.entries())
+    .map(([name, amount]) => ({ name, amount }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ru'))
+}
+
+function aggregateGarageIncomeReportRows(report: IncomeReportDto | null): ReportGarageServiceRow[] {
+  const totals = new Map<string, ReportGarageServiceRow>()
+  report?.rows.forEach((row) => {
+    const key = `${row.accountingMonth}|${row.garageNumber}|${row.incomeTypeName}`
+    const current = totals.get(key) ?? {
+      monthLabel: formatMonth(row.accountingMonth),
+      garageNumber: row.garageNumber,
+      serviceName: row.incomeTypeName,
+      accrualAmount: 0,
+      incomeAmount: 0,
+      debt: 0,
+    }
+    current.accrualAmount += row.accrualAmount
+    current.incomeAmount += row.incomeAmount
+    current.debt = current.accrualAmount - current.incomeAmount
+    totals.set(key, current)
+  })
+  return Array.from(totals.values())
+    .sort((left, right) => left.monthLabel.localeCompare(right.monthLabel, 'ru') || left.garageNumber.localeCompare(right.garageNumber, 'ru') || left.serviceName.localeCompare(right.serviceName, 'ru'))
+}
+
 function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
@@ -7010,7 +7069,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
+  const [consolidatedIncomeBreakdown, setConsolidatedIncomeBreakdown] = useState<IncomeReportDto | null>(null)
+  const [consolidatedExpenseBreakdown, setConsolidatedExpenseBreakdown] = useState<ExpenseReportDto | null>(null)
   const [garageReport, setGarageReport] = useState<ConsolidatedReportDto | null>(null)
+  const [garageIncomeDetailReport, setGarageIncomeDetailReport] = useState<IncomeReportDto | null>(null)
   const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
   const [cashPaymentReport, setCashPaymentReport] = useState<CashPaymentReportDto | null>(null)
@@ -7068,17 +7130,35 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         const incomeFilter = dateFilters.income
         const cashPaymentFilter = dateFilters.cashPayments
         const bankDepositFilter = dateFilters.bankDeposits
-        const [loadedConsolidated, loadedGarages, loadedPayouts, loadedIncome, loadedCashPayments, loadedBankDeposits, loadedFees] = await Promise.all([
+        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedIncome, loadedCashPayments, loadedBankDeposits, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
             limit: 100,
+          }),
+          reportClient.getIncomeReport(auth.accessToken, {
+            dateFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
+            rowMode: 'payments',
+            limit: 500,
+          }),
+          reportClient.getExpenseReport(auth.accessToken, {
+            dateFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
+            rowMode: 'payments',
+            limit: 500,
           }),
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(garageFilterRange.monthFrom),
             monthTo: getReportMonthStart(garageFilterRange.monthTo),
             search: garageFilter.trim() || undefined,
             limit: 100,
+          }),
+          reportClient.getIncomeReport(auth.accessToken, {
+            dateFrom: getReportMonthStart(garageFilterRange.monthFrom),
+            dateTo: getReportMonthEnd(garageFilterRange.monthTo),
+            search: garageFilter.trim() || undefined,
+            limit: 500,
           }),
           reportClient.getExpenseReport(auth.accessToken, {
             dateFrom: getReportMonthStart(payoutFilter.monthFrom),
@@ -7113,7 +7193,10 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         }
 
         setConsolidatedReport(loadedConsolidated)
+        setConsolidatedIncomeBreakdown(loadedConsolidatedIncome)
+        setConsolidatedExpenseBreakdown(loadedConsolidatedExpenses)
         setGarageReport(loadedGarages)
+        setGarageIncomeDetailReport(loadedGarageIncomeDetails)
         setPayoutReport(loadedPayouts)
         setIncomeReport(loadedIncome)
         setCashPaymentReport(loadedCashPayments)
@@ -7271,23 +7354,36 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
   function renderActiveReport() {
     if (activeReportTab === 'consolidated') {
-      const reportRows = consolidatedReport?.monthlyRows.map((row) => [
-        formatMonth(row.accountingMonth),
-        'Поступления',
-        formatMoney(row.incomeTotal),
-        'Выплаты',
-        formatMoney(row.expenseTotal),
-        formatMoney(row.balance),
-        formatMoney(row.debt),
-        formatMoney(row.balance),
-      ]) ?? []
+      const incomeBreakdown = aggregateIncomePaymentsByName(consolidatedIncomeBreakdown)
+      const expenseBreakdown = aggregateExpensePaymentsByName(consolidatedExpenseBreakdown)
+      const rowCount = Math.max(incomeBreakdown.length, expenseBreakdown.length, 1)
+      const periodLabel = monthlyFilters.consolidated.monthFrom === monthlyFilters.consolidated.monthTo
+        ? formatMonth(getReportMonthStart(monthlyFilters.consolidated.monthFrom))
+        : `${formatMonth(getReportMonthStart(monthlyFilters.consolidated.monthFrom))} - ${formatMonth(getReportMonthStart(monthlyFilters.consolidated.monthTo))}`
+      const totalDifference = consolidatedReport ? consolidatedReport.incomeTotal - consolidatedReport.expenseTotal : 0
+      const endingBalance = consolidatedReport?.balance ?? 0
+      const openingBalance = endingBalance - totalDifference
+      const reportRows = Array.from({ length: rowCount }, (_, index) => {
+        const incomeRow = incomeBreakdown[index]
+        const expenseRow = expenseBreakdown[index]
+        return [
+          index === 0 ? periodLabel : '',
+          incomeRow?.name ?? '',
+          incomeRow ? formatMoney(incomeRow.amount) : '',
+          expenseRow?.name ?? '',
+          expenseRow ? formatMoney(expenseRow.amount) : '',
+          index === 0 ? formatMoney(totalDifference) : '',
+          index === 0 ? formatMoney(openingBalance) : '',
+          index === 0 ? formatMoney(endingBalance) : '',
+        ]
+      })
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
           {renderReportTable(
             'Консолидированный отчет',
             ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
-            reportRows.length > 0 ? reportRows : [['', 'Данных за период нет', '', '', '', '', '', '']],
+            reportRows,
             consolidatedReport ? ['ИТОГО', '', formatMoney(consolidatedReport.incomeTotal), '', formatMoney(consolidatedReport.expenseTotal), formatMoney(consolidatedReport.balance), formatMoney(consolidatedReport.debt), formatMoney(consolidatedReport.balance)] : undefined,
           )}
         </ReportWorkbookSheet>
@@ -7295,14 +7391,15 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
 
     if (activeReportTab === 'garages') {
-      const reportRows = garageReport?.garageRows.map((row) => [
-        `${monthlyFilters.garages.monthFrom} - ${monthlyFilters.garages.monthTo}`,
+      const garageRowsByService = aggregateGarageIncomeReportRows(garageIncomeDetailReport)
+      const reportRows = garageRowsByService.map((row) => [
+        row.monthLabel,
         row.garageNumber,
-        formatMoney(row.accrualTotal),
-        row.ownerName ?? 'Владелец не указан',
-        formatMoney(row.incomeTotal),
+        formatMoney(row.accrualAmount),
+        row.serviceName,
+        formatMoney(row.incomeAmount),
         formatMoney(row.debt),
-      ]) ?? []
+      ])
       return (
         <ReportWorkbookSheet title="Отчёт по гаражам">
           {renderMonthlyFilter('garages', {
@@ -7358,7 +7455,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           </div>
           {renderReportTable(
             'Отчет по выплатам',
-            ['Месяц', 'Услуга', 'Сотрудник', 'Начисления', 'Выплаты', 'Разница'],
+            ['Месяц', 'Услуга', 'Поставщик/сотрудник', 'Начисления', 'Выплаты', 'Разница'],
             reportRows.length > 0 ? reportRows : [['', '', counterpartyFilterLabel, 'Данных за период нет', '', '']],
             payoutReport ? ['ИТОГО', '', '', formatMoney(payoutReport.accrualTotal), formatMoney(payoutReport.expenseTotal), formatMoney(payoutReport.difference)] : undefined,
           )}
