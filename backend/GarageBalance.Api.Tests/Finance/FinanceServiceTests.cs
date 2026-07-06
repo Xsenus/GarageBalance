@@ -1892,6 +1892,59 @@ public sealed class FinanceServiceTests
         Assert.Equal("Иванов Иван", missing.OwnerName);
     }
 
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_BuildsRowsFromAccrualsPaymentsAndMeters()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var electricityType = new IncomeType { Name = "Электроэнергия", Code = "electricity" };
+        database.Context.IncomeTypes.Add(electricityType);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, electricityType.Id, new DateOnly(2026, 6, 1), 5674m, "regular", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, electricityType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1000m, "PKO-electricity", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 500m, "PKO-membership-only", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 118m, null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(fixtures.Garage.Id, result.Value!.GarageId);
+        Assert.Equal(5674m, result.Value.AccrualTotal);
+        Assert.Equal(1500m, result.Value.IncomeTotal);
+        Assert.Equal(4674m, result.Value.DebtTotal);
+        Assert.Equal(2, result.Value.Rows.Count);
+
+        var electricity = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == electricityType.Id);
+        Assert.Equal("electricity", electricity.MeterKind);
+        Assert.Equal(118m, electricity.MeterValue);
+        Assert.Equal(18m, electricity.MeterConsumption);
+        Assert.Equal(5674m, electricity.AccrualAmount);
+        Assert.Equal(1000m, electricity.IncomeAmount);
+        Assert.Equal(4674m, electricity.Debt);
+
+        var membership = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id);
+        Assert.Equal(0m, membership.AccrualAmount);
+        Assert.Equal(500m, membership.IncomeAmount);
+        Assert.Equal(0m, membership.Debt);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

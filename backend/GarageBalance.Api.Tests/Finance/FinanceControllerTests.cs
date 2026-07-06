@@ -65,6 +65,35 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetGarageIncomeWorksheet_PassesGarageAndPeriodToService()
+    {
+        var garageId = Guid.NewGuid();
+        var worksheet = new GarageIncomeWorksheetDto(
+            garageId,
+            "12",
+            "Иванов Иван",
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 7, 1),
+            1000m,
+            400m,
+            600m,
+            []);
+        var service = new FakeFinanceService
+        {
+            GarageIncomeWorksheetResult = FinanceResult<GarageIncomeWorksheetDto>.Success(worksheet)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetGarageIncomeWorksheet(garageId, new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(worksheet, ok.Value);
+        Assert.Equal(garageId, service.LastGarageIncomeWorksheetGarageId);
+        Assert.Equal(new DateOnly(2026, 6, 1), service.LastGarageIncomeWorksheetRequest?.MonthFrom);
+        Assert.Equal(new DateOnly(2026, 7, 1), service.LastGarageIncomeWorksheetRequest?.MonthTo);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -656,6 +685,7 @@ public sealed class FinanceControllerTests
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
+        public Guid? LastGarageIncomeWorksheetGarageId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
         public CreateStaffPaymentRequest? LastStaffPaymentRequest { get; private set; }
@@ -665,7 +695,9 @@ public sealed class FinanceControllerTests
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
         public MissingMeterReadingListRequest? LastMissingMeterReadingListRequest { get; private set; }
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
+        public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -744,6 +776,13 @@ public sealed class FinanceControllerTests
             LastGarageBalanceHistoryGarageId = garageId;
             LastGarageBalanceHistoryRequest = request;
             return Task.FromResult(GarageBalanceHistoryResult);
+        }
+
+        public Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)
+        {
+            LastGarageIncomeWorksheetGarageId = garageId;
+            LastGarageIncomeWorksheetRequest = request;
+            return Task.FromResult(GarageIncomeWorksheetResult);
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)

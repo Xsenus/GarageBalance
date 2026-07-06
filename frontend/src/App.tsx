@@ -32,7 +32,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
 import type { FundDto, FundsClient } from './services/fundsApi'
 import { formStatesApi } from './services/formStatesApi'
@@ -926,6 +926,26 @@ function createGarageIncomePrototypeRows(garageNumber: string): GarageIncomeProt
     { id: 'garage-1-2026-05-gate', month: '2026-05', monthLabel: 'май.26', service: 'Сбор на ворота', meter: null, difference: null, payable: 500, paymentDraft: '', paid: 500, debt: 0 },
     { id: 'garage-1-2026-05-lighting', month: '2026-05', monthLabel: 'май.26', service: 'Наружное освещение', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
   ]
+}
+
+function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
+  return worksheet.rows.map((row) => {
+    const month = row.accountingMonth.slice(0, 7)
+    const rowKey = row.incomeTypeId ?? row.incomeTypeName.toLocaleLowerCase('ru-RU').replace(/\s+/g, '-')
+    return {
+      id: `garage-${worksheet.garageId}-${month}-${rowKey}`,
+      month,
+      monthLabel: formatPaymentPrototypeMonthLabel(row.accountingMonth),
+      service: row.incomeTypeName,
+      meter: row.meterValue,
+      difference: row.meterConsumption,
+      payable: row.accrualAmount,
+      paymentDraft: '',
+      paid: row.incomeAmount,
+      debt: row.debt,
+      meterRequired: row.meterKind !== null && row.meterValue === null,
+    }
+  })
 }
 
 function FinancePanel({
@@ -2995,6 +3015,7 @@ function PaymentsPrototypePanel({
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -3236,12 +3257,30 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
+  async function loadGarageIncomeWorksheet(garage: PaymentsPrototypeGarage) {
+    if (!realGarageIds.has(garage.id)) {
+      return
+    }
+
+    setGarageWorksheetLoadingId(garage.id)
+    try {
+      const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id)
+      const rows = createGarageIncomeRowsFromWorksheet(worksheet)
+      setGarageRows(rows)
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
+    } finally {
+      setGarageWorksheetLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+    }
+  }
+
   function selectGarage(garage: PaymentsPrototypeGarage) {
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
     setGarageRows(createGarageIncomePrototypeRows(garage.number))
     setHistoryRows(garage.number === '1' ? garagePaymentHistoryRows : [])
     setPaymentError(null)
+    void loadGarageIncomeWorksheet(garage)
   }
 
   function selectFirstGarageResult() {
@@ -3863,6 +3902,7 @@ function PaymentsPrototypePanel({
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
+      {garageWorksheetLoadingId ? <p className="form-status" role="status">Загружаем поступления выбранного гаража...</p> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">

@@ -273,6 +273,134 @@ public sealed class FinanceService(
         return FinanceResult<GarageBalanceHistoryDto>.Success(dto);
     }
 
+    public async Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)
+    {
+        var defaultMonthTo = MonthPeriod.CurrentLocalMonth();
+        var monthTo = MonthPeriod.Normalize(request.MonthTo ?? defaultMonthTo);
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? monthTo.AddMonths(-5));
+        if (monthFrom > monthTo)
+        {
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure("income_worksheet_period_invalid", "Дата начала формы поступлений не может быть позже даты окончания.");
+        }
+
+        var monthCount = ((monthTo.Year - monthFrom.Year) * 12) + monthTo.Month - monthFrom.Month + 1;
+        if (monthCount > MaxBalanceHistoryMonths)
+        {
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure("income_worksheet_period_too_large", $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
+        }
+
+        var garage = await dbContext.Garages.AsNoTracking()
+            .Include(item => item.Owner)
+            .SingleOrDefaultAsync(item => item.Id == garageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для формы поступлений не найден.");
+        }
+
+        var accrualBuckets = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.AccountingMonth >= monthFrom &&
+                accrual.AccountingMonth <= monthTo)
+            .GroupBy(accrual => new
+            {
+                accrual.AccountingMonth,
+                accrual.IncomeTypeId,
+                accrual.IncomeType.Name,
+                accrual.IncomeType.Code
+            })
+            .Select(group => new IncomeWorksheetBucket(
+                group.Key.AccountingMonth,
+                group.Key.IncomeTypeId,
+                group.Key.Name,
+                group.Key.Code,
+                group.Sum(accrual => accrual.Amount)))
+            .ToListAsync(cancellationToken);
+
+        var incomeBuckets = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.IncomeTypeId != null &&
+                operation.AccountingMonth >= monthFrom &&
+                operation.AccountingMonth <= monthTo)
+            .GroupBy(operation => new
+            {
+                operation.AccountingMonth,
+                IncomeTypeId = operation.IncomeTypeId!.Value,
+                operation.IncomeType!.Name,
+                operation.IncomeType.Code
+            })
+            .Select(group => new IncomeWorksheetBucket(
+                group.Key.AccountingMonth,
+                group.Key.IncomeTypeId,
+                group.Key.Name,
+                group.Key.Code,
+                group.Sum(operation => operation.Amount)))
+            .ToListAsync(cancellationToken);
+
+        var meterReadings = await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading =>
+                !reading.IsCanceled &&
+                reading.GarageId == garageId &&
+                reading.AccountingMonth >= monthFrom &&
+                reading.AccountingMonth <= monthTo)
+            .ToListAsync(cancellationToken);
+        var meterReadingByMonthKind = meterReadings
+            .GroupBy(reading => (reading.AccountingMonth, reading.MeterKind))
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(reading => reading.ReadingDate)
+                    .ThenByDescending(reading => reading.UpdatedAtUtc)
+                    .First());
+
+        var accrualLookup = accrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var incomeLookup = incomeBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var keys = accrualBuckets
+            .Concat(incomeBuckets)
+            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId))
+            .Select(group => group.First())
+            .OrderByDescending(bucket => bucket.AccountingMonth)
+            .ThenBy(bucket => bucket.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var rows = keys.Select(key =>
+        {
+            var accrualAmount = MoneyMath.RoundMoney(accrualLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))?.Amount ?? 0m);
+            var incomeAmount = MoneyMath.RoundMoney(incomeLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))?.Amount ?? 0m);
+            var debt = MoneyMath.RoundMoney(Math.Max(accrualAmount - incomeAmount, 0m));
+            var meterKind = InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
+            meterReadingByMonthKind.TryGetValue((key.AccountingMonth, meterKind ?? string.Empty), out var reading);
+            return new GarageIncomeWorksheetRowDto(
+                key.AccountingMonth,
+                key.IncomeTypeId,
+                key.IncomeTypeName,
+                meterKind,
+                reading?.CurrentValue,
+                reading?.Consumption,
+                accrualAmount,
+                incomeAmount,
+                debt);
+        }).ToList();
+
+        var accrualTotal = MoneyMath.RoundMoney(rows.Sum(row => row.AccrualAmount));
+        var incomeTotal = MoneyMath.RoundMoney(rows.Sum(row => row.IncomeAmount));
+        var debtTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Debt));
+        return FinanceResult<GarageIncomeWorksheetDto>.Success(new GarageIncomeWorksheetDto(
+            garage.Id,
+            garage.Number,
+            garage.Owner?.FullName,
+            monthFrom,
+            monthTo,
+            accrualTotal,
+            incomeTotal,
+            debtTotal,
+            rows));
+    }
+
     private static int NormalizeListLimit(int? limit)
     {
         if (limit is null or <= 0)
@@ -2555,6 +2683,24 @@ public sealed class FinanceService(
             operation.StaffMember?.FullName,
             operation.StaffMember?.Department?.Name);
     }
+
+    private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)
+    {
+        var normalized = $"{incomeTypeCode ?? string.Empty} {incomeTypeName}".ToLower(RussianCulture);
+        if (normalized.Contains("electric", StringComparison.Ordinal) || normalized.Contains("электр", StringComparison.Ordinal))
+        {
+            return MeterKinds.Electricity;
+        }
+
+        if (normalized.Contains("water", StringComparison.Ordinal) || normalized.Contains("вод", StringComparison.Ordinal))
+        {
+            return MeterKinds.Water;
+        }
+
+        return null;
+    }
+
+    private sealed record IncomeWorksheetBucket(DateOnly AccountingMonth, Guid IncomeTypeId, string IncomeTypeName, string? IncomeTypeCode, decimal Amount);
 
     private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
 

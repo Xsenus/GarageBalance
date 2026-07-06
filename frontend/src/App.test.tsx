@@ -21,7 +21,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1380,6 +1380,9 @@ describe('App', () => {
           ],
         })
       },
+      getGarageIncomeWorksheet: async () => {
+        throw new Error('Серверная ведомость недоступна')
+      },
     })
     const fundsClient = createFundsClient({
       createOperation: async (_token, fundId, request) => {
@@ -1629,6 +1632,48 @@ describe('App', () => {
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
   })
 
+  it('loads selected garage income worksheet from finance backend', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: '77',
+      ownerName: 'Кузнецова Мария',
+      rows: [
+        {
+          accountingMonth: '2026-06-01',
+          incomeTypeId: 'income-type-electricity',
+          incomeTypeName: 'Серверная электроэнергия',
+          meterKind: 'electricity',
+          meterValue: 86,
+          meterConsumption: 18,
+          accrualAmount: 5674,
+          incomeAmount: 1000,
+          debt: 4674,
+        },
+      ],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '77')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ }))
+
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77'))
+    const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 77' })
+    expect(await within(incomeTable).findByText('Серверная электроэнергия')).toBeInTheDocument()
+    expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
+    expect(within(incomeTable).getByText('86')).toBeInTheDocument()
+    expect(within(incomeTable).getByText('18')).toBeInTheDocument()
+    expect(within(incomeTable).getAllByText('4 674').length).toBeGreaterThan(0)
+  })
+
   it('moves garage debt to the next month and saves the transfer in form history', async () => {
     const user = userEvent.setup()
     const saveStateMock = vi.mocked(formStatesApi.saveState)
@@ -1644,7 +1689,12 @@ describe('App', () => {
       comment: request.comment ?? null,
     }))
     const garage = createGarage({ id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', peopleCount: 2, floorCount: 1, startingBalance: -1700 })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ createDebtTransfer: createDebtTransferMock })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({
+      createDebtTransfer: createDebtTransferMock,
+      getGarageIncomeWorksheet: async () => {
+        throw new Error('Серверная ведомость недоступна')
+      },
+    })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -6499,6 +6549,12 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
   const meterReading = createMeterReading({ id: 'meter-reading-1', consumption: 5.5, currentValue: 15.5, previousValue: 10 })
   const missingMeterReading = createMissingMeterReading({})
   const garageBalanceHistory = createGarageBalanceHistory({})
+  const garageIncomeWorksheet = createGarageIncomeWorksheet({
+    accrualTotal: 0,
+    incomeTotal: 0,
+    debtTotal: 0,
+    rows: [],
+  })
 
   const client: FinanceClient = {
     getOperations: async () => [operation],
@@ -6511,6 +6567,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getMissingMeterReadings: async () => [missingMeterReading],
     getGarageBalanceHistory: async () => garageBalanceHistory,
+    getGarageIncomeWorksheet: async () => garageIncomeWorksheet,
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
@@ -7561,6 +7618,33 @@ function createGarageBalanceHistory(overrides: Partial<GarageBalanceHistoryDto>)
     rows: [
       { accountingMonth: '2026-06-01', openingDebt: 100, accrualAmount: 500, incomeAmount: 200, closingDebt: 400 },
       { accountingMonth: '2026-07-01', openingDebt: 400, accrualAmount: 700, incomeAmount: 300, closingDebt: 800 },
+    ],
+    ...overrides,
+  }
+}
+
+function createGarageIncomeWorksheet(overrides: Partial<GarageIncomeWorksheetDto>): GarageIncomeWorksheetDto {
+  return {
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    monthFrom: '2026-06-01',
+    monthTo: '2026-06-01',
+    accrualTotal: 5674,
+    incomeTotal: 1000,
+    debtTotal: 4674,
+    rows: [
+      {
+        accountingMonth: '2026-06-01',
+        incomeTypeId: 'income-type-electricity',
+        incomeTypeName: 'Электроэнергия',
+        meterKind: 'electricity',
+        meterValue: 86,
+        meterConsumption: 18,
+        accrualAmount: 5674,
+        incomeAmount: 1000,
+        debt: 4674,
+      },
     ],
     ...overrides,
   }

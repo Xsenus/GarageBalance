@@ -141,6 +141,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("garages/{garageId:guid}/income-worksheet")]
+    [ProducesResponseType<GarageIncomeWorksheetDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheet(
+        Guid garageId,
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetGarageIncomeWorksheetAsync(garageId, new GarageIncomeWorksheetRequest(monthFrom, monthTo), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType<FinanceSummaryDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinanceSummaryDto>> GetSummary(

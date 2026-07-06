@@ -134,6 +134,30 @@ export type GarageBalanceHistoryDto = {
   rows: GarageBalanceHistoryRowDto[]
 }
 
+export type GarageIncomeWorksheetRowDto = {
+  accountingMonth: string
+  incomeTypeId: string | null
+  incomeTypeName: string
+  meterKind: 'water' | 'electricity' | null
+  meterValue: number | null
+  meterConsumption: number | null
+  accrualAmount: number
+  incomeAmount: number
+  debt: number
+}
+
+export type GarageIncomeWorksheetDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  monthFrom: string
+  monthTo: string
+  accrualTotal: number
+  incomeTotal: number
+  debtTotal: number
+  rows: GarageIncomeWorksheetRowDto[]
+}
+
 export type CreateIncomeOperationRequest = {
   garageId: string
   incomeTypeId: string
@@ -256,6 +280,7 @@ export type FinanceClient = {
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
+  getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -387,6 +412,12 @@ export const financeApi: FinanceClient = {
   },
   getGarageBalanceHistory(accessToken, garageId, params = {}) {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/balance-history`, {
+      monthFrom: toMonthStart(params.monthFrom),
+      monthTo: toMonthStart(params.monthTo),
+    }))
+  },
+  getGarageIncomeWorksheet(accessToken, garageId, params = {}) {
+    return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/income-worksheet`, {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
     }))

@@ -245,6 +245,32 @@ public sealed record GarageBalanceHistoryDto(
     decimal Debt,
     IReadOnlyList<GarageBalanceHistoryRowDto> Rows);
 
+public sealed record GarageIncomeWorksheetRequest(
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo);
+
+public sealed record GarageIncomeWorksheetRowDto(
+    DateOnly AccountingMonth,
+    Guid? IncomeTypeId,
+    string IncomeTypeName,
+    string? MeterKind,
+    decimal? MeterValue,
+    decimal? MeterConsumption,
+    decimal AccrualAmount,
+    decimal IncomeAmount,
+    decimal Debt);
+
+public sealed record GarageIncomeWorksheetDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    DateOnly MonthFrom,
+    DateOnly MonthTo,
+    decimal AccrualTotal,
+    decimal IncomeTotal,
+    decimal DebtTotal,
+    IReadOnlyList<GarageIncomeWorksheetRowDto> Rows);
+
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,
     decimal ExpenseTotal,
