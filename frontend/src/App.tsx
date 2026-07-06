@@ -889,6 +889,8 @@ type RegularAccrualPrototypeSubmitRequest = {
 type PaymentsPrototypeSavedState = {
   selectedGarageId: string | null
   garageSearch: string
+  incomeWorksheetMonthFrom?: string
+  incomeWorksheetMonthTo?: string
   garageRows: GarageIncomePrototypeRow[]
   historyRows: GaragePaymentHistoryPrototypeRow[]
 }
@@ -3000,6 +3002,17 @@ function addPaymentPrototypeMonths(value: string, offset: number) {
   return `${year}-${month}`
 }
 
+function createPaymentPrototypeMonthOptions(currentMonth = getCurrentMonthInputValue(), extraMonths: string[] = []) {
+  const values = [
+    ...Array.from({ length: 4 }, (_, index) => addPaymentPrototypeMonths(currentMonth, -index)),
+    ...extraMonths,
+  ].filter((value, index, source) => value && source.indexOf(value) === index)
+
+  return values.map((value) => {
+    return { value, label: formatMonth(`${value}-01`) }
+  })
+}
+
 function PaymentsPrototypePanel({
   auth,
   expenseTypes,
@@ -3028,6 +3041,8 @@ function PaymentsPrototypePanel({
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
+  const [incomeWorksheetMonthFrom, setIncomeWorksheetMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
+  const [incomeWorksheetMonthTo, setIncomeWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>(() => paymentPrototypeRows.map((row) => ({ ...row })))
   const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState('2026-06')
@@ -3088,6 +3103,10 @@ function PaymentsPrototypePanel({
     .slice(0, 6)
   const shouldShowGarageResults = garageSearch.length > 0 && (!selectedGarage || garageSearch !== `Гараж ${selectedGarage.number} - ${selectedGarage.ownerName}`)
   const garageSearchListId = useId()
+  const incomeWorksheetMonthOptions = useMemo(
+    () => createPaymentPrototypeMonthOptions(getCurrentMonthInputValue(), [incomeWorksheetMonthFrom, incomeWorksheetMonthTo]),
+    [incomeWorksheetMonthFrom, incomeWorksheetMonthTo],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -3101,6 +3120,8 @@ function PaymentsPrototypePanel({
         if (state?.payload) {
           setSelectedGarageId(state.payload.selectedGarageId ?? null)
           setGarageSearch(state.payload.garageSearch ?? '')
+          setIncomeWorksheetMonthFrom(state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue()))
+          setIncomeWorksheetMonthTo(state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue())
           setGarageRows(Array.isArray(state.payload.garageRows) ? state.payload.garageRows : [])
           setHistoryRows(Array.isArray(state.payload.historyRows) ? state.payload.historyRows : [])
         }
@@ -3129,14 +3150,14 @@ function PaymentsPrototypePanel({
     const handle = window.setTimeout(() => {
       void formStateClient
         .saveState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope, {
-          payload: { selectedGarageId, garageSearch, garageRows, historyRows },
+          payload: { selectedGarageId, garageSearch, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, garageRows, historyRows },
           summary: 'Сохранено состояние формы платежей и последние введенные значения.'
         })
         .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние платежей.'))
     }, 400)
 
     return () => window.clearTimeout(handle)
-  }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, selectedGarageId])
+  }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, selectedGarageId])
 
   useEffect(() => {
     if (activeTab !== 'expense') {
@@ -3323,14 +3344,21 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  async function loadGarageIncomeWorksheet(garage: PaymentsPrototypeGarage) {
+  async function loadGarageIncomeWorksheet(
+    garage: PaymentsPrototypeGarage,
+    monthFrom = incomeWorksheetMonthFrom,
+    monthTo = incomeWorksheetMonthTo,
+  ) {
     if (!realGarageIds.has(garage.id)) {
       return
     }
 
     setGarageWorksheetLoadingId(garage.id)
     try {
-      const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id)
+      const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
+        monthFrom: `${monthFrom}-01`,
+        monthTo: `${monthTo}-01`,
+      })
       const rows = createGarageIncomeRowsFromWorksheet(worksheet)
       setGarageRows(rows)
     } catch (error) {
@@ -3347,6 +3375,29 @@ function PaymentsPrototypePanel({
     setHistoryRows(garage.number === '1' ? garagePaymentHistoryRows : [])
     setPaymentError(null)
     void loadGarageIncomeWorksheet(garage)
+  }
+
+  function handleIncomeWorksheetMonthFromChange(value: string) {
+    setIncomeWorksheetMonthFrom(value)
+    if (selectedGarage) {
+      void loadGarageIncomeWorksheet(selectedGarage, value, incomeWorksheetMonthTo)
+    }
+  }
+
+  function handleIncomeWorksheetMonthToChange(value: string) {
+    setIncomeWorksheetMonthTo(value)
+    if (selectedGarage) {
+      void loadGarageIncomeWorksheet(selectedGarage, incomeWorksheetMonthFrom, value)
+    }
+  }
+
+  function setCurrentIncomeWorksheetMonth() {
+    const currentMonth = getCurrentMonthInputValue()
+    setIncomeWorksheetMonthFrom(currentMonth)
+    setIncomeWorksheetMonthTo(currentMonth)
+    if (selectedGarage) {
+      void loadGarageIncomeWorksheet(selectedGarage, currentMonth, currentMonth)
+    }
   }
 
   function selectFirstGarageResult() {
@@ -4053,21 +4104,21 @@ function PaymentsPrototypePanel({
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц с</span>
-                <select aria-label="Месяц поступлений с" defaultValue="2026-05">
-                  <option value="2026-06">июнь 2026</option>
-                  <option value="2026-05">май 2026</option>
-                  <option value="2026-04">апрель 2026</option>
+                <select aria-label="Месяц поступлений с" value={incomeWorksheetMonthFrom} onChange={(event) => handleIncomeWorksheetMonthFromChange(event.target.value)}>
+                  {incomeWorksheetMonthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </label>
               <label>
                 <span>Месяц по</span>
-                <select aria-label="Месяц поступлений по" defaultValue="2026-06">
-                  <option value="2026-06">июнь 2026</option>
-                  <option value="2026-05">май 2026</option>
-                  <option value="2026-04">апрель 2026</option>
+                <select aria-label="Месяц поступлений по" value={incomeWorksheetMonthTo} onChange={(event) => handleIncomeWorksheetMonthToChange(event.target.value)}>
+                  {incomeWorksheetMonthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </label>
-              <button className="link-button" type="button">Текущий</button>
+              <button className="link-button" type="button" onClick={setCurrentIncomeWorksheetMonth}>Текущий</button>
             </div>
             <div className="payments-prototype-table-scroll">
               <table className="payments-prototype-table payments-prototype-table--garage" aria-label={`Поступления гаража ${selectedGarage.number}`}>

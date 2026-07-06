@@ -1665,7 +1665,18 @@ describe('App', () => {
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '77')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ }))
 
-    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77'))
+    const currentMonth = getTestCurrentMonthInputValue()
+    const previousMonth = addTestMonths(currentMonth, -1)
+    const twoMonthsAgo = addTestMonths(currentMonth, -2)
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77', {
+      monthFrom: `${previousMonth}-01`,
+      monthTo: `${currentMonth}-01`,
+    }))
+    await user.selectOptions(within(prototype).getByLabelText('Месяц поступлений с'), twoMonthsAgo)
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
+      monthFrom: `${twoMonthsAgo}-01`,
+      monthTo: `${currentMonth}-01`,
+    }))
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 77' })
     expect(await within(incomeTable).findByText('Серверная электроэнергия')).toBeInTheDocument()
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
@@ -7612,6 +7623,16 @@ function createIrregularPayment(overrides: Partial<IrregularPaymentDto> = {}): I
     isUsed: false,
     ...overrides,
   }
+}
+
+function getTestCurrentMonthInputValue(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function addTestMonths(value: string, offset: number) {
+  const [yearText, monthText] = value.split('-')
+  const date = new Date(Number(yearText), Number(monthText) - 1 + offset, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 function createChargeServiceSetting(overrides: Partial<ChargeServiceSettingDto> = {}): ChargeServiceSettingDto {
