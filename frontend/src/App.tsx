@@ -759,8 +759,8 @@ const paymentPrototypeRows: PaymentPrototypeRow[] = [
 ]
 
 const garagePaymentHistoryRows = [
-  { date: '19.06.2026', time: '10:24', amount: 5674, purpose: 'Электроэнергия', debtAfter: 0 },
-  { date: '20.06.2026', time: '16:05', amount: 1000, purpose: 'Частичная оплата', debtAfter: 2500 },
+  { id: 'prototype-history-1', date: '19.06.2026', time: '10:24', amount: 5674, purpose: 'Электроэнергия', debtAfter: 0 },
+  { id: 'prototype-history-2', date: '20.06.2026', time: '16:05', amount: 1000, purpose: 'Частичная оплата', debtAfter: 2500 },
 ]
 
 type PaymentsPrototypeGarage = {
@@ -789,6 +789,7 @@ type GarageIncomePrototypeRow = {
 }
 
 type GaragePaymentHistoryPrototypeRow = {
+  id: string
   date: string
   time: string
   amount: number
@@ -2978,6 +2979,35 @@ function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
 }
 
+function formatPaymentPrototypeOperationTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+}
+
+function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOperationDto[]): GaragePaymentHistoryPrototypeRow[] {
+  return operations
+    .filter((operation) => operation.operationKind === 'income' && operation.garageId)
+    .map((operation) => ({
+      id: operation.id,
+      date: formatDateOnly(operation.operationDate),
+      time: formatPaymentPrototypeOperationTime(operation.createdAtUtc),
+      amount: operation.amount,
+      purpose: operation.incomeTypeName ?? operation.comment ?? 'Поступление',
+      debtAfter: operation.garageDebtAfter ?? 0,
+    }))
+}
+
+function normalizeGaragePaymentHistoryRows(rows: GaragePaymentHistoryPrototypeRow[]) {
+  return rows.map((row, index) => ({
+    ...row,
+    id: row.id ?? `saved-history-${index}-${row.date}-${row.time}-${row.amount}`,
+  }))
+}
+
 function formatPaymentPrototypeMonthLabel(value: string) {
   const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value)
   if (!match) {
@@ -3052,6 +3082,7 @@ function PaymentsPrototypePanel({
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
+  const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
   const [expenseWorksheetLoading, setExpenseWorksheetLoading] = useState(false)
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
@@ -3123,7 +3154,7 @@ function PaymentsPrototypePanel({
           setIncomeWorksheetMonthFrom(state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue()))
           setIncomeWorksheetMonthTo(state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue())
           setGarageRows(Array.isArray(state.payload.garageRows) ? state.payload.garageRows : [])
-          setHistoryRows(Array.isArray(state.payload.historyRows) ? state.payload.historyRows : [])
+          setHistoryRows(Array.isArray(state.payload.historyRows) ? normalizeGaragePaymentHistoryRows(state.payload.historyRows) : [])
         }
       })
       .catch((error: unknown) => {
@@ -3368,13 +3399,34 @@ function PaymentsPrototypePanel({
     }
   }
 
+  async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
+    if (!realGarageIds.has(garage.id)) {
+      return
+    }
+
+    setGaragePaymentHistoryLoadingId(garage.id)
+    try {
+      const page = await financeClient.getOperationsPage(auth.accessToken, {
+        operationKind: 'income',
+        garageId: garage.id,
+        limit: 25,
+      })
+      setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
+    } finally {
+      setGaragePaymentHistoryLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+    }
+  }
+
   function selectGarage(garage: PaymentsPrototypeGarage) {
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
     setGarageRows(createGarageIncomePrototypeRows(garage.number))
-    setHistoryRows(garage.number === '1' ? garagePaymentHistoryRows : [])
+    setHistoryRows(realGarageIds.has(garage.id) ? [] : garage.number === '1' ? garagePaymentHistoryRows : [])
     setPaymentError(null)
     void loadGarageIncomeWorksheet(garage)
+    void loadGaragePaymentHistory(garage)
   }
 
   function handleIncomeWorksheetMonthFromChange(value: string) {
@@ -3460,9 +3512,10 @@ function PaymentsPrototypePanel({
 
       setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, debt: nextDebt } : currentRow))
       setHistoryRows((currentRows) => [
-        { date: formatDateOnly(operation.operationDate), time: paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
+        { id: operation.id, date: formatDateOnly(operation.operationDate), time: formatPaymentPrototypeOperationTime(operation.createdAtUtc) || paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
         ...currentRows,
       ])
+      void loadGaragePaymentHistory(selectedGarage)
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж. Повторите попытку позже.')
     } finally {
@@ -3532,8 +3585,9 @@ function PaymentsPrototypePanel({
       ...operations.map((operation, index) => {
         const plan = paymentPlan[index]
         return {
+          id: operation.id,
           date: formatDateOnly(operation.operationDate),
-          time: paymentTime,
+          time: formatPaymentPrototypeOperationTime(operation.createdAtUtc) || paymentTime,
           amount: operation.amount,
           purpose: operation.incomeTypeName ?? plan.row.service,
           debtAfter: operation.garageDebtAfter ?? Math.max(plan.row.debt - plan.amount, 0),
@@ -3541,6 +3595,8 @@ function PaymentsPrototypePanel({
       }),
       ...currentRows,
     ])
+
+    void loadGaragePaymentHistory(selectedGarage)
 
     return null
   }
@@ -3626,6 +3682,7 @@ function PaymentsPrototypePanel({
 
     setHistoryRows((currentRows) => [
       {
+        id: `debt-transfer-${selectedGarage.id}-${request.sourceMonth}-${request.targetMonth}-${transferDate}-${transferTime}`,
         date: formatDateOnly(transferDate),
         time: transferTime,
         amount: request.amount,
@@ -4079,8 +4136,12 @@ function PaymentsPrototypePanel({
                 </tr>
               </thead>
               <tbody>
-                {historyRows.length > 0 ? historyRows.map((row) => (
-                  <tr key={`${row.date}-${row.time}-${row.purpose}-${row.amount}`}>
+                {garagePaymentHistoryLoadingId === selectedGarage.id ? (
+                  <tr>
+                    <td colSpan={5}>Загружаем историю платежей...</td>
+                  </tr>
+                ) : historyRows.length > 0 ? historyRows.map((row) => (
+                  <tr key={row.id}>
                     <td>{row.date}</td>
                     <td>{row.time}</td>
                     <td>{formatPaymentPrototypeValue(row.amount)}</td>

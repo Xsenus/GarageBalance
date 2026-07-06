@@ -33,6 +33,7 @@ export type FinancialOperationDto = {
   staffMemberId: string | null
   staffMemberName: string | null
   staffDepartmentName: string | null
+  createdAtUtc: string
 }
 
 export type FinanceSummaryDto = {
@@ -57,6 +58,7 @@ export type FinancePageParams = {
   monthFrom?: string
   monthTo?: string
   search?: string
+  garageId?: string
   offset?: number
   limit?: number
 }
@@ -388,6 +390,7 @@ export const financeApi: FinanceClient = {
       dateTo: toMonthEnd(params.monthTo),
       operationKind: params.operationKind,
       search: params.search,
+      garageId: params.garageId,
       offset: params.offset,
       limit: params.limit,
     }))

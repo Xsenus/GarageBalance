@@ -37,7 +37,8 @@ public sealed record FinancialOperationDto(
     bool IsCanceled,
     Guid? StaffMemberId = null,
     string? StaffMemberName = null,
-    string? StaffDepartmentName = null);
+    string? StaffDepartmentName = null,
+    DateTimeOffset CreatedAtUtc = default);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -74,7 +75,8 @@ public sealed record FinancialOperationListRequest(
     string? OperationKind,
     string? Search,
     int? Limit = null,
-    int? Offset = null);
+    int? Offset = null,
+    Guid? GarageId = null);
 
 public sealed record AccrualDto(
     Guid Id,

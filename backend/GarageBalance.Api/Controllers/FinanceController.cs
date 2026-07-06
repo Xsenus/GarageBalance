@@ -33,9 +33,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] string? search,
         [FromQuery] int? offset,
         [FromQuery] int? limit,
+        [FromQuery] Guid? garageId,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetOperationsPageAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit, offset), cancellationToken));
+        return Ok(await financeService.GetOperationsPageAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit, offset, garageId), cancellationToken));
     }
 
     [HttpGet("accruals")]

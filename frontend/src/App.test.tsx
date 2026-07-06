@@ -1687,6 +1687,53 @@ describe('App', () => {
     expect(within(incomeTable).getAllByText('4 674').length).toBeGreaterThan(0)
   })
 
+  it('loads selected garage payment history from finance backend', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => ({
+      items: params?.garageId === 'garage-77'
+        ? [
+          createFinancialOperation({
+            id: 'operation-garage-77',
+            garageId: 'garage-77',
+            garageNumber: '77',
+            ownerName: 'Кузнецова Мария',
+            amount: 1234,
+            incomeTypeName: 'Серверная оплата',
+            garageDebtAfter: 3200,
+            operationDate: '2026-06-19',
+            createdAtUtc: '2026-06-19T10:24:00',
+          }),
+        ]
+        : [],
+      totalCount: params?.garageId === 'garage-77' ? 1 : 0,
+      offset: 0,
+      limit: params?.limit ?? 25,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '77')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ }))
+
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
+      operationKind: 'income',
+      garageId: 'garage-77',
+      limit: 25,
+    })))
+    const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
+    expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
+    expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
+    expect(within(historyTable).getByText('1 234')).toBeInTheDocument()
+    expect(within(historyTable).getByText('3 200')).toBeInTheDocument()
+  })
+
   it('loads expense worksheet from finance backend', async () => {
     const user = userEvent.setup()
     const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
@@ -7682,6 +7729,7 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     staffMemberId: null,
     staffMemberName: null,
     staffDepartmentName: null,
+    createdAtUtc: '2026-06-19T10:24:00Z',
     ...overrides,
   }
 }

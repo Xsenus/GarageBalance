@@ -408,6 +408,37 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetOperationsPageAsync_FiltersIncomeHistoryByGarageId()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
+        var secondGarage = new Garage { Number = "99", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
+        database.Context.Garages.Add(secondGarage);
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 100m, "PKO-garage-1", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(secondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 200m, "PKO-garage-99", null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var page = await service.GetOperationsPageAsync(
+            new FinancialOperationListRequest(null, null, "income", null, 25, 0, fixtures.Garage.Id),
+            CancellationToken.None);
+
+        var operation = Assert.Single(page.Items);
+        Assert.Equal(fixtures.Garage.Id, operation.GarageId);
+        Assert.Equal("PKO-garage-1", operation.DocumentNumber);
+        Assert.NotEqual(default, operation.CreatedAtUtc);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -2171,6 +2171,11 @@ public sealed class FinanceService(
             query = query.Where(operation => operation.OperationKind == kind);
         }
 
+        if (request.GarageId is not null)
+        {
+            query = query.Where(operation => operation.GarageId == request.GarageId);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
@@ -2809,7 +2814,8 @@ public sealed class FinanceService(
             operation.IsCanceled,
             operation.StaffMemberId,
             operation.StaffMember?.FullName,
-            operation.StaffMember?.Department?.Name);
+            operation.StaffMember?.Department?.Name,
+            operation.CreatedAtUtc);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)
