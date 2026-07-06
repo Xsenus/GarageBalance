@@ -629,6 +629,24 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("debt_payment_amount_invalid", "Сумма оплаты входящего долга должна быть больше нуля.");
         }
 
+        var garage = await dbContext.Garages.AsNoTracking().SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для оплаты входящего долга не найден.");
+        }
+
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        var availableOpeningDebt = await CalculateAvailableOpeningDebtAsync(garage, accountingMonth, cancellationToken);
+        if (availableOpeningDebt <= 0)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("debt_payment_opening_debt_not_found", "На начало выбранного периода нет входящего долга для оплаты.");
+        }
+
+        if (amount > availableOpeningDebt)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("debt_payment_amount_exceeds_opening_debt", $"Сумма оплаты входящего долга не может превышать {availableOpeningDebt.ToString("0.00", RussianCulture)}.");
+        }
+
         var incomeType = await GetOrCreateDebtTransferIncomeTypeAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -638,12 +656,40 @@ public sealed class FinanceService(
                 request.GarageId,
                 incomeType.Id,
                 request.OperationDate,
-                request.AccountingMonth,
+                accountingMonth,
                 amount,
                 null,
                 comment is null ? "Оплата входящего долга периода" : $"Оплата входящего долга периода: {comment}"),
             actorUserId,
             cancellationToken);
+    }
+
+    private async Task<decimal> CalculateAvailableOpeningDebtAsync(Garage garage, DateOnly accountingMonth, CancellationToken cancellationToken)
+    {
+        var previousAccrualTotal = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garage.Id &&
+                accrual.AccountingMonth < accountingMonth)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garage.Id &&
+                operation.AccountingMonth < accountingMonth)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+        var alreadyPaidOpeningDebt = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garage.Id &&
+                operation.AccountingMonth == accountingMonth &&
+                operation.IncomeType != null &&
+                (operation.IncomeType.Code == DebtTransferIncomeTypeCode || operation.IncomeType.Name == DebtTransferIncomeTypeName))
+            .SumAsync(operation => operation.Amount, cancellationToken);
+
+        return MoneyMath.RoundMoney(Math.Max(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal - alreadyPaidOpeningDebt, 0m));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

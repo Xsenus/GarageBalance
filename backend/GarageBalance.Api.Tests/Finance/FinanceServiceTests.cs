@@ -502,6 +502,30 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateGarageDebtPaymentAsync_RejectsAmountAboveRemainingOpeningDebt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 900m;
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var firstPayment = await service.CreateGarageDebtPaymentAsync(
+            new CreateGarageDebtPaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 500m, null),
+            null,
+            CancellationToken.None);
+        var secondPayment = await service.CreateGarageDebtPaymentAsync(
+            new CreateGarageDebtPaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 500m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(firstPayment.Succeeded);
+        Assert.False(secondPayment.Succeeded);
+        Assert.Equal("debt_payment_amount_exceeds_opening_debt", secondPayment.ErrorCode);
+        Assert.Equal(1, await database.Context.FinancialOperations.CountAsync(operation => operation.OperationKind == "income"));
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts()
     {
         await using var database = await TestDatabase.CreateAsync();
