@@ -728,9 +728,19 @@ type CancelFinanceTarget = {
   record: FinanceRecord
   reason: string
 }
-type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual'
+type PaymentsPrototypeDialogKey = 'bank' | 'accrual'
 
-const paymentPrototypeRows = [
+type PaymentPrototypeRow = {
+  item: string
+  cost: number | string
+  paid: number | string
+  balance: number | string
+  collected: number | string
+  difference: number | string
+  action: boolean
+}
+
+const paymentPrototypeRows: PaymentPrototypeRow[] = [
   { item: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
   { item: 'Н/о', cost: 4000, paid: 0, balance: '', collected: 15000, difference: 1000, action: true },
   { item: 'Водоснабжение', cost: 32000, paid: 0, balance: '', collected: 29000, difference: -3000, action: true },
@@ -799,6 +809,23 @@ type GarageAccrualPrototypeSubmitRequest = {
   accountingMonth: string
   amount: number
   comment: string
+}
+
+type ExpensePrototypeDialogPreset = {
+  expenseTypeName?: string
+  amount?: number
+  rowIndex?: number
+}
+
+type ExpensePrototypeSubmitRequest = {
+  supplierId: string
+  expenseTypeId: string
+  operationDate: string
+  accountingMonth: string
+  amount: number
+  documentNumber: string
+  comment: string
+  rowIndex?: number
 }
 
 type PaymentsPrototypeSavedState = {
@@ -2207,7 +2234,16 @@ function FinancePanel({
       {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
-      <PaymentsPrototypePanel auth={auth} financeClient={financeClient} formStateClient={formStateClient} garages={garages} incomeTypes={incomeTypes} onOpenDialog={openPaymentsPrototypeDialog} />
+      <PaymentsPrototypePanel
+        auth={auth}
+        expenseTypes={expenseTypes}
+        financeClient={financeClient}
+        formStateClient={formStateClient}
+        garages={garages}
+        incomeTypes={incomeTypes}
+        suppliers={suppliers}
+        onOpenDialog={openPaymentsPrototypeDialog}
+      />
 
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
@@ -2827,7 +2863,6 @@ function FinancePanel({
         </div>
       ) : null}
       {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
-      {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
       {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
@@ -2851,23 +2886,28 @@ function formatPaymentPrototypeMonthLabel(value: string) {
 
 function PaymentsPrototypePanel({
   auth,
+  expenseTypes,
   financeClient,
   formStateClient,
   garages,
   incomeTypes,
+  suppliers,
   onOpenDialog,
 }: {
   auth: AuthResponse
+  expenseTypes: AccountingTypeDto[]
   financeClient: FinanceClient
   formStateClient: FormStateClient
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
+  suppliers: SupplierDto[]
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
+  const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>(() => paymentPrototypeRows.map((row) => ({ ...row })))
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
@@ -2877,6 +2917,8 @@ function PaymentsPrototypePanel({
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [expenseDialogPreset, setExpenseDialogPreset] = useState<ExpensePrototypeDialogPreset | null>(null)
+  const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
@@ -2996,6 +3038,23 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       garageAccrualTriggerRef.current = null
+    }, 0)
+  }
+
+  function openExpenseDialog(event: MouseEvent<HTMLButtonElement>, preset?: ExpensePrototypeDialogPreset) {
+    expenseTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setExpenseDialogPreset(preset ?? {})
+  }
+
+  function closeExpenseDialog() {
+    const trigger = expenseTriggerRef.current
+    setExpenseDialogPreset(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      expenseTriggerRef.current = null
     }, 0)
   }
 
@@ -3201,6 +3260,43 @@ function PaymentsPrototypePanel({
         },
       ]
     })
+
+    return null
+  }
+
+  async function commitExpensePayment(request: ExpensePrototypeSubmitRequest) {
+    const supplier = suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
+    if (!supplier) {
+      return 'Выберите поставщика из справочника.'
+    }
+
+    const expenseType = expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived) ?? null
+    if (!expenseType) {
+      return 'Выберите вид выплаты из справочника.'
+    }
+
+    const operation = await financeClient.createExpense(auth.accessToken, {
+      supplierId: supplier.id,
+      expenseTypeId: expenseType.id,
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      documentNumber: request.documentNumber.trim() || undefined,
+      comment: request.comment.trim() || undefined,
+    })
+
+    setExpenseRows((currentRows) => currentRows.map((row, index) => {
+      const shouldUpdate = request.rowIndex === index
+        || (request.rowIndex === undefined && row.item.trim().toLocaleLowerCase('ru-RU') === (operation.expenseTypeName ?? expenseType.name).trim().toLocaleLowerCase('ru-RU'))
+      if (!shouldUpdate) {
+        return row
+      }
+
+      const paid = typeof row.paid === 'number' ? row.paid + operation.amount : operation.amount
+      const cost = typeof row.cost === 'number' ? row.cost : operation.amount
+      const balance = Math.max(cost - paid, 0)
+      return { ...row, paid, balance }
+    }))
 
     return null
   }
@@ -3436,7 +3532,7 @@ function PaymentsPrototypePanel({
               <Plus size={16} aria-hidden="true" />
               <span>Добавить начисление</span>
             </button>
-            <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')}>
+            <button className="secondary-button" type="button" onClick={(event) => openExpenseDialog(event)}>
               <Plus size={16} aria-hidden="true" />
               <span>Добавить выплату</span>
             </button>
@@ -3468,7 +3564,7 @@ function PaymentsPrototypePanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {paymentPrototypeRows.map((row, index) => {
+                  {expenseRows.map((row, index) => {
                     const supplier = index < 5 ? '' : ['Иванов', 'Петрова', 'Сидоров', '', '', ''][index - 5] ?? ''
                     return (
                       <tr key={`${row.item}-${index}`}>
@@ -3489,7 +3585,7 @@ function PaymentsPrototypePanel({
                         </td>
                         <td>
                           {row.action && row.item !== 'Авансовые выплаты' && row.item !== 'Выплата без чека' ? (
-                            <button className="link-button" type="button" onClick={(event) => openDialogFromButton(event, 'expense')} aria-label={`Оплатить ${row.item}`}>
+                            <button className="link-button" type="button" onClick={(event) => openExpenseDialog(event, { expenseTypeName: row.item, amount: typeof row.balance === 'number' && row.balance > 0 ? row.balance : typeof row.cost === 'number' ? row.cost : undefined, rowIndex: index })} aria-label={`Оплатить ${row.item}`}>
                               Оплатить
                             </button>
                           ) : null}
@@ -3545,6 +3641,15 @@ function PaymentsPrototypePanel({
           onSubmit={commitGarageAccrual}
         />
       ) : null}
+      {expenseDialogPreset ? (
+        <NewExpensePrototypeDialog
+          expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
+          preset={expenseDialogPreset}
+          suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
+          onClose={closeExpenseDialog}
+          onSubmit={commitExpensePayment}
+        />
+      ) : null}
     </section>
   )
 }
@@ -3588,10 +3693,83 @@ function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
+function NewExpensePrototypeDialog({
+  expenseTypes,
+  preset,
+  suppliers,
+  onClose,
+  onSubmit,
+}: {
+  expenseTypes: AccountingTypeDto[]
+  preset: ExpensePrototypeDialogPreset
+  suppliers: SupplierDto[]
+  onClose: () => void
+  onSubmit: (request: ExpensePrototypeSubmitRequest) => Promise<string | null>
+}) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const presetExpenseType = preset.expenseTypeName
+    ? expenseTypes.find((expenseType) => expenseType.name.trim().toLocaleLowerCase('ru-RU') === preset.expenseTypeName?.trim().toLocaleLowerCase('ru-RU'))
+    : null
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
+  const [expenseTypeId, setExpenseTypeId] = useState(presetExpenseType?.id ?? expenseTypes[0]?.id ?? '')
+  const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
+  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
+  const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '')
+  const [documentNumber, setDocumentNumber] = useState('')
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!supplierId) {
+      setError('Выберите поставщика из справочника.')
+      return
+    }
+    if (!expenseTypeId) {
+      setError('Выберите вид выплаты из справочника.')
+      return
+    }
+    if (!operationDate) {
+      setError('Укажите дату выплаты.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError('Укажите месяц выплаты.')
+      return
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму выплаты больше нуля.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        supplierId,
+        expenseTypeId,
+        operationDate,
+        accountingMonth: `${accountingMonth}-01`,
+        amount: parsedAmount,
+        documentNumber,
+        comment,
+        rowIndex: preset.rowIndex,
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось провести выплату. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3604,31 +3782,55 @@ function NewExpensePrototypeDialog({ onClose }: { onClose: () => void }) {
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onClose()
-        }}>
-          <FormField label="Тип выплаты">
-            <select aria-label="Тип выплаты" defaultValue="advance">
-              <option value="advance">Авансовая выплата</option>
-              <option value="no-receipt">Выплата без чека</option>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Поставщик">
+            <select aria-label="Поставщик выплаты" value={supplierId} onChange={(event) => {
+              setSupplierId(event.target.value)
+              setError(null)
+            }}>
+              {suppliers.length > 0 ? suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+              )) : <option value="">Нет поставщиков</option>}
+            </select>
+          </FormField>
+          <FormField label="Вид выплаты">
+            <select aria-label="Вид выплаты" value={expenseTypeId} onChange={(event) => {
+              setExpenseTypeId(event.target.value)
+              setError(null)
+            }}>
+              {expenseTypes.length > 0 ? expenseTypes.map((expenseType) => (
+                <option key={expenseType.id} value={expenseType.id}>{expenseType.name}</option>
+              )) : <option value="">Нет видов выплат</option>}
             </select>
           </FormField>
           <FormField label="Дата">
-            <input aria-label="Дата выплаты" type="date" />
+            <input aria-label="Дата выплаты" type="date" value={operationDate} onChange={(event) => {
+              setOperationDate(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Месяц">
+            <input aria-label="Месяц выплаты" type="month" value={accountingMonth} onChange={(event) => {
+              setAccountingMonth(event.target.value)
+              setError(null)
+            }} />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма выплаты" inputMode="decimal" />
+            <input aria-label="Сумма выплаты" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} />
           </FormField>
-          <FormField label="Назначение">
-            <input aria-label="Назначение выплаты" />
+          <FormField label="Документ">
+            <input aria-label="Документ выплаты" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к выплате" rows={4} />
+            <textarea aria-label="Комментарий к выплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
+          {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit">Провести</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>

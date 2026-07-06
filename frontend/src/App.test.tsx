@@ -20,7 +20,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1045,6 +1045,7 @@ describe('App', () => {
     const incomeTypes = [incomeType, waterIncomeType]
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateAccrualRequest[] = []
+    const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
       getIncomeTypes: async () => incomeTypes,
@@ -1081,6 +1082,24 @@ describe('App', () => {
           amount: request.amount,
           source: request.source,
           comment: request.comment ?? null,
+        })
+      },
+      createExpense: async (_token, request) => {
+        savedExpenseRequests.push(request)
+        return createFinancialOperation({
+          id: `expense-payment-${savedExpenseRequests.length}`,
+          operationKind: 'expense',
+          supplierId: request.supplierId,
+          supplierName: 'Водоканал',
+          expenseTypeId: request.expenseTypeId,
+          expenseTypeName: 'Электроэнергия',
+          operationDate: request.operationDate,
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          documentNumber: request.documentNumber ?? null,
+          comment: request.comment ?? null,
+          supplierDebtBefore: 39000,
+          supplierDebtAfter: 37800,
         })
       },
     })
@@ -1173,10 +1192,25 @@ describe('App', () => {
     const addExpenseButton = within(prototype).getByRole('button', { name: 'Добавить выплату' })
     await user.click(addExpenseButton)
     const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
-    expect(within(expenseDialog).getByLabelText('Тип выплаты')).toHaveValue('advance')
-    const expenseCancelButton = within(expenseDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(expenseCancelButton).toHaveFocus())
-    await user.click(expenseCancelButton)
+    expect(within(expenseDialog).getByLabelText('Поставщик выплаты')).toHaveValue('supplier-1')
+    expect(within(expenseDialog).getByLabelText('Вид выплаты')).toHaveValue('expense-type-1')
+    expect(within(expenseDialog).getByLabelText('Дата выплаты')).toHaveValue('2026-06-30')
+    expect(within(expenseDialog).getByLabelText('Месяц выплаты')).toHaveValue('2026-06')
+    await user.type(within(expenseDialog).getByLabelText('Сумма выплаты'), '1200')
+    await user.type(within(expenseDialog).getByLabelText('Документ выплаты'), 'RKO-prototype')
+    await user.type(within(expenseDialog).getByLabelText('Комментарий к выплате'), 'Оплата из формы выплат')
+    await user.click(within(expenseDialog).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(savedExpenseRequests).toHaveLength(1))
+    expect(savedExpenseRequests[0]).toMatchObject({
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      operationDate: '2026-06-30',
+      accountingMonth: '2026-06-01',
+      amount: 1200,
+      documentNumber: 'RKO-prototype',
+      comment: 'Оплата из формы выплат',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(addExpenseButton).toHaveFocus())
 
     const addAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление' })
