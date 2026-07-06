@@ -281,7 +281,7 @@ function createOwner(overrides: Partial<OwnerDto> = {}): OwnerDto {
 }
 
 function createGarage(overrides: Partial<GarageDto> = {}): GarageDto {
-  return {
+  const garage = {
     id: 'garage-1',
     number: '42',
     peopleCount: 1,
@@ -289,11 +289,19 @@ function createGarage(overrides: Partial<GarageDto> = {}): GarageDto {
     ownerId: null,
     ownerName: null,
     startingBalance: 0,
+    balance: 0,
+    overdueDebt: 0,
     initialWaterMeterValue: null,
     initialElectricityMeterValue: null,
     comment: null,
     isArchived: false,
     ...overrides,
+  }
+
+  return {
+    ...garage,
+    balance: overrides.balance ?? garage.startingBalance,
+    overdueDebt: overrides.overdueDebt ?? Math.max(garage.startingBalance, 0),
   }
 }
 

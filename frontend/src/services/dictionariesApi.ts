@@ -23,6 +23,8 @@ export type GarageDto = {
   initialElectricityMeterValue: number | null
   comment: string | null
   isArchived: boolean
+  balance: number
+  overdueDebt: number
 }
 
 export type SupplierGroupDto = {

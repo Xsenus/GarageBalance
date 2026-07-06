@@ -234,11 +234,11 @@ public sealed class DictionaryService(
             var sqliteGarages = await query
                 .OrderBy(garage => garage.Number)
                 .ToListAsync(cancellationToken);
-            return sqliteGarages
+            var matchedGarages = sqliteGarages
                 .Where(garage => GarageMatchesSearch(garage, searchValue))
                 .Take(normalizedLimit)
-                .Select(garage => ToGarageDto(garage))
                 .ToList();
+            return await ToGarageDtosWithBalancesAsync(matchedGarages, cancellationToken);
         }
 
         if (normalizedSearch is not null)
@@ -256,7 +256,7 @@ public sealed class DictionaryService(
             .OrderBy(garage => garage.Number)
             .Take(normalizedLimit)
             .ToListAsync(cancellationToken);
-        return garages.Select(garage => ToGarageDto(garage)).ToList();
+        return await ToGarageDtosWithBalancesAsync(garages, cancellationToken);
     }
 
     public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
@@ -276,9 +276,8 @@ public sealed class DictionaryService(
             var items = filteredGarages
                 .Skip(normalizedOffset)
                 .Take(normalizedLimit)
-                .Select(garage => ToGarageDto(garage))
                 .ToList();
-            return new PagedResult<GarageDto>(items, filteredGarages.Count, normalizedOffset, normalizedLimit);
+            return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(items, cancellationToken), filteredGarages.Count, normalizedOffset, normalizedLimit);
         }
 
         if (normalizedSearch is not null)
@@ -298,7 +297,49 @@ public sealed class DictionaryService(
             .Skip(normalizedOffset)
             .Take(normalizedLimit)
             .ToListAsync(cancellationToken);
-        return new PagedResult<GarageDto>(garages.Select(garage => ToGarageDto(garage)).ToList(), totalCount, normalizedOffset, normalizedLimit);
+        return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(garages, cancellationToken), totalCount, normalizedOffset, normalizedLimit);
+    }
+
+    private async Task<GarageDto> ToGarageDtoWithBalanceAsync(Garage garage, CancellationToken cancellationToken)
+    {
+        return (await ToGarageDtosWithBalancesAsync([garage], cancellationToken))[0];
+    }
+
+    private async Task<IReadOnlyList<GarageDto>> ToGarageDtosWithBalancesAsync(IReadOnlyList<Garage> garages, CancellationToken cancellationToken)
+    {
+        if (garages.Count == 0)
+        {
+            return [];
+        }
+
+        var garageIds = garages.Select(garage => garage.Id).ToArray();
+        var accrualTotals = await dbContext.Accruals
+            .AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && garageIds.Contains(accrual.GarageId))
+            .GroupBy(accrual => accrual.GarageId)
+            .Select(group => new { GarageId = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
+        var incomeTotals = await dbContext.FinancialOperations
+            .AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId.HasValue &&
+                garageIds.Contains(operation.GarageId.Value))
+            .GroupBy(operation => operation.GarageId!.Value)
+            .Select(group => new { GarageId = group.Key, Amount = group.Sum(operation => operation.Amount) })
+            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
+
+        return garages
+            .Select(garage =>
+            {
+                var balance = garage.StartingBalance +
+                    accrualTotals.GetValueOrDefault(garage.Id) -
+                    incomeTotals.GetValueOrDefault(garage.Id);
+                balance = Math.Round(balance, 2, MidpointRounding.AwayFromZero);
+                return ToGarageDto(garage, balance, Math.Max(balance, 0m));
+            })
+            .ToList();
     }
 
     private static bool GarageMatchesSearch(Garage garage, string normalizedSearch)
@@ -342,7 +383,7 @@ public sealed class DictionaryService(
         dbContext.Garages.Add(garage);
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
         await dbContext.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+        return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
     public async Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -371,7 +412,7 @@ public sealed class DictionaryService(
         var comment = NormalizeOptional(request.Comment);
         if (GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, initialWaterMeterValue, initialElectricityMeterValue, comment))
         {
-            return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+            return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
         }
 
         var oldValues = new Dictionary<string, object?>
@@ -410,7 +451,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", oldValues: oldValues, newValues: newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+        return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
     public async Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
@@ -431,7 +472,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.garage_archived", "garage", garage.Id, $"Архивирован гараж N {garage.Number}.", archiveReason);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+        return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
     public async Task<DictionaryResult<GarageDto>> RestoreGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -452,7 +493,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.garage_restored", "garage", garage.Id, $"Восстановлен гараж N {garage.Number}.");
         await dbContext.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<GarageDto>.Success(ToGarageDto(garage));
+        return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
     public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -2283,8 +2324,9 @@ public sealed class DictionaryService(
         };
     }
 
-    private static GarageDto ToGarageDto(Garage garage)
+    private static GarageDto ToGarageDto(Garage garage, decimal? balance = null, decimal? overdueDebt = null)
     {
+        var calculatedBalance = balance ?? garage.StartingBalance;
         return new GarageDto(
             garage.Id,
             garage.Number,
@@ -2296,7 +2338,9 @@ public sealed class DictionaryService(
             garage.InitialWaterMeterValue,
             garage.InitialElectricityMeterValue,
             garage.Comment,
-            garage.IsArchived);
+            garage.IsArchived,
+            calculatedBalance,
+            overdueDebt ?? Math.Max(calculatedBalance, 0m));
     }
 
     private static SupplierDto ToSupplierDto(Supplier supplier)

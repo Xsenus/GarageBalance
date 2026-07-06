@@ -549,19 +549,40 @@ describe('App', () => {
       address: 'ГСК, ряд 1',
     })
     const contractorGarage = createGarage({
-      id: 'garage-contractors-1',
+      id: '11111111-1111-4111-8111-111111111111',
       number: '1',
       ownerId: contractorOwner.id,
       ownerName: contractorOwner.fullName,
       peopleCount: 3,
       floorCount: 1,
-      startingBalance: 5300,
+      startingBalance: 100,
+      balance: 5300,
+      overdueDebt: 1300,
       initialWaterMeterValue: 59,
       initialElectricityMeterValue: 49,
     })
+    let savedGarageStartingBalance: number | null = null
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
+      updateGarage: async (_token, id, request) => {
+        savedGarageStartingBalance = request.startingBalance
+        return createGarage({
+          ...contractorGarage,
+          id,
+          number: request.number,
+          peopleCount: request.peopleCount,
+          floorCount: request.floorCount,
+          ownerId: request.ownerId,
+          ownerName: 'Новый владелец',
+          startingBalance: request.startingBalance,
+          balance: 5300,
+          overdueDebt: 1300,
+          initialWaterMeterValue: request.initialWaterMeterValue ?? null,
+          initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
+          comment: request.comment ?? null,
+        })
+      },
     })
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -579,12 +600,15 @@ describe('App', () => {
     expect(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('columnheader', { name: 'Просроченная задолженность' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('1 300 руб.')).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
 
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 1' }))
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
     expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveAttribute('readonly')
+    expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveValue('5\u00A0300')
     expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveAttribute('readonly')
+    expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveValue('1\u00A0300 руб.')
     expect(within(garageDialog).getByLabelText('Стартовое значение счетчика воды')).toBeInTheDocument()
     expect(within(garageDialog).getByLabelText('Стартовое значение счетчика электричества')).toBeInTheDocument()
     expect(within(garageDialog).queryByLabelText('Счетчики гаража')).not.toBeInTheDocument()
@@ -605,6 +629,7 @@ describe('App', () => {
     const reopenedGarageChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения гаража' })
     await user.click(within(reopenedGarageChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
+    expect(savedGarageStartingBalance).toBe(100)
 
     const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
     const garageRow = within(garagesTable).getByText('Новый владелец').closest('[role="row"]')!
@@ -6065,6 +6090,8 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
         ownerId: garageOwner?.id ?? null,
         ownerName: garageOwner?.fullName ?? null,
         startingBalance: request.startingBalance,
+        balance: request.startingBalance,
+        overdueDebt: Math.max(request.startingBalance, 0),
         initialWaterMeterValue: request.initialWaterMeterValue ?? null,
         initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
         comment: request.comment ?? null,
@@ -6082,6 +6109,8 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
         ownerId: garageOwner?.id ?? null,
         ownerName: garageOwner?.fullName ?? null,
         startingBalance: request.startingBalance,
+        balance: request.startingBalance,
+        overdueDebt: Math.max(request.startingBalance, 0),
         initialWaterMeterValue: request.initialWaterMeterValue ?? null,
         initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
         comment: request.comment ?? null,
@@ -6867,6 +6896,8 @@ function createStatefulDictionaryClient(): DictionaryClient {
         ownerId: owner?.id ?? null,
         ownerName: owner?.fullName ?? null,
         startingBalance: request.startingBalance,
+        balance: request.startingBalance,
+        overdueDebt: Math.max(request.startingBalance, 0),
         initialWaterMeterValue: request.initialWaterMeterValue ?? null,
         initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
         comment: request.comment ?? null,
@@ -6884,6 +6915,8 @@ function createStatefulDictionaryClient(): DictionaryClient {
         ownerId: owner?.id ?? null,
         ownerName: owner?.fullName ?? null,
         startingBalance: request.startingBalance,
+        balance: request.startingBalance,
+        overdueDebt: Math.max(request.startingBalance, 0),
         initialWaterMeterValue: request.initialWaterMeterValue ?? null,
         initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
         comment: request.comment ?? null,
@@ -7227,7 +7260,7 @@ function createOwner(overrides: Partial<OwnerDto>): OwnerDto {
 }
 
 function createGarage(overrides: Partial<GarageDto>): GarageDto {
-  return {
+  const garage = {
     id: 'garage',
     number: '1',
     peopleCount: 1,
@@ -7235,11 +7268,19 @@ function createGarage(overrides: Partial<GarageDto>): GarageDto {
     ownerId: null,
     ownerName: null,
     startingBalance: 0,
+    balance: 0,
+    overdueDebt: 0,
     initialWaterMeterValue: null,
     initialElectricityMeterValue: null,
     comment: null,
     isArchived: false,
     ...overrides,
+  }
+
+  return {
+    ...garage,
+    balance: overrides.balance ?? garage.startingBalance,
+    overdueDebt: overrides.overdueDebt ?? Math.max(garage.startingBalance, 0),
   }
 }
 

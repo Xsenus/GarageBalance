@@ -480,6 +480,82 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetGaragesAsync_ReturnsCalculatedBalanceAndOverdueDebt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Electricity", "electricity"), null, CancellationToken.None);
+        var debtGarage = await service.CreateGarageAsync(new UpsertGarageRequest("BAL-1", 1, 1, null, 100m, null, null, null), null, CancellationToken.None);
+        var overpaidGarage = await service.CreateGarageAsync(new UpsertGarageRequest("BAL-2", 1, 1, null, 0m, null, null, null), null, CancellationToken.None);
+
+        database.Context.Accruals.AddRange(
+            new Accrual
+            {
+                GarageId = debtGarage.Value!.Id,
+                IncomeTypeId = incomeType.Value!.Id,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 500m,
+                Source = AccrualSources.Manual
+            },
+            new Accrual
+            {
+                GarageId = debtGarage.Value.Id,
+                IncomeTypeId = incomeType.Value.Id,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 999m,
+                Source = AccrualSources.Manual,
+                IsCanceled = true
+            },
+            new Accrual
+            {
+                GarageId = overpaidGarage.Value!.Id,
+                IncomeTypeId = incomeType.Value.Id,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 50m,
+                Source = AccrualSources.Manual
+            });
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                GarageId = debtGarage.Value.Id,
+                IncomeTypeId = incomeType.Value.Id,
+                OperationDate = new DateOnly(2026, 7, 15),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 250m
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                GarageId = debtGarage.Value.Id,
+                IncomeTypeId = incomeType.Value.Id,
+                OperationDate = new DateOnly(2026, 7, 16),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 999m,
+                IsCanceled = true
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                GarageId = overpaidGarage.Value.Id,
+                IncomeTypeId = incomeType.Value.Id,
+                OperationDate = new DateOnly(2026, 7, 15),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 75m
+            });
+        await database.Context.SaveChangesAsync();
+
+        var garages = await service.GetGaragesAsync("BAL", CancellationToken.None);
+
+        var debt = Assert.Single(garages, garage => garage.Number == "BAL-1");
+        Assert.Equal(350m, debt.Balance);
+        Assert.Equal(350m, debt.OverdueDebt);
+        var overpaid = Assert.Single(garages, garage => garage.Number == "BAL-2");
+        Assert.Equal(-25m, overpaid.Balance);
+        Assert.Equal(0m, overpaid.OverdueDebt);
+    }
+
+    [Fact]
     public async Task CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner()
     {
         await using var database = await TestDatabase.CreateAsync();

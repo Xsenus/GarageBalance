@@ -40,7 +40,9 @@ public sealed record GarageDto(
     decimal? InitialWaterMeterValue,
     decimal? InitialElectricityMeterValue,
     string? Comment,
-    bool IsArchived);
+    bool IsArchived,
+    decimal Balance = 0,
+    decimal OverdueDebt = 0);
 
 public sealed record UpsertGarageRequest(
     [Required, MaxLength(80)] string Number,

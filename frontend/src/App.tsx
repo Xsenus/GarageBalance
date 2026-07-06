@@ -1649,6 +1649,8 @@ function FinancePanel({
               peopleCount: 0,
               floorCount: 0,
               startingBalance: 0,
+              balance: 0,
+              overdueDebt: 0,
               initialWaterMeterValue: null,
               initialElectricityMeterValue: null,
               comment: null,
@@ -3022,8 +3024,8 @@ function PaymentsPrototypePanel({
           phone: prototypeGarage?.phone ?? '',
           peopleCount: garage.peopleCount,
           floorCount: garage.floorCount,
-          balance: garage.startingBalance,
-          overdueDebt: prototypeGarage?.overdueDebt ?? 0,
+          balance: garage.balance,
+          overdueDebt: garage.overdueDebt,
         }
       })
     const loadedNumbers = new Set(loadedGarages.map((garage) => garage.number))
@@ -7760,6 +7762,7 @@ type ContractorGarageRow = {
   owner: string
   phone: string
   address: string
+  startingBalance?: string
   balance: string
   overdueDebt: string
   initialWater: string
@@ -7821,9 +7824,9 @@ type ContractorRestoreTarget =
   | { type: 'employee'; item: ContractorStaffRow }
 
 const contractorGarageRows: ContractorGarageRow[] = [
-  { id: 'garage-1', ownerId: null, number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
-  { id: 'garage-12', ownerId: null, number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
-  { id: 'garage-27', ownerId: null, number: '27', peopleCount: '2', floorCount: '1', owner: 'Сидорова Анна', phone: '+7 900 000-00-27', address: 'ГСК, ряд 4', balance: '1700', overdueDebt: '1700 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-1', ownerId: null, number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', startingBalance: '5300', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-12', ownerId: null, number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', startingBalance: '0', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
+  { id: 'garage-27', ownerId: null, number: '27', peopleCount: '2', floorCount: '1', owner: 'Сидорова Анна', phone: '+7 900 000-00-27', address: 'ГСК, ряд 4', startingBalance: '1700', balance: '1700', overdueDebt: '1700 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
 ]
 
 const contractorSupplierRows: ContractorSupplierRow[] = [
@@ -7960,7 +7963,8 @@ function createOwnerRequestFromGarage(row: ContractorGarageRow): UpsertOwnerRequ
 
 function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): ContractorGarageRow {
   const owner = garage.ownerId ? owners.find((item) => item.id === garage.ownerId) : null
-  const startingBalance = garage.startingBalance ?? 0
+  const balance = garage.balance ?? garage.startingBalance ?? 0
+  const overdueDebt = garage.overdueDebt ?? Math.max(balance, 0)
 
   return {
     id: garage.id,
@@ -7971,8 +7975,9 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
     owner: garage.ownerName ?? owner?.fullName ?? '',
     phone: owner?.phone ?? '',
     address: owner?.address ?? '',
-    balance: formatPrototypeMoney(startingBalance),
-    overdueDebt: startingBalance < 0 ? `${formatPrototypeMoney(Math.abs(startingBalance))} руб.` : '',
+    startingBalance: formatPrototypeMoney(garage.startingBalance),
+    balance: formatPrototypeMoney(balance),
+    overdueDebt: overdueDebt > 0 ? `${formatPrototypeMoney(overdueDebt)} руб.` : '',
     initialWater: formatPrototypeNumber(garage.initialWaterMeterValue),
     initialElectricity: formatPrototypeNumber(garage.initialElectricityMeterValue),
     meters: owner?.meterNotes ?? '',
@@ -7987,7 +7992,7 @@ function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | 
     peopleCount: parsePrototypeInteger(row.peopleCount, 0),
     floorCount: parsePrototypeInteger(row.floorCount, 0),
     ownerId,
-    startingBalance: parsePrototypeMoney(row.balance),
+    startingBalance: parsePrototypeMoney(row.startingBalance ?? row.balance),
     initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
     initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
     comment: row.comment.trim(),
@@ -9176,6 +9181,7 @@ function createEmptyGaragePrototype(): ContractorGarageRow {
     owner: '',
     phone: '',
     address: '',
+    startingBalance: '',
     balance: '',
     overdueDebt: '',
     initialWater: '',
