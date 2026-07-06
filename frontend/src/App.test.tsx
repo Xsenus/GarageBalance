@@ -936,12 +936,29 @@ describe('App', () => {
   it('creates a charge service setting from tariffs screen and renders saved rows', async () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
+    let updatedServiceRequest: unknown = null
     const dictionaryClient = createDictionaryClient({
       getChargeServiceSettings: async () => [],
       createChargeServiceSetting: async (_token, request) => {
         createdServiceRequest = request
         return createChargeServiceSetting({
           id: 'service-security',
+          name: request.name,
+          isRegular: request.isRegular,
+          periodicityMonths: request.periodicityMonths ?? null,
+          accrualStartMonth: request.accrualStartMonth ?? null,
+          paymentDueDay: request.paymentDueDay ?? null,
+          paymentDueMonth: request.paymentDueMonth ?? null,
+          overdueGraceDays: request.overdueGraceDays,
+          isMetered: request.isMetered,
+          hasTieredTariff: request.hasTieredTariff,
+          unitName: request.unitName ?? null,
+        })
+      },
+      updateChargeServiceSetting: async (_token, id, request) => {
+        updatedServiceRequest = request
+        return createChargeServiceSetting({
+          id,
           name: request.name,
           isRegular: request.isRegular,
           periodicityMonths: request.periodicityMonths ?? null,
@@ -987,7 +1004,29 @@ describe('App', () => {
       unitName: 'руб.',
     }))
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
+    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('12')
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
+
+    await user.clear(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение'))
+    await user.type(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение'), '6')
+    await user.keyboard('{Enter}')
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    expect(within(confirmationDialog).getByText('Периодичность')).toBeInTheDocument()
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updatedServiceRequest).toMatchObject({
+      name: 'Охрана',
+      isRegular: true,
+      periodicityMonths: 6,
+      accrualStartMonth: 1,
+      paymentDueDay: 28,
+      paymentDueMonth: 2,
+      overdueGraceDays: 30,
+      isMetered: true,
+      hasTieredTariff: true,
+      unitName: 'руб.',
+    }))
+    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('6')
   })
 
   it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {
@@ -1064,6 +1103,7 @@ describe('App', () => {
     await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125'))
     expect(within(tariffsPanel).queryByText('Старый сбор')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Периодичность: значение')).toHaveValue('12')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveValue('дек')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')

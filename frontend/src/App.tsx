@@ -7691,7 +7691,7 @@ type ContractorTariffRow = {
   id: string
   backendTariffId?: string
   backendServiceSettingId?: string
-  serviceSettingKind?: 'main' | 'start-date' | 'due-date' | 'overdue-days'
+  serviceSettingKind?: 'main' | 'periodicity' | 'start-date' | 'due-date' | 'overdue-days'
   title: string
   amount?: string
   dateDay?: string
@@ -10054,6 +10054,17 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
   if (setting.isRegular) {
     rows.push(
       {
+        id: `charge-service-${setting.id}-periodicity`,
+        backendServiceSettingId: setting.id,
+        serviceSettingKind: 'periodicity',
+        category: setting.name,
+        title: 'Периодичность',
+        amount: String(setting.periodicityMonths ?? 12),
+        unit: 'мес.',
+        byMeter: setting.isMetered,
+        tiered: setting.hasTieredTariff,
+      },
+      {
         id: `charge-service-${setting.id}-due-date`,
         backendServiceSettingId: setting.id,
         serviceSettingKind: 'due-date',
@@ -10183,6 +10194,26 @@ type TariffPrototypePendingChange =
 
 function formatPrototypeChangeValue(value: string) {
   return value.trim() || 'Пусто'
+}
+
+function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') {
+  if (field === 'title') {
+    return 'Наименование порога'
+  }
+
+  if (field === 'unit') {
+    return 'Единица'
+  }
+
+  if (row.serviceSettingKind === 'periodicity') {
+    return 'Периодичность'
+  }
+
+  if (row.serviceSettingKind === 'overdue-days') {
+    return 'Перенос долга в просроченный'
+  }
+
+  return 'Значение'
 }
 
 type TariffsPrototypeSavedState = {
@@ -10411,6 +10442,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
   function buildChargeServiceRequest(setting: ChargeServiceSettingDto, nextRows: ContractorTariffRow[]): UpsertChargeServiceSettingRequest {
     const relatedRows = nextRows.filter((item) => item.backendServiceSettingId === setting.id)
     const mainRow = relatedRows.find((item) => item.serviceSettingKind === 'main') ?? relatedRows[0]
+    const periodicityRow = relatedRows.find((item) => item.serviceSettingKind === 'periodicity')
     const startRow = relatedRows.find((item) => item.serviceSettingKind === 'start-date')
     const dueRow = relatedRows.find((item) => item.serviceSettingKind === 'due-date')
     const overdueRow = relatedRows.find((item) => item.serviceSettingKind === 'overdue-days')
@@ -10418,6 +10450,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
     const dueDay = dueRow?.dateDay ? Number(dueRow.dateDay) : setting.paymentDueDay
     const dueMonth = dueRow?.dateMonth ? getContractorTariffMonthNumber(dueRow.dateMonth) : setting.paymentDueMonth
     const startMonth = startRow?.dateMonth ? getContractorTariffMonthNumber(startRow.dateMonth) : setting.accrualStartMonth
+    const periodicityMonths = parsePrototypeAmount(periodicityRow?.amount ?? '') ?? setting.periodicityMonths ?? 12
     const overdueGraceDays = parsePrototypeAmount(overdueRow?.amount ?? '') ?? setting.overdueGraceDays
     const isMetered = mainRow?.byMeter ?? setting.isMetered
     const hasTieredTariff = isMetered ? (mainRow?.tiered ?? setting.hasTieredTariff) : false
@@ -10425,7 +10458,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
     return {
       name: (mainRow?.title ?? setting.name).trim() || setting.name,
       isRegular,
-      periodicityMonths: isRegular ? setting.periodicityMonths ?? 12 : null,
+      periodicityMonths: isRegular ? Math.trunc(periodicityMonths) : null,
       accrualStartMonth: isRegular ? startMonth ?? 1 : null,
       paymentDueDay: isRegular ? dueDay ?? 1 : null,
       paymentDueMonth: isRegular ? dueMonth ?? 1 : null,
@@ -10664,7 +10697,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
       rowId: row.id,
       field,
       objectName: `${row.category}: ${row.title}`,
-      fieldLabel: field === 'title' ? 'Наименование порога' : field === 'amount' ? 'Значение' : 'Единица',
+      fieldLabel: getTariffTextFieldLabel(row, field),
       previousValue,
       nextValue,
     })
