@@ -553,6 +553,93 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task SupplierContactAsync_SavesContactAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null),
+            null,
+            CancellationToken.None);
+
+        var created = await service.CreateSupplierContactAsync(
+            new UpsertSupplierContactRequest(supplier.Value!.Id, " Петров И.А. ", " Директор ", " +7 ", "contact@example.com", "Работает", " Основной "),
+            actorUserId,
+            CancellationToken.None);
+        var updated = await service.UpdateSupplierContactAsync(
+            created.Value!.Id,
+            new UpsertSupplierContactRequest(supplier.Value.Id, "Петров И.А.", "Менеджер", "+7", "contact@example.com", "Не работает", "Уволен"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal("Петров И.А.", created.Value.FullName);
+        Assert.True(updated.Succeeded);
+        Assert.Equal("Менеджер", updated.Value!.Position);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_contact_created" && item.ActorUserId == actorUserId);
+        var updateAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_contact_updated");
+        Assert.Equal(actorUserId, updateAudit.ActorUserId);
+        Assert.Equal(created.Value.Id.ToString(), updateAudit.EntityId);
+        Assert.Contains("Обновлен контакт Петров И.А.", updateAudit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreSupplierContactAsync_RestoresSupplierAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null),
+            null,
+            CancellationToken.None);
+        var contact = await service.CreateSupplierContactAsync(
+            new UpsertSupplierContactRequest(supplier.Value!.Id, "Петров", null, null, null, "Работает", null),
+            null,
+            CancellationToken.None);
+        await service.ArchiveSupplierContactAsync(contact.Value!.Id, "Контакт временно не нужен", actorUserId, CancellationToken.None);
+        await service.ArchiveSupplierAsync(supplier.Value.Id, "Поставщик временно скрыт", actorUserId, CancellationToken.None);
+
+        var restored = await service.RestoreSupplierContactAsync(contact.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(restored.Succeeded);
+        Assert.False(restored.Value!.IsArchived);
+        Assert.False((await database.Context.Suppliers.FindAsync(new object[] { supplier.Value.Id }, CancellationToken.None))!.IsArchived);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_restored" && item.Summary.Contains("при восстановлении контакта", StringComparison.Ordinal));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_contact_restored" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task StaffDepartmentAndMemberAsync_WriteAuditAndBlockUsedDepartmentArchive()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Бухгалтерия"), actorUserId, CancellationToken.None);
+        var member = await service.CreateStaffMemberAsync(new UpsertStaffMemberRequest("Петрова Ольга", department.Value!.Id, 40000.005m), actorUserId, CancellationToken.None);
+        var archiveDepartment = await service.ArchiveStaffDepartmentAsync(department.Value.Id, "Отдел больше не нужен", actorUserId, CancellationToken.None);
+        var updatedMember = await service.UpdateStaffMemberAsync(
+            member.Value!.Id,
+            new UpsertStaffMemberRequest("Петрова Ольга", department.Value.Id, 41000),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(department.Succeeded);
+        Assert.True(member.Succeeded);
+        Assert.Equal(40000.01m, member.Value.Rate);
+        Assert.False(archiveDepartment.Succeeded);
+        Assert.Equal("staff_department_used", archiveDepartment.ErrorCode);
+        Assert.True(updatedMember.Succeeded);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.staff_department_created");
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.staff_member_created");
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.staff_member_updated");
+    }
+
+    [Fact]
     public async Task RestoreSupplierGroupAsync_RejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -277,6 +277,184 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("supplier-contacts")]
+    [ProducesResponseType<IReadOnlyList<SupplierContactDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SupplierContactDto>>> GetSupplierContacts([FromQuery] Guid? supplierId, [FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetSupplierContactsAsync(supplierId, search, cancellationToken, limit, includeArchived));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("supplier-contacts")]
+    [ProducesResponseType<SupplierContactDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierContactDto>> CreateSupplierContact(UpsertSupplierContactRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateSupplierContactAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetSupplierContacts), new { supplierId = result.Value!.SupplierId }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("supplier-contacts/{id:guid}")]
+    [ProducesResponseType<SupplierContactDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierContactDto>> UpdateSupplierContact(Guid id, UpsertSupplierContactRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateSupplierContactAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("supplier-contacts/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveSupplierContact(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveSupplierContactAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("supplier-contacts/{id:guid}/restore")]
+    [ProducesResponseType<SupplierContactDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierContactDto>> RestoreSupplierContact(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreSupplierContactAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpGet("staff-departments")]
+    [ProducesResponseType<IReadOnlyList<StaffDepartmentDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<StaffDepartmentDto>>> GetStaffDepartments([FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetStaffDepartmentsAsync(cancellationToken, limit, includeArchived));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("staff-departments")]
+    [ProducesResponseType<StaffDepartmentDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<StaffDepartmentDto>> CreateStaffDepartment(UpsertStaffDepartmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateStaffDepartmentAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetStaffDepartments), result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("staff-departments/{id:guid}")]
+    [ProducesResponseType<StaffDepartmentDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<StaffDepartmentDto>> UpdateStaffDepartment(Guid id, UpsertStaffDepartmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateStaffDepartmentAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("staff-departments/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArchiveStaffDepartment(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveStaffDepartmentAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("staff-departments/{id:guid}/restore")]
+    [ProducesResponseType<StaffDepartmentDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<StaffDepartmentDto>> RestoreStaffDepartment(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreStaffDepartmentAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpGet("staff-members")]
+    [ProducesResponseType<IReadOnlyList<StaffMemberDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<StaffMemberDto>>> GetStaffMembers([FromQuery] Guid? departmentId, [FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetStaffMembersAsync(departmentId, search, cancellationToken, limit, includeArchived));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("staff-members")]
+    [ProducesResponseType<StaffMemberDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StaffMemberDto>> CreateStaffMember(UpsertStaffMemberRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateStaffMemberAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetStaffMembers), new { departmentId = result.Value!.DepartmentId }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("staff-members/{id:guid}")]
+    [ProducesResponseType<StaffMemberDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StaffMemberDto>> UpdateStaffMember(Guid id, UpsertStaffMemberRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateStaffMemberAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("staff-members/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveStaffMember(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveStaffMemberAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("staff-members/{id:guid}/restore")]
+    [ProducesResponseType<StaffMemberDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StaffMemberDto>> RestoreStaffMember(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreStaffMemberAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("income-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes([FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
@@ -632,8 +810,8 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         return result.ErrorCode switch
         {
-            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

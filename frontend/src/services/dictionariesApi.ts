@@ -47,6 +47,34 @@ export type SupplierDto = {
   isArchived: boolean
 }
 
+export type SupplierContactDto = {
+  id: string
+  supplierId: string
+  supplierName: string
+  fullName: string
+  position: string | null
+  phone: string | null
+  email: string | null
+  status: string
+  comment: string | null
+  isArchived: boolean
+}
+
+export type StaffDepartmentDto = {
+  id: string
+  name: string
+  isArchived: boolean
+}
+
+export type StaffMemberDto = {
+  id: string
+  fullName: string
+  departmentId: string
+  departmentName: string
+  rate: number
+  isArchived: boolean
+}
+
 export type AccountingTypeDto = {
   id: string
   name: string
@@ -140,6 +168,26 @@ export type UpsertSupplierRequest = {
   comment?: string
 }
 
+export type UpsertSupplierContactRequest = {
+  supplierId: string
+  fullName: string
+  position?: string
+  phone?: string
+  email?: string
+  status: string
+  comment?: string
+}
+
+export type UpsertStaffDepartmentRequest = {
+  name: string
+}
+
+export type UpsertStaffMemberRequest = {
+  fullName: string
+  departmentId: string
+  rate: number
+}
+
 export type UpsertAccountingTypeRequest = {
   name: string
   code?: string
@@ -205,6 +253,21 @@ export type DictionaryClient = {
   updateSupplier(accessToken: string, id: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   archiveSupplier(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplier(accessToken: string, id: string): Promise<SupplierDto>
+  getSupplierContacts(accessToken: string, supplierId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierContactDto[]>
+  createSupplierContact(accessToken: string, request: UpsertSupplierContactRequest): Promise<SupplierContactDto>
+  updateSupplierContact(accessToken: string, id: string, request: UpsertSupplierContactRequest): Promise<SupplierContactDto>
+  archiveSupplierContact(accessToken: string, id: string, reason: string): Promise<void>
+  restoreSupplierContact(accessToken: string, id: string): Promise<SupplierContactDto>
+  getStaffDepartments(accessToken: string, limit?: number, includeArchived?: boolean): Promise<StaffDepartmentDto[]>
+  createStaffDepartment(accessToken: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
+  updateStaffDepartment(accessToken: string, id: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
+  archiveStaffDepartment(accessToken: string, id: string, reason: string): Promise<void>
+  restoreStaffDepartment(accessToken: string, id: string): Promise<StaffDepartmentDto>
+  getStaffMembers(accessToken: string, departmentId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<StaffMemberDto[]>
+  createStaffMember(accessToken: string, request: UpsertStaffMemberRequest): Promise<StaffMemberDto>
+  updateStaffMember(accessToken: string, id: string, request: UpsertStaffMemberRequest): Promise<StaffMemberDto>
+  archiveStaffMember(accessToken: string, id: string, reason: string): Promise<void>
+  restoreStaffMember(accessToken: string, id: string): Promise<StaffMemberDto>
   getIncomeTypes(accessToken: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
   getIncomeTypesPage?(accessToken: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
   createIncomeType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
@@ -358,6 +421,51 @@ export const dictionariesApi: DictionaryClient = {
   },
   restoreSupplier(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/suppliers/${id}/restore`, { method: 'POST' })
+  },
+  getSupplierContacts(accessToken, supplierId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-contacts', { supplierId, search, limit, includeArchived: includeArchived || undefined }))
+  },
+  createSupplierContact(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/supplier-contacts', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateSupplierContact(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/supplier-contacts/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  archiveSupplierContact(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/supplier-contacts/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreSupplierContact(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/supplier-contacts/${id}/restore`, { method: 'POST' })
+  },
+  getStaffDepartments(accessToken, limit = defaultDictionaryListLimit, includeArchived = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/staff-departments', { limit, includeArchived: includeArchived || undefined }))
+  },
+  createStaffDepartment(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/staff-departments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateStaffDepartment(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/staff-departments/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  archiveStaffDepartment(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/staff-departments/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreStaffDepartment(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/staff-departments/${id}/restore`, { method: 'POST' })
+  },
+  getStaffMembers(accessToken, departmentId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members', { departmentId, search, limit, includeArchived: includeArchived || undefined }))
+  },
+  createStaffMember(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/staff-members', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateStaffMember(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/staff-members/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  archiveStaffMember(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/staff-members/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreStaffMember(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/staff-members/${id}/restore`, { method: 'POST' })
   },
   getIncomeTypes(accessToken, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/income-types', { limit, includeArchived: includeArchived || undefined }))

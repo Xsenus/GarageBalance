@@ -30,7 +30,7 @@ import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authAp
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
@@ -467,7 +467,7 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel auth={auth} formStateClient={formStateClient} />
+          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -6011,6 +6011,8 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
 
 const contractorGarageColumnStorageKey = 'garagebalance.contractors.garageColumnWidths'
+const contractorsDictionaryListLimit = 500
+const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const contractorGarageColumnDefinitions: Array<{ key: ContractorGarageColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'number', label: 'Номер', defaultWidth: 96, minWidth: 72 },
@@ -6045,6 +6047,125 @@ function normalizeSupplierPrototype(supplier: ContractorSupplierRow): Contractor
     contactPerson: primaryContact?.fullName ?? '',
     phone: primaryContact?.phone ?? '',
     email: primaryContact?.email ?? '',
+  }
+}
+
+function isBackendDictionaryId(id: string) {
+  return guidPattern.test(id)
+}
+
+function formatPrototypeMoney(value: number | null | undefined) {
+  if (!value) {
+    return ''
+  }
+
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)
+}
+
+function parsePrototypeMoney(value: string) {
+  const normalized = value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function createSupplierContactFromDto(contact: SupplierContactDto): ContractorSupplierContact {
+  return {
+    id: contact.id,
+    fullName: contact.fullName,
+    position: contact.position ?? '',
+    phone: contact.phone ?? '',
+    email: contact.email ?? '',
+    status: contact.status === 'Не работает' ? 'Не работает' : 'Работает',
+    comment: contact.comment ?? '',
+    isDeleted: contact.isArchived,
+  }
+}
+
+function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierContactDto[]): ContractorSupplierRow {
+  const supplierContacts = contacts.filter((contact) => contact.supplierId === supplier.id).map(createSupplierContactFromDto)
+
+  return normalizeSupplierPrototype({
+    id: supplier.id,
+    name: supplier.name,
+    service: supplier.groupName,
+    inn: supplier.inn ?? '',
+    legalAddress: supplier.legalAddress ?? '',
+    contactPerson: supplier.contactPerson ?? '',
+    phone: supplier.phone ?? '',
+    email: supplier.email ?? '',
+    contacts: supplierContacts,
+    debt: formatPrototypeMoney(supplier.startingBalance),
+    comment: supplier.comment ?? '',
+    isDeleted: supplier.isArchived,
+  })
+}
+
+function createStaffDepartmentRowFromDto(department: StaffDepartmentDto): ContractorDepartmentRow {
+  return {
+    id: department.id,
+    name: department.name,
+  }
+}
+
+function createStaffRowFromDto(member: StaffMemberDto): ContractorStaffRow {
+  return {
+    id: member.id,
+    fullName: member.fullName,
+    department: member.departmentName,
+    rate: formatPrototypeMoney(member.rate),
+    isDeleted: member.isArchived,
+  }
+}
+
+async function resolveSupplierGroup(
+  dictionaryClient: DictionaryClient,
+  accessToken: string,
+  groups: SupplierGroupDto[],
+  serviceName: string,
+) {
+  const normalizedName = serviceName.trim() || 'Прочее'
+  const existing = groups.find((group) => !group.isArchived && group.name.localeCompare(normalizedName, 'ru', { sensitivity: 'accent' }) === 0)
+  if (existing) {
+    return existing
+  }
+
+  const created = await dictionaryClient.createSupplierGroup(accessToken, { name: normalizedName })
+  groups.push(created)
+  return created
+}
+
+function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: string): UpsertSupplierRequest {
+  const normalized = normalizeSupplierPrototype(row)
+  return {
+    name: normalized.name.trim(),
+    groupId,
+    inn: normalized.inn.trim(),
+    legalAddress: normalized.legalAddress.trim(),
+    contactPerson: normalized.contactPerson.trim(),
+    phone: normalized.phone.trim(),
+    email: normalized.email.trim(),
+    startingBalance: parsePrototypeMoney(normalized.debt),
+    comment: normalized.comment.trim(),
+  }
+}
+
+function createSupplierContactRequestFromRow(supplierId: string, contact: ContractorSupplierContact): UpsertSupplierContactRequest {
+  return {
+    supplierId,
+    fullName: contact.fullName.trim(),
+    position: contact.position.trim(),
+    phone: contact.phone.trim(),
+    email: contact.email.trim(),
+    status: contact.status,
+    comment: contact.comment.trim(),
+  }
+}
+
+function createStaffMemberRequestFromRow(row: ContractorStaffRow, departmentId: string): UpsertStaffMemberRequest {
+  return {
+    fullName: row.fullName.trim(),
+    departmentId,
+    rate: parsePrototypeMoney(row.rate),
   }
 }
 
@@ -6122,13 +6243,15 @@ type ContractorsPrototypeSavedState = {
   supplierServices: string[]
 }
 
-function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthResponse; formStateClient: FormStateClient }) {
+function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
   const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
   const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>(contractorSupplierRows)
   const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
+  const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
+  const [backendContractorsLoaded, setBackendContractorsLoaded] = useState(false)
   const [supplierServices, setSupplierServices] = useState(() => getSupplierServiceOptions(contractorSupplierRows.map((supplier) => supplier.service)))
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
@@ -6173,7 +6296,7 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
           return
         }
 
-        if (state?.payload) {
+        if (state?.payload && !backendContractorsLoaded) {
           setGarages(Array.isArray(state.payload.garages) ? state.payload.garages : contractorGarageRows)
           setSuppliers(Array.isArray(state.payload.suppliers) ? state.payload.suppliers : contractorSupplierRows)
           setStaff(Array.isArray(state.payload.staff) ? state.payload.staff : contractorStaffRows)
@@ -6195,7 +6318,56 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
     return () => {
       cancelled = true
     }
-  }, [auth.accessToken, formStateClient])
+  }, [auth.accessToken, backendContractorsLoaded, formStateClient])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadContractorsFromDictionaries() {
+      try {
+        const [groups, supplierRows, supplierContactRows, departmentRows, staffRows] = await Promise.all([
+          dictionaryClient.getSupplierGroups(auth.accessToken, contractorsDictionaryListLimit, true),
+          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+          dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+          dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
+          dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        setSupplierGroups(groups)
+        if (supplierRows.length > 0) {
+          const nextSuppliers = supplierRows.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
+          setSuppliers(nextSuppliers)
+          setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
+        }
+
+        if (departmentRows.length > 0) {
+          setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
+        }
+
+        if (staffRows.length > 0) {
+          setStaff(staffRows.map(createStaffRowFromDto))
+        }
+
+        if (supplierRows.length > 0 || departmentRows.length > 0 || staffRows.length > 0) {
+          setBackendContractorsLoaded(true)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контрагентов из справочников.')
+        }
+      }
+    }
+
+    void loadContractorsFromDictionaries()
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     if (!formStateLoaded) {
@@ -6302,12 +6474,67 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
     void row
   }
 
-  const saveSupplier = (supplier: ContractorSupplierRow) => {
+  const saveSupplier = async (supplier: ContractorSupplierRow) => {
     const normalizedSupplier = normalizeSupplierPrototype(supplier)
     const currentSupplier = suppliers.find((item) => item.id === normalizedSupplier.id)
 
     if (normalizedSupplier.service.trim()) {
       setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, normalizedSupplier.service]))
+    }
+
+    try {
+      const groups = [...supplierGroups]
+      const group = await resolveSupplierGroup(dictionaryClient, auth.accessToken, groups, normalizedSupplier.service)
+      const request = createSupplierRequestFromRow(normalizedSupplier, group.id)
+      const savedSupplier = isBackendDictionaryId(normalizedSupplier.id)
+        ? await dictionaryClient.updateSupplier(auth.accessToken, normalizedSupplier.id, request)
+        : await dictionaryClient.createSupplier(auth.accessToken, request)
+      const savedContacts: SupplierContactDto[] = []
+
+      for (const contact of normalizedSupplier.contacts) {
+        if (contact.isDeleted) {
+          if (isBackendDictionaryId(contact.id)) {
+            await dictionaryClient.archiveSupplierContact(auth.accessToken, contact.id, 'Контакт удален из карточки поставщика.')
+          }
+
+          savedContacts.push({
+            id: contact.id,
+            supplierId: savedSupplier.id,
+            supplierName: savedSupplier.name,
+            fullName: contact.fullName,
+            position: contact.position || null,
+            phone: contact.phone || null,
+            email: contact.email || null,
+            status: contact.status,
+            comment: contact.comment || null,
+            isArchived: true,
+          })
+          continue
+        }
+
+        if (!contact.fullName.trim()) {
+          continue
+        }
+
+        const contactRequest = createSupplierContactRequestFromRow(savedSupplier.id, contact)
+        const savedContact = isBackendDictionaryId(contact.id)
+          ? await dictionaryClient.updateSupplierContact(auth.accessToken, contact.id, contactRequest)
+          : await dictionaryClient.createSupplierContact(auth.accessToken, contactRequest)
+        savedContacts.push(savedContact)
+      }
+
+      const nextSupplier = createSupplierRowFromDto(savedSupplier, savedContacts)
+      setSupplierGroups(groups)
+      setSuppliers((currentSuppliers) => {
+        if (currentSupplier) {
+          return currentSuppliers.map((item) => (item.id === normalizedSupplier.id ? nextSupplier : item))
+        }
+
+        return [...currentSuppliers, nextSupplier]
+      })
+      return
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить поставщика.')
     }
 
     if (currentSupplier) {
@@ -6318,7 +6545,16 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
     setSuppliers((currentSuppliers) => [...currentSuppliers, normalizedSupplier])
   }
 
-  const deleteSupplier = (supplier: ContractorSupplierRow) => {
+  const deleteSupplier = async (supplier: ContractorSupplierRow, reason = 'Поставщик удален из таблицы контрагентов.') => {
+    try {
+      if (isBackendDictionaryId(supplier.id)) {
+        await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id, reason)
+      }
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить поставщика.')
+      return
+    }
+
     setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? { ...item, isDeleted: true } : item)))
   }
 
@@ -6348,7 +6584,7 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
       return
     }
 
-    deleteSupplier(supplierDeleteTarget)
+    void deleteSupplier(supplierDeleteTarget, supplierDeleteReason.trim())
     closeSupplierDeleteDialog()
   }
 
@@ -6362,8 +6598,38 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
     void row
   }
 
-  const saveEmployee = (employee: ContractorStaffRow) => {
+  const saveEmployee = async (employee: ContractorStaffRow) => {
     const currentEmployee = staff.find((item) => item.id === employee.id)
+
+    try {
+      const department = departments.find((item) => item.name === employee.department)
+      let departmentId = department?.id
+      if (!departmentId || !isBackendDictionaryId(departmentId)) {
+        const savedDepartment = await dictionaryClient.createStaffDepartment(auth.accessToken, { name: employee.department.trim() || 'Без отдела' })
+        departmentId = savedDepartment.id
+        setDepartments((currentDepartments) => {
+          const withoutLocal = department ? currentDepartments.filter((item) => item.id !== department.id) : currentDepartments
+          return [...withoutLocal, createStaffDepartmentRowFromDto(savedDepartment)]
+        })
+      }
+
+      const request = createStaffMemberRequestFromRow(employee, departmentId)
+      const savedEmployee = isBackendDictionaryId(employee.id)
+        ? await dictionaryClient.updateStaffMember(auth.accessToken, employee.id, request)
+        : await dictionaryClient.createStaffMember(auth.accessToken, request)
+      const nextEmployee = createStaffRowFromDto(savedEmployee)
+
+      setStaff((currentStaff) => {
+        if (currentEmployee) {
+          return currentStaff.map((item) => (item.id === employee.id ? nextEmployee : item))
+        }
+
+        return [...currentStaff, nextEmployee]
+      })
+      return
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить сотрудника.')
+    }
 
     if (currentEmployee) {
       setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? employee : item)))
@@ -6373,7 +6639,16 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
     setStaff((currentStaff) => [...currentStaff, employee])
   }
 
-  const deleteEmployee = (employee: ContractorStaffRow) => {
+  const deleteEmployee = async (employee: ContractorStaffRow, reason = 'Сотрудник удален из таблицы контрагентов.') => {
+    try {
+      if (isBackendDictionaryId(employee.id)) {
+        await dictionaryClient.archiveStaffMember(auth.accessToken, employee.id, reason)
+      }
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить сотрудника.')
+      return
+    }
+
     setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
   }
 
@@ -6403,7 +6678,7 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
       return
     }
 
-    deleteEmployee(employeeDeleteTarget)
+    void deleteEmployee(employeeDeleteTarget, employeeDeleteReason.trim())
     closeEmployeeDeleteDialog()
   }
 
@@ -6417,23 +6692,46 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
     void row
   }
 
-  const confirmRestore = () => {
+  const confirmRestore = async () => {
     if (!restoreTarget) {
       return
     }
 
-    if (restoreTarget.type === 'garage') {
-      setGarages((currentGarages) => currentGarages.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
-    } else if (restoreTarget.type === 'supplier') {
-      setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
-    } else {
-      setStaff((currentStaff) => currentStaff.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+    try {
+      if (restoreTarget.type === 'garage') {
+        setGarages((currentGarages) => currentGarages.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+      } else if (restoreTarget.type === 'supplier') {
+        if (isBackendDictionaryId(restoreTarget.item.id)) {
+          const restoredSupplier = await dictionaryClient.restoreSupplier(auth.accessToken, restoreTarget.item.id)
+          const restoredContacts = await dictionaryClient.getSupplierContacts(auth.accessToken, restoredSupplier.id, undefined, contractorsDictionaryListLimit, true)
+          const nextSupplier = createSupplierRowFromDto(restoredSupplier, restoredContacts)
+          setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? nextSupplier : item)))
+        } else {
+          setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+        }
+      } else if (isBackendDictionaryId(restoreTarget.item.id)) {
+        const restoredEmployee = await dictionaryClient.restoreStaffMember(auth.accessToken, restoreTarget.item.id)
+        setStaff((currentStaff) => currentStaff.map((item) => (item.id === restoreTarget.item.id ? createStaffRowFromDto(restoredEmployee) : item)))
+      } else {
+        setStaff((currentStaff) => currentStaff.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+      }
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось восстановить запись.')
+      return
     }
 
     setRestoreTarget(null)
   }
 
-  const saveDepartment = (departmentName: string) => {
+  const saveDepartment = async (departmentName: string) => {
+    try {
+      const savedDepartment = await dictionaryClient.createStaffDepartment(auth.accessToken, { name: departmentName.trim() })
+      setDepartments((currentDepartments) => [...currentDepartments, createStaffDepartmentRowFromDto(savedDepartment)])
+      return
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить отдел.')
+    }
+
     const nextDepartment = { id: `department-${Date.now()}`, name: departmentName }
     setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
   }
@@ -6748,7 +7046,7 @@ function ContractorsPrototypePanel({ auth, formStateClient }: { auth: AuthRespon
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="contractor-restore-description">Запись снова появится как активная в рабочем списке. После подключения backend это действие будет записываться в историю изменений.</p>
+            <p className="confirmation-text" id="contractor-restore-description">Запись снова появится как активная в рабочем списке. Действие записывается в историю изменений.</p>
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmRestore}>
@@ -6997,7 +7295,7 @@ function PrototypeChangeConfirmationDialog({
             <X size={18} />
           </button>
         </div>
-        <p className="confirmation-text" id="prototype-change-description">Проверьте, что именно изменится. После подключения backend это действие будет записываться в историю изменений.</p>
+        <p className="confirmation-text" id="prototype-change-description">Проверьте, что именно изменится. Действие записывается в историю изменений.</p>
         <dl className="dictionary-change-list">
           {changes.map((change) => (
             <div key={change.fieldLabel}>
@@ -8692,7 +8990,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="tariff-prototype-change-description">Проверьте, что именно изменится. После подключения backend это действие будет записываться в историю изменений.</p>
+            <p className="confirmation-text" id="tariff-prototype-change-description">Проверьте, что именно изменится. Действие записывается в историю изменений.</p>
             <div className="tariff-change-summary" aria-label="Изменяемое поле тарифа">
               <div className="tariff-change-field-row">
                 <span>Поле</span>

@@ -81,6 +81,44 @@ public sealed record UpsertSupplierRequest(
     decimal StartingBalance,
     [MaxLength(1000)] string? Comment);
 
+public sealed record SupplierContactDto(
+    Guid Id,
+    Guid SupplierId,
+    string SupplierName,
+    string FullName,
+    string? Position,
+    string? Phone,
+    string? Email,
+    string Status,
+    string? Comment,
+    bool IsArchived);
+
+public sealed record UpsertSupplierContactRequest(
+    Guid SupplierId,
+    [Required, MaxLength(200)] string FullName,
+    [MaxLength(160)] string? Position,
+    [MaxLength(80)] string? Phone,
+    [EmailAddress, MaxLength(320)] string? Email,
+    [Required, MaxLength(40)] string Status,
+    [MaxLength(1000)] string? Comment);
+
+public sealed record StaffDepartmentDto(Guid Id, string Name, bool IsArchived);
+
+public sealed record UpsertStaffDepartmentRequest([Required, MaxLength(200)] string Name);
+
+public sealed record StaffMemberDto(
+    Guid Id,
+    string FullName,
+    Guid DepartmentId,
+    string DepartmentName,
+    decimal Rate,
+    bool IsArchived);
+
+public sealed record UpsertStaffMemberRequest(
+    [Required, MaxLength(200)] string FullName,
+    Guid DepartmentId,
+    [Range(0, 999999999)] decimal Rate);
+
 public sealed record AccountingTypeDto(Guid Id, string Name, string? Code, bool IsSystem, bool IsArchived);
 
 public sealed record UpsertAccountingTypeRequest(

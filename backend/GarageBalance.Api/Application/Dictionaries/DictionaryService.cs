@@ -36,6 +36,10 @@ public sealed class DictionaryService(
         ["legalAddress"] = "Юр. адрес",
         ["contactPerson"] = "Контактное лицо",
         ["email"] = "Почта",
+        ["fullName"] = "ФИО",
+        ["position"] = "Должность",
+        ["status"] = "Статус",
+        ["department"] = "Отдел",
         ["code"] = "Код",
         ["calculationBase"] = "База расчета",
         ["rate"] = "Ставка",
@@ -773,6 +777,358 @@ public sealed class DictionaryService(
         AddAudit(actorUserId, "dictionary.supplier_restored", "supplier", supplier.Id, $"Восстановлен поставщик {supplier.Name}.");
         await dbContext.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+    }
+
+    public async Task<IReadOnlyList<SupplierContactDto>> GetSupplierContactsAsync(Guid? supplierId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        var query = dbContext.SupplierContacts.AsNoTracking().Include(contact => contact.Supplier).Where(contact => includeArchived || !contact.IsArchived);
+        if (supplierId is not null)
+        {
+            query = query.Where(contact => contact.SupplierId == supplierId);
+        }
+
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(contact =>
+                contact.FullName.ToLower().Contains(normalizedSearch) ||
+                (contact.Position != null && contact.Position.ToLower().Contains(normalizedSearch)) ||
+                (contact.Phone != null && contact.Phone.ToLower().Contains(normalizedSearch)) ||
+                (contact.Email != null && contact.Email.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
+            .OrderBy(contact => contact.Supplier.Name)
+            .ThenBy(contact => contact.FullName)
+            .Take(NormalizeListLimit(limit))
+            .Select(contact => ToSupplierContactDto(contact))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<SupplierContactDto>> CreateSupplierContactAsync(UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        if (supplier is null)
+        {
+            return DictionaryResult<SupplierContactDto>.Failure("supplier_not_found", "Поставщик не найден.");
+        }
+
+        var contact = new SupplierContact { FullName = request.FullName.Trim(), SupplierId = supplier.Id, Supplier = supplier };
+        ApplySupplierContact(contact, request);
+        dbContext.SupplierContacts.Add(contact);
+        AddAudit(actorUserId, "dictionary.supplier_contact_created", "supplier_contact", contact.Id, $"Создан контакт {contact.FullName} поставщика {supplier.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
+    }
+
+    public async Task<DictionaryResult<SupplierContactDto>> UpdateSupplierContactAsync(Guid id, UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var contact = await dbContext.SupplierContacts.Include(item => item.Supplier).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (contact is null)
+        {
+            return DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Контакт поставщика не найден.");
+        }
+
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        if (supplier is null)
+        {
+            return DictionaryResult<SupplierContactDto>.Failure("supplier_not_found", "Поставщик не найден.");
+        }
+
+        if (SupplierContactMatches(contact, request, supplier.Id))
+        {
+            return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
+        }
+
+        var oldValues = ToSupplierContactAuditValues(contact);
+        contact.SupplierId = supplier.Id;
+        contact.Supplier = supplier;
+        ApplySupplierContact(contact, request);
+        contact.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var newValues = ToSupplierContactAuditValues(contact);
+
+        AddAudit(actorUserId, "dictionary.supplier_contact_updated", "supplier_contact", contact.Id, $"Обновлен контакт {contact.FullName} поставщика {supplier.Name}.", oldValues: oldValues, newValues: newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
+    }
+
+    public async Task<DictionaryResult<SupplierContactDto>> ArchiveSupplierContactAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<SupplierContactDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var contact = await dbContext.SupplierContacts.Include(item => item.Supplier).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (contact is null)
+        {
+            return DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Контакт поставщика не найден.");
+        }
+
+        contact.IsArchived = true;
+        contact.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.supplier_contact_archived", "supplier_contact", contact.Id, $"Архивирован контакт {contact.FullName} поставщика {contact.Supplier.Name}.", archiveReason);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
+    }
+
+    public async Task<DictionaryResult<SupplierContactDto>> RestoreSupplierContactAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var contact = await dbContext.SupplierContacts.Include(item => item.Supplier).ThenInclude(supplier => supplier.Group).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (contact is null)
+        {
+            return DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Контакт поставщика не найден в архиве.");
+        }
+
+        if (contact.Supplier.IsArchived)
+        {
+            if (contact.Supplier.Group.IsArchived)
+            {
+                return DictionaryResult<SupplierContactDto>.Failure("supplier_group_not_found", "Сначала восстановите группу поставщика.");
+            }
+
+            contact.Supplier.IsArchived = false;
+            contact.Supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            AddAudit(actorUserId, "dictionary.supplier_restored", "supplier", contact.Supplier.Id, $"Восстановлен поставщик {contact.Supplier.Name} при восстановлении контакта.");
+        }
+
+        contact.IsArchived = false;
+        contact.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.supplier_contact_restored", "supplier_contact", contact.Id, $"Восстановлен контакт {contact.FullName} поставщика {contact.Supplier.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
+    }
+
+    public async Task<IReadOnlyList<StaffDepartmentDto>> GetStaffDepartmentsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        return await dbContext.StaffDepartments.AsNoTracking()
+            .Where(department => includeArchived || !department.IsArchived)
+            .OrderBy(department => department.Name)
+            .Take(NormalizeListLimit(limit))
+            .Select(department => new StaffDepartmentDto(department.Id, department.Name, department.IsArchived))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<StaffDepartmentDto>> CreateStaffDepartmentAsync(UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var name = request.Name.Trim();
+        if (await dbContext.StaffDepartments.AnyAsync(department => !department.IsArchived && department.Name == name, cancellationToken))
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_duplicate", "Отдел с таким названием уже существует.");
+        }
+
+        var department = new StaffDepartment { Name = name };
+        dbContext.StaffDepartments.Add(department);
+        AddAudit(actorUserId, "dictionary.staff_department_created", "staff_department", department.Id, $"Создан отдел {department.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
+    }
+
+    public async Task<DictionaryResult<StaffDepartmentDto>> UpdateStaffDepartmentAsync(Guid id, UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (department is null)
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Отдел не найден.");
+        }
+
+        var name = request.Name.Trim();
+        if (await dbContext.StaffDepartments.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_duplicate", "Отдел с таким названием уже существует.");
+        }
+
+        if (StringEquals(department.Name, name))
+        {
+            return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
+        }
+
+        var oldValues = new Dictionary<string, object?> { ["name"] = department.Name };
+        var newValues = new Dictionary<string, object?> { ["name"] = name };
+        department.Name = name;
+        department.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.staff_department_updated", "staff_department", department.Id, $"Обновлен отдел {department.Name}.", oldValues: oldValues, newValues: newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
+    }
+
+    public async Task<DictionaryResult<StaffDepartmentDto>> ArchiveStaffDepartmentAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<StaffDepartmentDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (department is null)
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Отдел не найден.");
+        }
+
+        if (await dbContext.StaffMembers.AnyAsync(member => member.DepartmentId == id && !member.IsArchived, cancellationToken))
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_used", "В отделе есть активные сотрудники.");
+        }
+
+        department.IsArchived = true;
+        department.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "dictionary.staff_department_archived", "staff_department", department.Id, $"Архивирован отдел {department.Name}.", archiveReason);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
+    }
+
+    public async Task<DictionaryResult<StaffDepartmentDto>> RestoreStaffDepartmentAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (department is null)
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Отдел не найден в архиве.");
+        }
+
+        if (await dbContext.StaffDepartments.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == department.Name, cancellationToken))
+        {
+            return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_duplicate", "Активный отдел с таким названием уже существует.");
+        }
+
+        department.IsArchived = false;
+        department.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "dictionary.staff_department_restored", "staff_department", department.Id, $"Восстановлен отдел {department.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
+    }
+
+    public async Task<IReadOnlyList<StaffMemberDto>> GetStaffMembersAsync(Guid? departmentId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        var query = dbContext.StaffMembers.AsNoTracking().Include(member => member.Department).Where(member => includeArchived || !member.IsArchived);
+        if (departmentId is not null)
+        {
+            query = query.Where(member => member.DepartmentId == departmentId);
+        }
+
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(member =>
+                member.FullName.ToLower().Contains(normalizedSearch) ||
+                member.Department.Name.ToLower().Contains(normalizedSearch));
+        }
+
+        return await query
+            .OrderBy(member => member.Department.Name)
+            .ThenBy(member => member.FullName)
+            .Take(NormalizeListLimit(limit))
+            .Select(member => ToStaffMemberDto(member))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<StaffMemberDto>> CreateStaffMemberAsync(UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == request.DepartmentId && !item.IsArchived, cancellationToken);
+        if (department is null)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_department_not_found", "Отдел не найден.");
+        }
+
+        var member = new StaffMember
+        {
+            FullName = request.FullName.Trim(),
+            DepartmentId = department.Id,
+            Department = department,
+            Rate = MoneyMath.RoundMoney(request.Rate)
+        };
+
+        dbContext.StaffMembers.Add(member);
+        AddAudit(actorUserId, "dictionary.staff_member_created", "staff_member", member.Id, $"Создан сотрудник {member.FullName}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
+    }
+
+    public async Task<DictionaryResult<StaffMemberDto>> UpdateStaffMemberAsync(Guid id, UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var member = await dbContext.StaffMembers.Include(item => item.Department).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (member is null)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден.");
+        }
+
+        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == request.DepartmentId && !item.IsArchived, cancellationToken);
+        if (department is null)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_department_not_found", "Отдел не найден.");
+        }
+
+        var fullName = request.FullName.Trim();
+        var rate = MoneyMath.RoundMoney(request.Rate);
+        if (StringEquals(member.FullName, fullName) && member.DepartmentId == department.Id && member.Rate == rate)
+        {
+            return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
+        }
+
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["fullName"] = member.FullName,
+            ["department"] = member.Department.Name,
+            ["rate"] = member.Rate
+        };
+        var newValues = new Dictionary<string, object?>
+        {
+            ["fullName"] = fullName,
+            ["department"] = department.Name,
+            ["rate"] = rate
+        };
+
+        member.FullName = fullName;
+        member.DepartmentId = department.Id;
+        member.Department = department;
+        member.Rate = rate;
+        member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.staff_member_updated", "staff_member", member.Id, $"Обновлен сотрудник {member.FullName}.", oldValues: oldValues, newValues: newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
+    }
+
+    public async Task<DictionaryResult<StaffMemberDto>> ArchiveStaffMemberAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<StaffMemberDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var member = await dbContext.StaffMembers.Include(item => item.Department).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (member is null)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден.");
+        }
+
+        member.IsArchived = true;
+        member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "dictionary.staff_member_archived", "staff_member", member.Id, $"Архивирован сотрудник {member.FullName}.", archiveReason);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
+    }
+
+    public async Task<DictionaryResult<StaffMemberDto>> RestoreStaffMemberAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var member = await dbContext.StaffMembers.Include(item => item.Department).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (member is null)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден в архиве.");
+        }
+
+        if (member.Department.IsArchived)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_department_not_found", "Сначала восстановите отдел сотрудника.");
+        }
+
+        member.IsArchived = false;
+        member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "dictionary.staff_member_restored", "staff_member", member.Id, $"Восстановлен сотрудник {member.FullName}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
     }
 
     public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -1821,6 +2177,41 @@ public sealed class DictionaryService(
             StringEquals(supplier.Comment, comment);
     }
 
+    private static void ApplySupplierContact(SupplierContact contact, UpsertSupplierContactRequest request)
+    {
+        contact.FullName = request.FullName.Trim();
+        contact.Position = NormalizeOptional(request.Position);
+        contact.Phone = NormalizeOptional(request.Phone);
+        contact.Email = NormalizeOptional(request.Email);
+        contact.Status = request.Status.Trim();
+        contact.Comment = NormalizeOptional(request.Comment);
+    }
+
+    private static bool SupplierContactMatches(SupplierContact contact, UpsertSupplierContactRequest request, Guid supplierId)
+    {
+        return contact.SupplierId == supplierId &&
+            StringEquals(contact.FullName, request.FullName.Trim()) &&
+            StringEquals(contact.Position, NormalizeOptional(request.Position)) &&
+            StringEquals(contact.Phone, NormalizeOptional(request.Phone)) &&
+            StringEquals(contact.Email, NormalizeOptional(request.Email)) &&
+            StringEquals(contact.Status, request.Status.Trim()) &&
+            StringEquals(contact.Comment, NormalizeOptional(request.Comment));
+    }
+
+    private static Dictionary<string, object?> ToSupplierContactAuditValues(SupplierContact contact)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["name"] = contact.Supplier.Name,
+            ["fullName"] = contact.FullName,
+            ["position"] = contact.Position,
+            ["phone"] = contact.Phone,
+            ["email"] = contact.Email,
+            ["status"] = contact.Status,
+            ["comment"] = contact.Comment
+        };
+    }
+
     private static bool AccountingTypeMatches(IncomeType accountingType, string name, string? code)
     {
         return StringEquals(accountingType.Name, name) && StringEquals(accountingType.Code, code);
@@ -1923,6 +2314,32 @@ public sealed class DictionaryService(
             supplier.StartingBalance,
             supplier.Comment,
             supplier.IsArchived);
+    }
+
+    private static SupplierContactDto ToSupplierContactDto(SupplierContact contact)
+    {
+        return new SupplierContactDto(
+            contact.Id,
+            contact.SupplierId,
+            contact.Supplier.Name,
+            contact.FullName,
+            contact.Position,
+            contact.Phone,
+            contact.Email,
+            contact.Status,
+            contact.Comment,
+            contact.IsArchived);
+    }
+
+    private static StaffMemberDto ToStaffMemberDto(StaffMember member)
+    {
+        return new StaffMemberDto(
+            member.Id,
+            member.FullName,
+            member.DepartmentId,
+            member.Department.Name,
+            member.Rate,
+            member.IsArchived);
     }
 
     private static ChargeServiceSettingDto ToChargeServiceSettingDto(ChargeServiceSetting setting)

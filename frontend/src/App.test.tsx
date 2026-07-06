@@ -19,7 +19,7 @@ import App from './App'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -622,7 +622,7 @@ describe('App', () => {
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     expect(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).toBeInTheDocument()
-    expect(within(contractorsPanel).getByText('Энергосбыт')).toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Водоканал')).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('columnheader', { name: 'Задолженность' })).toBeInTheDocument()
 
     const addContractorServiceButton = within(contractorsPanel).getByRole('button', { name: 'Добавить услугу' })
@@ -732,7 +732,7 @@ describe('App', () => {
     const employeeChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения сотрудника' })
     expect(within(employeeChangeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
     expect(within(employeeChangeDialog).getByText('Ставка')).toBeInTheDocument()
-    expect(within(employeeChangeDialog).getByText('25000 -> 30000')).toBeInTheDocument()
+    expect(within(employeeChangeDialog).getByText(/25\s*000\s*->\s*30000/)).toBeInTheDocument()
     await user.click(within(employeeChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     const updatedEmployeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
@@ -5559,9 +5559,17 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   const garage = createGarage({ id: 'garage-1', number: '12', ownerId: owner.id, ownerName: owner.fullName })
   const group = createGroup({ id: 'group-1', name: 'Коммунальные услуги' })
   const supplier = createSupplier({ id: 'supplier-1', name: 'Водоканал', groupId: group.id, groupName: group.name, inn: '5401' })
+  const supplierContact = createSupplierContact({ id: 'supplier-contact-1', supplierId: supplier.id, supplierName: supplier.name, fullName: 'Иванов П.В.' })
+  const staffDepartment = createStaffDepartment({ id: 'staff-department-1', name: 'Бухгалтерия' })
+  const staffMember = createStaffMember({ id: 'staff-member-1', fullName: 'Петрова Ольга', departmentId: staffDepartment.id, departmentName: staffDepartment.name, rate: 40000 })
   const incomeType = createAccountingType({ id: 'income-type-1', name: 'Членский взнос', code: 'membership' })
   const expenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
   const tariff = createTariff({ id: 'tariff-1', name: 'Тариф воды', calculationBase: 'meter_water', rate: 50, effectiveFrom: '2026-07-01' })
+  let supplierGroups = [group]
+  let suppliers = [supplier]
+  let supplierContacts = [supplierContact]
+  let staffDepartments = [staffDepartment]
+  let staffMembers = [staffMember]
 
   return {
     getOwners: async () => [owner],
@@ -5572,14 +5580,136 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     createGarage: async () => garage,
     archiveGarage: async () => undefined,
     restoreGarage: async () => garage,
-    getSupplierGroups: async () => [group],
-    createSupplierGroup: async () => group,
+    getSupplierGroups: async () => supplierGroups,
+    createSupplierGroup: async (_token, request) => {
+      const createdGroup = createGroup({ id: `group-${supplierGroups.length + 1}`, name: request.name })
+      supplierGroups = [createdGroup, ...supplierGroups]
+      return createdGroup
+    },
     archiveSupplierGroup: async () => undefined,
     restoreSupplierGroup: async () => group,
-    getSuppliers: async () => [supplier],
-    createSupplier: async () => supplier,
+    getSuppliers: async () => suppliers,
+    createSupplier: async (_token, request) => {
+      const supplierGroup = supplierGroups.find((item) => item.id === request.groupId) ?? group
+      const createdSupplier = createSupplier({
+        id: `supplier-${suppliers.length + 1}`,
+        name: request.name,
+        groupId: supplierGroup.id,
+        groupName: supplierGroup.name,
+        inn: request.inn ?? null,
+        legalAddress: request.legalAddress ?? null,
+        contactPerson: request.contactPerson ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        startingBalance: request.startingBalance,
+        comment: request.comment ?? null,
+      })
+      suppliers = [createdSupplier, ...suppliers]
+      return createdSupplier
+    },
+    updateSupplier: async (_token, id, request) => {
+      const supplierGroup = supplierGroups.find((item) => item.id === request.groupId) ?? group
+      const updatedSupplier = createSupplier({
+        id,
+        name: request.name,
+        groupId: supplierGroup.id,
+        groupName: supplierGroup.name,
+        inn: request.inn ?? null,
+        legalAddress: request.legalAddress ?? null,
+        contactPerson: request.contactPerson ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        startingBalance: request.startingBalance,
+        comment: request.comment ?? null,
+      })
+      suppliers = suppliers.map((item) => (item.id === id ? updatedSupplier : item))
+      return updatedSupplier
+    },
     archiveSupplier: async () => undefined,
-    restoreSupplier: async () => supplier,
+    restoreSupplier: async (_token, id) => {
+      const restoredSupplier = suppliers.find((item) => item.id === id) ?? createSupplier({ id, isArchived: false })
+      suppliers = suppliers.some((item) => item.id === id)
+        ? suppliers.map((item) => (item.id === id ? { ...restoredSupplier, isArchived: false } : item))
+        : [{ ...restoredSupplier, isArchived: false }, ...suppliers]
+      return { ...restoredSupplier, isArchived: false }
+    },
+    getSupplierContacts: async (_token, supplierId) => supplierId ? supplierContacts.filter((item) => item.supplierId === supplierId) : supplierContacts,
+    createSupplierContact: async (_token, request) => {
+      const contact = createSupplierContact({
+        id: `supplier-contact-${supplierContacts.length + 1}`,
+        supplierId: request.supplierId,
+        supplierName: suppliers.find((item) => item.id === request.supplierId)?.name ?? 'Поставщик',
+        fullName: request.fullName,
+        position: request.position ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        status: request.status,
+        comment: request.comment ?? null,
+      })
+      supplierContacts = [contact, ...supplierContacts]
+      return contact
+    },
+    updateSupplierContact: async (_token, id, request) => {
+      const updatedContact = createSupplierContact({
+        id,
+        supplierId: request.supplierId,
+        supplierName: suppliers.find((item) => item.id === request.supplierId)?.name ?? 'Поставщик',
+        fullName: request.fullName,
+        position: request.position ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        status: request.status,
+        comment: request.comment ?? null,
+      })
+      supplierContacts = supplierContacts.map((item) => (item.id === id ? updatedContact : item))
+      return updatedContact
+    },
+    archiveSupplierContact: async (_token, id) => {
+      supplierContacts = supplierContacts.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreSupplierContact: async (_token, id) => {
+      const contact = supplierContacts.find((item) => item.id === id) ?? createSupplierContact({ id, isArchived: false })
+      supplierContacts = supplierContacts.some((item) => item.id === id)
+        ? supplierContacts.map((item) => (item.id === id ? { ...contact, isArchived: false } : item))
+        : [{ ...contact, isArchived: false }, ...supplierContacts]
+      return { ...contact, isArchived: false }
+    },
+    getStaffDepartments: async () => staffDepartments,
+    createStaffDepartment: async (_token, request) => {
+      const department = createStaffDepartment({ id: `staff-department-${staffDepartments.length + 1}`, name: request.name })
+      staffDepartments = [department, ...staffDepartments]
+      return department
+    },
+    updateStaffDepartment: async (_token, id, request) => {
+      const department = createStaffDepartment({ id, name: request.name })
+      staffDepartments = staffDepartments.map((item) => (item.id === id ? department : item))
+      return department
+    },
+    archiveStaffDepartment: async () => undefined,
+    restoreStaffDepartment: async (_token, id) => createStaffDepartment({ id, isArchived: false }),
+    getStaffMembers: async () => staffMembers,
+    createStaffMember: async (_token, request) => {
+      const department = staffDepartments.find((item) => item.id === request.departmentId) ?? staffDepartment
+      const member = createStaffMember({ id: `staff-member-${staffMembers.length + 1}`, fullName: request.fullName, departmentId: department.id, departmentName: department.name, rate: request.rate })
+      staffMembers = [member, ...staffMembers]
+      return member
+    },
+    updateStaffMember: async (_token, id, request) => {
+      const department = staffDepartments.find((item) => item.id === request.departmentId) ?? staffDepartment
+      const member = createStaffMember({ id, fullName: request.fullName, departmentId: department.id, departmentName: department.name, rate: request.rate })
+      staffMembers = staffMembers.map((item) => (item.id === id ? member : item))
+      return member
+    },
+    archiveStaffMember: async (_token, id) => {
+      staffMembers = staffMembers.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreStaffMember: async (_token, id) => {
+      const member = staffMembers.find((item) => item.id === id) ?? createStaffMember({ id, isArchived: false })
+      staffMembers = staffMembers.some((item) => item.id === id)
+        ? staffMembers.map((item) => (item.id === id ? { ...member, isArchived: false } : item))
+        : [{ ...member, isArchived: false }, ...staffMembers]
+      return { ...member, isArchived: false }
+    },
     getIncomeTypes: async () => [incomeType],
     createIncomeType: async () => incomeType,
     archiveIncomeType: async () => undefined,
@@ -6150,6 +6280,9 @@ function createStatefulDictionaryClient(): DictionaryClient {
   let lastGroup: SupplierGroupDto | null = null
   let garages: GarageDto[] = []
   let suppliers: SupplierDto[] = []
+  let supplierContacts: SupplierContactDto[] = []
+  let staffDepartments: StaffDepartmentDto[] = []
+  let staffMembers: StaffMemberDto[] = []
   let incomeTypes: AccountingTypeDto[] = []
   let expenseTypes: AccountingTypeDto[] = []
   let tariffs: TariffDto[] = []
@@ -6210,7 +6343,135 @@ function createStatefulDictionaryClient(): DictionaryClient {
       suppliers = [supplier, ...suppliers]
       return supplier
     },
+    updateSupplier: async (_token, id, request) => {
+      const group = lastGroup?.id === request.groupId ? lastGroup : createGroup({ id: request.groupId, name: 'Поставщики' })
+      const supplier = createSupplier({
+        id,
+        name: request.name,
+        groupId: group.id,
+        groupName: group.name,
+        inn: request.inn ?? null,
+        legalAddress: request.legalAddress ?? null,
+        contactPerson: request.contactPerson ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        startingBalance: request.startingBalance,
+        comment: request.comment ?? null,
+      })
+      suppliers = suppliers.map((item) => (item.id === id ? supplier : item))
+      return supplier
+    },
     archiveSupplier: async () => undefined,
+    restoreSupplier: async (_token, id) => {
+      const supplier = suppliers.find((item) => item.id === id) ?? createSupplier({ id, isArchived: false })
+      const restored = { ...supplier, isArchived: false }
+      suppliers = suppliers.some((item) => item.id === id)
+        ? suppliers.map((item) => (item.id === id ? restored : item))
+        : [restored, ...suppliers]
+      return restored
+    },
+    getSupplierContacts: async (_token, supplierId) => supplierId ? supplierContacts.filter((item) => item.supplierId === supplierId) : supplierContacts,
+    createSupplierContact: async (_token, request) => {
+      const supplier = suppliers.find((item) => item.id === request.supplierId)
+      const contact = createSupplierContact({
+        id: crypto.randomUUID(),
+        supplierId: request.supplierId,
+        supplierName: supplier?.name ?? 'Поставщик',
+        fullName: request.fullName,
+        position: request.position ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        status: request.status,
+        comment: request.comment ?? null,
+      })
+      supplierContacts = [contact, ...supplierContacts]
+      return contact
+    },
+    updateSupplierContact: async (_token, id, request) => {
+      const supplier = suppliers.find((item) => item.id === request.supplierId)
+      const contact = createSupplierContact({
+        id,
+        supplierId: request.supplierId,
+        supplierName: supplier?.name ?? 'Поставщик',
+        fullName: request.fullName,
+        position: request.position ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        status: request.status,
+        comment: request.comment ?? null,
+      })
+      supplierContacts = supplierContacts.map((item) => (item.id === id ? contact : item))
+      return contact
+    },
+    archiveSupplierContact: async (_token, id) => {
+      supplierContacts = supplierContacts.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreSupplierContact: async (_token, id) => {
+      const contact = supplierContacts.find((item) => item.id === id) ?? createSupplierContact({ id, isArchived: false })
+      const restored = { ...contact, isArchived: false }
+      supplierContacts = supplierContacts.some((item) => item.id === id)
+        ? supplierContacts.map((item) => (item.id === id ? restored : item))
+        : [restored, ...supplierContacts]
+      return restored
+    },
+    getStaffDepartments: async () => staffDepartments,
+    createStaffDepartment: async (_token, request) => {
+      const department = createStaffDepartment({ id: crypto.randomUUID(), name: request.name })
+      staffDepartments = [department, ...staffDepartments]
+      return department
+    },
+    updateStaffDepartment: async (_token, id, request) => {
+      const department = createStaffDepartment({ id, name: request.name })
+      staffDepartments = staffDepartments.map((item) => (item.id === id ? department : item))
+      return department
+    },
+    archiveStaffDepartment: async (_token, id) => {
+      staffDepartments = staffDepartments.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreStaffDepartment: async (_token, id) => {
+      const department = staffDepartments.find((item) => item.id === id) ?? createStaffDepartment({ id, isArchived: false })
+      const restored = { ...department, isArchived: false }
+      staffDepartments = staffDepartments.some((item) => item.id === id)
+        ? staffDepartments.map((item) => (item.id === id ? restored : item))
+        : [restored, ...staffDepartments]
+      return restored
+    },
+    getStaffMembers: async (_token, departmentId) => departmentId ? staffMembers.filter((item) => item.departmentId === departmentId) : staffMembers,
+    createStaffMember: async (_token, request) => {
+      const department = staffDepartments.find((item) => item.id === request.departmentId) ?? createStaffDepartment({ id: request.departmentId, name: 'Отдел' })
+      const member = createStaffMember({
+        id: crypto.randomUUID(),
+        fullName: request.fullName,
+        departmentId: department.id,
+        departmentName: department.name,
+        rate: request.rate,
+      })
+      staffMembers = [member, ...staffMembers]
+      return member
+    },
+    updateStaffMember: async (_token, id, request) => {
+      const department = staffDepartments.find((item) => item.id === request.departmentId) ?? createStaffDepartment({ id: request.departmentId, name: 'Отдел' })
+      const member = createStaffMember({
+        id,
+        fullName: request.fullName,
+        departmentId: department.id,
+        departmentName: department.name,
+        rate: request.rate,
+      })
+      staffMembers = staffMembers.map((item) => (item.id === id ? member : item))
+      return member
+    },
+    archiveStaffMember: async (_token, id) => {
+      staffMembers = staffMembers.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreStaffMember: async (_token, id) => {
+      const member = staffMembers.find((item) => item.id === id) ?? createStaffMember({ id, isArchived: false })
+      const restored = { ...member, isArchived: false }
+      staffMembers = staffMembers.some((item) => item.id === id)
+        ? staffMembers.map((item) => (item.id === id ? restored : item))
+        : [restored, ...staffMembers]
+      return restored
+    },
     getIncomeTypes: async () => incomeTypes,
     createIncomeType: async (_token, request) => {
       const incomeType = createAccountingType({ id: crypto.randomUUID(), name: request.name, code: request.code ?? null })
@@ -6425,6 +6686,43 @@ function createSupplier(overrides: Partial<SupplierDto>): SupplierDto {
     email: null,
     startingBalance: 0,
     comment: null,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createSupplierContact(overrides: Partial<SupplierContactDto>): SupplierContactDto {
+  return {
+    id: 'supplier-contact',
+    supplierId: 'supplier',
+    supplierName: 'Поставщик',
+    fullName: 'Контакт',
+    position: null,
+    phone: null,
+    email: null,
+    status: 'Работает',
+    comment: null,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createStaffDepartment(overrides: Partial<StaffDepartmentDto>): StaffDepartmentDto {
+  return {
+    id: 'staff-department',
+    name: 'Отдел',
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createStaffMember(overrides: Partial<StaffMemberDto>): StaffMemberDto {
+  return {
+    id: 'staff-member',
+    fullName: 'Сотрудник',
+    departmentId: 'staff-department',
+    departmentName: 'Отдел',
+    rate: 0,
     isArchived: false,
     ...overrides,
   }

@@ -21,6 +21,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Garage> Garages => Set<Garage>();
     public DbSet<SupplierGroup> SupplierGroups => Set<SupplierGroup>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<SupplierContact> SupplierContacts => Set<SupplierContact>();
+    public DbSet<StaffDepartment> StaffDepartments => Set<StaffDepartment>();
+    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
@@ -188,6 +191,49 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
                 .HasForeignKey(supplier => supplier.GroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SupplierContact>(entity =>
+        {
+            entity.ToTable("supplier_contacts");
+            entity.HasKey(contact => contact.Id);
+            entity.Property(contact => contact.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(contact => contact.Position).HasMaxLength(160);
+            entity.Property(contact => contact.Phone).HasMaxLength(80);
+            entity.Property(contact => contact.Email).HasMaxLength(320);
+            entity.Property(contact => contact.Status).HasMaxLength(40).IsRequired();
+            entity.Property(contact => contact.Comment).HasMaxLength(1000);
+            entity.HasIndex(contact => contact.SupplierId);
+            entity.HasIndex(contact => contact.FullName);
+            entity.HasIndex(contact => contact.Phone);
+            entity.HasIndex(contact => contact.Email);
+            entity.HasIndex(contact => contact.Status);
+            entity.HasOne(contact => contact.Supplier)
+                .WithMany()
+                .HasForeignKey(contact => contact.SupplierId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StaffDepartment>(entity =>
+        {
+            entity.ToTable("staff_departments");
+            entity.HasKey(department => department.Id);
+            entity.Property(department => department.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(department => department.Name).IsUnique().HasFilter("\"IsArchived\" = false");
+        });
+
+        modelBuilder.Entity<StaffMember>(entity =>
+        {
+            entity.ToTable("staff_members");
+            entity.HasKey(member => member.Id);
+            entity.Property(member => member.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(member => member.Rate).HasPrecision(18, 2);
+            entity.HasIndex(member => member.FullName);
+            entity.HasIndex(member => member.DepartmentId);
+            entity.HasOne(member => member.Department)
+                .WithMany(department => department.StaffMembers)
+                .HasForeignKey(member => member.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

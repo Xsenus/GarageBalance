@@ -348,6 +348,38 @@ public sealed class DictionariesControllerTests
         Assert.Equal("charge_service_payment_day_invalid", problem.Title);
     }
 
+    [Fact]
+    public async Task SupplierContactsAndStaffEndpoints_PassFiltersAndActorToService()
+    {
+        var actorId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var departmentId = Guid.NewGuid();
+        var contactId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateSupplierContactResult = DictionaryResult<SupplierContactDto>.Success(new SupplierContactDto(contactId, supplierId, "Водоканал", "Петров", "Директор", "+7", "mail@example.com", "Работает", null, false)),
+            CreateStaffDepartmentResult = DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(departmentId, "Бухгалтерия", false)),
+            CreateStaffMemberResult = DictionaryResult<StaffMemberDto>.Success(new StaffMemberDto(staffId, "Петрова Ольга", departmentId, "Бухгалтерия", 40000, false))
+        };
+        var controller = CreateController(service, actorId);
+
+        await controller.GetSupplierContacts(supplierId, "петр", 11, true, CancellationToken.None);
+        await controller.GetStaffDepartments(12, true, CancellationToken.None);
+        await controller.GetStaffMembers(departmentId, "ольга", 13, true, CancellationToken.None);
+        var contactResult = await controller.CreateSupplierContact(new UpsertSupplierContactRequest(supplierId, "Петров", "Директор", "+7", "mail@example.com", "Работает", null), CancellationToken.None);
+        var departmentResult = await controller.CreateStaffDepartment(new UpsertStaffDepartmentRequest("Бухгалтерия"), CancellationToken.None);
+        var staffResult = await controller.CreateStaffMember(new UpsertStaffMemberRequest("Петрова Ольга", departmentId, 40000), CancellationToken.None);
+
+        Assert.Equal((supplierId, "петр", 11, true), service.LastSupplierContactListRequest);
+        Assert.Equal((12, true), service.LastStaffDepartmentListRequest);
+        Assert.Equal((departmentId, "ольга", 13, true), service.LastStaffMemberListRequest);
+        Assert.Equal(actorId, service.LastActorUserId);
+        Assert.IsType<CreatedAtActionResult>(contactResult.Result);
+        Assert.IsType<CreatedAtActionResult>(departmentResult.Result);
+        Assert.IsType<CreatedAtActionResult>(staffResult.Result);
+    }
+
     private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
     {
         var controller = new DictionariesController(service);
@@ -477,6 +509,9 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
+        public (Guid? SupplierId, string? Search, int? Limit, bool IncludeArchived) LastSupplierContactListRequest { get; private set; }
+        public (int? Limit, bool IncludeArchived) LastStaffDepartmentListRequest { get; private set; }
+        public (Guid? DepartmentId, string? Search, int? Limit, bool IncludeArchived) LastStaffMemberListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
@@ -490,6 +525,12 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<GarageDto> RestoreGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierGroupDto> RestoreSupplierGroupResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> RestoreSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierContactDto> CreateSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierContactDto> RestoreSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<StaffDepartmentDto> CreateStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<StaffDepartmentDto> RestoreStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<StaffMemberDto> CreateStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<StaffMemberDto> RestoreStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> ArchiveIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> RestoreIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> RestoreExpenseTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
@@ -640,6 +681,102 @@ public sealed class DictionariesControllerTests
             LastRestoreId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreSupplierResult);
+        }
+
+        public Task<IReadOnlyList<SupplierContactDto>> GetSupplierContactsAsync(Guid? supplierId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        {
+            LastSupplierContactListRequest = (supplierId, search, limit, includeArchived);
+            return Task.FromResult<IReadOnlyList<SupplierContactDto>>([]);
+        }
+
+        public Task<DictionaryResult<SupplierContactDto>> CreateSupplierContactAsync(UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateSupplierContactResult);
+        }
+
+        public Task<DictionaryResult<SupplierContactDto>> UpdateSupplierContactAsync(Guid id, UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<SupplierContactDto>> ArchiveSupplierContactAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<SupplierContactDto>> RestoreSupplierContactAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreSupplierContactResult);
+        }
+
+        public Task<IReadOnlyList<StaffDepartmentDto>> GetStaffDepartmentsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        {
+            LastStaffDepartmentListRequest = (limit, includeArchived);
+            return Task.FromResult<IReadOnlyList<StaffDepartmentDto>>([]);
+        }
+
+        public Task<DictionaryResult<StaffDepartmentDto>> CreateStaffDepartmentAsync(UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateStaffDepartmentResult);
+        }
+
+        public Task<DictionaryResult<StaffDepartmentDto>> UpdateStaffDepartmentAsync(Guid id, UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<StaffDepartmentDto>> ArchiveStaffDepartmentAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<StaffDepartmentDto>> RestoreStaffDepartmentAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreStaffDepartmentResult);
+        }
+
+        public Task<IReadOnlyList<StaffMemberDto>> GetStaffMembersAsync(Guid? departmentId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        {
+            LastStaffMemberListRequest = (departmentId, search, limit, includeArchived);
+            return Task.FromResult<IReadOnlyList<StaffMemberDto>>([]);
+        }
+
+        public Task<DictionaryResult<StaffMemberDto>> CreateStaffMemberAsync(UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateStaffMemberResult);
+        }
+
+        public Task<DictionaryResult<StaffMemberDto>> UpdateStaffMemberAsync(Guid id, UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<StaffMemberDto>> ArchiveStaffMemberAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Not found."));
+        }
+
+        public Task<DictionaryResult<StaffMemberDto>> RestoreStaffMemberAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreStaffMemberResult);
         }
 
         public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
