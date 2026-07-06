@@ -59,4 +59,40 @@ describe('financeApi', () => {
       },
     })
   })
+
+  it('posts opening debt payment to the debt payment endpoint', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      id: 'operation-debt-payment',
+      operationKind: 'income',
+      operationDate: '2026-06-19',
+      accountingMonth: '2026-06-01',
+      amount: 900,
+      paymentAllocations: [],
+      isCanceled: false,
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.createGarageDebtPayment('token', {
+      garageId: 'garage-88',
+      operationDate: '2026-06-19',
+      accountingMonth: '2026-06-01',
+      amount: 900,
+      comment: 'Закрываем долг',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/income/debt-payment', {
+      method: 'POST',
+      body: JSON.stringify({
+        garageId: 'garage-88',
+        operationDate: '2026-06-19',
+        accountingMonth: '2026-06-01',
+        amount: 900,
+        comment: 'Закрываем долг',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
 })

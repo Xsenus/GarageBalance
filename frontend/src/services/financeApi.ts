@@ -198,6 +198,14 @@ export type CreateIncomeOperationRequest = {
   comment?: string
 }
 
+export type CreateGarageDebtPaymentRequest = {
+  garageId: string
+  operationDate: string
+  accountingMonth: string
+  amount: number
+  comment?: string
+}
+
 export type CreateExpenseOperationRequest = {
   supplierId: string
   expenseTypeId: string
@@ -329,6 +337,7 @@ export type FinanceClient = {
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string }): Promise<ExpenseWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
+  createGarageDebtPayment(accessToken: string, request: CreateGarageDebtPaymentRequest): Promise<FinancialOperationDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
@@ -484,6 +493,9 @@ export const financeApi: FinanceClient = {
   },
   createIncome(accessToken, request) {
     return requestJson(accessToken, '/api/finance/income', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createGarageDebtPayment(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/income/debt-payment', { method: 'POST', body: JSON.stringify(request) })
   },
   updateIncome(accessToken, operationId, request) {
     return requestJson(accessToken, `/api/finance/operations/${operationId}/income`, { method: 'PUT', body: JSON.stringify(request) })

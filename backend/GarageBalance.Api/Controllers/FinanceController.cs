@@ -194,6 +194,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("income/debt-payment")]
+    [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FinancialOperationDto>> CreateGarageDebtPayment(CreateGarageDebtPaymentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateGarageDebtPaymentAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetOperations), new { operationKind = result.Value!.OperationKind }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPut("operations/{operationId:guid}/income")]
     [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

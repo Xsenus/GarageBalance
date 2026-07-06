@@ -621,6 +621,31 @@ public sealed class FinanceService(
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
+    public async Task<FinanceResult<FinancialOperationDto>> CreateGarageDebtPaymentAsync(CreateGarageDebtPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        if (amount <= 0)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("debt_payment_amount_invalid", "Сумма оплаты входящего долга должна быть больше нуля.");
+        }
+
+        var incomeType = await GetOrCreateDebtTransferIncomeTypeAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var comment = NormalizeOptional(request.Comment);
+        return await CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                request.GarageId,
+                incomeType.Id,
+                request.OperationDate,
+                request.AccountingMonth,
+                amount,
+                null,
+                comment is null ? "Оплата входящего долга периода" : $"Оплата входящего долга периода: {comment}"),
+            actorUserId,
+            cancellationToken);
+    }
+
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);

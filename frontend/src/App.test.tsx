@@ -1720,6 +1720,62 @@ describe('App', () => {
     expect(periodSummary).toHaveTextContent('5 574')
   })
 
+  it('pays opening debt through full payment when worksheet has no service rows', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({ id: 'garage-opening-debt', number: '88', ownerName: 'Смирнов Алексей', peopleCount: 2, floorCount: 1, startingBalance: -900 })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: '88',
+      ownerName: 'Смирнов Алексей',
+      openingDebt: 900,
+      accrualTotal: 0,
+      incomeTotal: 0,
+      debtTotal: 900,
+      closingDebt: 900,
+      rows: [],
+    }))
+    const createGarageDebtPayment = vi.fn(async (_token: string, request) => createFinancialOperation({
+      id: 'opening-debt-payment',
+      garageId: request.garageId,
+      garageNumber: '88',
+      ownerName: 'Смирнов Алексей',
+      incomeTypeName: 'Перенос задолженности',
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      garageDebtBefore: 900,
+      garageDebtAfter: 0,
+    }))
+    const createIncome = vi.fn(async () => createFinancialOperation({ id: 'unexpected-income' }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, createGarageDebtPayment, createIncome })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '88')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*88\s*Смирнов Алексей/ }))
+
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalled())
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('900')
+    await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Закрываем долг на начало')
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
+
+    await waitFor(() => expect(createGarageDebtPayment).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: 'garage-opening-debt',
+      accountingMonth: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+      amount: 900,
+      comment: 'Закрываем долг на начало',
+    })))
+    expect(createIncome).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
+  })
+
   it('loads selected garage payment history from finance backend', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
@@ -6786,6 +6842,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     },
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     createIncome: async () => operation,
+    createGarageDebtPayment: async () => createFinancialOperation({ id: 'operation-debt-payment', amount: 500, incomeTypeName: 'Перенос задолженности' }),
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     createStaffPayment: async () => createFinancialOperation({ id: 'operation-staff', operationKind: 'expense', amount: 500, staffMemberId: 'staff-1', staffMemberName: 'Петрова Ольга', staffDepartmentName: 'Бухгалтерия', expenseTypeName: 'Зарплата' }),

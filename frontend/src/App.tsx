@@ -3660,17 +3660,23 @@ function PaymentsPrototypePanel({
     return garageRows.filter((row) => row.debt > 0 && (period === 'full' || row.month === period))
   }
 
+  function getOpeningDebtForFullPayment(period: string) {
+    return period === 'full' ? Math.max(garageWorksheetSummary?.openingDebt ?? 0, 0) : 0
+  }
+
   async function commitFullGaragePayment(request: FullPaymentPrototypeSubmitRequest) {
     if (!selectedGarage || !realGarageIds.has(selectedGarage.id)) {
       return 'Выберите гараж из справочника, чтобы сохранить полную оплату в истории операций.'
     }
 
     const rowsToPay = getRowsForFullPayment(request.period)
-    const totalDebtToPay = rowsToPay.reduce((sum, row) => sum + row.debt, 0)
-    if (rowsToPay.length === 0 || totalDebtToPay <= 0) {
+    const rowsDebtToPay = rowsToPay.reduce((sum, row) => sum + row.debt, 0)
+    const openingDebtToPay = getOpeningDebtForFullPayment(request.period)
+    const totalDebtToPay = rowsDebtToPay + openingDebtToPay
+    if (totalDebtToPay <= 0) {
       return 'По выбранному периоду нет задолженности для оплаты.'
     }
-    let remainingAmount = totalDebtToPay
+    let remainingAmount = rowsDebtToPay
     const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: AccountingTypeDto; amount: number }> = []
     for (const row of rowsToPay) {
       if (remainingAmount <= 0) {
@@ -3687,11 +3693,26 @@ function PaymentsPrototypePanel({
       remainingAmount -= rowAmount
     }
 
-    if (paymentPlan.length === 0) {
+    if (paymentPlan.length === 0 && openingDebtToPay <= 0) {
       return 'Укажите сумму полной оплаты больше нуля.'
     }
 
-    const operations: FinancialOperationDto[] = []
+    const historyItems: Array<{ operation: FinancialOperationDto; purposeFallback: string; debtAfterFallback: number }> = []
+    if (openingDebtToPay > 0) {
+      const operation = await financeClient.createGarageDebtPayment(auth.accessToken, {
+        garageId: selectedGarage.id,
+        operationDate: getLocalDateInputValue(),
+        accountingMonth: incomeWorksheetMonthFrom.length === 7 ? `${incomeWorksheetMonthFrom}-01` : incomeWorksheetMonthFrom,
+        amount: openingDebtToPay,
+        comment: request.comment.trim() || undefined,
+      })
+      historyItems.push({
+        operation,
+        purposeFallback: 'Оплата входящего долга',
+        debtAfterFallback: Math.max(totalDebtToPay - openingDebtToPay, 0),
+      })
+    }
+
     for (const item of paymentPlan) {
       const accountingMonth = item.row.month.length === 7 ? `${item.row.month}-01` : item.row.month
       const operation = await financeClient.createIncome(auth.accessToken, {
@@ -3704,7 +3725,11 @@ function PaymentsPrototypePanel({
           ? `Полная оплата ${item.row.service} ${item.row.monthLabel}: ${request.comment.trim()}`
           : `Полная оплата ${item.row.service} ${item.row.monthLabel}`,
       })
-      operations.push(operation)
+      historyItems.push({
+        operation,
+        purposeFallback: item.row.service,
+        debtAfterFallback: Math.max(item.row.debt - item.amount, 0),
+      })
     }
 
     const paidByRowId = new Map(paymentPlan.map((item) => [item.row.id, item.amount]))
@@ -3715,20 +3740,21 @@ function PaymentsPrototypePanel({
 
     const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
     setHistoryRows((currentRows) => [
-      ...operations.map((operation, index) => {
-        const plan = paymentPlan[index]
+      ...historyItems.map((item) => {
+        const operation = item.operation
         return {
           id: operation.id,
           date: formatDateOnly(operation.operationDate),
           time: formatPaymentPrototypeOperationTime(operation.createdAtUtc) || paymentTime,
           amount: operation.amount,
-          purpose: operation.incomeTypeName ?? plan.row.service,
-          debtAfter: operation.garageDebtAfter ?? Math.max(plan.row.debt - plan.amount, 0),
+          purpose: operation.incomeTypeName ?? item.purposeFallback,
+          debtAfter: operation.garageDebtAfter ?? item.debtAfterFallback,
         }
       }),
       ...currentRows,
     ])
 
+    void loadGarageIncomeWorksheet(selectedGarage)
     void loadGaragePaymentHistory(selectedGarage)
 
     return null
@@ -4126,7 +4152,7 @@ function PaymentsPrototypePanel({
   const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
   const debtTotal = garageRows.reduce((sum, row) => sum + row.debt, 0)
   const fullPaymentPeriodOptions = [
-    { value: 'full', label: 'Полный расчет', debt: debtTotal },
+    { value: 'full', label: 'Полный расчет', debt: debtTotal + getOpeningDebtForFullPayment('full') },
     ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: group.rows.reduce((sum, row) => sum + row.debt, 0) })),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
   const debtTransferSourceOptions: DebtTransferPrototypePeriodOption[] = groupedGarageRows

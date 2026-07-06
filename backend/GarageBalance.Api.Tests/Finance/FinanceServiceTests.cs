@@ -469,6 +469,39 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateGarageDebtPaymentAsync_CreatesSystemIncomeAndReducesOpeningDebt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 900m;
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateGarageDebtPaymentAsync(
+            new CreateGarageDebtPaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 500m, "Оплата старого долга"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("income", result.Value!.OperationKind);
+        Assert.Equal("Перенос задолженности", result.Value.IncomeTypeName);
+        Assert.Equal(900m, result.Value.GarageDebtBefore);
+        Assert.Equal(400m, result.Value.GarageDebtAfter);
+        var allocation = Assert.Single(result.Value.PaymentAllocations);
+        Assert.Equal("starting_balance", allocation.AllocationKind);
+        Assert.Equal(900m, allocation.DebtBefore);
+        Assert.Equal(500m, allocation.PaidAmount);
+        Assert.Equal(400m, allocation.DebtAfter);
+
+        var incomeType = Assert.Single(database.Context.IncomeTypes, item => item.Code == "debt_transfer");
+        Assert.True(incomeType.IsSystem);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Оплата входящего долга периода", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts()
     {
         await using var database = await TestDatabase.CreateAsync();

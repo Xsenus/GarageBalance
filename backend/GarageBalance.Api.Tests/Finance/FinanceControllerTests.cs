@@ -141,6 +141,25 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateGarageDebtPayment_PassesActorUserIdAndRequestToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operation = CreateOperation("income");
+        var request = new CreateGarageDebtPaymentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 900m, "Оплата долга");
+        var service = new FakeFinanceService
+        {
+            CreateGarageDebtPaymentResult = FinanceResult<FinancialOperationDto>.Success(operation)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateGarageDebtPayment(request, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastGarageDebtPaymentRequest);
+    }
+
+    [Fact]
     public async Task CreateExpense_ReturnsConflictForDuplicateOperation()
     {
         var controller = CreateController(new FakeFinanceService
@@ -756,10 +775,12 @@ public sealed class FinanceControllerTests
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
+        public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> CreateGarageDebtPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateStaffPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -862,6 +883,13 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateIncomeResult);
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> CreateGarageDebtPaymentAsync(CreateGarageDebtPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastGarageDebtPaymentRequest = request;
+            return Task.FromResult(CreateGarageDebtPaymentResult);
         }
 
         public Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
