@@ -1041,21 +1041,24 @@ describe('App', () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300 })
     const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
-    let savedIncomeRequest: CreateIncomeOperationRequest | null = null
+    const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
+    const incomeTypes = [incomeType, waterIncomeType]
+    const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
-      getIncomeTypes: async () => [incomeType],
+      getIncomeTypes: async () => incomeTypes,
     })
     const financeClient = createFinanceClient({
       createIncome: async (_token, request) => {
-        savedIncomeRequest = request
+        savedIncomeRequests.push(request)
+        const requestIncomeType = incomeTypes.find((item) => item.id === request.incomeTypeId) ?? incomeType
         return createFinancialOperation({
-          id: 'income-electricity-payment',
+          id: `income-payment-${savedIncomeRequests.length}`,
           garageId: request.garageId,
           garageNumber: garage.number,
           ownerName: garage.ownerName,
           incomeTypeId: request.incomeTypeId,
-          incomeTypeName: incomeType.name,
+          incomeTypeName: requestIncomeType.name,
           operationDate: request.operationDate,
           accountingMonth: request.accountingMonth,
           amount: request.amount,
@@ -1095,7 +1098,7 @@ describe('App', () => {
     expect(electricityPaymentInput).toHaveValue('5674')
     await user.click(electricityPaymentInput)
     await user.keyboard('{Enter}')
-    await waitFor(() => expect(savedIncomeRequest).toMatchObject({
+    await waitFor(() => expect(savedIncomeRequests[0]).toMatchObject({
       garageId: garage.id,
       incomeTypeId: incomeType.id,
       operationDate: '2026-06-30',
@@ -1118,9 +1121,19 @@ describe('App', () => {
     await user.click(fullPaymentButton)
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(within(fullPaymentDialog).getByLabelText('Период полной оплаты')).toHaveValue('full')
-    const fullPaymentCancelButton = within(fullPaymentDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(fullPaymentCancelButton).toHaveFocus())
-    await user.click(fullPaymentCancelButton)
+    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('2500')
+    await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
+    await waitFor(() => expect(savedIncomeRequests).toHaveLength(2))
+    expect(savedIncomeRequests[1]).toMatchObject({
+      garageId: garage.id,
+      incomeTypeId: waterIncomeType.id,
+      operationDate: '2026-06-30',
+      accountingMonth: '2026-06-01',
+      amount: 2500,
+      comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
 
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))

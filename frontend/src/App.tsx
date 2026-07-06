@@ -728,7 +728,7 @@ type CancelFinanceTarget = {
   record: FinanceRecord
   reason: string
 }
-type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual' | 'garageAccrual' | 'fullPayment'
+type PaymentsPrototypeDialogKey = 'bank' | 'expense' | 'accrual' | 'garageAccrual'
 
 const paymentPrototypeRows = [
   { item: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
@@ -780,6 +780,18 @@ type GaragePaymentHistoryPrototypeRow = {
   amount: number
   purpose: string
   debtAfter: number
+}
+
+type FullPaymentPrototypePeriodOption = {
+  value: string
+  label: string
+  debt: number
+}
+
+type FullPaymentPrototypeSubmitRequest = {
+  period: string
+  amount: number
+  comment: string
 }
 
 type PaymentsPrototypeSavedState = {
@@ -2811,7 +2823,6 @@ function FinancePanel({
       {paymentsPrototypeDialog === 'expense' ? <NewExpensePrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
       {paymentsPrototypeDialog === 'accrual' ? <NewAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
       {paymentsPrototypeDialog === 'garageAccrual' ? <GarageAccrualPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
-      {paymentsPrototypeDialog === 'fullPayment' ? <FullPaymentPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
 }
@@ -2844,6 +2855,8 @@ function PaymentsPrototypePanel({
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
+  const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
+  const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
@@ -2932,6 +2945,23 @@ function PaymentsPrototypePanel({
     onOpenDialog(dialog, event.currentTarget)
   }
 
+  function openFullPaymentDialog(event: MouseEvent<HTMLButtonElement>) {
+    fullPaymentTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setFullPaymentDialogOpen(true)
+  }
+
+  function closeFullPaymentDialog() {
+    const trigger = fullPaymentTriggerRef.current
+    setFullPaymentDialogOpen(false)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      fullPaymentTriggerRef.current = null
+    }, 0)
+  }
+
   function selectGarage(garage: PaymentsPrototypeGarage) {
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
@@ -3010,6 +3040,85 @@ function PaymentsPrototypePanel({
     }
   }
 
+  function getRowsForFullPayment(period: string) {
+    return garageRows.filter((row) => row.debt > 0 && (period === 'full' || row.month === period))
+  }
+
+  async function commitFullGaragePayment(request: FullPaymentPrototypeSubmitRequest) {
+    if (!selectedGarage || !realGarageIds.has(selectedGarage.id)) {
+      return 'Выберите гараж из справочника, чтобы сохранить полную оплату в истории операций.'
+    }
+
+    const rowsToPay = getRowsForFullPayment(request.period)
+    const totalDebtToPay = rowsToPay.reduce((sum, row) => sum + row.debt, 0)
+    if (rowsToPay.length === 0 || totalDebtToPay <= 0) {
+      return 'По выбранному периоду нет задолженности для оплаты.'
+    }
+    if (request.amount > totalDebtToPay) {
+      return `Сумма полной оплаты не должна превышать задолженность ${formatPaymentPrototypeValue(totalDebtToPay)}.`
+    }
+
+    let remainingAmount = request.amount
+    const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: AccountingTypeDto; amount: number }> = []
+    for (const row of rowsToPay) {
+      if (remainingAmount <= 0) {
+        break
+      }
+
+      const incomeType = findIncomeTypeForPayment(row.service)
+      if (!incomeType) {
+        return `Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`
+      }
+
+      const rowAmount = Math.min(row.debt, remainingAmount)
+      paymentPlan.push({ row, incomeType, amount: rowAmount })
+      remainingAmount -= rowAmount
+    }
+
+    if (paymentPlan.length === 0) {
+      return 'Укажите сумму полной оплаты больше нуля.'
+    }
+
+    const operations: FinancialOperationDto[] = []
+    for (const item of paymentPlan) {
+      const accountingMonth = item.row.month.length === 7 ? `${item.row.month}-01` : item.row.month
+      const operation = await financeClient.createIncome(auth.accessToken, {
+        garageId: selectedGarage.id,
+        incomeTypeId: item.incomeType.id,
+        operationDate: getLocalDateInputValue(),
+        accountingMonth,
+        amount: item.amount,
+        comment: request.comment.trim()
+          ? `Полная оплата ${item.row.service} ${item.row.monthLabel}: ${request.comment.trim()}`
+          : `Полная оплата ${item.row.service} ${item.row.monthLabel}`,
+      })
+      operations.push(operation)
+    }
+
+    const paidByRowId = new Map(paymentPlan.map((item) => [item.row.id, item.amount]))
+    setGarageRows((currentRows) => currentRows.map((row) => {
+      const paidAmount = paidByRowId.get(row.id)
+      return paidAmount ? { ...row, paymentDraft: '', paid: row.paid + paidAmount, debt: Math.max(row.debt - paidAmount, 0) } : row
+    }))
+
+    const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    setHistoryRows((currentRows) => [
+      ...operations.map((operation, index) => {
+        const plan = paymentPlan[index]
+        return {
+          date: formatDateOnly(operation.operationDate),
+          time: paymentTime,
+          amount: operation.amount,
+          purpose: operation.incomeTypeName ?? plan.row.service,
+          debtAfter: operation.garageDebtAfter ?? Math.max(plan.row.debt - plan.amount, 0),
+        }
+      }),
+      ...currentRows,
+    ])
+
+    return null
+  }
+
   const groupedGarageRows = garageRows.reduce<Array<{ month: string; monthLabel: string; rows: GarageIncomePrototypeRow[] }>>((groups, row) => {
     const existingGroup = groups.find((group) => group.month === row.month)
     if (existingGroup) {
@@ -3023,6 +3132,10 @@ function PaymentsPrototypePanel({
   const paymentTotal = garageRows.reduce((sum, row) => sum + row.payable, 0)
   const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
   const debtTotal = garageRows.reduce((sum, row) => sum + row.debt, 0)
+  const fullPaymentPeriodOptions = [
+    { value: 'full', label: 'Полный расчет', debt: debtTotal },
+    ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: group.rows.reduce((sum, row) => sum + row.debt, 0) })),
+  ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -3099,7 +3212,7 @@ function PaymentsPrototypePanel({
                 <Plus size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
               </button>
-              <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'fullPayment')}>
+              <button className="secondary-button" type="button" onClick={openFullPaymentDialog}>
                 <span>Полная оплата</span>
               </button>
             </div>
@@ -3332,6 +3445,13 @@ function PaymentsPrototypePanel({
           </div>
         </>
       )}
+      {fullPaymentDialogOpen ? (
+        <FullPaymentPrototypeDialog
+          periodOptions={fullPaymentPeriodOptions}
+          onClose={closeFullPaymentDialog}
+          onSubmit={commitFullGaragePayment}
+        />
+      ) : null}
     </section>
   )
 }
@@ -3508,10 +3628,47 @@ function GarageAccrualPrototypeDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
+function FullPaymentPrototypeDialog({
+  periodOptions,
+  onClose,
+  onSubmit,
+}: {
+  periodOptions: FullPaymentPrototypePeriodOption[]
+  onClose: () => void
+  onSubmit: (request: FullPaymentPrototypeSubmitRequest) => Promise<string | null>
+}) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [period, setPeriod] = useState(periodOptions[0]?.value ?? 'full')
+  const [amount, setAmount] = useState(() => String(periodOptions[0]?.debt ?? 0))
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму полной оплаты больше нуля.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({ period, amount: parsedAmount, comment })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось провести полную оплату. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3524,27 +3681,34 @@ function FullPaymentPrototypeDialog({ onClose }: { onClose: () => void }) {
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onClose()
-        }}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Период">
-            <select aria-label="Период полной оплаты" defaultValue="full">
-              <option value="full">Полный расчет</option>
-              <option value="2026-06">июн.26</option>
-              <option value="2026-05">май.26</option>
-              <option value="2026-04">апр.26</option>
+            <select aria-label="Период полной оплаты" value={period} onChange={(event) => {
+              const nextPeriod = event.target.value
+              setPeriod(nextPeriod)
+              setAmount(String(periodOptions.find((option) => option.value === nextPeriod)?.debt ?? 0))
+              setError(null)
+            }}>
+              {periodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма полной оплаты" inputMode="decimal" />
+            <input aria-label="Сумма полной оплаты" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к полной оплате" rows={4} />
+            <textarea aria-label="Комментарий к полной оплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
+          {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit">Принять</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Принять'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>
