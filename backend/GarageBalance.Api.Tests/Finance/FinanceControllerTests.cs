@@ -101,6 +101,25 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateStaffPayment_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operation = CreateOperation("expense");
+        var request = new CreateStaffPaymentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 25), new DateOnly(2026, 6, 1), 25000m, "PAY-1", "Аванс");
+        var service = new FakeFinanceService
+        {
+            CreateStaffPaymentResult = FinanceResult<FinancialOperationDto>.Success(operation)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateStaffPayment(request, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastStaffPaymentRequest);
+    }
+
+    [Fact]
     public async Task CancelOperation_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -621,6 +640,7 @@ public sealed class FinanceControllerTests
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
+        public CreateStaffPaymentRequest? LastStaffPaymentRequest { get; private set; }
         public AccrualListRequest? LastAccrualListRequest { get; private set; }
         public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
@@ -630,6 +650,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> CreateStaffPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CancelOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
@@ -726,6 +747,13 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateExpenseResult);
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> CreateStaffPaymentAsync(CreateStaffPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastStaffPaymentRequest = request;
+            return Task.FromResult(CreateStaffPaymentResult);
         }
 
         public Task<FinanceResult<FinancialOperationDto>> UpdateExpenseAsync(Guid operationId, CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

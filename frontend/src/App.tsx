@@ -832,9 +832,25 @@ type ExpensePrototypeDialogPreset = {
   rowIndex?: number
 }
 
+type StaffPaymentPrototypeDialogPreset = {
+  staffMemberName?: string
+  amount?: number
+  rowIndex?: number
+}
+
 type ExpensePrototypeSubmitRequest = {
   supplierId: string
   expenseTypeId: string
+  operationDate: string
+  accountingMonth: string
+  amount: number
+  documentNumber: string
+  comment: string
+  rowIndex?: number
+}
+
+type StaffPaymentPrototypeSubmitRequest = {
+  staffMemberId: string
   operationDate: string
   accountingMonth: string
   amount: number
@@ -931,6 +947,7 @@ function FinancePanel({
   const [incomeGarageOptions, setIncomeGarageOptions] = useState<GarageDto[]>([])
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
+  const [staffMembers, setStaffMembers] = useState<StaffMemberDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
@@ -1070,10 +1087,11 @@ function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSupplierGroups(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
@@ -1089,6 +1107,7 @@ function FinancePanel({
           setIncomeGarageOptions(loadedGarages)
           setSupplierGroups(loadedSupplierGroups)
           setSuppliers(loadedSuppliers)
+          setStaffMembers(loadedStaffMembers)
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
           setTariffs(loadedTariffs)
@@ -2284,6 +2303,7 @@ function FinancePanel({
         incomeTypes={incomeTypes}
         supplierGroups={supplierGroups}
         suppliers={suppliers}
+        staffMembers={staffMembers}
         tariffs={tariffs}
         onOpenDialog={openPaymentsPrototypeDialog}
       />
@@ -2947,6 +2967,7 @@ function PaymentsPrototypePanel({
   incomeTypes,
   supplierGroups,
   suppliers,
+  staffMembers,
   tariffs,
   onOpenDialog,
 }: {
@@ -2958,6 +2979,7 @@ function PaymentsPrototypePanel({
   incomeTypes: AccountingTypeDto[]
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
+  staffMembers: StaffMemberDto[]
   tariffs: TariffDto[]
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
 }) {
@@ -2985,6 +3007,8 @@ function PaymentsPrototypePanel({
   const salaryTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [expenseDialogPreset, setExpenseDialogPreset] = useState<ExpensePrototypeDialogPreset | null>(null)
   const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
+  const staffPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
@@ -3189,6 +3213,23 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       expenseTriggerRef.current = null
+    }, 0)
+  }
+
+  function openStaffPaymentDialog(event: MouseEvent<HTMLButtonElement>, preset?: StaffPaymentPrototypeDialogPreset) {
+    staffPaymentTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    setStaffPaymentDialogPreset(preset ?? {})
+  }
+
+  function closeStaffPaymentDialog() {
+    const trigger = staffPaymentTriggerRef.current
+    setStaffPaymentDialogPreset(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      staffPaymentTriggerRef.current = null
     }, 0)
   }
 
@@ -3579,6 +3620,39 @@ function PaymentsPrototypePanel({
 
       const paid = typeof row.paid === 'number' ? row.paid + operation.amount : operation.amount
       const cost = typeof row.cost === 'number' ? row.cost : operation.amount
+      const balance = Math.max(cost - paid, 0)
+      return { ...row, paid, balance }
+    }))
+
+    return null
+  }
+
+  async function commitStaffPayment(request: StaffPaymentPrototypeSubmitRequest) {
+    const staffMember = staffMembers.find((item) => item.id === request.staffMemberId && !item.isArchived) ?? null
+    if (!staffMember) {
+      return 'Выберите сотрудника из справочника персонала.'
+    }
+
+    const operation = await financeClient.createStaffPayment(auth.accessToken, {
+      staffMemberId: staffMember.id,
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      documentNumber: request.documentNumber.trim() || undefined,
+      comment: request.comment.trim() || undefined,
+    })
+
+    setExpenseRows((currentRows) => currentRows.map((row, index) => {
+      const normalizedCounterparty = row.counterparty?.trim().toLocaleLowerCase('ru-RU') ?? ''
+      const normalizedStaffName = (operation.staffMemberName ?? staffMember.fullName).trim().toLocaleLowerCase('ru-RU')
+      const shouldUpdate = request.rowIndex === index
+        || (request.rowIndex === undefined && normalizedCounterparty.length > 0 && normalizedStaffName.includes(normalizedCounterparty))
+      if (!shouldUpdate) {
+        return row
+      }
+
+      const paid = (typeof row.paid === 'number' ? row.paid : 0) + operation.amount
+      const cost = typeof row.cost === 'number' ? row.cost : staffMember.rate
       const balance = Math.max(cost - paid, 0)
       return { ...row, paid, balance }
     }))
@@ -3987,6 +4061,8 @@ function PaymentsPrototypePanel({
                 <tbody>
                   {expenseRows.map((row, index) => {
                     const supplier = row.counterparty ?? ''
+                    const isStaffPaymentRow = Boolean(row.counterparty && !suppliers.some((item) => item.name.trim().toLocaleLowerCase('ru-RU') === row.counterparty?.trim().toLocaleLowerCase('ru-RU')))
+                    const suggestedAmount = typeof row.balance === 'number' && row.balance > 0 ? row.balance : typeof row.cost === 'number' ? row.cost : undefined
                     return (
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
@@ -4006,7 +4082,14 @@ function PaymentsPrototypePanel({
                         </td>
                         <td>
                           {row.action && row.item !== 'Авансовые выплаты' && row.item !== 'Выплата без чека' ? (
-                            <button className="link-button" type="button" onClick={(event) => openExpenseDialog(event, { expenseTypeName: row.item, amount: typeof row.balance === 'number' && row.balance > 0 ? row.balance : typeof row.cost === 'number' ? row.cost : undefined, rowIndex: index })} aria-label={`Оплатить ${row.item}`}>
+                            <button className="link-button" type="button" onClick={(event) => {
+                              if (isStaffPaymentRow) {
+                                openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
+                                return
+                              }
+
+                              openExpenseDialog(event, { expenseTypeName: row.item, amount: suggestedAmount, rowIndex: index })
+                            }} aria-label={isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
                               Оплатить
                             </button>
                           ) : null}
@@ -4085,6 +4168,14 @@ function PaymentsPrototypePanel({
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
           onClose={closeExpenseDialog}
           onSubmit={commitExpensePayment}
+        />
+      ) : null}
+      {staffPaymentDialogPreset ? (
+        <StaffPaymentPrototypeDialog
+          preset={staffPaymentDialogPreset}
+          staffMembers={staffMembers.filter((staffMember) => !staffMember.isArchived)}
+          onClose={closeStaffPaymentDialog}
+          onSubmit={commitStaffPayment}
         />
       ) : null}
       {supplierAccrualDialogOpen ? (
@@ -4378,6 +4469,134 @@ function NewExpensePrototypeDialog({
           </FormField>
           <FormField label="Комментарий">
             <textarea aria-label="Комментарий к выплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
+          </FormField>
+          {error ? <FormError>{error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function StaffPaymentPrototypeDialog({
+  preset,
+  staffMembers,
+  onClose,
+  onSubmit,
+}: {
+  preset: StaffPaymentPrototypeDialogPreset
+  staffMembers: StaffMemberDto[]
+  onClose: () => void
+  onSubmit: (request: StaffPaymentPrototypeSubmitRequest) => Promise<string | null>
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const normalizedPresetName = preset.staffMemberName?.trim().toLocaleLowerCase('ru-RU') ?? ''
+  const presetStaffMember = normalizedPresetName
+    ? staffMembers.find((member) => member.fullName.trim().toLocaleLowerCase('ru-RU').includes(normalizedPresetName))
+    : null
+  const [staffMemberId, setStaffMemberId] = useState(presetStaffMember?.id ?? staffMembers[0]?.id ?? '')
+  const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
+  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
+  const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '')
+  const [documentNumber, setDocumentNumber] = useState('')
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!staffMemberId) {
+      setError('Выберите сотрудника из справочника персонала.')
+      return
+    }
+    if (!operationDate) {
+      setError('Укажите дату выплаты сотруднику.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError('Укажите месяц выплаты сотруднику.')
+      return
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму выплаты сотруднику больше нуля.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        staffMemberId,
+        operationDate,
+        accountingMonth: `${accountingMonth}-01`,
+        amount: parsedAmount,
+        documentNumber,
+        comment,
+        rowIndex: preset.rowIndex,
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось провести выплату сотруднику. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-payment-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="staff-payment-title">Выплата сотруднику</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть выплату сотруднику" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Сотрудник">
+            <select aria-label="Сотрудник выплаты" value={staffMemberId} onChange={(event) => {
+              setStaffMemberId(event.target.value)
+              setError(null)
+            }}>
+              {staffMembers.length > 0 ? staffMembers.map((member) => (
+                <option key={member.id} value={member.id}>{member.fullName} · {member.departmentName}</option>
+              )) : <option value="">Нет сотрудников</option>}
+            </select>
+          </FormField>
+          <FormField label="Дата">
+            <input aria-label="Дата выплаты сотруднику" type="date" value={operationDate} onChange={(event) => {
+              setOperationDate(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Месяц">
+            <input aria-label="Месяц выплаты сотруднику" type="month" value={accountingMonth} onChange={(event) => {
+              setAccountingMonth(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Сумма">
+            <input aria-label="Сумма выплаты сотруднику" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Документ">
+            <input aria-label="Документ выплаты сотруднику" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к выплате сотруднику" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">

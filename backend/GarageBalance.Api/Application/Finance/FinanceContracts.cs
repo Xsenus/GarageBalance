@@ -34,7 +34,10 @@ public sealed record FinancialOperationDto(
     decimal? SupplierDebtBefore,
     decimal? SupplierDebtAfter,
     IReadOnlyList<PaymentAllocationDto> PaymentAllocations,
-    bool IsCanceled);
+    bool IsCanceled,
+    Guid? StaffMemberId = null,
+    string? StaffMemberName = null,
+    string? StaffDepartmentName = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -48,6 +51,14 @@ public sealed record CreateIncomeOperationRequest(
 public sealed record CreateExpenseOperationRequest(
     Guid SupplierId,
     Guid ExpenseTypeId,
+    DateOnly OperationDate,
+    DateOnly AccountingMonth,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(120)] string? DocumentNumber,
+    [MaxLength(1000)] string? Comment);
+
+public sealed record CreateStaffPaymentRequest(
+    Guid StaffMemberId,
     DateOnly OperationDate,
     DateOnly AccountingMonth,
     [Range(0.01, 999999999)] decimal Amount,

@@ -158,6 +158,62 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateStaffPaymentAsync_CreatesExpenseOperationWithAuditAndAvailableAmountCheck()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember { FullName = "Петрова Ольга", Department = department, Rate = 40000m };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
+        database.Context.AddRange(department, staffMember, salaryType);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(
+                staffMember.Id,
+                new DateOnly(2026, 6, 25),
+                new DateOnly(2026, 6, 1),
+                25000m,
+                "PAY-STAFF-1",
+                "Аванс сотруднику"),
+            actorUserId,
+            CancellationToken.None);
+        var tooLarge = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(
+                staffMember.Id,
+                new DateOnly(2026, 6, 26),
+                new DateOnly(2026, 6, 1),
+                16000m,
+                "PAY-STAFF-2",
+                null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("expense", result.Value!.OperationKind);
+        Assert.Equal(staffMember.Id, result.Value.StaffMemberId);
+        Assert.Equal("Петрова Ольга", result.Value.StaffMemberName);
+        Assert.Equal("Бухгалтерия", result.Value.StaffDepartmentName);
+        Assert.Null(result.Value.SupplierId);
+        Assert.Equal(salaryType.Id, result.Value.ExpenseTypeId);
+        Assert.False(tooLarge.Succeeded);
+        Assert.Equal("staff_payment_amount_exceeds_available", tooLarge.ErrorCode);
+        var operation = Assert.Single(database.Context.FinancialOperations.Where(item => item.StaffMemberId == staffMember.Id));
+        Assert.Equal(25000m, operation.Amount);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.staff_payment_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(staffMember.Id.ToString(), audit.RelatedCounterpartyId);
+        Assert.Equal("Петрова Ольга", audit.RelatedCounterpartyName);
+        Assert.Contains("Создана выплата 25000,00 сотруднику Петрова Ольга", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("доступно до выплаты 40000,00", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Петрова Ольга", metadata.RootElement.GetProperty("staffMemberName").GetString());
+        Assert.Equal("Бухгалтерия", metadata.RootElement.GetProperty("staffDepartmentName").GetString());
+    }
+
+    [Fact]
     public async Task UpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
     {
         await using var database = await TestDatabase.CreateAsync();

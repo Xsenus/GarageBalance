@@ -21,7 +21,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1048,6 +1048,7 @@ describe('App', () => {
     const savedAccrualRequests: CreateAccrualRequest[] = []
     const savedRegularAccrualRequests: GenerateRegularAccrualsRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
+    const savedStaffPaymentRequests: CreateStaffPaymentRequest[] = []
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
     const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
@@ -1132,6 +1133,22 @@ describe('App', () => {
           comment: request.comment ?? null,
           supplierDebtBefore: 39000,
           supplierDebtAfter: 37800,
+        })
+      },
+      createStaffPayment: async (_token, request) => {
+        savedStaffPaymentRequests.push(request)
+        return createFinancialOperation({
+          id: `staff-payment-${savedStaffPaymentRequests.length}`,
+          operationKind: 'expense',
+          operationDate: request.operationDate,
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          documentNumber: request.documentNumber ?? null,
+          comment: request.comment ?? null,
+          staffMemberId: request.staffMemberId,
+          staffMemberName: 'Петрова Ольга',
+          staffDepartmentName: 'Бухгалтерия',
+          expenseTypeName: 'Зарплата',
         })
       },
       createSupplierAccrual: async (_token, request) => {
@@ -1314,6 +1331,28 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(addExpenseButton).toHaveFocus())
+
+    const staffPaymentButton = within(prototype).getByRole('button', { name: 'Оплатить сотрудника Петрова' })
+    await user.click(staffPaymentButton)
+    const staffPaymentDialog = await screen.findByRole('dialog', { name: 'Выплата сотруднику' })
+    expect(within(staffPaymentDialog).getByLabelText('Сотрудник выплаты')).toHaveValue('staff-member-1')
+    expect(within(staffPaymentDialog).getByLabelText('Дата выплаты сотруднику')).toHaveValue('2026-06-30')
+    expect(within(staffPaymentDialog).getByLabelText('Месяц выплаты сотруднику')).toHaveValue('2026-06')
+    expect(within(staffPaymentDialog).getByLabelText('Сумма выплаты сотруднику')).toHaveValue('40000')
+    await user.type(within(staffPaymentDialog).getByLabelText('Документ выплаты сотруднику'), 'STAFF-PAY-prototype')
+    await user.type(within(staffPaymentDialog).getByLabelText('Комментарий к выплате сотруднику'), 'Выплата сотруднику из формы')
+    await user.click(within(staffPaymentDialog).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(savedStaffPaymentRequests).toHaveLength(1))
+    expect(savedStaffPaymentRequests[0]).toMatchObject({
+      staffMemberId: 'staff-member-1',
+      operationDate: '2026-06-30',
+      accountingMonth: '2026-06-01',
+      amount: 40000,
+      documentNumber: 'STAFF-PAY-prototype',
+      comment: 'Выплата сотруднику из формы',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Выплата сотруднику' })).not.toBeInTheDocument())
+    await waitFor(() => expect(staffPaymentButton).toHaveFocus())
 
     const addAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление' })
     await user.click(addAccrualButton)
@@ -6266,6 +6305,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     createIncome: async () => operation,
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
+    createStaffPayment: async () => createFinancialOperation({ id: 'operation-staff', operationKind: 'expense', amount: 500, staffMemberId: 'staff-1', staffMemberName: 'Петрова Ольга', staffDepartmentName: 'Бухгалтерия', expenseTypeName: 'Зарплата' }),
     updateExpense: async (_token, operationId) => createFinancialOperation({ id: operationId, operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     cancelOperation: async (_token, operationId, request) => {
       const target = operation.id === operationId ? operation : createFinancialOperation({ id: operationId })
@@ -7268,6 +7308,9 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     supplierDebtAfter: null,
     paymentAllocations: [],
     isCanceled: false,
+    staffMemberId: null,
+    staffMemberName: null,
+    staffDepartmentName: null,
     ...overrides,
   }
 }

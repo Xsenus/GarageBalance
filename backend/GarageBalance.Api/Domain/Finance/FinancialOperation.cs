@@ -17,6 +17,8 @@ public sealed class FinancialOperation
     public IncomeType? IncomeType { get; set; }
     public Guid? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
+    public Guid? StaffMemberId { get; set; }
+    public StaffMember? StaffMember { get; set; }
     public Guid? ExpenseTypeId { get; set; }
     public ExpenseType? ExpenseType { get; set; }
     public bool IsCanceled { get; set; }

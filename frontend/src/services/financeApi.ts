@@ -30,6 +30,9 @@ export type FinancialOperationDto = {
   supplierDebtAfter: number | null
   paymentAllocations: PaymentAllocationDto[]
   isCanceled: boolean
+  staffMemberId: string | null
+  staffMemberName: string | null
+  staffDepartmentName: string | null
 }
 
 export type FinanceSummaryDto = {
@@ -151,6 +154,15 @@ export type CreateExpenseOperationRequest = {
   comment?: string
 }
 
+export type CreateStaffPaymentRequest = {
+  staffMemberId: string
+  operationDate: string
+  accountingMonth: string
+  amount: number
+  documentNumber?: string
+  comment?: string
+}
+
 export type CancelFinanceEntryRequest = {
   reason: string
 }
@@ -240,6 +252,7 @@ export type FinanceClient = {
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
+  createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
   updateExpense(accessToken: string, operationId: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
@@ -384,6 +397,9 @@ export const financeApi: FinanceClient = {
   },
   createExpense(accessToken, request) {
     return requestJson(accessToken, '/api/finance/expense', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createStaffPayment(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/staff-payments', { method: 'POST', body: JSON.stringify(request) })
   },
   updateExpense(accessToken, operationId, request) {
     return requestJson(accessToken, `/api/finance/operations/${operationId}/expense`, { method: 'PUT', body: JSON.stringify(request) })

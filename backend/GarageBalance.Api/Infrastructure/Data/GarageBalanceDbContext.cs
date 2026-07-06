@@ -316,6 +316,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .HasFilter("\"IsCanceled\" = false AND \"DocumentNumber\" IS NOT NULL");
             entity.HasIndex(operation => operation.GarageId);
             entity.HasIndex(operation => operation.SupplierId);
+            entity.HasIndex(operation => operation.StaffMemberId);
             entity.HasOne(operation => operation.Garage)
                 .WithMany()
                 .HasForeignKey(operation => operation.GarageId)
@@ -327,6 +328,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(operation => operation.Supplier)
                 .WithMany()
                 .HasForeignKey(operation => operation.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.StaffMember)
+                .WithMany()
+                .HasForeignKey(operation => operation.StaffMemberId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(operation => operation.ExpenseType)
                 .WithMany()
