@@ -795,6 +795,23 @@ type GaragePaymentHistoryPrototypeRow = {
   amount: number
   purpose: string
   debtAfter: number
+  operation?: FinancialOperationDto
+}
+
+type GaragePaymentHistoryEditState = {
+  row: GaragePaymentHistoryPrototypeRow
+  amount: string
+  operationDate: string
+  accountingMonth: string
+  documentNumber: string
+  comment: string
+  error: string | null
+}
+
+type GaragePaymentHistoryCancelState = {
+  row: GaragePaymentHistoryPrototypeRow
+  reason: string
+  error: string | null
 }
 
 type FullPaymentPrototypePeriodOption = {
@@ -2341,6 +2358,7 @@ function FinancePanel({
 
       <PaymentsPrototypePanel
         auth={auth}
+        canWritePayments={canWritePayments}
         expenseTypes={expenseTypes}
         financeClient={financeClient}
         formStateClient={formStateClient}
@@ -2998,6 +3016,7 @@ function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOpera
       amount: operation.amount,
       purpose: operation.incomeTypeName ?? operation.comment ?? 'Поступление',
       debtAfter: operation.garageDebtAfter ?? 0,
+      operation,
     }))
 }
 
@@ -3045,6 +3064,7 @@ function createPaymentPrototypeMonthOptions(currentMonth = getCurrentMonthInputV
 
 function PaymentsPrototypePanel({
   auth,
+  canWritePayments,
   expenseTypes,
   financeClient,
   formStateClient,
@@ -3057,6 +3077,7 @@ function PaymentsPrototypePanel({
   onOpenDialog,
 }: {
   auth: AuthResponse
+  canWritePayments: boolean
   expenseTypes: AccountingTypeDto[]
   financeClient: FinanceClient
   formStateClient: FormStateClient
@@ -3101,6 +3122,9 @@ function PaymentsPrototypePanel({
   const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
   const staffPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [historyEdit, setHistoryEdit] = useState<GaragePaymentHistoryEditState | null>(null)
+  const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
+  const [historyActionSaving, setHistoryActionSaving] = useState(false)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
@@ -3409,13 +3433,108 @@ function PaymentsPrototypePanel({
       const page = await financeClient.getOperationsPage(auth.accessToken, {
         operationKind: 'income',
         garageId: garage.id,
-        limit: 25,
+        limit: 500,
       })
       setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
     } finally {
       setGaragePaymentHistoryLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+    }
+  }
+
+  function openHistoryEdit(row: GaragePaymentHistoryPrototypeRow) {
+    if (!row.operation || !canWritePayments) {
+      return
+    }
+
+    setPaymentError(null)
+    setHistoryEdit({
+      row,
+      amount: String(row.operation.amount),
+      operationDate: row.operation.operationDate,
+      accountingMonth: row.operation.accountingMonth.slice(0, 7),
+      documentNumber: row.operation.documentNumber ?? '',
+      comment: row.operation.comment ?? '',
+      error: null,
+    })
+  }
+
+  function openHistoryCancel(row: GaragePaymentHistoryPrototypeRow) {
+    if (!row.operation || !canWritePayments) {
+      return
+    }
+
+    setPaymentError(null)
+    setHistoryCancel({ row, reason: '', error: null })
+  }
+
+  async function saveHistoryEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!historyEdit?.row.operation || !selectedGarage) {
+      return
+    }
+
+    const operation = historyEdit.row.operation
+    const amount = Number(historyEdit.amount.trim().replace(',', '.'))
+    if (!operation.garageId || !operation.incomeTypeId) {
+      setHistoryEdit((state) => state ? { ...state, error: 'Платеж нельзя изменить: в операции не хватает гаража или вида поступления.' } : state)
+      return
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setHistoryEdit((state) => state ? { ...state, error: 'Укажите сумму платежа больше нуля.' } : state)
+      return
+    }
+
+    setHistoryActionSaving(true)
+    setHistoryEdit((state) => state ? { ...state, error: null } : state)
+    try {
+      await financeClient.updateIncome(auth.accessToken, operation.id, {
+        garageId: operation.garageId,
+        incomeTypeId: operation.incomeTypeId,
+        operationDate: historyEdit.operationDate,
+        accountingMonth: `${historyEdit.accountingMonth}-01`,
+        amount,
+        documentNumber: historyEdit.documentNumber.trim() || undefined,
+        comment: historyEdit.comment.trim() || undefined,
+      })
+      setHistoryEdit(null)
+      await Promise.all([
+        loadGaragePaymentHistory(selectedGarage),
+        loadGarageIncomeWorksheet(selectedGarage),
+      ])
+    } catch (error) {
+      setHistoryEdit((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось изменить платеж.' } : state)
+    } finally {
+      setHistoryActionSaving(false)
+    }
+  }
+
+  async function confirmHistoryCancel() {
+    if (!historyCancel?.row.operation || !selectedGarage) {
+      return
+    }
+
+    const reason = historyCancel.reason.trim()
+    if (!reason) {
+      setHistoryCancel((state) => state ? { ...state, error: 'Укажите причину отмены платежа.' } : state)
+      return
+    }
+
+    setHistoryActionSaving(true)
+    setHistoryCancel((state) => state ? { ...state, error: null } : state)
+    try {
+      await financeClient.cancelOperation(auth.accessToken, historyCancel.row.operation.id, { reason })
+      setHistoryCancel(null)
+      await Promise.all([
+        loadGaragePaymentHistory(selectedGarage),
+        loadGarageIncomeWorksheet(selectedGarage),
+      ])
+    } catch (error) {
+      setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось отменить платеж.' } : state)
+    } finally {
+      setHistoryActionSaving(false)
     }
   }
 
@@ -4133,12 +4252,13 @@ function PaymentsPrototypePanel({
                   <th scope="col">Сумма платежа</th>
                   <th scope="col">Назначение платежа</th>
                   <th scope="col">Остаток долга после платежа</th>
+                  <th scope="col">Действия</th>
                 </tr>
               </thead>
               <tbody>
                 {garagePaymentHistoryLoadingId === selectedGarage.id ? (
                   <tr>
-                    <td colSpan={5}>Загружаем историю платежей...</td>
+                    <td colSpan={6}>Загружаем историю платежей...</td>
                   </tr>
                 ) : historyRows.length > 0 ? historyRows.map((row) => (
                   <tr key={row.id}>
@@ -4147,10 +4267,22 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentPrototypeValue(row.amount)}</td>
                     <td>{row.purpose}</td>
                     <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
+                    <td>
+                      {row.operation && canWritePayments ? (
+                        <div className="table-action-row">
+                          <button className="icon-button" type="button" title="Изменить платеж" aria-label={`Изменить платеж ${row.purpose}`} onClick={() => openHistoryEdit(row)}>
+                            <Pencil size={16} aria-hidden="true" />
+                          </button>
+                          <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={() => openHistoryCancel(row)}>
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        </div>
+                      ) : '—'}
+                    </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5}>Платежей по выбранному гаражу пока нет.</td>
+                    <td colSpan={6}>Платежей по выбранному гаражу пока нет.</td>
                   </tr>
                 )}
               </tbody>
@@ -4425,7 +4557,141 @@ function PaymentsPrototypePanel({
           onSubmit={commitSalaryAccruals}
         />
       ) : null}
+      {historyEdit ? (
+        <GaragePaymentHistoryEditDialog
+          state={historyEdit}
+          saving={historyActionSaving}
+          onChange={(patch) => setHistoryEdit((value) => value ? { ...value, ...patch, error: null } : value)}
+          onClose={() => setHistoryEdit(null)}
+          onSubmit={saveHistoryEdit}
+        />
+      ) : null}
+      {historyCancel ? (
+        <GaragePaymentHistoryCancelDialog
+          state={historyCancel}
+          saving={historyActionSaving}
+          onChange={(patch) => setHistoryCancel((value) => value ? { ...value, ...patch, error: null } : value)}
+          onClose={() => setHistoryCancel(null)}
+          onConfirm={confirmHistoryCancel}
+        />
+      ) : null}
     </section>
+  )
+}
+
+function GaragePaymentHistoryEditDialog({
+  state,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  state: GaragePaymentHistoryEditState
+  saving: boolean
+  onChange: (patch: Partial<Omit<GaragePaymentHistoryEditState, 'row'>>) => void
+  onClose: () => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useEscapeKey(!saving, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+      if (!saving) {
+        onClose()
+      }
+    }}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-payment-edit-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Платеж гаража</p>
+            <h3 id="garage-payment-edit-title">Изменить платеж</h3>
+            <p>{state.row.purpose}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть изменение платежа" onClick={onClose} disabled={saving}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={onSubmit}>
+          <FormField label="Сумма">
+            <input aria-label="Сумма изменяемого платежа" inputMode="decimal" value={state.amount} onChange={(event) => onChange({ amount: event.target.value })} disabled={saving} />
+          </FormField>
+          <FormField label="Дата">
+            <input aria-label="Дата изменяемого платежа" type="date" value={state.operationDate} onChange={(event) => onChange({ operationDate: event.target.value })} disabled={saving} />
+          </FormField>
+          <FormField label="Месяц">
+            <input aria-label="Месяц изменяемого платежа" type="month" value={state.accountingMonth} onChange={(event) => onChange({ accountingMonth: event.target.value })} disabled={saving} />
+          </FormField>
+          <FormField label="Документ">
+            <input aria-label="Документ изменяемого платежа" value={state.documentNumber} onChange={(event) => onChange({ documentNumber: event.target.value })} disabled={saving} />
+          </FormField>
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к изменяемому платежу" rows={4} value={state.comment} onChange={(event) => onChange({ comment: event.target.value })} disabled={saving} />
+          </FormField>
+          {state.error ? <FormError>{state.error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>
+              <Save size={16} aria-hidden="true" />
+              <span>{saving ? 'Сохраняем...' : 'Сохранить'}</span>
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function GaragePaymentHistoryCancelDialog({
+  state,
+  saving,
+  onChange,
+  onClose,
+  onConfirm,
+}: {
+  state: GaragePaymentHistoryCancelState
+  saving: boolean
+  onChange: (patch: Partial<Omit<GaragePaymentHistoryCancelState, 'row'>>) => void
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useEscapeKey(!saving, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+      if (!saving) {
+        onClose()
+      }
+    }}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-payment-cancel-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Отмена платежа</p>
+            <h3 id="garage-payment-cancel-title">Отменить платеж?</h3>
+            <p>{state.row.purpose} · {formatPaymentPrototypeValue(state.row.amount)}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть отмену платежа" onClick={onClose} disabled={saving}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="dictionary-modal-form payments-prototype-modal-form">
+          <FormField label="Причина отмены">
+            <textarea aria-label="Причина отмены платежа" rows={4} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
+          </FormField>
+          {state.error ? <FormError>{state.error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className="secondary-button danger-button" type="button" onClick={onConfirm} disabled={saving}>
+              <Trash2 size={16} aria-hidden="true" />
+              <span>{saving ? 'Отменяем...' : 'Отменить платеж'}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   )
 }
 

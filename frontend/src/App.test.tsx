@@ -1690,27 +1690,42 @@ describe('App', () => {
   it('loads selected garage payment history from finance backend', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
+    const serverOperation = createFinancialOperation({
+      id: 'operation-garage-77',
+      garageId: 'garage-77',
+      garageNumber: '77',
+      ownerName: 'Кузнецова Мария',
+      amount: 1234,
+      incomeTypeName: 'Серверная оплата',
+      garageDebtAfter: 3200,
+      operationDate: '2026-06-19',
+      accountingMonth: '2026-06-01',
+      createdAtUtc: '2026-06-19T10:24:00',
+    })
     const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => ({
       items: params?.garageId === 'garage-77'
-        ? [
-          createFinancialOperation({
-            id: 'operation-garage-77',
-            garageId: 'garage-77',
-            garageNumber: '77',
-            ownerName: 'Кузнецова Мария',
-            amount: 1234,
-            incomeTypeName: 'Серверная оплата',
-            garageDebtAfter: 3200,
-            operationDate: '2026-06-19',
-            createdAtUtc: '2026-06-19T10:24:00',
-          }),
-        ]
+        ? [serverOperation]
         : [],
       totalCount: params?.garageId === 'garage-77' ? 1 : 0,
       offset: 0,
       limit: params?.limit ?? 25,
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const updateIncome = vi.fn(async (_token: string, operationId: string, request: CreateIncomeOperationRequest) => ({
+      ...serverOperation,
+      id: operationId,
+      amount: request.amount,
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      documentNumber: request.documentNumber ?? null,
+      comment: request.comment ?? null,
+    }))
+    const cancelOperation = vi.fn(async (_token: string, operationId: string, request: { reason: string }) => ({
+      ...serverOperation,
+      id: operationId,
+      isCanceled: true,
+      comment: `Отменено: ${request.reason}`,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage, updateIncome, cancelOperation })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -1725,13 +1740,37 @@ describe('App', () => {
     await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
       operationKind: 'income',
       garageId: 'garage-77',
-      limit: 25,
+      limit: 500,
     })))
     const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200')).toBeInTheDocument()
+
+    await user.click(within(historyTable).getByRole('button', { name: 'Изменить платеж Серверная оплата' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить платеж' })
+    await user.clear(within(editDialog).getByLabelText('Сумма изменяемого платежа'))
+    await user.type(within(editDialog).getByLabelText('Сумма изменяемого платежа'), '1500')
+    await user.clear(within(editDialog).getByLabelText('Комментарий к изменяемому платежу'))
+    await user.type(within(editDialog).getByLabelText('Комментарий к изменяемому платежу'), 'Исправление суммы')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateIncome).toHaveBeenCalledWith('token', 'operation-garage-77', expect.objectContaining({
+      garageId: 'garage-77',
+      incomeTypeId: 'income-type-1',
+      operationDate: '2026-06-19',
+      accountingMonth: '2026-06-01',
+      amount: 1500,
+      comment: 'Исправление суммы',
+    })))
+
+    await user.click(within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' }))
+    const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить платеж?' })
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
+    expect(await within(cancelDialog).findByText('Укажите причину отмены платежа.')).toBeInTheDocument()
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены платежа'), 'Ошибочный платеж')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
+    await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
   })
 
   it('loads expense worksheet from finance backend', async () => {
