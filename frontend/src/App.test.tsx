@@ -584,7 +584,30 @@ describe('App', () => {
         })
       },
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    let requestedGarageFinancialReportId: string | null = null
+    let requestedGarageFinancialReportPeriod: { monthFrom?: string; monthTo?: string } | null = null
+    const garageFinancialReport = createGarageBalanceHistory({
+      garageId: contractorGarage.id,
+      garageNumber: contractorGarage.number,
+      ownerName: contractorOwner.fullName,
+      monthFrom: '2026-07-01',
+      monthTo: '2026-07-01',
+      startingBalance: 100,
+      accrualTotal: 500,
+      incomeTotal: 200,
+      debt: 400,
+      rows: [
+        { accountingMonth: '2026-07-01', openingDebt: 100, accrualAmount: 500, incomeAmount: 200, closingDebt: 400 },
+      ],
+    })
+    const financeClient = createFinanceClient({
+      getGarageBalanceHistory: async (_token, garageId, params) => {
+        requestedGarageFinancialReportId = garageId
+        requestedGarageFinancialReportPeriod = params ?? null
+        return garageFinancialReport
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -637,7 +660,22 @@ describe('App', () => {
     const garageContextMenu = await screen.findByRole('menu', { name: 'Действия гаража 1' })
     expect(within(garageContextMenu).getByRole('menuitem', { name: 'Изменить' })).toBeInTheDocument()
     expect(within(garageContextMenu).getByRole('menuitem', { name: 'Открыть финансовый отчет' })).toBeInTheDocument()
-    await user.click(within(garageContextMenu).getByRole('menuitem', { name: 'Удалить' }))
+    await user.click(within(garageContextMenu).getByRole('menuitem', { name: 'Открыть финансовый отчет' }))
+    const garageFinancialReportDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
+    expect(within(garageFinancialReportDialog).getByText('Финансовый отчет')).toBeInTheDocument()
+    expect(within(garageFinancialReportDialog).getByText('Новый владелец')).toBeInTheDocument()
+    expect(within(garageFinancialReportDialog).getByRole('table', { name: 'Финансовый отчет гаража' })).toBeInTheDocument()
+    expect(within(garageFinancialReportDialog).getByText('07.2026')).toBeInTheDocument()
+    expect(within(garageFinancialReportDialog).getAllByText('500,00').length).toBeGreaterThan(0)
+    expect(requestedGarageFinancialReportId).toBe(contractorGarage.id)
+    expect(requestedGarageFinancialReportPeriod?.monthFrom).toMatch(/^\d{4}-\d{2}$/)
+    expect(requestedGarageFinancialReportPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
+    await user.click(within(garageFinancialReportDialog).getByRole('button', { name: 'Закрыть финансовый отчет гаража' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гараж 1' })).not.toBeInTheDocument())
+
+    await user.pointer({ keys: '[MouseRight]', target: garageRow as HTMLElement })
+    const deleteGarageContextMenu = await screen.findByRole('menu', { name: 'Действия гаража 1' })
+    await user.click(within(deleteGarageContextMenu).getByRole('menuitem', { name: 'Удалить' }))
     const deleteGarageDialog = await screen.findByRole('dialog', { name: 'Удалить гараж?' })
     expect(within(deleteGarageDialog).getByText('Гараж 1')).toBeInTheDocument()
     expect(within(deleteGarageDialog).getByRole('button', { name: 'Удалить гараж' })).toBeDisabled()

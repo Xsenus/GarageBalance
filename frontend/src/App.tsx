@@ -467,7 +467,7 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} formStateClient={formStateClient} />
+          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -8201,7 +8201,7 @@ type ContractorsPrototypeSavedState = {
   supplierServices: string[]
 }
 
-function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; formStateClient: FormStateClient }) {
+function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
   const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
@@ -8220,6 +8220,11 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
   const [garageContextMenu, setGarageContextMenu] = useState<{ row: ContractorGarageRow; x: number; y: number } | null>(null)
   const [garageDeleteTarget, setGarageDeleteTarget] = useState<ContractorGarageRow | null>(null)
   const [garageDeleteReason, setGarageDeleteReason] = useState('')
+  const [garageFinancialReportTarget, setGarageFinancialReportTarget] = useState<ContractorGarageRow | null>(null)
+  const [garageFinancialReport, setGarageFinancialReport] = useState<GarageBalanceHistoryDto | null>(null)
+  const [garageFinancialReportFilters, setGarageFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
+  const [garageFinancialReportLoading, setGarageFinancialReportLoading] = useState(false)
+  const [garageFinancialReportError, setGarageFinancialReportError] = useState<string | null>(null)
   const [supplierContextMenu, setSupplierContextMenu] = useState<{ row: ContractorSupplierRow; x: number; y: number } | null>(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState<ContractorSupplierRow | null>(null)
   const [supplierDeleteReason, setSupplierDeleteReason] = useState('')
@@ -8228,12 +8233,15 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
   const [employeeDeleteReason, setEmployeeDeleteReason] = useState('')
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
+  useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
   useRestoreFocusOnClose(Boolean(supplierDeleteTarget))
   useRestoreFocusOnClose(Boolean(employeeDeleteTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
   const garageDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageDeleteTarget))
+  const garageFinancialReportDialogRef = useFocusTrap<HTMLElement>(Boolean(garageFinancialReportTarget))
+  const garageFinancialReportCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageFinancialReportTarget))
   const supplierDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(supplierDeleteTarget))
   const supplierDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(supplierDeleteTarget))
   const employeeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(employeeDeleteTarget))
@@ -8241,6 +8249,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
   useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
+  useEscapeKey(Boolean(garageFinancialReportTarget), () => closeGarageFinancialReport())
   useEscapeKey(Boolean(supplierContextMenu), () => setSupplierContextMenu(null))
   useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
   useEscapeKey(Boolean(employeeContextMenu), () => setEmployeeContextMenu(null))
@@ -8468,9 +8477,46 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
     setRestoreTarget({ type: 'garage', item: row })
   }
 
+  async function loadGarageFinancialReport(row = garageFinancialReportTarget, filters = garageFinancialReportFilters) {
+    if (!row) {
+      return
+    }
+
+    if (!isBackendDictionaryId(row.id)) {
+      setGarageFinancialReport(null)
+      setGarageFinancialReportError('Финансовый отчет доступен для гаража, сохраненного в справочнике.')
+      return
+    }
+
+    setGarageFinancialReportLoading(true)
+    setGarageFinancialReportError(null)
+
+    try {
+      const report = await financeClient.getGarageBalanceHistory(auth.accessToken, row.id, filters)
+      setGarageFinancialReport(report)
+    } catch (error) {
+      setGarageFinancialReportError(error instanceof Error ? error.message : 'Не удалось загрузить финансовый отчет гаража.')
+      setGarageFinancialReport(null)
+    } finally {
+      setGarageFinancialReportLoading(false)
+    }
+  }
+
   function openGarageFinancialReport(row: ContractorGarageRow) {
     setGarageContextMenu(null)
-    void row
+    const filters = createDefaultGarageBalanceHistoryFilters()
+    setGarageFinancialReportTarget(row)
+    setGarageFinancialReportFilters(filters)
+    setGarageFinancialReport(null)
+    setGarageFinancialReportError(null)
+    void loadGarageFinancialReport(row, filters)
+  }
+
+  function closeGarageFinancialReport() {
+    setGarageFinancialReportTarget(null)
+    setGarageFinancialReport(null)
+    setGarageFinancialReportError(null)
+    setGarageFinancialReportLoading(false)
   }
 
   const saveSupplier = async (supplier: ContractorSupplierRow) => {
@@ -9037,6 +9083,88 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, formStateClient }: 
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
+
+      {garageFinancialReportTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeGarageFinancialReport}>
+          <section ref={garageFinancialReportDialogRef} className="detail-dialog garage-balance-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-garage-report-title" aria-describedby="contractor-garage-report-owner" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Финансовый отчет</p>
+                <h3 id="contractor-garage-report-title">Гараж {garageFinancialReportTarget.number || 'без номера'}</h3>
+                <p id="contractor-garage-report-owner">{garageFinancialReportTarget.owner || 'Владелец не указан'}</p>
+              </div>
+              <button ref={garageFinancialReportCloseRef} className="icon-button" type="button" aria-label="Закрыть финансовый отчет гаража" onClick={closeGarageFinancialReport}>
+                <X size={18} />
+              </button>
+            </div>
+            <form className="balance-history-filters" onSubmit={(event) => {
+              event.preventDefault()
+              void loadGarageFinancialReport()
+            }}>
+              <label>
+                Период с
+                <input aria-label="Начало периода финансового отчета гаража" type="month" value={garageFinancialReportFilters.monthFrom} onChange={(event) => setGarageFinancialReportFilters((value) => ({ ...value, monthFrom: event.target.value }))} required />
+              </label>
+              <label>
+                Период по
+                <input aria-label="Конец периода финансового отчета гаража" type="month" value={garageFinancialReportFilters.monthTo} onChange={(event) => setGarageFinancialReportFilters((value) => ({ ...value, monthTo: event.target.value }))} required />
+              </label>
+              <button className="secondary-button" type="submit" disabled={garageFinancialReportLoading}>
+                <Search size={16} />
+                <span>{garageFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
+              </button>
+            </form>
+            {garageFinancialReportError ? <FormError>{garageFinancialReportError}</FormError> : null}
+            {garageFinancialReport ? (
+              <>
+                <div className="balance-history-summary" aria-label="Итоги финансового отчета гаража">
+                  <div>
+                    <span>Старт</span>
+                    <strong>{formatMoney(garageFinancialReport.startingBalance)}</strong>
+                  </div>
+                  <div>
+                    <span>Начислено</span>
+                    <strong>{formatMoney(garageFinancialReport.accrualTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Поступило</span>
+                    <strong>{formatMoney(garageFinancialReport.incomeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>{formatDebtLabel(garageFinancialReport.debt)}</span>
+                    <strong className={getDebtClassName(garageFinancialReport.debt)}>{formatDebtAmount(garageFinancialReport.debt)}</strong>
+                  </div>
+                </div>
+                <div className="dictionary-table-scroll garage-balance-table-scroll">
+                  <table className="dictionary-data-table" aria-label="Финансовый отчет гаража">
+                    <thead>
+                      <tr>
+                        <th>Месяц</th>
+                        <th>Долг на начало</th>
+                        <th>Начислено</th>
+                        <th>Поступило</th>
+                        <th>Долг на конец</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {garageFinancialReport.rows.map((row) => (
+                        <tr key={row.accountingMonth}>
+                          <td>{formatMonth(row.accountingMonth)}</td>
+                          <td className={getDebtClassName(row.openingDebt)}>{formatDebtAmount(row.openingDebt)}</td>
+                          <td className="money-accrual">{formatMoney(row.accrualAmount)}</td>
+                          <td className="money-income">{formatMoney(row.incomeAmount)}</td>
+                          <td className={getDebtClassName(row.closingDebt)}>{formatDebtAmount(row.closingDebt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {garageFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
+                </div>
+              </>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
 
       {restoreTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
