@@ -479,7 +479,7 @@ function Workspace({
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
-          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} />
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
         )
@@ -886,11 +886,13 @@ function FinancePanel({
   auth,
   dictionaryClient,
   financeClient,
+  fundsClient,
   formStateClient,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
+  fundsClient: FundsClient
   formStateClient: FormStateClient
 }) {
   const today = getLocalDateInputValue()
@@ -2871,7 +2873,7 @@ function FinancePanel({
           </section>
         </div>
       ) : null}
-      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog auth={auth} fundsClient={fundsClient} onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
 }
@@ -3744,10 +3746,95 @@ function PaymentsPrototypePanel({
   )
 }
 
-function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
+function BankDepositPrototypeDialog({
+  auth,
+  fundsClient,
+  onClose,
+}: {
+  auth: AuthResponse
+  fundsClient: FundsClient
+  onClose: () => void
+}) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [funds, setFunds] = useState<FundDto[]>([])
+  const [fundId, setFundId] = useState('')
+  const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
+  const [amount, setAmount] = useState('')
+  const [comment, setComment] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadFunds() {
+      setLoading(true)
+      setError(null)
+      try {
+        const loadedFunds = await fundsClient.getFunds(auth.accessToken)
+        if (!active) {
+          return
+        }
+
+        const allowedFunds = loadedFunds.filter((fund) => fund.allowOperations)
+        setFunds(allowedFunds)
+        setFundId((current) => current || allowedFunds[0]?.id || '')
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить фонды.')
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadFunds()
+
+    return () => {
+      active = false
+    }
+  }, [auth.accessToken, fundsClient])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    if (!fundId) {
+      setError('Выберите фонд для сдачи кассы в банк.')
+      return
+    }
+    if (!operationDate) {
+      setError('Укажите дату сдачи кассы.')
+      return
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму сдачи больше нуля.')
+      return
+    }
+
+    const reason = comment.trim()
+      ? `Сдача кассы в банк ${operationDate}: ${comment.trim()}`
+      : `Сдача кассы в банк ${operationDate}`
+
+    setSaving(true)
+    setError(null)
+    try {
+      await fundsClient.createOperation(auth.accessToken, fundId, {
+        operationKind: 'deposit',
+        amount: parsedAmount,
+        reason,
+      })
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось сохранить сдачу кассы в банк.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3760,22 +3847,37 @@ function BankDepositPrototypeDialog({ onClose }: { onClose: () => void }) {
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onClose()
-        }}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Фонд">
+            <select aria-label="Фонд для сдачи кассы" value={fundId} onChange={(event) => {
+              setFundId(event.target.value)
+              setError(null)
+            }} disabled={loading || saving}>
+              {funds.length > 0 ? funds.map((fund) => (
+                <option key={fund.id} value={fund.id}>{fund.name}</option>
+              )) : <option value="">Нет доступных фондов</option>}
+            </select>
+          </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма в банке" inputMode="decimal" />
+            <input aria-label="Сумма в банке" inputMode="decimal" value={amount} onChange={(event) => {
+              setAmount(event.target.value)
+              setError(null)
+            }} disabled={saving} />
           </FormField>
           <FormField label="Дата">
-            <input aria-label="Дата учета суммы в банке" type="date" />
+            <input aria-label="Дата учета суммы в банке" type="date" value={operationDate} onChange={(event) => {
+              setOperationDate(event.target.value)
+              setError(null)
+            }} disabled={saving} />
           </FormField>
-          <FormField label="Коммент">
-            <textarea aria-label="Комментарий к сумме в банке" rows={5} />
+          <FormField label="Комментарий">
+            <textarea aria-label="Комментарий к сумме в банке" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
+          {loading ? <p className="form-hint" role="status">Загружаем фонды...</p> : null}
+          {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit">Ок</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={loading || saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>

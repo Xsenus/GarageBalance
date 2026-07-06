@@ -1047,6 +1047,7 @@ describe('App', () => {
     const savedAccrualRequests: CreateAccrualRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
+    const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
       getIncomeTypes: async () => incomeTypes,
@@ -1119,7 +1120,19 @@ describe('App', () => {
         })
       },
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const fundsClient = createFundsClient({
+      createOperation: async (_token, fundId, request) => {
+        savedFundOperationRequests.push({ fundId, request })
+        return createFundOperation({
+          fundId,
+          fundName: 'Электроэнергия',
+          operationKind: request.operationKind,
+          amount: request.amount,
+          reason: request.reason,
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -1255,10 +1268,20 @@ describe('App', () => {
     const bankButton = within(prototype).getByRole('button', { name: 'Сдать кассу в банк' })
     await user.click(bankButton)
     const bankDialog = await screen.findByRole('dialog', { name: 'Учет суммы на счете в банке' })
-    expect(within(bankDialog).getByLabelText('Сумма в банке')).toBeInTheDocument()
-    const bankCancelButton = within(bankDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(bankCancelButton).toHaveFocus())
-    await user.keyboard('{Escape}')
+    expect(await within(bankDialog).findByLabelText('Фонд для сдачи кассы')).toHaveValue('fund-electricity')
+    expect(within(bankDialog).getByLabelText('Дата учета суммы в банке')).toHaveValue('2026-06-30')
+    await user.type(within(bankDialog).getByLabelText('Сумма в банке'), '12300')
+    await user.type(within(bankDialog).getByLabelText('Комментарий к сумме в банке'), 'Инкассация из формы')
+    await user.click(within(bankDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(savedFundOperationRequests).toHaveLength(1))
+    expect(savedFundOperationRequests[0]).toMatchObject({
+      fundId: 'fund-electricity',
+      request: {
+        operationKind: 'deposit',
+        amount: 12300,
+        reason: 'Сдача кассы в банк 2026-06-30: Инкассация из формы',
+      },
+    })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
     expect(bankButton).toHaveFocus()
   })
