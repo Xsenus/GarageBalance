@@ -898,8 +898,6 @@ type SalaryAccrualPrototypeSubmitRequest = {
 }
 
 type RegularAccrualPrototypeSubmitRequest = {
-  incomeTypeId: string
-  tariffId: string
   accountingMonth: string
   comment: string
 }
@@ -2367,7 +2365,6 @@ function FinancePanel({
         supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}
-        tariffs={tariffs}
         onOpenDialog={openPaymentsPrototypeDialog}
       />
 
@@ -3077,7 +3074,6 @@ function PaymentsPrototypePanel({
   supplierGroups,
   suppliers,
   staffMembers,
-  tariffs,
   onOpenDialog,
 }: {
   auth: AuthResponse
@@ -3090,7 +3086,6 @@ function PaymentsPrototypePanel({
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
-  tariffs: TariffDto[]
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
@@ -3870,26 +3865,15 @@ function PaymentsPrototypePanel({
   }
 
   async function commitRegularAccruals(request: RegularAccrualPrototypeSubmitRequest) {
-    const incomeType = incomeTypes.find((item) => item.id === request.incomeTypeId && !item.isArchived) ?? null
-    if (!incomeType) {
-      return 'Выберите вид начисления из справочника поступлений.'
-    }
-
-    const tariff = tariffs.find((item) => item.id === request.tariffId && !item.isArchived) ?? null
-    if (!tariff) {
-      return 'Выберите тариф для начисления.'
-    }
-
-    const result = await financeClient.generateRegularAccruals(auth.accessToken, {
-      incomeTypeId: incomeType.id,
-      tariffId: tariff.id,
+    const result = await financeClient.generateRegularCatalogAccruals(auth.accessToken, {
       accountingMonth: request.accountingMonth,
       comment: request.comment.trim() || undefined,
     })
+    const createdAccruals = result.serviceResults.flatMap((serviceResult) => serviceResult.createdAccruals)
 
     const selectedGarageAccruals = selectedGarage
-      ? result.createdAccruals.filter((accrual) => accrual.garageId === selectedGarage.id)
-      : result.createdAccruals
+      ? createdAccruals.filter((accrual) => accrual.garageId === selectedGarage.id)
+      : createdAccruals
 
     setGarageRows((currentRows) => {
       let nextRows = currentRows
@@ -4523,8 +4507,6 @@ function PaymentsPrototypePanel({
       ) : null}
       {regularAccrualDialogOpen ? (
         <RegularAccrualPrototypeDialog
-          incomeTypes={incomeTypes.filter((incomeType) => !incomeType.isArchived)}
-          tariffs={tariffs.filter((tariff) => !tariff.isArchived)}
           onClose={closeRegularAccrualDialog}
           onSubmit={commitRegularAccruals}
         />
@@ -5348,43 +5330,22 @@ function SalaryAccrualPrototypeDialog({
 }
 
 function RegularAccrualPrototypeDialog({
-  incomeTypes,
-  tariffs,
   onClose,
   onSubmit,
 }: {
-  incomeTypes: AccountingTypeDto[]
-  tariffs: TariffDto[]
   onClose: () => void
   onSubmit: (request: RegularAccrualPrototypeSubmitRequest) => Promise<string | null>
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [incomeTypeId, setIncomeTypeId] = useState(incomeTypes[0]?.id ?? '')
-  const [tariffId, setTariffId] = useState(() => chooseRegularTariffId(incomeTypes[0]?.id ?? '', '', incomeTypes, tariffs))
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   useEscapeKey(true, onClose)
-
-  function handleIncomeTypeChange(nextIncomeTypeId: string) {
-    setIncomeTypeId(nextIncomeTypeId)
-    setTariffId(chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs))
-    setError(null)
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!incomeTypeId) {
-      setError('Выберите вид начисления из справочника поступлений.')
-      return
-    }
-    if (!tariffId) {
-      setError('Выберите тариф для начисления.')
-      return
-    }
     if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
       setError('Укажите месяц начисления.')
       return
@@ -5394,8 +5355,6 @@ function RegularAccrualPrototypeDialog({
     setError(null)
     try {
       const submitError = await onSubmit({
-        incomeTypeId,
-        tariffId,
         accountingMonth: `${accountingMonth}-01`,
         comment,
       })
@@ -5423,23 +5382,6 @@ function RegularAccrualPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Вид начисления">
-            <select aria-label="Вид регулярного начисления" value={incomeTypeId} onChange={(event) => handleIncomeTypeChange(event.target.value)}>
-              {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
-                <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
-              )) : <option value="">Нет видов поступлений</option>}
-            </select>
-          </FormField>
-          <FormField label="Тариф">
-            <select aria-label="Тариф регулярного начисления" value={tariffId} onChange={(event) => {
-              setTariffId(event.target.value)
-              setError(null)
-            }}>
-              {compatibleTariffs.length > 0 ? compatibleTariffs.map((tariff) => (
-                <option key={tariff.id} value={tariff.id}>{tariff.name}</option>
-              )) : <option value="">Нет совместимых тарифов</option>}
-            </select>
-          </FormField>
           <FormField label="Месяц">
             <input aria-label="Месяц регулярного начисления" type="month" value={accountingMonth} onChange={(event) => {
               setAccountingMonth(event.target.value)
@@ -10833,6 +10775,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
+  const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [backendIrregularPayments, setBackendIrregularPayments] = useState<IrregularPaymentDto[]>([])
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
@@ -10858,8 +10801,9 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
       setTariffsLoading(true)
       setTariffPersistenceError(null)
       try {
-        const [loadedTariffs, loadedIrregularPayments, loadedChargeServices] = await Promise.all([
+        const [loadedTariffs, loadedIncomeTypes, loadedIrregularPayments, loadedChargeServices] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
           dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
@@ -10867,6 +10811,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
           const mergedRows = mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(contractorTariffRows, loadedTariffs), loadedChargeServices)
           const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows(contractorOneTimeRows, loadedIrregularPayments)
           setBackendTariffs(loadedTariffs)
+          setBackendIncomeTypes(loadedIncomeTypes)
           setBackendChargeServices(loadedChargeServices)
           setBackendIrregularPayments(loadedIrregularPayments)
           setTariffRows(mergedRows)
@@ -11074,6 +11019,8 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
       isMetered,
       hasTieredTariff,
       unitName: (mainRow?.unit ?? setting.unitName ?? '').trim() || null,
+      incomeTypeId: isRegular ? setting.incomeTypeId ?? null : null,
+      tariffId: isRegular ? setting.tariffId ?? null : null,
     }
   }
 
@@ -11838,8 +11785,10 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
       {modal === 'service' ? (
         <AddServicePrototypeDialog
           isSaving={tariffSavingRowId === 'new-service'}
+          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={() => setModal(null)}
           onSave={createServiceSetting}
+          tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           unitOptions={Array.from(new Set(tariffRows.map((row) => row.unit).filter((unit): unit is string => Boolean(unit))))}
         />
       ) : null}
@@ -11850,17 +11799,23 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
 
 function AddServicePrototypeDialog({
   isSaving,
+  incomeTypes,
   onClose,
   onSave,
+  tariffs,
   unitOptions,
 }: {
   isSaving: boolean
+  incomeTypes: AccountingTypeDto[]
   onClose: () => void
   onSave: (request: UpsertChargeServiceSettingRequest) => Promise<void>
+  tariffs: TariffDto[]
   unitOptions: string[]
 }) {
   const [name, setName] = useState('')
   const [isRegular, setIsRegular] = useState(false)
+  const [incomeTypeId, setIncomeTypeId] = useState(incomeTypes[0]?.id ?? '')
+  const [tariffId, setTariffId] = useState(() => chooseRegularTariffId(incomeTypes[0]?.id ?? '', '', incomeTypes, tariffs))
   const [isByMeter, setIsByMeter] = useState(true)
   const [isTiered, setIsTiered] = useState(true)
   const [periodicityMonths, setPeriodicityMonths] = useState('12')
@@ -11870,6 +11825,7 @@ function AddServicePrototypeDialog({
   const [overdueGraceDays, setOverdueGraceDays] = useState('30')
   const [unitName, setUnitName] = useState(unitOptions[0] ?? 'руб.')
   const [error, setError] = useState<string | null>(null)
+  const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
@@ -11888,6 +11844,16 @@ function AddServicePrototypeDialog({
     }
 
     if (isRegular) {
+      if (!incomeTypeId) {
+        setError('Выберите вид начисления для регулярной услуги.')
+        return
+      }
+
+      if (!tariffId) {
+        setError('Выберите тариф для регулярной услуги.')
+        return
+      }
+
       if (!Number.isInteger(parsedPeriodicity) || parsedPeriodicity < 1 || parsedPeriodicity > 120) {
         setError('Периодичность должна быть числом от 1 до 120 месяцев.')
         return
@@ -11916,6 +11882,8 @@ function AddServicePrototypeDialog({
       isMetered: isByMeter,
       hasTieredTariff: isByMeter && isTiered,
       unitName: unitName.trim() || null,
+      incomeTypeId: isRegular ? incomeTypeId : null,
+      tariffId: isRegular ? tariffId : null,
     })
   }
 
@@ -11942,6 +11910,38 @@ function AddServicePrototypeDialog({
           </label>
           {isRegular ? (
             <>
+              <div className="contractors-service-period-grid">
+                <FormField label="Вид начисления">
+                  <select
+                    aria-label="Вид начисления регулярной услуги"
+                    value={incomeTypeId}
+                    onChange={(event) => {
+                      const nextIncomeTypeId = event.target.value
+                      setIncomeTypeId(nextIncomeTypeId)
+                      setTariffId(chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs))
+                      setError(null)
+                    }}
+                  >
+                    {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
+                      <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
+                    )) : <option value="">Нет видов поступлений</option>}
+                  </select>
+                </FormField>
+                <FormField label="Тариф">
+                  <select
+                    aria-label="Тариф регулярной услуги"
+                    value={tariffId}
+                    onChange={(event) => {
+                      setTariffId(event.target.value)
+                      setError(null)
+                    }}
+                  >
+                    {compatibleTariffs.length > 0 ? compatibleTariffs.map((tariff) => (
+                      <option key={tariff.id} value={tariff.id}>{tariff.name}</option>
+                    )) : <option value="">Нет совместимых тарифов</option>}
+                  </select>
+                </FormField>
+              </div>
               <div className="contractors-service-period-grid">
                 <FormField label="Периодичность">
                   <input aria-label="Периодичность" inputMode="numeric" value={periodicityMonths} onChange={(event) => setPeriodicityMonths(event.target.value)} />

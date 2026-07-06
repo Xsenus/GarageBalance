@@ -253,6 +253,11 @@ export type GenerateRegularAccrualsRequest = {
   comment?: string
 }
 
+export type GenerateRegularCatalogAccrualsRequest = {
+  accountingMonth: string
+  comment?: string
+}
+
 export type GenerateSupplierGroupSalaryAccrualsRequest = {
   supplierGroupId: string
   accountingMonth: string
@@ -273,6 +278,16 @@ export type RegularAccrualGenerationResultDto = {
   totalAmount: number
   createdAccruals: AccrualDto[]
   skippedGarages: string[]
+}
+
+export type RegularCatalogAccrualGenerationResultDto = {
+  accountingMonth: string
+  serviceCount: number
+  createdCount: number
+  skippedCount: number
+  totalAmount: number
+  serviceResults: RegularAccrualGenerationResultDto[]
+  skippedServices: string[]
 }
 
 export type SupplierGroupSalaryAccrualGenerationResultDto = {
@@ -325,6 +340,7 @@ export type FinanceClient = {
   updateSupplierAccrual(accessToken: string, supplierAccrualId: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
   cancelSupplierAccrual(accessToken: string, supplierAccrualId: string, request: CancelFinanceEntryRequest): Promise<SupplierAccrualDto>
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
+  generateRegularCatalogAccruals(accessToken: string, request: GenerateRegularCatalogAccrualsRequest): Promise<RegularCatalogAccrualGenerationResultDto>
   generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   updateMeterReading(accessToken: string, meterReadingId: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
@@ -505,6 +521,9 @@ export const financeApi: FinanceClient = {
   },
   generateRegularAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals/generate-regular', { method: 'POST', body: JSON.stringify(request) })
+  },
+  generateRegularCatalogAccruals(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals/generate-regular-catalog', { method: 'POST', body: JSON.stringify(request) })
   },
   generateSupplierGroupSalaryAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/supplier-accruals/generate-salary', { method: 'POST', body: JSON.stringify(request) })

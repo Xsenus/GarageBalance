@@ -1491,6 +1491,86 @@ public sealed class FinanceService(
         return FinanceResult<RegularAccrualGenerationResultDto>.Success(result);
     }
 
+    public async Task<FinanceResult<RegularCatalogAccrualGenerationResultDto>> GenerateRegularCatalogAccrualsAsync(GenerateRegularCatalogAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var settings = await dbContext.ChargeServiceSettings
+            .AsNoTracking()
+            .Where(setting => !setting.IsArchived && setting.IsRegular)
+            .OrderBy(setting => setting.Name)
+            .ToListAsync(cancellationToken);
+        if (settings.Count == 0)
+        {
+            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_empty", "В каталоге нет активных регулярных услуг.");
+        }
+
+        var serviceResults = new List<RegularAccrualGenerationResultDto>();
+        var skippedServices = new List<string>();
+        foreach (var setting in settings)
+        {
+            if (!IsChargeServiceDueForMonth(setting, month))
+            {
+                skippedServices.Add($"{setting.Name}: услуга не начисляется в {month:MM.yyyy} по своей периодичности.");
+                continue;
+            }
+
+            if (!setting.IncomeTypeId.HasValue || !setting.TariffId.HasValue)
+            {
+                skippedServices.Add($"{setting.Name}: не указан вид начисления или тариф.");
+                continue;
+            }
+
+            var comment = BuildRegularCatalogAccrualComment(setting.Name, request.Comment);
+            var serviceResult = await GenerateRegularAccrualsAsync(
+                new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, setting.TariffId.Value, month, comment),
+                actorUserId,
+                cancellationToken);
+            if (!serviceResult.Succeeded)
+            {
+                skippedServices.Add($"{setting.Name}: {serviceResult.ErrorMessage}");
+                continue;
+            }
+
+            serviceResults.Add(serviceResult.Value!);
+        }
+
+        var createdCount = serviceResults.Sum(result => result.CreatedCount);
+        if (createdCount == 0)
+        {
+            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_accruals_empty", "По каталогу услуг не создано ни одного начисления.");
+        }
+
+        var skippedCount = serviceResults.Sum(result => result.SkippedCount) + skippedServices.Count;
+        var totalAmount = serviceResults.Sum(result => result.TotalAmount);
+        AddAudit(
+            actorUserId,
+            "finance.regular_catalog_accruals_generated",
+            "accrual",
+            Guid.NewGuid(),
+            $"Сформированы регулярные начисления по каталогу услуг за {month:MM.yyyy}: услуг обработано {serviceResults.Count}, создано {createdCount}, на сумму {totalAmount.ToString("N2", CultureInfo.InvariantCulture)}, пропущено {skippedCount}.",
+            relatedAccountingMonth: month,
+            relatedDocumentNumber: $"Каталог услуг {month:MM.yyyy}",
+            metadata: new Dictionary<string, object?>
+            {
+                ["financeEntityType"] = "accrual",
+                ["serviceCount"] = serviceResults.Count,
+                ["createdCount"] = createdCount,
+                ["skippedCount"] = skippedCount,
+                ["totalAmount"] = totalAmount
+            });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var result = new RegularCatalogAccrualGenerationResultDto(
+            month,
+            serviceResults.Count,
+            createdCount,
+            skippedCount,
+            totalAmount,
+            serviceResults,
+            skippedServices);
+        return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Success(result);
+    }
+
     public async Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
@@ -1608,6 +1688,30 @@ public sealed class FinanceService(
             "membership" or "target" or "entry" or "connection" => calculationBase == TariffCalculationBases.Fixed,
             _ => true
         };
+    }
+
+    private static bool IsChargeServiceDueForMonth(ChargeServiceSetting setting, DateOnly month)
+    {
+        if (!setting.IsRegular || !setting.AccrualStartMonth.HasValue || !setting.PeriodicityMonths.HasValue)
+        {
+            return false;
+        }
+
+        var periodicity = Math.Max(1, setting.PeriodicityMonths.Value);
+        if (periodicity >= 12)
+        {
+            return month.Month == setting.AccrualStartMonth.Value;
+        }
+
+        var monthsAfterStart = (month.Month - setting.AccrualStartMonth.Value + 12) % 12;
+        return monthsAfterStart % periodicity == 0;
+    }
+
+    private static string BuildRegularCatalogAccrualComment(string serviceName, string? comment)
+    {
+        var prefix = $"Каталог услуг: {serviceName}";
+        var normalizedComment = NormalizeOptional(comment);
+        return normalizedComment is null ? prefix : $"{prefix}; {normalizedComment}";
     }
 
     public async Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)

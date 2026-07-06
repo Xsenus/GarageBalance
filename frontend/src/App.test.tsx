@@ -21,7 +21,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -937,7 +937,11 @@ describe('App', () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceRequest: unknown = null
+    const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
+    const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
     const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [serviceIncomeType],
+      getTariffs: async () => [serviceTariff],
       getChargeServiceSettings: async () => [],
       createChargeServiceSetting: async (_token, request) => {
         createdServiceRequest = request
@@ -949,8 +953,10 @@ describe('App', () => {
           accrualStartMonth: request.accrualStartMonth ?? null,
           paymentDueDay: request.paymentDueDay ?? null,
           paymentDueMonth: request.paymentDueMonth ?? null,
-          overdueGraceDays: request.overdueGraceDays,
-          isMetered: request.isMetered,
+      overdueGraceDays: request.overdueGraceDays,
+      incomeTypeId: request.incomeTypeId ?? null,
+      tariffId: request.tariffId ?? null,
+      isMetered: request.isMetered,
           hasTieredTariff: request.hasTieredTariff,
           unitName: request.unitName ?? null,
         })
@@ -965,8 +971,10 @@ describe('App', () => {
           accrualStartMonth: request.accrualStartMonth ?? null,
           paymentDueDay: request.paymentDueDay ?? null,
           paymentDueMonth: request.paymentDueMonth ?? null,
-          overdueGraceDays: request.overdueGraceDays,
-          isMetered: request.isMetered,
+      overdueGraceDays: request.overdueGraceDays,
+      incomeTypeId: request.incomeTypeId ?? null,
+      tariffId: request.tariffId ?? null,
+      isMetered: request.isMetered,
           hasTieredTariff: request.hasTieredTariff,
           unitName: request.unitName ?? null,
         })
@@ -984,6 +992,8 @@ describe('App', () => {
     const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Охрана')
     await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
+    expect(within(serviceDialog).getByLabelText('Вид начисления регулярной услуги')).toHaveValue(serviceIncomeType.id)
+    expect(within(serviceDialog).getByLabelText('Тариф регулярной услуги')).toHaveValue(serviceTariff.id)
     await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
     await user.type(within(serviceDialog).getByLabelText('День оплаты'), '28')
     await user.selectOptions(within(serviceDialog).getByLabelText('Месяц оплаты'), 'фев')
@@ -999,6 +1009,8 @@ describe('App', () => {
       paymentDueDay: 28,
       paymentDueMonth: 2,
       overdueGraceDays: 30,
+      incomeTypeId: serviceIncomeType.id,
+      tariffId: serviceTariff.id,
       isMetered: true,
       hasTieredTariff: true,
       unitName: 'руб.',
@@ -1022,6 +1034,8 @@ describe('App', () => {
       paymentDueDay: 28,
       paymentDueMonth: 2,
       overdueGraceDays: 30,
+      incomeTypeId: serviceIncomeType.id,
+      tariffId: serviceTariff.id,
       isMetered: true,
       hasTieredTariff: true,
       unitName: 'руб.',
@@ -1235,7 +1249,7 @@ describe('App', () => {
     const incomeTypes = [incomeType, waterIncomeType]
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateAccrualRequest[] = []
-    const savedRegularAccrualRequests: GenerateRegularAccrualsRequest[] = []
+    const savedRegularAccrualRequests: GenerateRegularCatalogAccrualsRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedStaffPaymentRequests: CreateStaffPaymentRequest[] = []
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
@@ -1279,31 +1293,38 @@ describe('App', () => {
           comment: request.comment ?? null,
         })
       },
-      generateRegularAccruals: async (_token, request) => {
+      generateRegularCatalogAccruals: async (_token, request) => {
         savedRegularAccrualRequests.push(request)
-        return createRegularAccrualGenerationResult({
+        return createRegularCatalogAccrualGenerationResult({
           accountingMonth: request.accountingMonth,
-          incomeTypeId: request.incomeTypeId,
-          incomeTypeName: 'Водоснабжение',
-          tariffId: request.tariffId,
-          tariffName: 'Тариф воды',
-          calculationBase: 'meter_water',
-          createdCount: 1,
-          totalAmount: 1250,
-          createdAccruals: [
-            createAccrual({
-              id: `regular-accrual-${savedRegularAccrualRequests.length}`,
-              garageId: garage.id,
-              garageNumber: garage.number,
-              ownerName: garage.ownerName,
-              incomeTypeId: request.incomeTypeId,
-              incomeTypeName: 'Водоснабжение',
+          serviceResults: [
+            createRegularAccrualGenerationResult({
               accountingMonth: request.accountingMonth,
-              amount: 1250,
-              source: 'regular',
-              comment: request.comment ?? null,
+              incomeTypeId: waterIncomeType.id,
+              incomeTypeName: 'Водоснабжение',
+              tariffId: 'tariff-1',
+              tariffName: 'Тариф воды',
+              calculationBase: 'meter_water',
+              createdCount: 1,
+              totalAmount: 1250,
+              createdAccruals: [
+                createAccrual({
+                  id: `regular-accrual-${savedRegularAccrualRequests.length}`,
+                  garageId: garage.id,
+                  garageNumber: garage.number,
+                  ownerName: garage.ownerName,
+                  incomeTypeId: waterIncomeType.id,
+                  incomeTypeName: 'Водоснабжение',
+                  accountingMonth: request.accountingMonth,
+                  amount: 1250,
+                  source: 'regular',
+                  comment: request.comment ?? null,
+                }),
+              ],
             }),
           ],
+          createdCount: 1,
+          totalAmount: 1250,
         })
       },
       createExpense: async (_token, request) => {
@@ -1462,17 +1483,15 @@ describe('App', () => {
     const regularAccrualButton = within(prototype).getByRole('button', { name: 'Сформировать начисления' })
     await user.click(regularAccrualButton)
     const regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
-    await user.selectOptions(within(regularAccrualDialog).getByLabelText('Вид регулярного начисления'), waterIncomeType.id)
-    expect(within(regularAccrualDialog).getByLabelText('Тариф регулярного начисления')).toHaveValue('tariff-1')
+    expect(within(regularAccrualDialog).queryByLabelText('Вид регулярного начисления')).not.toBeInTheDocument()
+    expect(within(regularAccrualDialog).queryByLabelText('Тариф регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).getByLabelText('Месяц регулярного начисления')).toHaveValue('2026-06')
-    await user.type(within(regularAccrualDialog).getByLabelText('Комментарий регулярного начисления'), 'Автоначисление воды')
+    await user.type(within(regularAccrualDialog).getByLabelText('Комментарий регулярного начисления'), 'Автоначисление по каталогу')
     await user.click(within(regularAccrualDialog).getByRole('button', { name: 'Ок' }))
     await waitFor(() => expect(savedRegularAccrualRequests).toHaveLength(1))
     expect(savedRegularAccrualRequests[0]).toMatchObject({
-      incomeTypeId: waterIncomeType.id,
-      tariffId: 'tariff-1',
       accountingMonth: '2026-06-01',
-      comment: 'Автоначисление воды',
+      comment: 'Автоначисление по каталогу',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать начисления' })).not.toBeInTheDocument())
     await waitFor(() => expect(regularAccrualButton).toHaveFocus())
@@ -6617,6 +6636,8 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       paymentDueDay: request.paymentDueDay ?? null,
       paymentDueMonth: request.paymentDueMonth ?? null,
       overdueGraceDays: request.overdueGraceDays,
+      incomeTypeId: request.incomeTypeId ?? null,
+      tariffId: request.tariffId ?? null,
       isMetered: request.isMetered,
       hasTieredTariff: request.hasTieredTariff,
       unitName: request.unitName ?? null,
@@ -6630,6 +6651,8 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       paymentDueDay: request.paymentDueDay ?? null,
       paymentDueMonth: request.paymentDueMonth ?? null,
       overdueGraceDays: request.overdueGraceDays,
+      incomeTypeId: request.incomeTypeId ?? null,
+      tariffId: request.tariffId ?? null,
       isMetered: request.isMetered,
       hasTieredTariff: request.hasTieredTariff,
       unitName: request.unitName ?? null,
@@ -6780,6 +6803,11 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
+    generateRegularCatalogAccruals: async () => createRegularCatalogAccrualGenerationResult({
+      createdCount: 1,
+      totalAmount: accrual.amount,
+      serviceResults: [createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount })],
+    }),
     generateSupplierGroupSalaryAccruals: async () => createSupplierGroupSalaryAccrualGenerationResult({ createdAccruals: [supplierAccrual], totalAmount: supplierAccrual.amount }),
     createMeterReading: async () => meterReading,
     updateMeterReading: async (_token, meterReadingId) => ({ ...meterReading, id: meterReadingId }),
@@ -7766,6 +7794,8 @@ function createChargeServiceSetting(overrides: Partial<ChargeServiceSettingDto> 
     paymentDueDay: null,
     paymentDueMonth: null,
     overdueGraceDays: 0,
+    incomeTypeId: null,
+    tariffId: null,
     isMetered: false,
     hasTieredTariff: false,
     unitName: 'руб.',
@@ -7941,6 +7971,20 @@ function createRegularAccrualGenerationResult(overrides: Partial<RegularAccrualG
     totalAmount: 300,
     createdAccruals: [createAccrual({ amount: 300, source: 'regular' })],
     skippedGarages: [],
+    ...overrides,
+  }
+}
+
+function createRegularCatalogAccrualGenerationResult(overrides: Partial<RegularCatalogAccrualGenerationResultDto>): RegularCatalogAccrualGenerationResultDto {
+  const serviceResults = overrides.serviceResults ?? [createRegularAccrualGenerationResult({})]
+  return {
+    accountingMonth: '2026-06-01',
+    serviceCount: serviceResults.length,
+    createdCount: serviceResults.reduce((total, result) => total + result.createdCount, 0),
+    skippedCount: 0,
+    totalAmount: serviceResults.reduce((total, result) => total + result.totalAmount, 0),
+    serviceResults,
+    skippedServices: [],
     ...overrides,
   }
 }

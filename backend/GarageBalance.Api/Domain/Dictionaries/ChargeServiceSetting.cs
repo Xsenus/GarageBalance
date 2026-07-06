@@ -10,6 +10,10 @@ public sealed class ChargeServiceSetting
     public int? PaymentDueDay { get; set; }
     public int? PaymentDueMonth { get; set; }
     public int OverdueGraceDays { get; set; }
+    public Guid? IncomeTypeId { get; set; }
+    public IncomeType? IncomeType { get; set; }
+    public Guid? TariffId { get; set; }
+    public Tariff? Tariff { get; set; }
     public bool IsMetered { get; set; }
     public bool HasTieredTariff { get; set; }
     public string? UnitName { get; set; }

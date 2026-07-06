@@ -315,7 +315,7 @@ public sealed class DictionariesControllerTests
         var serviceId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            CreateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт", false))
+            CreateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Электроэнергия", true, 1, 1, 30, 6, 30, null, null, true, true, "кВт", false))
         };
         var controller = CreateController(service, actorUserId);
 

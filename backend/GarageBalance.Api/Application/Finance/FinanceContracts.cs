@@ -134,6 +134,10 @@ public sealed record GenerateRegularAccrualsRequest(
     DateOnly AccountingMonth,
     [MaxLength(1000)] string? Comment);
 
+public sealed record GenerateRegularCatalogAccrualsRequest(
+    DateOnly AccountingMonth,
+    [MaxLength(1000)] string? Comment);
+
 public sealed record GenerateSupplierGroupSalaryAccrualsRequest(
     Guid SupplierGroupId,
     DateOnly AccountingMonth,
@@ -153,6 +157,15 @@ public sealed record RegularAccrualGenerationResultDto(
     decimal TotalAmount,
     IReadOnlyList<AccrualDto> CreatedAccruals,
     IReadOnlyList<string> SkippedGarages);
+
+public sealed record RegularCatalogAccrualGenerationResultDto(
+    DateOnly AccountingMonth,
+    int ServiceCount,
+    int CreatedCount,
+    int SkippedCount,
+    decimal TotalAmount,
+    IReadOnlyList<RegularAccrualGenerationResultDto> ServiceResults,
+    IReadOnlyList<string> SkippedServices);
 
 public sealed record SupplierGroupSalaryAccrualGenerationResultDto(
     DateOnly AccountingMonth,

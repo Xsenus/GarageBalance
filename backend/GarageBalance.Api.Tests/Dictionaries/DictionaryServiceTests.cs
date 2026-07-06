@@ -1164,6 +1164,34 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceSettingAsync_SavesAccountingLinksAndRejectsMismatch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var waterTariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.IncomeTypes.Add(incomeType);
+        database.Context.Tariffs.AddRange(tariff, waterTariff);
+        await database.Context.SaveChangesAsync();
+        var service = new DictionaryService(database.Context);
+
+        var result = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Членский взнос", true, 12, 1, 30, 6, 30, false, false, "руб.", incomeType.Id, tariff.Id),
+            null,
+            CancellationToken.None);
+        var mismatch = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вода как членский", true, 1, 1, 30, 6, 30, true, false, "м3", incomeType.Id, waterTariff.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(incomeType.Id, result.Value!.IncomeTypeId);
+        Assert.Equal(tariff.Id, result.Value.TariffId);
+        Assert.False(mismatch.Succeeded);
+        Assert.Equal("charge_service_tariff_mismatch", mismatch.ErrorCode);
+    }
+
+    [Fact]
     public async Task UpdateChargeServiceSettingAsync_WritesChangedFieldsAndSkipsNoOp()
     {
         await using var database = await TestDatabase.CreateAsync();

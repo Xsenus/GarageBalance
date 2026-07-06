@@ -1706,6 +1706,12 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request, cancellationToken);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
+        }
+
         var name = request.Name.Trim();
         if (await dbContext.ChargeServiceSettings.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
         {
@@ -1733,6 +1739,12 @@ public sealed class DictionaryService(
         if (!validation.Succeeded)
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request, cancellationToken);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
         }
 
         var name = request.Name.Trim();
@@ -2129,6 +2141,47 @@ public sealed class DictionaryService(
         return DictionaryResult<object>.Success(new object());
     }
 
+    private async Task<DictionaryResult<object>> ValidateChargeServiceAccountingLinksAsync(UpsertChargeServiceSettingRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.IsRegular)
+        {
+            return DictionaryResult<object>.Success(new object());
+        }
+
+        if (request.IncomeTypeId.HasValue != request.TariffId.HasValue)
+        {
+            return DictionaryResult<object>.Failure("charge_service_regular_link_incomplete", "Для регулярной услуги заполните и вид начисления, и тариф.");
+        }
+
+        if (!request.IncomeTypeId.HasValue)
+        {
+            return DictionaryResult<object>.Success(new object());
+        }
+
+        var incomeType = await dbContext.IncomeTypes
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId.Value && !item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return DictionaryResult<object>.Failure("charge_service_income_type_not_found", "Вид начисления для услуги не найден.");
+        }
+
+        var tariff = await dbContext.Tariffs
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == request.TariffId!.Value && !item.IsArchived, cancellationToken);
+        if (tariff is null)
+        {
+            return DictionaryResult<object>.Failure("charge_service_tariff_not_found", "Тариф для услуги не найден.");
+        }
+
+        if (!IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))
+        {
+            return DictionaryResult<object>.Failure("charge_service_tariff_mismatch", "Выбранный тариф не подходит для вида начисления услуги.");
+        }
+
+        return DictionaryResult<object>.Success(new object());
+    }
+
     private static void ApplyChargeServiceSetting(ChargeServiceSetting setting, UpsertChargeServiceSettingRequest request)
     {
         setting.Name = request.Name.Trim();
@@ -2138,6 +2191,8 @@ public sealed class DictionaryService(
         setting.PaymentDueDay = request.PaymentDueDay;
         setting.PaymentDueMonth = request.PaymentDueMonth;
         setting.OverdueGraceDays = request.OverdueGraceDays;
+        setting.IncomeTypeId = request.IsRegular ? request.IncomeTypeId : null;
+        setting.TariffId = request.IsRegular ? request.TariffId : null;
         setting.IsMetered = request.IsMetered;
         setting.HasTieredTariff = request.HasTieredTariff;
         setting.UnitName = NormalizeOptional(request.UnitName);
@@ -2152,9 +2207,23 @@ public sealed class DictionaryService(
             setting.PaymentDueDay == request.PaymentDueDay &&
             setting.PaymentDueMonth == request.PaymentDueMonth &&
             setting.OverdueGraceDays == request.OverdueGraceDays &&
+            setting.IncomeTypeId == (request.IsRegular ? request.IncomeTypeId : null) &&
+            setting.TariffId == (request.IsRegular ? request.TariffId : null) &&
             setting.IsMetered == request.IsMetered &&
             setting.HasTieredTariff == request.HasTieredTariff &&
             StringEquals(setting.UnitName, NormalizeOptional(request.UnitName));
+    }
+
+    private static bool IsIncomeTypeCompatibleWithTariff(string? incomeTypeCode, string calculationBase)
+    {
+        return NormalizeOptional(incomeTypeCode)?.Trim().ToLowerInvariant() switch
+        {
+            "water" => calculationBase == TariffCalculationBases.MeterWater,
+            "trash" => calculationBase == TariffCalculationBases.People,
+            "electricity" => calculationBase == TariffCalculationBases.MeterElectricity,
+            "membership" or "target" or "entry" or "connection" => calculationBase == TariffCalculationBases.Fixed,
+            _ => true
+        };
     }
 
     private static Dictionary<string, object?> ToChargeServiceAuditValues(ChargeServiceSetting setting)
@@ -2168,6 +2237,8 @@ public sealed class DictionaryService(
             ["paymentDueDay"] = setting.PaymentDueDay,
             ["paymentDueMonth"] = setting.PaymentDueMonth,
             ["overdueGraceDays"] = setting.OverdueGraceDays,
+            ["incomeTypeId"] = setting.IncomeTypeId,
+            ["tariffId"] = setting.TariffId,
             ["isMetered"] = setting.IsMetered,
             ["hasTieredTariff"] = setting.HasTieredTariff,
             ["unitName"] = setting.UnitName
@@ -2397,6 +2468,8 @@ public sealed class DictionaryService(
             setting.PaymentDueDay,
             setting.PaymentDueMonth,
             setting.OverdueGraceDays,
+            setting.IncomeTypeId,
+            setting.TariffId,
             setting.IsMetered,
             setting.HasTieredTariff,
             setting.UnitName,

@@ -29,4 +29,34 @@ describe('financeApi', () => {
       },
     })
   })
+
+  it('posts regular catalog accrual generation to the catalog endpoint', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      accountingMonth: '2026-06-01',
+      serviceCount: 1,
+      createdCount: 1,
+      skippedCount: 0,
+      totalAmount: 300,
+      serviceResults: [],
+      skippedServices: [],
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.generateRegularCatalogAccruals('token', {
+      accountingMonth: '2026-06-01',
+      comment: 'Каталог',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/accruals/generate-regular-catalog', {
+      method: 'POST',
+      body: JSON.stringify({
+        accountingMonth: '2026-06-01',
+        comment: 'Каталог',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
 })

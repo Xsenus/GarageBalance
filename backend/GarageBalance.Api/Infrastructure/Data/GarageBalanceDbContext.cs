@@ -288,6 +288,16 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.IsRegular);
             entity.HasIndex(item => item.IsMetered);
             entity.HasIndex(item => item.HasTieredTariff);
+            entity.HasIndex(item => item.IncomeTypeId);
+            entity.HasIndex(item => item.TariffId);
+            entity.HasOne(item => item.IncomeType)
+                .WithMany()
+                .HasForeignKey(item => item.IncomeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Tariff)
+                .WithMany()
+                .HasForeignKey(item => item.TariffId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<IrregularPayment>(entity =>

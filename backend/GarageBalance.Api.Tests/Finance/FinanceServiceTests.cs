@@ -1424,6 +1424,66 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularCatalogAccrualsAsync_CreatesAccrualsFromLinkedChargeServices()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        database.Context.ChargeServiceSettings.AddRange(
+            new ChargeServiceSetting
+            {
+                Name = "Членский взнос",
+                IsRegular = true,
+                PeriodicityMonths = 12,
+                AccrualStartMonth = 6,
+                PaymentDueDay = 30,
+                PaymentDueMonth = 6,
+                OverdueGraceDays = 30,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                TariffId = tariff.Id,
+                UnitName = "руб."
+            },
+            new ChargeServiceSetting
+            {
+                Name = "Годовой сбор",
+                IsRegular = true,
+                PeriodicityMonths = 12,
+                AccrualStartMonth = 7,
+                PaymentDueDay = 30,
+                PaymentDueMonth = 7,
+                OverdueGraceDays = 30,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                TariffId = tariff.Id,
+                UnitName = "руб."
+            });
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.GenerateRegularCatalogAccrualsAsync(
+            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 6, 1), "Июнь"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
+        Assert.Equal(1, result.Value.ServiceCount);
+        Assert.Equal(1, result.Value.CreatedCount);
+        Assert.Equal(1, result.Value.SkippedCount);
+        Assert.Equal(300m, result.Value.TotalAmount);
+        Assert.Contains(result.Value.SkippedServices, item => item.Contains("Годовой сбор", StringComparison.Ordinal));
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+        Assert.Equal(tariff.Id, accrual.TariffId);
+        Assert.Equal("Каталог услуг: Членский взнос; Июнь; тариф Членский тариф: ставка 300, действует с 01.01.2026.", accrual.Comment);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated" && item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_KeepsExistingAccrualAmountAfterTariffUpdate()
     {
         await using var database = await TestDatabase.CreateAsync();

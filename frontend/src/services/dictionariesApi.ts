@@ -121,6 +121,8 @@ export type ChargeServiceSettingDto = {
   paymentDueDay: number | null
   paymentDueMonth: number | null
   overdueGraceDays: number
+  incomeTypeId: string | null
+  tariffId: string | null
   isMetered: boolean
   hasTieredTariff: boolean
   unitName: string | null
@@ -225,6 +227,8 @@ export type UpsertChargeServiceSettingRequest = {
   paymentDueDay?: number | null
   paymentDueMonth?: number | null
   overdueGraceDays: number
+  incomeTypeId?: string | null
+  tariffId?: string | null
   isMetered: boolean
   hasTieredTariff: boolean
   unitName?: string | null

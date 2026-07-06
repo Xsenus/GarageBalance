@@ -168,6 +168,8 @@ public sealed record ChargeServiceSettingDto(
     int? PaymentDueDay,
     int? PaymentDueMonth,
     int OverdueGraceDays,
+    Guid? IncomeTypeId,
+    Guid? TariffId,
     bool IsMetered,
     bool HasTieredTariff,
     string? UnitName,
@@ -183,7 +185,9 @@ public sealed record UpsertChargeServiceSettingRequest(
     [Range(0, 366)] int OverdueGraceDays,
     bool IsMetered,
     bool HasTieredTariff,
-    [MaxLength(40)] string? UnitName);
+    [MaxLength(40)] string? UnitName,
+    Guid? IncomeTypeId = null,
+    Guid? TariffId = null);
 
 public sealed record IrregularPaymentDto(
     Guid Id,
