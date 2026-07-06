@@ -2188,7 +2188,7 @@ function FinancePanel({
       {error ? <FormError>{error}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
-      <PaymentsPrototypePanel auth={auth} formStateClient={formStateClient} garages={garages} onOpenDialog={openPaymentsPrototypeDialog} />
+      <PaymentsPrototypePanel auth={auth} financeClient={financeClient} formStateClient={formStateClient} garages={garages} incomeTypes={incomeTypes} onOpenDialog={openPaymentsPrototypeDialog} />
 
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
         <div>
@@ -2820,7 +2820,21 @@ function formatPaymentPrototypeValue(value: number | string) {
   return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
 }
 
-function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }: { auth: AuthResponse; formStateClient: FormStateClient; garages: GarageDto[]; onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void }) {
+function PaymentsPrototypePanel({
+  auth,
+  financeClient,
+  formStateClient,
+  garages,
+  incomeTypes,
+  onOpenDialog,
+}: {
+  auth: AuthResponse
+  financeClient: FinanceClient
+  formStateClient: FormStateClient
+  garages: GarageDto[]
+  incomeTypes: AccountingTypeDto[]
+  onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
+}) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
@@ -2828,6 +2842,9 @@ function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
+  const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
     const loadedGarages = garages
       .filter((garage) => !garage.isArchived)
@@ -2920,6 +2937,7 @@ function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
     setGarageRows(createGarageIncomePrototypeRows(garage.number))
     setHistoryRows(garage.number === '1' ? garagePaymentHistoryRows : [])
+    setPaymentError(null)
   }
 
   function selectFirstGarageResult() {
@@ -2929,26 +2947,67 @@ function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }
   }
 
   function handlePaymentDraftChange(rowId: string, value: string) {
+    setPaymentError(null)
     setGarageRows((currentRows) => currentRows.map((row) => row.id === rowId ? { ...row, paymentDraft: value } : row))
   }
 
-  function commitGaragePayment(row: GarageIncomePrototypeRow) {
+  function findIncomeTypeForPayment(serviceName: string) {
+    const normalizedService = serviceName.trim().toLocaleLowerCase('ru-RU')
+    const activeIncomeTypes = incomeTypes.filter((incomeType) => !incomeType.isArchived)
+
+    return activeIncomeTypes.find((incomeType) => incomeType.name.trim().toLocaleLowerCase('ru-RU') === normalizedService)
+      ?? activeIncomeTypes.find((incomeType) => {
+        const normalizedTypeName = incomeType.name.trim().toLocaleLowerCase('ru-RU')
+        return normalizedTypeName.length > 0 && (normalizedTypeName.includes(normalizedService) || normalizedService.includes(normalizedTypeName))
+      })
+      ?? null
+  }
+
+  async function commitGaragePayment(row: GarageIncomePrototypeRow) {
     const amount = Number(row.paymentDraft.trim().replace(',', '.'))
     if (!Number.isFinite(amount) || amount <= 0) {
       return
     }
 
+    if (!selectedGarage || !realGarageIds.has(selectedGarage.id)) {
+      setPaymentError('Выберите гараж из справочника, чтобы сохранить платеж в истории операций.')
+      return
+    }
+
+    const incomeType = findIncomeTypeForPayment(row.service)
+    if (!incomeType) {
+      setPaymentError(`Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`)
+      return
+    }
+
     const nextPaid = row.paid + amount
     const nextDebt = Math.max(row.payable - nextPaid, 0)
-    const now = new Date()
-    const paymentDate = now.toLocaleDateString('ru-RU')
-    const paymentTime = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    const accountingMonth = row.month.length === 7 ? `${row.month}-01` : row.month
+    setSavingPaymentRowId(row.id)
+    setPaymentError(null)
 
-    setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, debt: nextDebt } : currentRow))
-    setHistoryRows((currentRows) => [
-      { date: paymentDate, time: paymentTime, amount, purpose: row.service, debtAfter: nextDebt },
-      ...currentRows,
-    ])
+    try {
+      const operation = await financeClient.createIncome(auth.accessToken, {
+        garageId: selectedGarage.id,
+        incomeTypeId: incomeType.id,
+        operationDate: getLocalDateInputValue(),
+        accountingMonth,
+        amount,
+        comment: `Платеж из формы поступлений: ${row.service} ${row.monthLabel}`,
+      })
+      const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+      const historyDebtAfter = operation.garageDebtAfter ?? nextDebt
+
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, debt: nextDebt } : currentRow))
+      setHistoryRows((currentRows) => [
+        { date: formatDateOnly(operation.operationDate), time: paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
+        ...currentRows,
+      ])
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж. Повторите попытку позже.')
+    } finally {
+      setSavingPaymentRowId(null)
+    }
   }
 
   const groupedGarageRows = garageRows.reduce<Array<{ month: string; monthLabel: string; rows: GarageIncomePrototypeRow[] }>>((groups, row) => {
@@ -3014,6 +3073,7 @@ function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }
         ) : null}
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
+      {paymentError ? <FormError>{paymentError}</FormError> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -3137,12 +3197,13 @@ function PaymentsPrototypePanel({ auth, formStateClient, garages, onOpenDialog }
                                 className="payments-prototype-payment-input"
                                 aria-label={`Платеж ${row.service} ${row.monthLabel}`}
                                 inputMode="decimal"
+                                disabled={savingPaymentRowId === row.id}
                                 value={row.paymentDraft}
                                 onChange={(event) => handlePaymentDraftChange(row.id, event.target.value)}
                                 onKeyDown={(event) => {
                                   if (event.key === 'Enter') {
                                     event.preventDefault()
-                                    commitGaragePayment(row)
+                                    void commitGaragePayment(row)
                                   }
                                 }}
                               />

@@ -20,7 +20,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateIncomeOperationRequest, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1039,7 +1039,32 @@ describe('App', () => {
 
   it('shows payments prototype and opens payment form modals', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300 })
+    const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
+    let savedIncomeRequest: CreateIncomeOperationRequest | null = null
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [garage],
+      getIncomeTypes: async () => [incomeType],
+    })
+    const financeClient = createFinanceClient({
+      createIncome: async (_token, request) => {
+        savedIncomeRequest = request
+        return createFinancialOperation({
+          id: 'income-electricity-payment',
+          garageId: request.garageId,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          incomeTypeId: request.incomeTypeId,
+          incomeTypeName: incomeType.name,
+          operationDate: request.operationDate,
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          garageDebtBefore: 5674,
+          garageDebtAfter: 0,
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -1070,6 +1095,13 @@ describe('App', () => {
     expect(electricityPaymentInput).toHaveValue('5674')
     await user.click(electricityPaymentInput)
     await user.keyboard('{Enter}')
+    await waitFor(() => expect(savedIncomeRequest).toMatchObject({
+      garageId: garage.id,
+      incomeTypeId: incomeType.id,
+      operationDate: '2026-06-30',
+      accountingMonth: '2026-06-01',
+      amount: 5674,
+    }))
     expect(electricityPaymentInput).toHaveValue('')
     expect(within(prototype).getAllByText('5 674').length).toBeGreaterThanOrEqual(2)
 
