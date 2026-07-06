@@ -9966,8 +9966,11 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
   ]
 }
 
-function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], payments: IrregularPaymentDto[]) {
-  const mergedRows = rows.map((row) => {
+function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], payments: IrregularPaymentDto[], preferBackend = false) {
+  const sourceRows = preferBackend && payments.length > 0
+    ? rows.filter((row) => row.backendPaymentId || payments.some((payment) => payment.name.toLocaleLowerCase('ru') === row.name.toLocaleLowerCase('ru')))
+    : rows
+  const mergedRows = sourceRows.map((row) => {
     const payment = payments.find((item) => item.name.toLocaleLowerCase('ru') === row.name.toLocaleLowerCase('ru'))
     if (!payment) {
       return row
@@ -10058,6 +10061,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
+  const [backendIrregularPayments, setBackendIrregularPayments] = useState<IrregularPaymentDto[]>([])
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
   const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
   const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
@@ -10091,6 +10095,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
           const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows(contractorOneTimeRows, loadedIrregularPayments)
           setBackendTariffs(loadedTariffs)
           setBackendChargeServices(loadedChargeServices)
+          setBackendIrregularPayments(loadedIrregularPayments)
           setTariffRows(mergedRows)
           setOneTimeRows(mergedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
@@ -10126,11 +10131,12 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
         if (state?.payload) {
           const savedTariffRows = Array.isArray(state.payload.tariffRows) ? state.payload.tariffRows : contractorTariffRows
           const savedOneTimeRows = Array.isArray(state.payload.oneTimeRows) ? state.payload.oneTimeRows : contractorOneTimeRows
-          const mergedSavedTariffRows = mergeChargeServicesIntoPrototypeRows(savedTariffRows, backendChargeServices)
+          const mergedSavedTariffRows = mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(savedTariffRows, backendTariffs), backendChargeServices)
+          const mergedSavedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows(savedOneTimeRows, backendIrregularPayments, true)
           setTariffRows(mergedSavedTariffRows)
-          setOneTimeRows(savedOneTimeRows)
+          setOneTimeRows(mergedSavedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedSavedTariffRows))
-          setOneTimeDrafts(createEditableDrafts(savedOneTimeRows))
+          setOneTimeDrafts(createEditableDrafts(mergedSavedOneTimeRows))
         }
       })
       .catch((error: unknown) => {
@@ -10147,7 +10153,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, backendChargeServices, formStateClient])
+  }, [auth.accessToken, backendChargeServices, backendIrregularPayments, backendTariffs, formStateClient])
 
   useEffect(() => {
     if (!formStateLoaded) {

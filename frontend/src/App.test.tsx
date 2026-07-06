@@ -32,6 +32,13 @@ describe('App', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
+    vi.mocked(formStatesApi.getState).mockImplementation(async () => null)
+    vi.mocked(formStatesApi.saveState).mockImplementation(async (_accessToken: string, scope: string, request: { payload: unknown }) => ({
+      scope,
+      payload: request.payload,
+      updatedAtUtc: '2026-06-30T03:00:00Z',
+      updatedByUserId: 'admin-user',
+    }))
     window.sessionStorage.clear()
     window.localStorage.clear()
   })
@@ -918,6 +925,85 @@ describe('App', () => {
     }))
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
+  })
+
+  it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {
+    const user = userEvent.setup()
+    vi.mocked(formStatesApi.getState).mockImplementation(async () => ({
+      scope: 'tariffs-and-fees-prototype',
+      payload: {
+        tariffRows: [
+          {
+            id: 'water-rate',
+            group: 'Вода',
+            category: 'Вода',
+            title: 'Старый тариф воды',
+            amount: '1',
+            unit: 'руб.',
+            byMeter: false,
+            tiered: false,
+            calculationBase: 'meter_water',
+          },
+        ],
+        oneTimeRows: [
+          {
+            id: 'stale-fee',
+            name: 'Старый сбор',
+            amount: '10',
+            isActive: true,
+          },
+        ],
+      },
+      updatedAtUtc: '2026-06-29T03:00:00Z',
+      updatedByUserId: 'admin-user',
+    }))
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [
+        createTariff({
+          id: 'water-tariff',
+          name: 'Тариф воды из БД',
+          calculationBase: 'meter_water',
+          rate: 125,
+          effectiveFrom: '2026-01-01',
+        }),
+      ],
+      getChargeServiceSettings: async () => [
+        createChargeServiceSetting({
+          id: 'service-security',
+          name: 'Охрана из БД',
+          isRegular: true,
+          periodicityMonths: 12,
+          accrualStartMonth: 3,
+          paymentDueDay: 25,
+          paymentDueMonth: 12,
+          overdueGraceDays: 45,
+          isMetered: false,
+          hasTieredTariff: false,
+          unitName: 'руб.',
+        }),
+      ],
+      getIrregularPayments: async () => [
+        createIrregularPayment({
+          id: 'irregular-gate',
+          name: 'Сбор на ворота из БД',
+          amount: 777,
+        }),
+      ],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125'))
+    expect(within(tariffsPanel).queryByText('Старый сбор')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveValue('дек')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
