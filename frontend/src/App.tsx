@@ -7082,6 +7082,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [cashPaymentReport, setCashPaymentReport] = useState<CashPaymentReportDto | null>(null)
   const [bankDepositReport, setBankDepositReport] = useState<BankDepositReportDto | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
+  const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
   const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
@@ -7575,12 +7576,24 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
                 <div><dt>Собрано</dt><dd>{formatMoney(feeReport?.collectedTotal ?? 0)}</dd></div>
                 <div><dt>Задолженность</dt><dd>{formatMoney(feeReport?.debtTotal ?? 0)}</dd></div>
               </dl>
-              <button className="link-button" type="button">Показать должников</button>
-              {renderReportTable(
-                'Должники по сбору',
-                ['Гараж', 'Оплачено', 'Дата', 'Задолженность'],
-                debtorRows.length > 0 ? debtorRows : [['', '', '', 'Должников нет']],
-              )}
+              <button
+                aria-controls="fee-debtors-report"
+                aria-expanded={feeDebtorsVisible}
+                className="link-button"
+                type="button"
+                onClick={() => setFeeDebtorsVisible((value) => !value)}
+              >
+                {feeDebtorsVisible ? 'Скрыть должников' : 'Показать должников'}
+              </button>
+              {feeDebtorsVisible ? (
+                <div id="fee-debtors-report">
+                  {renderReportTable(
+                    'Должники по сбору',
+                    ['Гараж', 'Оплачено', 'Дата', 'Задолженность'],
+                    debtorRows.length > 0 ? debtorRows : [['', '', '', 'Должников нет']],
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         </ReportWorkbookSheet>
