@@ -506,6 +506,120 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetCashPaymentReportAsync_ReturnsExpenseRowsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
+
+        var result = await service.GetCashPaymentReportAsync(
+            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "вод", 10, actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(400m, result.Value!.Total);
+        Assert.Equal(1, result.Value.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal(new DateOnly(2026, 6, 12), row.Date);
+        Assert.Equal(400m, row.Amount);
+        Assert.True(row.HasReceipt);
+        Assert.Equal("Вода: Vodokanal", row.Purpose);
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.cash_payments_generated" &&
+            auditEvent.EntityId == "cash_payments" &&
+            auditEvent.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task GetBankDepositReportAsync_ReturnsDepositRowsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 3000m,
+                BalanceBefore = 0m,
+                BalanceAfter = 3000m,
+                Reason = "Сдача наличных в банк",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Withdraw,
+                Amount = 1000m,
+                BalanceBefore = 3000m,
+                BalanceAfter = 2000m,
+                Reason = "Не сдача",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 16, 9, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetBankDepositReportAsync(
+            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", 10, actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(3000m, result.Value!.Total);
+        Assert.Equal(1, result.Value.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal(new DateOnly(2026, 6, 15), row.Date);
+        Assert.Equal("Сдача наличных в банк", row.Comment);
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.bank_deposits_generated" &&
+            auditEvent.EntityId == "bank_deposits" &&
+            auditEvent.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task GetFeeReportAsync_ReturnsSummaryDebtorsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var firstAccrual = await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
+        var secondAccrual = await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
+        var payment = await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"), null, CancellationToken.None);
+        Assert.True(firstAccrual.Succeeded, firstAccrual.ErrorMessage);
+        Assert.True(secondAccrual.Succeeded, secondAccrual.ErrorMessage);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+
+        var result = await service.GetFeeReportAsync(
+            new FeeReportRequest("член", 10, actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("член", result.Value!.Variation);
+        Assert.Equal(1000m, result.Value.AccruedTotal);
+        Assert.Equal(200m, result.Value.CollectedTotal);
+        Assert.Equal(800m, result.Value.DebtTotal);
+        var summary = Assert.Single(result.Value.SummaryRows);
+        Assert.Equal("Членский взнос", summary.Name);
+        Assert.Equal("Членский взнос", summary.Goal);
+        Assert.Equal(2, result.Value.DebtorRows.Count);
+        Assert.Contains(result.Value.DebtorRows, row => row.GarageNumber == "12" && row.Paid == 200m && row.Debt == 300m);
+        Assert.Contains(result.Value.DebtorRows, row => row.GarageNumber == "21" && row.Paid == 0m && row.Debt == 500m);
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.fees_generated" &&
+            auditEvent.EntityId == "fees" &&
+            auditEvent.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();

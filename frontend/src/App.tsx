@@ -40,7 +40,7 @@ import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { reportsApi } from './services/reportsApi'
-import type { ConsolidatedReportDto, ExpenseReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import { usersApi } from './services/usersApi'
@@ -4743,6 +4743,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [garageReport, setGarageReport] = useState<ConsolidatedReportDto | null>(null)
   const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
+  const [cashPaymentReport, setCashPaymentReport] = useState<CashPaymentReportDto | null>(null)
+  const [bankDepositReport, setBankDepositReport] = useState<BankDepositReportDto | null>(null)
+  const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
   const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
@@ -4793,7 +4796,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         const garageFilterRange = monthlyFilters.garages
         const payoutFilter = monthlyFilters.payouts
         const incomeFilter = dateFilters.income
-        const [loadedConsolidated, loadedGarages, loadedPayouts, loadedIncome] = await Promise.all([
+        const cashPaymentFilter = dateFilters.cashPayments
+        const bankDepositFilter = dateFilters.bankDeposits
+        const [loadedConsolidated, loadedGarages, loadedPayouts, loadedIncome, loadedCashPayments, loadedBankDeposits, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
@@ -4817,6 +4822,20 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             search: incomeGarageFilter.trim() || undefined,
             limit: 100,
           }),
+          reportClient.getCashPaymentReport(auth.accessToken, {
+            dateFrom: cashPaymentFilter.dateFrom,
+            dateTo: cashPaymentFilter.dateTo,
+            limit: 100,
+          }),
+          reportClient.getBankDepositReport(auth.accessToken, {
+            dateFrom: bankDepositFilter.dateFrom,
+            dateTo: bankDepositFilter.dateTo,
+            limit: 100,
+          }),
+          reportClient.getFeeReport(auth.accessToken, {
+            variation: feeVariationFilter.trim() || undefined,
+            limit: 100,
+          }),
         ])
 
         if (ignore) {
@@ -4827,6 +4846,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         setGarageReport(loadedGarages)
         setPayoutReport(loadedPayouts)
         setIncomeReport(loadedIncome)
+        setCashPaymentReport(loadedCashPayments)
+        setBankDepositReport(loadedBankDeposits)
+        setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
           setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
@@ -4839,7 +4861,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, counterpartyFilter, dateFilters.income, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+  }, [auth.accessToken, counterpartyFilter, dateFilters.bankDeposits, dateFilters.cashPayments, dateFilters.income, feeVariationFilter, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'funds') {
@@ -5106,26 +5128,60 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
 
     if (activeReportTab === 'cashPayments') {
+      const cashRows = cashPaymentReport?.rows.map((row) => [
+        row.date,
+        formatMoney(row.amount),
+        row.hasReceipt ? 'Да' : 'Нет',
+        row.purpose,
+        row.comment ?? '',
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
-          {renderReportTable('Отчет по оплатам из кассы', ['Дата', 'Сумма', 'Наличие чека', 'Назначение', 'Комментарий'], [[today, formatMoney(0), 'Да/Нет', 'Назначение платежа', '']])}
+          {renderReportTable(
+            'Отчет по оплатам из кассы',
+            ['Дата', 'Сумма', 'Наличие чека', 'Назначение', 'Комментарий'],
+            cashRows.length > 0 ? cashRows : [['', 'Операций за период нет', '', '', '']],
+            cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', `${cashPaymentReport.rowCount} операций`] : undefined,
+          )}
         </ReportWorkbookSheet>
       )
     }
 
     if (activeReportTab === 'bankDeposits') {
+      const bankRows = bankDepositReport?.rows.map((row) => [
+        row.date,
+        formatMoney(row.amount),
+        row.comment || row.fundName || '',
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
-          {renderReportTable('Отчет по сдаче кассы в банк', ['Дата', 'Сумма', 'Комментарий'], [[today, formatMoney(0), '']])}
+          {renderReportTable(
+            'Отчет по сдаче кассы в банк',
+            ['Дата', 'Сумма', 'Комментарий'],
+            bankRows.length > 0 ? bankRows : [['', 'Операций за период нет', '']],
+            bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), `${bankDepositReport.rowCount} операций`] : undefined,
+          )}
         </ReportWorkbookSheet>
       )
     }
 
     if (activeReportTab === 'fees') {
+      const summaryRows = feeReport?.summaryRows.map((row) => [
+        row.name,
+        row.goal,
+        formatMoney(row.feeAmount),
+        formatMoney(row.collected),
+      ]) ?? []
+      const debtorRows = feeReport?.debtorRows.map((row) => [
+        row.garageNumber,
+        formatMoney(row.paid),
+        row.lastPaymentDate ?? '',
+        formatMoney(row.debt),
+      ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по сборам">
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
@@ -5135,14 +5191,24 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </label>
           </div>
           <div className="report-workbook-split">
-            {renderReportTable('Отчет по сборам', ['Наименование', 'Цель', 'Сумма сбора', 'Собрано'], [[feeVariationLabel, 'Целевой сбор', formatMoney(500), formatMoney(33500)]])}
+            {renderReportTable(
+              'Отчет по сборам',
+              ['Наименование', 'Цель', 'Сумма сбора', 'Собрано'],
+              summaryRows.length > 0 ? summaryRows : [[feeVariationLabel, 'Данных по сбору нет', '', '']],
+              feeReport ? ['ИТОГО', '', formatMoney(feeReport.accruedTotal), formatMoney(feeReport.collectedTotal)] : undefined,
+            )}
             <div className="report-workbook-side-summary" aria-label="Детализация сбора">
               <dl>
-                <div><dt>{feeVariationLabel}</dt><dd>{formatMoney(500)}</dd></div>
-                <div><dt>Собрано</dt><dd>{formatMoney(33500)}</dd></div>
+                <div><dt>{feeReport?.variation ?? feeVariationLabel}</dt><dd>{formatMoney(feeReport?.accruedTotal ?? 0)}</dd></div>
+                <div><dt>Собрано</dt><dd>{formatMoney(feeReport?.collectedTotal ?? 0)}</dd></div>
+                <div><dt>Задолженность</dt><dd>{formatMoney(feeReport?.debtTotal ?? 0)}</dd></div>
               </dl>
               <button className="link-button" type="button">Показать должников</button>
-              {renderReportTable('Должники по сбору', ['Гараж', 'Оплачено', 'Дата', 'Задолженность'], [['1', formatMoney(500), '04.05.2026', formatMoney(0)], ['2', formatMoney(500), '08.05.2026', formatMoney(0)], ['3', formatMoney(200), '25.06.2026', formatMoney(300)]])}
+              {renderReportTable(
+                'Должники по сбору',
+                ['Гараж', 'Оплачено', 'Дата', 'Задолженность'],
+                debtorRows.length > 0 ? debtorRows : [['', '', '', 'Должников нет']],
+              )}
             </div>
           </div>
         </ReportWorkbookSheet>

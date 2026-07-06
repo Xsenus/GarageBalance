@@ -755,6 +755,290 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         return ReportResult<FundChangeReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<CashPaymentReportDto>> GetCashPaymentReportAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
+    {
+        var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
+        if (dateTo < dateFrom)
+        {
+            return ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        var operationsQuery = dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.Supplier)
+            .Include(operation => operation.ExpenseType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.OperationDate >= dateFrom &&
+                operation.OperationDate <= dateTo);
+
+        var operations = await operationsQuery
+            .OrderBy(operation => operation.OperationDate)
+            .ThenBy(operation => operation.DocumentNumber)
+            .ToListAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var normalizedSearch = request.Search.Trim();
+            operations = operations
+                .Where(operation =>
+                    (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.ExpenseType?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        var rowCount = operations.Count;
+        var visibleOperations = ApplyEnumerableReportRowLimit(operations, request.Limit).ToList();
+        var rows = visibleOperations
+            .Select(operation => new CashPaymentReportRowDto(
+                operation.Id,
+                operation.OperationDate,
+                operation.Amount,
+                !string.IsNullOrWhiteSpace(operation.DocumentNumber),
+                BuildCashPaymentPurpose(operation),
+                operation.Supplier?.Name,
+                operation.ExpenseType?.Name,
+                operation.DocumentNumber,
+                operation.Comment))
+            .ToList();
+        var report = new CashPaymentReportDto(dateFrom, dateTo, operations.Sum(operation => operation.Amount), rowCount, rows);
+
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.cash_payments_generated",
+            "Отчет по оплатам из кассы",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            new Dictionary<string, object?>
+            {
+                ["reportType"] = "cash_payments",
+                ["visibleRowCount"] = report.Rows.Count,
+                ["total"] = report.Total,
+                ["limit"] = request.Limit
+            },
+            cancellationToken);
+
+        return ReportResult<CashPaymentReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<BankDepositReportDto>> GetBankDepositReportAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
+    {
+        var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
+        if (dateTo < dateFrom)
+        {
+            return ReportResult<BankDepositReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var operationsQuery = dbContext.FundOperations.AsNoTracking()
+            .Include(operation => operation.Fund)
+            .Where(operation =>
+                operation.OperationKind == FundOperationKinds.Deposit &&
+                operation.CreatedAtUtc >= fromUtc &&
+                operation.CreatedAtUtc < toExclusiveUtc);
+
+        List<FundOperation> operations;
+        if (dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            operations = await dbContext.FundOperations.AsNoTracking()
+                .Include(operation => operation.Fund)
+                .ToListAsync(cancellationToken);
+            operations = operations
+                .Where(operation =>
+                    operation.OperationKind == FundOperationKinds.Deposit &&
+                    operation.CreatedAtUtc >= fromUtc &&
+                    operation.CreatedAtUtc < toExclusiveUtc)
+                .ToList();
+        }
+        else
+        {
+            operations = await operationsQuery
+                .OrderBy(operation => operation.CreatedAtUtc)
+                .ThenBy(operation => operation.Fund.Name)
+                .ToListAsync(cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var normalizedSearch = request.Search.Trim();
+            operations = operations
+                .Where(operation =>
+                    operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        operations = operations
+            .OrderBy(operation => operation.CreatedAtUtc)
+            .ThenBy(operation => operation.Fund.Name)
+            .ToList();
+
+        var rowCount = operations.Count;
+        var rows = ApplyEnumerableReportRowLimit(operations, request.Limit)
+            .Select(operation => new BankDepositReportRowDto(
+                operation.Id,
+                DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
+                operation.Amount,
+                operation.Fund.Name,
+                operation.Reason))
+            .ToList();
+        var report = new BankDepositReportDto(dateFrom, dateTo, operations.Sum(operation => operation.Amount), rowCount, rows);
+
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.bank_deposits_generated",
+            "Отчет по сдаче кассы в банк",
+            "generated",
+            report.DateFrom,
+            report.DateTo,
+            report.RowCount,
+            request.Search,
+            new Dictionary<string, object?>
+            {
+                ["reportType"] = "bank_deposits",
+                ["visibleRowCount"] = report.Rows.Count,
+                ["total"] = report.Total,
+                ["limit"] = request.Limit
+            },
+            cancellationToken);
+
+        return ReportResult<BankDepositReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)
+    {
+        var variation = request.Variation?.Trim();
+        var incomeTypes = await dbContext.IncomeTypes.AsNoTracking()
+            .Where(incomeType => !incomeType.IsArchived)
+            .OrderBy(incomeType => incomeType.Name)
+            .ToListAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(variation))
+        {
+            var normalizedVariation = variation.ToUpperInvariant();
+            incomeTypes = incomeTypes
+                .Where(incomeType => incomeType.Name.ToUpperInvariant().Contains(normalizedVariation, StringComparison.Ordinal))
+                .ToList();
+        }
+        var incomeTypeIds = incomeTypes.Select(incomeType => incomeType.Id).ToList();
+
+        if (incomeTypeIds.Count == 0)
+        {
+            var emptyReport = new FeeReportDto(variation ?? "Все сборы", 0m, 0m, 0m, 0, [], []);
+            await AddFeeReportAuditAsync(request, emptyReport, cancellationToken);
+            return ReportResult<FeeReportDto>.Success(emptyReport);
+        }
+
+        var accrualTotals = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId))
+            .GroupBy(accrual => accrual.IncomeTypeId)
+            .Select(group => new { IncomeTypeId = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .ToDictionaryAsync(row => row.IncomeTypeId, row => row.Amount, cancellationToken);
+        var collectedTotals = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.IncomeTypeId.HasValue &&
+                incomeTypeIds.Contains(operation.IncomeTypeId.Value))
+            .GroupBy(operation => operation.IncomeTypeId!.Value)
+            .Select(group => new { IncomeTypeId = group.Key, Amount = group.Sum(operation => operation.Amount) })
+            .ToDictionaryAsync(row => row.IncomeTypeId, row => row.Amount, cancellationToken);
+
+        var summaryRows = incomeTypes
+            .Select(incomeType =>
+            {
+                accrualTotals.TryGetValue(incomeType.Id, out var accrued);
+                collectedTotals.TryGetValue(incomeType.Id, out var collected);
+                return new FeeReportSummaryRowDto(incomeType.Id, incomeType.Name, BuildFeeGoal(incomeType.Name), accrued, collected);
+            })
+            .Where(row => row.FeeAmount != 0 || row.Collected != 0 || !string.IsNullOrWhiteSpace(variation))
+            .ToList();
+
+        var accrualsByGarage = await dbContext.Accruals.AsNoTracking()
+            .Include(accrual => accrual.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Where(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId))
+            .GroupBy(accrual => new
+            {
+                accrual.GarageId,
+                accrual.Garage.Number,
+                OwnerLastName = accrual.Garage.Owner != null ? accrual.Garage.Owner.LastName : null,
+                OwnerFirstName = accrual.Garage.Owner != null ? accrual.Garage.Owner.FirstName : null,
+                OwnerMiddleName = accrual.Garage.Owner != null ? accrual.Garage.Owner.MiddleName : null,
+                accrual.IncomeTypeId
+            })
+            .Select(group => new
+            {
+                group.Key.GarageId,
+                GarageNumber = group.Key.Number,
+                group.Key.OwnerLastName,
+                group.Key.OwnerFirstName,
+                group.Key.OwnerMiddleName,
+                group.Key.IncomeTypeId,
+                Accrued = group.Sum(accrual => accrual.Amount)
+            })
+            .ToListAsync(cancellationToken);
+        var paymentsByGarage = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId.HasValue &&
+                operation.IncomeTypeId.HasValue &&
+                incomeTypeIds.Contains(operation.IncomeTypeId.Value))
+            .GroupBy(operation => new { GarageId = operation.GarageId!.Value, IncomeTypeId = operation.IncomeTypeId!.Value })
+            .Select(group => new
+            {
+                group.Key.GarageId,
+                group.Key.IncomeTypeId,
+                Paid = group.Sum(operation => operation.Amount),
+                LastPaymentDate = group.Max(operation => (DateOnly?)operation.OperationDate)
+            })
+            .ToListAsync(cancellationToken);
+        var paymentLookup = paymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
+        var incomeTypeNames = incomeTypes.ToDictionary(incomeType => incomeType.Id, incomeType => incomeType.Name);
+        var debtorRows = accrualsByGarage
+            .Select(row =>
+            {
+                paymentLookup.TryGetValue((row.GarageId, row.IncomeTypeId), out var payment);
+                var paid = payment?.Paid ?? 0m;
+                return new FeeReportDebtorRowDto(
+                    row.GarageId,
+                    row.GarageNumber,
+                    FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
+                    row.IncomeTypeId,
+                    incomeTypeNames[row.IncomeTypeId],
+                    paid,
+                    payment?.LastPaymentDate,
+                    row.Accrued - paid);
+            })
+            .Where(row => row.Debt > 0)
+            .OrderBy(row => row.FeeName)
+            .ThenBy(row => row.GarageNumber)
+            .ToList();
+
+        var rowCount = summaryRows.Count + debtorRows.Count;
+        var visibleSummaryRows = ApplyRowLimit(summaryRows, request.Limit);
+        var visibleDebtorRows = ApplyRowLimit(debtorRows, request.Limit);
+        var report = new FeeReportDto(
+            variation ?? "Все сборы",
+            summaryRows.Sum(row => row.FeeAmount),
+            summaryRows.Sum(row => row.Collected),
+            debtorRows.Sum(row => row.Debt),
+            rowCount,
+            visibleSummaryRows,
+            visibleDebtorRows);
+
+        await AddFeeReportAuditAsync(request, report, cancellationToken);
+
+        return ReportResult<FeeReportDto>.Success(report);
+    }
+
     public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
         var reportResult = await GetIncomeReportAsync(request, cancellationToken);
@@ -1517,6 +1801,32 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         };
     }
 
+    private async Task AddFeeReportAuditAsync(FeeReportRequest request, FeeReportDto report, CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.fees_generated",
+            "Отчет по сборам",
+            "generated",
+            today,
+            today,
+            report.RowCount,
+            request.Variation,
+            new Dictionary<string, object?>
+            {
+                ["reportType"] = "fees",
+                ["visibleSummaryRowCount"] = report.SummaryRows.Count,
+                ["visibleDebtorRowCount"] = report.DebtorRows.Count,
+                ["accruedTotal"] = report.AccruedTotal,
+                ["collectedTotal"] = report.CollectedTotal,
+                ["debtTotal"] = report.DebtTotal,
+                ["variation"] = report.Variation,
+                ["limit"] = request.Limit
+            },
+            cancellationToken);
+    }
+
     private static string NormalizeReportActionName(string reportTitle)
     {
         return reportTitle switch
@@ -1524,6 +1834,9 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             "Сводный отчет" => "consolidated",
             "Отчет по поступлениям" => "income",
             "Отчет по выплатам" => "expense",
+            "Отчет по оплатам из кассы" => "cash_payments",
+            "Отчет по сдаче кассы в банк" => "bank_deposits",
+            "Отчет по сборам" => "fees",
             "Отчет по изменению фондов" => "fund_changes",
             _ => "custom"
         };
@@ -1576,6 +1889,38 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             operation.ActorUserId,
             operation.CreatedAtUtc,
             operation.Reason);
+    }
+
+    private static string BuildCashPaymentPurpose(FinancialOperation operation)
+    {
+        var parts = new[] { operation.ExpenseType?.Name, operation.Supplier?.Name }
+            .Where(part => !string.IsNullOrWhiteSpace(part));
+        var purpose = string.Join(": ", parts);
+        return string.IsNullOrWhiteSpace(purpose)
+            ? operation.Comment ?? "Оплата из кассы"
+            : purpose;
+    }
+
+    private static string BuildFeeGoal(string name)
+    {
+        if (name.Contains("цел", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Целевой сбор";
+        }
+
+        if (name.Contains("член", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Членский взнос";
+        }
+
+        if (name.Contains("вступ", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Вступительный взнос";
+        }
+
+        return name.Contains("сбор", StringComparison.OrdinalIgnoreCase)
+            ? "Сбор"
+            : "Поступление";
     }
 
     private static int NormalizeReportLimit(int limit) => Math.Clamp(limit, 1, 500);

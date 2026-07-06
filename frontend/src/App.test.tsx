@@ -23,7 +23,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, Gara
 import type { AccrualDto, CreateMeterReadingRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { ConsolidatedReportDto, ExpenseReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
@@ -5214,11 +5214,17 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по оплатам из кассы' })).toBeInTheDocument()
+    const cashPaymentsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по оплатам из кассы' })
+    expect(cashPaymentsTable).toHaveTextContent('Вода: Водоканал')
+    expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
+    expect(cashPaymentsTable).toHaveTextContent('400,00')
+    expect(cashPaymentsTable).not.toHaveTextContent('Назначение платежа')
 
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
     expect(within(reportsPanel).getByText('Отчёт по сдаче кассы в банк')).toBeInTheDocument()
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })).toBeInTheDocument()
+    const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
+    expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
+    expect(bankDepositsTable).toHaveTextContent('3 000,00')
 
     await openReportTab(user, reportsPanel, 'Сборы')
     expect(within(reportsPanel).getByText('Отчёт по сборам')).toBeInTheDocument()
@@ -5226,8 +5232,10 @@ describe('App', () => {
     await waitFor(() => expect(reportsPanel.querySelector('datalist option[value="Членский взнос"]')).not.toBeNull())
     await user.clear(feeFilter)
     await user.type(feeFilter, 'Членский взнос')
-    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос')
-    expect(within(reportsPanel).getByRole('table', { name: 'Должники по сбору' })).toBeInTheDocument()
+    await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
+    const feeDebtorsTable = within(reportsPanel).getByRole('table', { name: 'Должники по сбору' })
+    expect(feeDebtorsTable).toHaveTextContent('12')
+    expect(feeDebtorsTable).toHaveTextContent('800,00')
 
     await openReportTab(user, reportsPanel, 'Изменение фондов')
     expect(within(reportsPanel).getByText('Отчёт по изменению фондов')).toBeInTheDocument()
@@ -6099,6 +6107,21 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     exportExpenseReportXlsx: async () => new Blob(['expense xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportExpenseReportPdf: async () => new Blob(['expense pdf'], { type: 'application/pdf' }),
     getFundChangeReport: async () => createFundChangeReport(),
+    getCashPaymentReport: async () => createCashPaymentReport(),
+    getBankDepositReport: async () => createBankDepositReport(),
+    getFeeReport: async (_token, params) => {
+      const variation = params?.variation ?? 'Сбор на ворота'
+      return variation.toLowerCase().includes('член')
+        ? createFeeReport({
+            variation,
+            accruedTotal: 1000,
+            collectedTotal: 200,
+            debtTotal: 800,
+            summaryRows: [{ incomeTypeId: 'income-type-membership', name: 'Членский взнос', goal: 'Членский взнос', feeAmount: 1000, collected: 200 }],
+            debtorRows: [{ garageId: 'garage-12', garageNumber: '12', ownerName: 'Иванов Иван', incomeTypeId: 'income-type-membership', feeName: 'Членский взнос', paid: 200, lastPaymentDate: '2026-06-10', debt: 800 }],
+          })
+        : createFeeReport({ variation })
+    },
     ...overrides,
   }
 }
@@ -7247,6 +7270,80 @@ function createFundChangeReport(overrides: Partial<FundChangeReportDto> = {}): F
         actorUserId: 'user-admin',
         actorDisplayName: 'Администратор ГСК',
         reason: 'Оплата счета',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createCashPaymentReport(overrides: Partial<CashPaymentReportDto> = {}): CashPaymentReportDto {
+  return {
+    dateFrom: '2026-06-01',
+    dateTo: '2026-06-30',
+    total: 400,
+    rowCount: 1,
+    rows: [
+      {
+        operationId: 'cash-payment-1',
+        date: '2026-06-12',
+        amount: 400,
+        hasReceipt: true,
+        purpose: 'Вода: Водоканал',
+        supplierName: 'Водоканал',
+        expenseTypeName: 'Вода',
+        documentNumber: 'RKO-1',
+        comment: 'Оплата воды',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createBankDepositReport(overrides: Partial<BankDepositReportDto> = {}): BankDepositReportDto {
+  return {
+    dateFrom: '2026-06-01',
+    dateTo: '2026-06-30',
+    total: 3000,
+    rowCount: 1,
+    rows: [
+      {
+        operationId: 'bank-deposit-1',
+        date: '2026-06-15',
+        amount: 3000,
+        fundName: 'Прочее',
+        comment: 'Сдача наличных в банк',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createFeeReport(overrides: Partial<FeeReportDto> = {}): FeeReportDto {
+  return {
+    variation: 'Сбор на ворота',
+    accruedTotal: 500,
+    collectedTotal: 200,
+    debtTotal: 300,
+    rowCount: 2,
+    summaryRows: [
+      {
+        incomeTypeId: 'income-type-fee',
+        name: 'Сбор на ворота',
+        goal: 'Сбор',
+        feeAmount: 500,
+        collected: 200,
+      },
+    ],
+    debtorRows: [
+      {
+        garageId: 'garage-12',
+        garageNumber: '12',
+        ownerName: 'Иванов Иван',
+        incomeTypeId: 'income-type-fee',
+        feeName: 'Сбор на ворота',
+        paid: 200,
+        lastPaymentDate: '2026-06-10',
+        debt: 300,
       },
     ],
     ...overrides,

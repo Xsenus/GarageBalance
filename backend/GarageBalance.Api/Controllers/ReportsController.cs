@@ -198,6 +198,61 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpGet("cash-payments")]
+    [ProducesResponseType<CashPaymentReportDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CashPaymentReportDto>> GetCashPaymentReport(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.GetCashPaymentReportAsync(
+            new CashPaymentReportRequest(dateFrom, dateTo, search, limit, GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpGet("bank-deposits")]
+    [ProducesResponseType<BankDepositReportDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BankDepositReportDto>> GetBankDepositReport(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.GetBankDepositReportAsync(
+            new BankDepositReportRequest(dateFrom, dateTo, search, limit, GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpGet("fees")]
+    [ProducesResponseType<FeeReportDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<FeeReportDto>> GetFeeReport(
+        [FromQuery] string? variation,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.GetFeeReportAsync(
+            new FeeReportRequest(variation, limit, GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpPost("expense/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

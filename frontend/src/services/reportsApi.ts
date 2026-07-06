@@ -112,6 +112,71 @@ export type FundChangeReportDto = {
   rows: FundChangeReportRowDto[]
 }
 
+export type CashPaymentReportRowDto = {
+  operationId: string
+  date: string
+  amount: number
+  hasReceipt: boolean
+  purpose: string
+  supplierName: string | null
+  expenseTypeName: string | null
+  documentNumber: string | null
+  comment: string | null
+}
+
+export type CashPaymentReportDto = {
+  dateFrom: string
+  dateTo: string
+  total: number
+  rowCount: number
+  rows: CashPaymentReportRowDto[]
+}
+
+export type BankDepositReportRowDto = {
+  operationId: string
+  date: string
+  amount: number
+  fundName: string | null
+  comment: string
+}
+
+export type BankDepositReportDto = {
+  dateFrom: string
+  dateTo: string
+  total: number
+  rowCount: number
+  rows: BankDepositReportRowDto[]
+}
+
+export type FeeReportSummaryRowDto = {
+  incomeTypeId: string
+  name: string
+  goal: string
+  feeAmount: number
+  collected: number
+}
+
+export type FeeReportDebtorRowDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  incomeTypeId: string
+  feeName: string
+  paid: number
+  lastPaymentDate: string | null
+  debt: number
+}
+
+export type FeeReportDto = {
+  variation: string
+  accruedTotal: number
+  collectedTotal: number
+  debtTotal: number
+  rowCount: number
+  summaryRows: FeeReportSummaryRowDto[]
+  debtorRows: FeeReportDebtorRowDto[]
+}
+
 export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number }): Promise<ConsolidatedReportDto>
   exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
@@ -174,6 +239,31 @@ export type ReportClient = {
       limit?: number
     },
   ): Promise<FundChangeReportDto>
+  getCashPaymentReport(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      limit?: number
+    },
+  ): Promise<CashPaymentReportDto>
+  getBankDepositReport(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+      limit?: number
+    },
+  ): Promise<BankDepositReportDto>
+  getFeeReport(
+    accessToken: string,
+    params?: {
+      variation?: string
+      limit?: number
+    },
+  ): Promise<FeeReportDto>
   exportExpenseReportXlsx(
     accessToken: string,
     params?: {
@@ -321,6 +411,51 @@ function buildFundChangeReportQuery(params: Parameters<ReportClient['getFundChan
   return searchParams.toString()
 }
 
+function buildCashPaymentReportQuery(params: Parameters<ReportClient['getCashPaymentReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.dateFrom) {
+    searchParams.set('dateFrom', params.dateFrom)
+  }
+  if (params.dateTo) {
+    searchParams.set('dateTo', params.dateTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+  return searchParams.toString()
+}
+
+function buildBankDepositReportQuery(params: Parameters<ReportClient['getBankDepositReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.dateFrom) {
+    searchParams.set('dateFrom', params.dateFrom)
+  }
+  if (params.dateTo) {
+    searchParams.set('dateTo', params.dateTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+  return searchParams.toString()
+}
+
+function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.variation) {
+    searchParams.set('variation', params.variation)
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+  return searchParams.toString()
+}
+
 export const reportsApi: ReportClient = {
   getConsolidatedReport(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)
@@ -353,6 +488,18 @@ export const reportsApi: ReportClient = {
   getFundChangeReport(accessToken, params = {}) {
     const query = buildFundChangeReportQuery(params)
     return requestJson(accessToken, `/api/reports/fund-changes${query ? `?${query}` : ''}`)
+  },
+  getCashPaymentReport(accessToken, params = {}) {
+    const query = buildCashPaymentReportQuery(params)
+    return requestJson(accessToken, `/api/reports/cash-payments${query ? `?${query}` : ''}`)
+  },
+  getBankDepositReport(accessToken, params = {}) {
+    const query = buildBankDepositReportQuery(params)
+    return requestJson(accessToken, `/api/reports/bank-deposits${query ? `?${query}` : ''}`)
+  },
+  getFeeReport(accessToken, params = {}) {
+    const query = buildFeeReportQuery(params)
+    return requestJson(accessToken, `/api/reports/fees${query ? `?${query}` : ''}`)
   },
   exportExpenseReportXlsx(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)

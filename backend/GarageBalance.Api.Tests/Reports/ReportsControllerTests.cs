@@ -243,6 +243,90 @@ public sealed class ReportsControllerTests
     }
 
     [Fact]
+    public async Task GetCashPaymentReport_ReturnsOk()
+    {
+        var report = CreateCashPaymentReport();
+        var service = new FakeReportService
+        {
+            CashPaymentResult = ReportResult<CashPaymentReportDto>.Success(report)
+        };
+        var controller = new ReportsController(service);
+
+        var result = await controller.GetCashPaymentReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "чек", 16, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(report, ok.Value);
+        Assert.Equal("чек", service.CashPaymentRequest?.Search);
+        Assert.Equal(16, service.CashPaymentRequest?.Limit);
+    }
+
+    [Fact]
+    public async Task GetCashPaymentReport_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            CashPaymentResult = ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.GetCashPaymentReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task GetBankDepositReport_ReturnsOk()
+    {
+        var report = CreateBankDepositReport();
+        var service = new FakeReportService
+        {
+            BankDepositResult = ReportResult<BankDepositReportDto>.Success(report)
+        };
+        var controller = new ReportsController(service);
+
+        var result = await controller.GetBankDepositReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", 16, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(report, ok.Value);
+        Assert.Equal("банк", service.BankDepositRequest?.Search);
+        Assert.Equal(16, service.BankDepositRequest?.Limit);
+    }
+
+    [Fact]
+    public async Task GetBankDepositReport_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            BankDepositResult = ReportResult<BankDepositReportDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.GetBankDepositReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task GetFeeReport_ReturnsOk()
+    {
+        var report = CreateFeeReport();
+        var service = new FakeReportService
+        {
+            FeeResult = ReportResult<FeeReportDto>.Success(report)
+        };
+        var controller = new ReportsController(service);
+
+        var result = await controller.GetFeeReport("ворота", 16, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(report, ok.Value);
+        Assert.Equal("ворота", service.FeeRequest?.Variation);
+        Assert.Equal(16, service.FeeRequest?.Limit);
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsx_ReturnsFile()
     {
         var content = new byte[] { 1, 2, 3 };
@@ -503,6 +587,53 @@ public sealed class ReportsControllerTests
             ]);
     }
 
+    private static CashPaymentReportDto CreateCashPaymentReport()
+    {
+        return new CashPaymentReportDto(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            1200m,
+            1,
+            [
+                new CashPaymentReportRowDto(
+                    Guid.NewGuid(),
+                    new DateOnly(2026, 6, 12),
+                    1200m,
+                    true,
+                    "Вода: Vodokanal",
+                    "Vodokanal",
+                    "Вода",
+                    "RKO-1",
+                    "Оплата")
+            ]);
+    }
+
+    private static BankDepositReportDto CreateBankDepositReport()
+    {
+        return new BankDepositReportDto(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            3000m,
+            1,
+            [
+                new BankDepositReportRowDto(Guid.NewGuid(), new DateOnly(2026, 6, 15), 3000m, "Прочее", "Сдача наличных")
+            ]);
+    }
+
+    private static FeeReportDto CreateFeeReport()
+    {
+        var incomeTypeId = Guid.NewGuid();
+        var garageId = Guid.NewGuid();
+        return new FeeReportDto(
+            "Сбор на ворота",
+            500m,
+            200m,
+            300m,
+            2,
+            [new FeeReportSummaryRowDto(incomeTypeId, "Сбор на ворота", "Сбор", 500m, 200m)],
+            [new FeeReportDebtorRowDto(garageId, "12", "Иванов Иван", incomeTypeId, "Сбор на ворота", 200m, new DateOnly(2026, 6, 10), 300m)]);
+    }
+
     private sealed class FakeReportService : IReportService
     {
         public ReportResult<ConsolidatedReportDto> Result { get; init; } = ReportResult<ConsolidatedReportDto>.Failure("not_configured", "Not configured.");
@@ -520,6 +651,15 @@ public sealed class ReportsControllerTests
 
         public ReportResult<FundChangeReportDto> FundChangeResult { get; init; } = ReportResult<FundChangeReportDto>.Failure("not_configured", "Not configured.");
         public FundChangeReportRequest? FundChangeRequest { get; private set; }
+
+        public ReportResult<CashPaymentReportDto> CashPaymentResult { get; init; } = ReportResult<CashPaymentReportDto>.Failure("not_configured", "Not configured.");
+        public CashPaymentReportRequest? CashPaymentRequest { get; private set; }
+
+        public ReportResult<BankDepositReportDto> BankDepositResult { get; init; } = ReportResult<BankDepositReportDto>.Failure("not_configured", "Not configured.");
+        public BankDepositReportRequest? BankDepositRequest { get; private set; }
+
+        public ReportResult<FeeReportDto> FeeResult { get; init; } = ReportResult<FeeReportDto>.Failure("not_configured", "Not configured.");
+        public FeeReportRequest? FeeRequest { get; private set; }
 
         public ReportResult<ReportExportFileDto> IncomeExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
@@ -561,6 +701,24 @@ public sealed class ReportsControllerTests
         {
             FundChangeRequest = request;
             return Task.FromResult(FundChangeResult);
+        }
+
+        public Task<ReportResult<CashPaymentReportDto>> GetCashPaymentReportAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
+        {
+            CashPaymentRequest = request;
+            return Task.FromResult(CashPaymentResult);
+        }
+
+        public Task<ReportResult<BankDepositReportDto>> GetBankDepositReportAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
+        {
+            BankDepositRequest = request;
+            return Task.FromResult(BankDepositResult);
+        }
+
+        public Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)
+        {
+            FeeRequest = request;
+            return Task.FromResult(FeeResult);
         }
 
         public Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
