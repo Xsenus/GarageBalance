@@ -1689,12 +1689,13 @@ function FinancePanel({
       setExpenseForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'accruals' && 'incomeTypeId' in record && !('operationKind' in record)) {
+      const editableSource: 'manual' | 'regular' = record.source === 'regular' ? 'regular' : 'manual'
       const nextForm = {
         garageId: record.garageId,
         incomeTypeId: record.incomeTypeId,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
-        source: record.source,
+        source: editableSource,
         comment: record.comment ?? '',
       }
       setAccrualForm(nextForm)
@@ -3393,8 +3394,8 @@ function PaymentsPrototypePanel({
   }
 
   async function commitDebtTransfer(request: DebtTransferPrototypeSubmitRequest) {
-    if (!selectedGarage) {
-      return 'Выберите гараж, чтобы перенести задолженность между месяцами.'
+    if (!selectedGarage || !realGarageIds.has(selectedGarage.id)) {
+      return 'Выберите гараж из справочника, чтобы перенести задолженность между месяцами.'
     }
 
     if (request.sourceMonth === request.targetMonth) {
@@ -3415,6 +3416,13 @@ function PaymentsPrototypePanel({
     const transferTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
     const sourceLabel = formatPaymentPrototypeMonthLabel(request.sourceMonth)
     const targetLabel = formatPaymentPrototypeMonthLabel(request.targetMonth)
+    await financeClient.createDebtTransfer(auth.accessToken, {
+      garageId: selectedGarage.id,
+      sourceMonth: `${request.sourceMonth}-01`,
+      targetMonth: `${request.targetMonth}-01`,
+      amount: request.amount,
+      comment: request.comment.trim() || undefined,
+    })
     const allocations: Array<{ sourceRowId: string; service: string; amount: number }> = []
     let remainingAmount = request.amount
 

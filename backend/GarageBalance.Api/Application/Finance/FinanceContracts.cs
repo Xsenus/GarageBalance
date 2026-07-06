@@ -110,6 +110,13 @@ public sealed record CreateAccrualRequest(
     [Required, MaxLength(40)] string Source,
     [MaxLength(1000)] string? Comment);
 
+public sealed record CreateDebtTransferRequest(
+    Guid GarageId,
+    DateOnly SourceMonth,
+    DateOnly TargetMonth,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(1000)] string? Comment);
+
 public sealed record CreateSupplierAccrualRequest(
     Guid SupplierId,
     Guid ExpenseTypeId,

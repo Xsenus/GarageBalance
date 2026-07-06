@@ -21,7 +21,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1633,8 +1633,18 @@ describe('App', () => {
     const user = userEvent.setup()
     const saveStateMock = vi.mocked(formStatesApi.saveState)
     saveStateMock.mockClear()
+    const createDebtTransferMock = vi.fn(async (_token: string, request: CreateDebtTransferRequest) => createAccrual({
+      id: 'debt-transfer-accrual-27',
+      garageId: request.garageId,
+      incomeTypeId: 'income-type-debt-transfer',
+      incomeTypeName: 'Перенос задолженности',
+      accountingMonth: request.targetMonth,
+      amount: request.amount,
+      source: 'debt_transfer',
+      comment: request.comment ?? null,
+    }))
     const garage = createGarage({ id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', peopleCount: 2, floorCount: 1, startingBalance: -1700 })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ createDebtTransfer: createDebtTransferMock })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -1655,6 +1665,13 @@ describe('App', () => {
     await user.click(within(transferDialog).getByRole('button', { name: 'Принять' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
+    expect(createDebtTransferMock).toHaveBeenCalledWith('token', {
+      garageId: 'garage-27',
+      sourceMonth: '2026-06-01',
+      targetMonth: '2026-07-01',
+      amount: 1700,
+      comment: 'Проверка переноса',
+    })
     expect(transferButton).toHaveFocus()
     expect(within(prototype).getByText('июл.26')).toBeInTheDocument()
     expect(within(prototype).getByText('Перенос задолженности: Электроэнергия')).toBeInTheDocument()
@@ -6505,6 +6522,16 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
     createAccrual: async () => accrual,
+    createDebtTransfer: async (_token, request) => createAccrual({
+      id: 'debt-transfer-accrual',
+      garageId: request.garageId,
+      incomeTypeId: 'income-type-debt-transfer',
+      incomeTypeName: 'Перенос задолженности',
+      accountingMonth: request.targetMonth,
+      amount: request.amount,
+      source: 'debt_transfer',
+      comment: request.comment ?? null,
+    }),
     updateAccrual: async (_token, accrualId) => ({ ...accrual, id: accrualId }),
     cancelAccrual: async (_token, accrualId, request) => {
       const target = accrual.id === accrualId ? accrual : createAccrual({ id: accrualId })

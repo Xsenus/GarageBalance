@@ -2,6 +2,7 @@ using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -960,6 +961,44 @@ public sealed class FinanceServiceTests
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Целевой сбор", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateDebtTransferAsync_CreatesAndAccumulatesSystemAccrualWithAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var created = await service.CreateDebtTransferAsync(
+            new CreateDebtTransferRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 15), new DateOnly(2026, 7, 20), 1700m, "Первичный перенос"),
+            actorUserId,
+            CancellationToken.None);
+        var updated = await service.CreateDebtTransferAsync(
+            new CreateDebtTransferRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), 300m, "Доначислили остаток"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.True(updated.Succeeded);
+        Assert.Equal(created.Value!.Id, updated.Value!.Id);
+        Assert.Equal(new DateOnly(2026, 7, 1), updated.Value.AccountingMonth);
+        Assert.Equal(2000m, updated.Value.Amount);
+        Assert.Equal("Перенос задолженности", updated.Value.IncomeTypeName);
+        Assert.Equal(AccrualSources.DebtTransfer, updated.Value.Source);
+        var incomeType = Assert.Single(database.Context.IncomeTypes, item => item.Code == "debt_transfer");
+        Assert.True(incomeType.IsSystem);
+        var createAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.debt_transfer_created");
+        var updateAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.debt_transfer_updated");
+        Assert.Equal(actorUserId, createAudit.ActorUserId);
+        Assert.Equal(actorUserId, updateAudit.ActorUserId);
+        Assert.Contains("Создан перенос задолженности 1700,00", createAudit.Summary, StringComparison.Ordinal);
+        Assert.Contains("из 06.2026 в 07.2026", createAudit.Summary, StringComparison.Ordinal);
+        Assert.Contains("добавлено 300,00", updateAudit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(updateAudit.MetadataJson!);
+        Assert.Equal("debt_transfer", metadata.RootElement.GetProperty("source").GetString());
+        Assert.Equal("2000", metadata.RootElement.GetProperty("amount").GetString());
     }
 
     [Fact]

@@ -252,6 +252,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("accruals/debt-transfer")]
+    [ProducesResponseType<AccrualDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccrualDto>> CreateDebtTransfer(CreateDebtTransferRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateDebtTransferAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetAccruals), new { search = result.Value!.GarageNumber }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPut("accruals/{accrualId:guid}")]
     [ProducesResponseType<AccrualDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

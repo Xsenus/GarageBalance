@@ -70,7 +70,7 @@ export type AccrualDto = {
   incomeTypeName: string
   accountingMonth: string
   amount: number
-  source: 'manual' | 'regular'
+  source: 'manual' | 'regular' | 'debt_transfer'
   comment: string | null
   isCanceled: boolean
 }
@@ -176,6 +176,14 @@ export type CreateAccrualRequest = {
   comment?: string
 }
 
+export type CreateDebtTransferRequest = {
+  garageId: string
+  sourceMonth: string
+  targetMonth: string
+  amount: number
+  comment?: string
+}
+
 export type CreateSupplierAccrualRequest = {
   supplierId: string
   expenseTypeId: string
@@ -256,6 +264,7 @@ export type FinanceClient = {
   updateExpense(accessToken: string, operationId: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
+  createDebtTransfer(accessToken: string, request: CreateDebtTransferRequest): Promise<AccrualDto>
   updateAccrual(accessToken: string, accrualId: string, request: CreateAccrualRequest): Promise<AccrualDto>
   cancelAccrual(accessToken: string, accrualId: string, request: CancelFinanceEntryRequest): Promise<AccrualDto>
   createSupplierAccrual(accessToken: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
@@ -409,6 +418,9 @@ export const financeApi: FinanceClient = {
   },
   createAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createDebtTransfer(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals/debt-transfer', { method: 'POST', body: JSON.stringify(request) })
   },
   updateAccrual(accessToken, accrualId, request) {
     return requestJson(accessToken, `/api/finance/accruals/${accrualId}`, { method: 'PUT', body: JSON.stringify(request) })

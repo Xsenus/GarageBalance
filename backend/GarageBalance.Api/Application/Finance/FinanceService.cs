@@ -15,6 +15,8 @@ public sealed class FinanceService(
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
     private const int MaxBalanceHistoryMonths = 60;
+    private const string DebtTransferIncomeTypeCode = "debt_transfer";
+    private const string DebtTransferIncomeTypeName = "Перенос задолженности";
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
     private static readonly IReadOnlyDictionary<string, string> FinanceFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -732,6 +734,90 @@ public sealed class FinanceService(
 
         dbContext.Accruals.Add(accrual);
         AddAudit(actorUserId, "finance.accrual_created", accrual, FormatAccrualCreatedAuditSummary(accrual));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+    }
+
+    public async Task<FinanceResult<AccrualDto>> CreateDebtTransferAsync(CreateDebtTransferRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var sourceMonth = MonthPeriod.Normalize(request.SourceMonth);
+        var targetMonth = MonthPeriod.Normalize(request.TargetMonth);
+        if (sourceMonth == targetMonth)
+        {
+            return FinanceResult<AccrualDto>.Failure("debt_transfer_months_equal", "Месяц переноса должен отличаться от исходного месяца.");
+        }
+
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        if (amount <= 0)
+        {
+            return FinanceResult<AccrualDto>.Failure("debt_transfer_amount_invalid", "Сумма переноса должна быть больше нуля.");
+        }
+
+        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для переноса задолженности не найден.");
+        }
+
+        var incomeType = await GetOrCreateDebtTransferIncomeTypeAsync(cancellationToken);
+        var comment = BuildDebtTransferComment(sourceMonth, targetMonth, request.Comment);
+        var accrual = await dbContext.Accruals
+            .Include(item => item.Garage)
+            .ThenInclude(item => item.Owner)
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(
+                item =>
+                    !item.IsCanceled &&
+                    item.GarageId == garage.Id &&
+                    item.IncomeTypeId == incomeType.Id &&
+                    item.AccountingMonth == targetMonth &&
+                    item.Source == AccrualSources.DebtTransfer,
+                cancellationToken);
+
+        if (accrual is null)
+        {
+            accrual = new Accrual
+            {
+                GarageId = garage.Id,
+                Garage = garage,
+                IncomeTypeId = incomeType.Id,
+                IncomeType = incomeType,
+                AccountingMonth = targetMonth,
+                Amount = amount,
+                Source = AccrualSources.DebtTransfer,
+                Comment = comment
+            };
+            dbContext.Accruals.Add(accrual);
+            AddAudit(actorUserId, "finance.debt_transfer_created", accrual, FormatDebtTransferCreatedAuditSummary(accrual, sourceMonth, targetMonth));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+        }
+
+        var before = AccrualAuditSnapshot.From(accrual);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["garage"] = accrual.Garage.Number,
+            ["incomeType"] = accrual.IncomeType.Name,
+            ["accountingMonth"] = accrual.AccountingMonth,
+            ["amount"] = accrual.Amount,
+            ["source"] = accrual.Source,
+            ["comment"] = accrual.Comment
+        };
+
+        accrual.Amount = MoneyMath.RoundMoney(accrual.Amount + amount);
+        accrual.Comment = AppendDebtTransferComment(accrual.Comment, comment);
+        accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        var newValues = new Dictionary<string, object?>
+        {
+            ["garage"] = accrual.Garage.Number,
+            ["incomeType"] = accrual.IncomeType.Name,
+            ["accountingMonth"] = accrual.AccountingMonth,
+            ["amount"] = accrual.Amount,
+            ["source"] = accrual.Source,
+            ["comment"] = accrual.Comment
+        };
+        AddAudit(actorUserId, "finance.debt_transfer_updated", accrual, FormatDebtTransferUpdatedAuditSummary(before, accrual, sourceMonth, targetMonth, amount), oldValues, newValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -1480,6 +1566,69 @@ public sealed class FinanceService(
         return userComment is null
             ? $"Автоначисление; {snapshot}."
             : $"{userComment}; {snapshot}.";
+    }
+
+    private async Task<IncomeType> GetOrCreateDebtTransferIncomeTypeAsync(CancellationToken cancellationToken)
+    {
+        var incomeType = await dbContext.IncomeTypes
+            .FirstOrDefaultAsync(item => !item.IsArchived && item.Code == DebtTransferIncomeTypeCode, cancellationToken)
+            ?? await dbContext.IncomeTypes.FirstOrDefaultAsync(item => !item.IsArchived && item.Name == DebtTransferIncomeTypeName, cancellationToken);
+        if (incomeType is not null)
+        {
+            if (!incomeType.IsSystem || incomeType.Code != DebtTransferIncomeTypeCode)
+            {
+                incomeType.IsSystem = true;
+                incomeType.Code = DebtTransferIncomeTypeCode;
+                incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+
+            return incomeType;
+        }
+
+        incomeType = await dbContext.IncomeTypes
+            .FirstOrDefaultAsync(item => item.IsArchived && (item.Code == DebtTransferIncomeTypeCode || item.Name == DebtTransferIncomeTypeName), cancellationToken);
+        if (incomeType is not null)
+        {
+            incomeType.Name = DebtTransferIncomeTypeName;
+            incomeType.Code = DebtTransferIncomeTypeCode;
+            incomeType.IsSystem = true;
+            incomeType.IsArchived = false;
+            incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            return incomeType;
+        }
+
+        incomeType = new IncomeType
+        {
+            Name = DebtTransferIncomeTypeName,
+            Code = DebtTransferIncomeTypeCode,
+            IsSystem = true
+        };
+        dbContext.IncomeTypes.Add(incomeType);
+        return incomeType;
+    }
+
+    private static string BuildDebtTransferComment(DateOnly sourceMonth, DateOnly targetMonth, string? comment)
+    {
+        var userComment = NormalizeOptional(comment);
+        var transferComment = $"Перенос задолженности {sourceMonth:MM.yyyy} -> {targetMonth:MM.yyyy}";
+        return userComment is null ? transferComment : $"{transferComment}: {userComment}";
+    }
+
+    private static string AppendDebtTransferComment(string? currentComment, string nextComment)
+    {
+        var normalized = NormalizeOptional(currentComment);
+        var combined = normalized is null ? nextComment : $"{normalized}{Environment.NewLine}{nextComment}";
+        return combined.Length <= 1000 ? combined : combined[^1000..];
+    }
+
+    private static string FormatDebtTransferCreatedAuditSummary(Accrual accrual, DateOnly sourceMonth, DateOnly targetMonth)
+    {
+        return $"Создан перенос задолженности {accrual.Amount.ToString("0.00", RussianCulture)} по гаражу {accrual.Garage.Number} из {sourceMonth:MM.yyyy} в {targetMonth:MM.yyyy}.";
+    }
+
+    private static string FormatDebtTransferUpdatedAuditSummary(AccrualAuditSnapshot before, Accrual accrual, DateOnly sourceMonth, DateOnly targetMonth, decimal addedAmount)
+    {
+        return $"Дополнен перенос задолженности по гаражу {accrual.Garage.Number} из {sourceMonth:MM.yyyy} в {targetMonth:MM.yyyy}: добавлено {addedAmount.ToString("0.00", RussianCulture)}; было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.";
     }
 
     private static string FormatIncomeCreatedAuditSummary(FinancialOperation operation)
