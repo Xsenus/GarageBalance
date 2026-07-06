@@ -20,7 +20,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -1047,6 +1047,7 @@ describe('App', () => {
     const savedAccrualRequests: CreateAccrualRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
+    const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
     const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
@@ -1117,6 +1118,31 @@ describe('App', () => {
           source: request.source,
           documentNumber: request.documentNumber ?? null,
           comment: request.comment ?? null,
+        })
+      },
+      generateSupplierGroupSalaryAccruals: async (_token, request) => {
+        savedSalaryAccrualRequests.push(request)
+        return createSupplierGroupSalaryAccrualGenerationResult({
+          accountingMonth: request.accountingMonth,
+          supplierGroupId: request.supplierGroupId,
+          supplierGroupName: 'Коммунальные услуги',
+          expenseTypeName: 'Зарплата',
+          createdCount: 1,
+          totalAmount: request.amount,
+          createdAccruals: [
+            createSupplierAccrual({
+              id: `salary-accrual-${savedSalaryAccrualRequests.length}`,
+              supplierId: 'staff-ivanov',
+              supplierName: 'Иванов Сергей',
+              expenseTypeId: 'expense-salary',
+              expenseTypeName: 'Зарплата',
+              accountingMonth: request.accountingMonth,
+              amount: request.amount,
+              source: 'regular',
+              documentNumber: request.documentNumber ?? null,
+              comment: request.comment ?? null,
+            }),
+          ],
         })
       },
     })
@@ -1264,6 +1290,26 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addAccrualButton).toHaveFocus())
+
+    const salaryButton = within(prototype).getByRole('button', { name: 'Начислить зарплату' })
+    await user.click(salaryButton)
+    const salaryDialog = await screen.findByRole('dialog', { name: 'Начислить зарплату' })
+    expect(within(salaryDialog).getByLabelText('Группа для начисления зарплаты')).toHaveValue('group-1')
+    expect(within(salaryDialog).getByLabelText('Месяц начисления зарплаты')).toHaveValue('2026-06')
+    await user.type(within(salaryDialog).getByLabelText('Сумма начисления зарплаты'), '20000')
+    await user.type(within(salaryDialog).getByLabelText('Документ начисления зарплаты'), 'PAYROLL-prototype')
+    await user.type(within(salaryDialog).getByLabelText('Комментарий начисления зарплаты'), 'Зарплата из формы выплат')
+    await user.click(within(salaryDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(savedSalaryAccrualRequests).toHaveLength(1))
+    expect(savedSalaryAccrualRequests[0]).toMatchObject({
+      supplierGroupId: 'group-1',
+      accountingMonth: '2026-06-01',
+      amount: 20000,
+      documentNumber: 'PAYROLL-prototype',
+      comment: 'Зарплата из формы выплат',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить зарплату' })).not.toBeInTheDocument())
+    await waitFor(() => expect(salaryButton).toHaveFocus())
 
     const bankButton = within(prototype).getByRole('button', { name: 'Сдать кассу в банк' })
     await user.click(bankButton)
