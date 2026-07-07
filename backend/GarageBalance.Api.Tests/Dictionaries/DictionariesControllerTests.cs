@@ -450,6 +450,30 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceSetting_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Water", true, 12, 2, 31, 12, 45, null, null, true, false, "m3", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateChargeServiceSetting(
+            serviceId,
+            new UpsertChargeServiceSettingRequest("Water", true, 12, 2, 31, 12, 45, true, false, "m3"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ChargeServiceSettingDto>(ok.Value);
+        Assert.Equal(serviceId, dto.Id);
+        Assert.Equal(45, dto.OverdueGraceDays);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(serviceId, service.LastChargeServiceSettingId);
+    }
+
+    [Fact]
     public async Task ArchiveChargeServiceSetting_ReturnsNoContentAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -728,6 +752,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
+        public Guid? LastChargeServiceSettingId { get; private set; }
         public Guid? LastIrregularPaymentId { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -1113,6 +1138,7 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastChargeServiceSettingId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(UpdateChargeServiceSettingResult);
         }
