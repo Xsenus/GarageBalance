@@ -370,6 +370,24 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task ArchiveChargeServiceSetting_ReturnsNoContentAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            ArchiveChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Electricity", true, 1, 1, 30, 6, 30, null, null, true, true, "kWh", true))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ArchiveChargeServiceSetting(serviceId, new ArchiveDictionaryEntryRequest("No longer used"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal("No longer used", service.LastArchiveReason);
+    }
+
+    [Fact]
     public async Task RestoreChargeServiceSetting_ReturnsOkActiveRecordAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -582,6 +600,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<TariffDto> RestoreTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> CreateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> UpdateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<ChargeServiceSettingDto> ArchiveChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> RestoreChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> ArchiveIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> RestoreIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
@@ -948,7 +967,7 @@ public sealed class DictionariesControllerTests
         {
             LastActorUserId = actorUserId;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Not found."));
+            return Task.FromResult(ArchiveChargeServiceSettingResult);
         }
 
         public Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)

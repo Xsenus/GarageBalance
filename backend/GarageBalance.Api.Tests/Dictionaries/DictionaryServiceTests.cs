@@ -1327,6 +1327,37 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ArchiveChargeServiceSettingAsync_HidesSettingRequiresReasonAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Electricity", true, 1, 1, 30, 6, 30, true, true, "kWh"),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var emptyReason = await service.ArchiveChargeServiceSettingAsync(created.Value!.Id, " ", actorUserId, CancellationToken.None);
+        var archive = await service.ArchiveChargeServiceSettingAsync(created.Value.Id, "No longer used", actorUserId, CancellationToken.None);
+        var activeSettings = await service.GetChargeServiceSettingsAsync("electric", CancellationToken.None);
+        var archivedSettings = await service.GetChargeServiceSettingsAsync("electric", CancellationToken.None, includeArchived: true);
+
+        Assert.False(emptyReason.Succeeded);
+        Assert.Equal("dictionary_archive_reason_required", emptyReason.ErrorCode);
+        Assert.True(archive.Succeeded);
+        Assert.True(archive.Value!.IsArchived);
+        Assert.DoesNotContain(activeSettings, item => item.Id == created.Value.Id);
+        Assert.Contains(archivedSettings, item => item.Id == created.Value.Id && item.IsArchived);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_archived");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(created.Value.Id.ToString(), audit.EntityId);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("No longer used", metadata.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task RestoreChargeServiceSettingAsync_RestoresArchivedSettingAndRejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
