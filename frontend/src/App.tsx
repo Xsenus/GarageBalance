@@ -736,20 +736,6 @@ type PaymentPrototypeRow = {
   action: boolean
 }
 
-const paymentPrototypeRows: PaymentPrototypeRow[] = [
-  { item: 'Электроэнергия', cost: 39000, paid: 39000, balance: '', collected: 43000, difference: 4000, action: true },
-  { item: 'Н/о', cost: 4000, paid: 0, balance: '', collected: 15000, difference: 1000, action: true },
-  { item: 'Водоснабжение', cost: 32000, paid: 0, balance: '', collected: 29000, difference: -3000, action: true },
-  { item: 'Вывоз мусора', cost: 15000, paid: 0, balance: '', collected: 13300, difference: -1700, action: true },
-  { item: 'Юридические услуги', cost: 8500, paid: 0, balance: '', collected: '', difference: '', action: true },
-  { rowKind: 'staff', item: 'Электрик', counterparty: 'Иванов', cost: 20000, paid: '', balance: '', collected: 156800, difference: '', action: true },
-  { rowKind: 'staff', item: 'Бухгалтерия', counterparty: 'Петрова', cost: 40000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { rowKind: 'staff', item: 'Председатель', counterparty: 'Сидоров', cost: 50000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { item: 'Прочие выплаты', cost: 10000, paid: '', balance: '', collected: '', difference: '', action: true },
-  { item: 'Авансовые выплаты', cost: '', paid: 16500, balance: '', collected: '', difference: '', action: true },
-  { item: 'Выплата без чека', cost: 16500, paid: '', balance: '', collected: '', difference: '', action: true },
-]
-
 const garagePaymentHistoryRows = [
   { id: 'prototype-history-1', date: '19.06.2026', time: '10:24', amount: 5674, purpose: 'Электроэнергия', debtAfter: 0 },
   { id: 'prototype-history-2', date: '20.06.2026', time: '16:05', amount: 1000, purpose: 'Частичная оплата', debtAfter: 2500 },
@@ -3094,9 +3080,9 @@ function PaymentsPrototypePanel({
   const [incomeWorksheetMonthTo, setIncomeWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
-  const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>(() => paymentPrototypeRows.map((row) => ({ ...row })))
+  const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
   const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState('2026-06')
-  const [expenseBankAmount, setExpenseBankAmount] = useState(234000)
+  const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
@@ -3219,6 +3205,10 @@ function PaymentsPrototypePanel({
     }
 
     let cancelled = false
+    setExpenseWorksheetLoading(true)
+    setExpenseRows([])
+    setExpenseBankAmount(0)
+    setPaymentError(null)
     financeClient
       .getExpenseWorksheet(auth.accessToken, { accountingMonth: `${expenseWorksheetMonth}-01` })
       .then((worksheet) => {
@@ -4509,6 +4499,11 @@ function PaymentsPrototypePanel({
                       </tr>
                     )
                   })}
+                  {expenseRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>{expenseWorksheetLoading ? 'Загружаем форму выплат...' : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                    </tr>
+                  ) : null}
                   <tr className="payments-prototype-total-row">
                     <td>ИТОГО</td>
                     <td />

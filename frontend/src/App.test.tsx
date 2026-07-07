@@ -1445,6 +1445,161 @@ describe('App', () => {
           },
         ],
       }),
+      getExpenseWorksheet: async (_token, params) => createExpenseWorksheet({
+        accountingMonth: params?.accountingMonth ?? '2026-06-01',
+        accrualTotal: 235000,
+        expenseTotal: 55500,
+        balanceTotal: 0,
+        collectedTotal: 257100,
+        differenceTotal: 22100,
+        bankAmount: 234000,
+        cashAmount: 201600,
+        rows: [
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Электроэнергия',
+            accrualAmount: 39000,
+            expenseAmount: 39000,
+            balance: 0,
+            collectedAmount: 43000,
+            difference: 4000,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Н/о',
+            accrualAmount: 4000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: 15000,
+            difference: 1000,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Водоснабжение',
+            accrualAmount: 32000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: 29000,
+            difference: -3000,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Вывоз мусора',
+            accrualAmount: 15000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: 13300,
+            difference: -1700,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Юридические услуги',
+            accrualAmount: 8500,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: null,
+            difference: null,
+          },
+          {
+            rowKind: 'staff',
+            supplierId: null,
+            staffMemberId: 'staff-member-1',
+            counterpartyName: 'Иванов',
+            expenseTypeId: null,
+            expenseTypeName: 'Электрик',
+            accrualAmount: 20000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: 156800,
+            difference: null,
+          },
+          {
+            rowKind: 'staff',
+            supplierId: null,
+            staffMemberId: 'staff-member-1',
+            counterpartyName: 'Петрова',
+            expenseTypeId: null,
+            expenseTypeName: 'Бухгалтерия',
+            accrualAmount: 40000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: null,
+            difference: null,
+          },
+          {
+            rowKind: 'staff',
+            supplierId: null,
+            staffMemberId: 'staff-member-1',
+            counterpartyName: 'Сидоров',
+            expenseTypeId: null,
+            expenseTypeName: 'Председатель',
+            accrualAmount: 50000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: null,
+            difference: null,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Прочие выплаты',
+            accrualAmount: 10000,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: null,
+            difference: null,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Авансовые выплаты',
+            accrualAmount: 0,
+            expenseAmount: 16500,
+            balance: 0,
+            collectedAmount: null,
+            difference: null,
+          },
+          {
+            rowKind: 'supplier',
+            supplierId: 'supplier-1',
+            staffMemberId: null,
+            counterpartyName: '',
+            expenseTypeId: 'expense-type-1',
+            expenseTypeName: 'Выплата без чека',
+            accrualAmount: 16500,
+            expenseAmount: 0,
+            balance: 0,
+            collectedAmount: null,
+            difference: null,
+          },
+        ],
+      }),
     })
     const fundsClient = createFundsClient({
       createOperation: async (_token, fundId, request) => {
@@ -1999,6 +2154,27 @@ describe('App', () => {
     expect(within(expenseTable).getAllByText('47 000').length).toBeGreaterThan(0)
     expect(within(prototype).getByText('12 000')).toBeInTheDocument()
     expect(within(prototype).getByText('4 000')).toBeInTheDocument()
+  })
+
+  it('does not show prototype expense rows when expense worksheet is unavailable', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '1')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    expect(await within(prototype).findByText('Серверная форма выплат недоступна')).toBeInTheDocument()
+    const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
+    expect(within(expenseTable).getByText('Начислений и выплат за выбранный месяц пока нет.')).toBeInTheDocument()
+    expect(within(expenseTable).queryByText('Электроэнергия')).not.toBeInTheDocument()
+    expect(within(expenseTable).queryByText('257 100')).not.toBeInTheDocument()
+    expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('0')
   })
 
   it('moves garage debt to the next month and saves the transfer in form history', async () => {
