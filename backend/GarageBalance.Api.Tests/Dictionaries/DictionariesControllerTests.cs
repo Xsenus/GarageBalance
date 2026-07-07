@@ -426,6 +426,66 @@ public sealed class DictionariesControllerTests
         Assert.Equal(serviceId, service.LastRestoreId);
     }
 
+    [Theory]
+    [InlineData("chargeService", "charge_service_not_found")]
+    [InlineData("irregularPayment", "irregular_payment_not_found")]
+    public async Task RecentRestoreEndpoints_ReturnNotFoundWhenArchivedRecordDoesNotExist(string dictionaryKind, string errorCode)
+    {
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var service = dictionaryKind switch
+        {
+            "chargeService" => new FakeDictionaryService
+            {
+                RestoreChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure(errorCode, "Not found.")
+            },
+            "irregularPayment" => new FakeDictionaryService
+            {
+                RestoreIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Failure(errorCode, "Not found.")
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await RestoreRecentDictionaryRecord(controller, dictionaryKind, id);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(id, service.LastRestoreId);
+    }
+
+    [Theory]
+    [InlineData("chargeService", "charge_service_duplicate")]
+    [InlineData("irregularPayment", "irregular_payment_duplicate")]
+    public async Task RecentRestoreEndpoints_ReturnConflictForDuplicateActiveRecord(string dictionaryKind, string errorCode)
+    {
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var service = dictionaryKind switch
+        {
+            "chargeService" => new FakeDictionaryService
+            {
+                RestoreChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure(errorCode, "Duplicate.")
+            },
+            "irregularPayment" => new FakeDictionaryService
+            {
+                RestoreIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Failure(errorCode, "Duplicate.")
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await RestoreRecentDictionaryRecord(controller, dictionaryKind, id);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(id, service.LastRestoreId);
+    }
+
     [Fact]
     public async Task SupplierContactsAndStaffEndpoints_PassFiltersAndActorToService()
     {
@@ -467,6 +527,16 @@ public sealed class DictionariesControllerTests
             User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
         };
         return controller;
+    }
+
+    private static async Task<IActionResult> RestoreRecentDictionaryRecord(DictionariesController controller, string dictionaryKind, Guid id)
+    {
+        return dictionaryKind switch
+        {
+            "chargeService" => (await controller.RestoreChargeServiceSetting(id, CancellationToken.None)).Result!,
+            "irregularPayment" => (await controller.RestoreIrregularPayment(id, CancellationToken.None)).Result!,
+            _ => throw new ArgumentOutOfRangeException(nameof(dictionaryKind), dictionaryKind, "Unsupported dictionary kind.")
+        };
     }
 
     private static FakeDictionaryService CreateRestoreService(string dictionaryKind, Guid id)
