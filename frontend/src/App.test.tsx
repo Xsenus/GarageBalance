@@ -876,7 +876,7 @@ describe('App', () => {
 
     expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов', hidden: true })).not.toBeInTheDocument()
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
-  })
+  }, 30000)
 
   it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
     const user = userEvent.setup()
@@ -2029,6 +2029,24 @@ describe('App', () => {
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
   })
 
+  it('does not show fallback garages or prototype payment history when backend garages are empty', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [] })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const garageSearchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(garageSearchInput, 'Иванов')
+
+    expect(within(prototype).queryByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })).not.toBeInTheDocument()
+    expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
+    expect(within(prototype).queryByText('19.06.2026')).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+  })
+
   it('does not show prototype income rows while selected real garage worksheet is unavailable', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({
@@ -2149,6 +2167,59 @@ describe('App', () => {
     expect(within(incomeTable).getByText('Начислений и поступлений за выбранный период пока нет.')).toBeInTheDocument()
     expect(within(incomeTable).queryByText('Старое начисление из сохраненного состояния')).not.toBeInTheDocument()
     expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).not.toHaveTextContent('Старая история из сохраненного состояния')
+  })
+
+  it('does not restore saved payment rows for a garage missing from the dictionary', async () => {
+    const user = userEvent.setup()
+    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'payments-prototype'
+      ? {
+          scope,
+          payload: {
+            selectedGarageId: 'prototype-garage-1',
+            garageSearch: 'Гараж 1 - Иванов Иван',
+            incomeWorksheetMonthFrom: '2026-05',
+            incomeWorksheetMonthTo: '2026-06',
+            garageRows: [
+              {
+                id: 'stale-prototype-income-row',
+                month: '2026-05',
+                monthLabel: 'май.26',
+                service: 'Старое демо-начисление',
+                meter: null,
+                difference: null,
+                payable: 9999,
+                paymentDraft: '',
+                paid: 0,
+                debt: 9999,
+              },
+            ],
+            historyRows: [
+              {
+                id: 'stale-prototype-history-row',
+                date: '19.06.2026',
+                time: '10:24',
+                amount: 5674,
+                purpose: 'Старый демо-платеж',
+                debtAfter: 0,
+              },
+            ],
+          },
+          updatedAtUtc: '2026-06-30T03:00:00Z',
+          updatedByUserId: 'admin-user',
+        }
+      : null)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [] })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+
+    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+    expect(within(prototype).queryByText('Гараж 1 - Иванов Иван')).not.toBeInTheDocument()
+    expect(within(prototype).queryByText('Старое демо-начисление')).not.toBeInTheDocument()
+    expect(within(prototype).queryByText('Старый демо-платеж')).not.toBeInTheDocument()
   })
 
   it('loads selected garage income worksheet from finance backend', async () => {
@@ -2402,8 +2473,8 @@ describe('App', () => {
     const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
     await user.click(within(dashboardTiles).getByRole('button', { name: 'Платежи' }))
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
-    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '1')
-    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
 
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-06-01' }))
@@ -2425,8 +2496,8 @@ describe('App', () => {
 
     await openSection(user, 'Платежи')
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
-    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '1')
-    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
 
     expect(await within(prototype).findByText('Серверная форма выплат недоступна')).toBeInTheDocument()

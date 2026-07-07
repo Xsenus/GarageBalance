@@ -736,11 +736,6 @@ type PaymentPrototypeRow = {
   action: boolean
 }
 
-const garagePaymentHistoryRows = [
-  { id: 'prototype-history-1', date: '19.06.2026', time: '10:24', amount: 5674, purpose: 'Электроэнергия', debtAfter: 0 },
-  { id: 'prototype-history-2', date: '20.06.2026', time: '16:05', amount: 1000, purpose: 'Частичная оплата', debtAfter: 2500 },
-]
-
 type PaymentsPrototypeGarage = {
   id: string
   number: string
@@ -894,44 +889,6 @@ type PaymentsPrototypeSavedState = {
   incomeWorksheetMonthTo?: string
   garageRows: GarageIncomePrototypeRow[]
   historyRows: GaragePaymentHistoryPrototypeRow[]
-}
-
-const paymentsPrototypeGarages: PaymentsPrototypeGarage[] = [
-  { id: 'garage-1', number: '1', ownerName: 'Иванов Иван', phone: '+7 900 000-00-01', peopleCount: 3, floorCount: 1, balance: -5300, overdueDebt: 1300 },
-  { id: 'garage-12', number: '12', ownerName: 'Петров Петр', phone: '+7 900 000-00-12', peopleCount: 1, floorCount: 2, balance: 2500, overdueDebt: 0 },
-  { id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', phone: '+7 900 000-00-27', peopleCount: 2, floorCount: 1, balance: -1700, overdueDebt: 1700 },
-]
-
-function createGarageIncomePrototypeRows(garageNumber: string): GarageIncomePrototypeRow[] {
-  if (garageNumber === '12') {
-    return [
-      { id: 'garage-12-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 42, difference: 8, payable: 1840, paymentDraft: '', paid: 1840, debt: 0 },
-      { id: 'garage-12-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: 16, difference: 2, payable: 900, paymentDraft: '', paid: 900, debt: 0 },
-      { id: 'garage-12-2026-06-trash', month: '2026-06', monthLabel: 'июн.26', service: 'Вывоз мусора', meter: null, difference: null, payable: 300, paymentDraft: '', paid: 300, debt: 0 },
-      { id: 'garage-12-2026-05-lighting', month: '2026-05', monthLabel: 'май.26', service: 'Наружное освещение', meter: null, difference: null, payable: 500, paymentDraft: '', paid: 500, debt: 0 },
-    ]
-  }
-
-  if (garageNumber === '27') {
-    return [
-      { id: 'garage-27-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 74, difference: 13, payable: 4210, paymentDraft: '', paid: 2510, debt: 1700 },
-      { id: 'garage-27-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: null, difference: 0, payable: 1800, paymentDraft: '', paid: 1800, debt: 0, meterRequired: true },
-      { id: 'garage-27-2026-05-membership', month: '2026-05', monthLabel: 'май.26', service: 'Членский взнос', meter: null, difference: null, payable: 1600, paymentDraft: '', paid: 1600, debt: 0 },
-    ]
-  }
-
-  return [
-    { id: 'garage-1-2026-06-electricity', month: '2026-06', monthLabel: 'июн.26', service: 'Электроэнергия', meter: 86, difference: 18, payable: 5674, paymentDraft: '5674', paid: 0, debt: 5674 },
-    { id: 'garage-1-2026-06-water', month: '2026-06', monthLabel: 'июн.26', service: 'Водоснабжение', meter: 59, difference: 4, payable: 3500, paymentDraft: '', paid: 1000, debt: 2500 },
-    { id: 'garage-1-2026-06-trash', month: '2026-06', monthLabel: 'июн.26', service: 'Вывоз мусора', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
-    { id: 'garage-1-2026-06-penalty', month: '2026-06', monthLabel: 'июн.26', service: 'Штраф', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
-    { id: 'garage-1-2026-05-electricity', month: '2026-05', monthLabel: 'май.26', service: 'Электроэнергия', meter: 49, difference: 14, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
-    { id: 'garage-1-2026-05-water', month: '2026-05', monthLabel: 'май.26', service: 'Водоснабжение', meter: null, difference: 0, payable: 0, paymentDraft: '', paid: 0, debt: 0, meterRequired: true },
-    { id: 'garage-1-2026-05-membership', month: '2026-05', monthLabel: 'май.26', service: 'Членский взнос', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
-    { id: 'garage-1-2026-05-target', month: '2026-05', monthLabel: 'май.26', service: 'Целевой взнос', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
-    { id: 'garage-1-2026-05-gate', month: '2026-05', monthLabel: 'май.26', service: 'Сбор на ворота', meter: null, difference: null, payable: 500, paymentDraft: '', paid: 500, debt: 0 },
-    { id: 'garage-1-2026-05-lighting', month: '2026-05', monthLabel: 'май.26', service: 'Наружное освещение', meter: null, difference: null, payable: 0, paymentDraft: '', paid: 0, debt: 0 },
-  ]
 }
 
 function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
@@ -3006,13 +2963,6 @@ function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOpera
     }))
 }
 
-function normalizeGaragePaymentHistoryRows(rows: GaragePaymentHistoryPrototypeRow[]) {
-  return rows.map((row, index) => ({
-    ...row,
-    id: row.id ?? `saved-history-${index}-${row.date}-${row.time}-${row.amount}`,
-  }))
-}
-
 function formatPaymentPrototypeMonthLabel(value: string) {
   const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value)
   if (!match) {
@@ -3111,31 +3061,21 @@ function PaymentsPrototypePanel({
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
-  const garageOptions = useMemo<PaymentsPrototypeGarage[]>(() => {
-    const loadedGarages = garages
+  const garageOptions = useMemo<PaymentsPrototypeGarage[]>(
+    () => garages
       .filter((garage) => !garage.isArchived)
-      .map((garage) => {
-        const prototypeGarage = paymentsPrototypeGarages.find((item) => item.number === garage.number)
-        return {
-          id: garage.id,
-          number: garage.number,
-          ownerName: garage.ownerName?.trim() || 'Владелец не указан',
-          phone: prototypeGarage?.phone ?? '',
-          peopleCount: garage.peopleCount,
-          floorCount: garage.floorCount,
-          balance: garage.balance,
-          overdueDebt: garage.overdueDebt,
-        }
-      })
-    const loadedNumbers = new Set(loadedGarages.map((garage) => garage.number))
-    const loadedIds = new Set(loadedGarages.map((garage) => garage.id))
-    return [
-      ...loadedGarages,
-      ...paymentsPrototypeGarages
-        .filter((garage) => !loadedNumbers.has(garage.number))
-        .map((garage) => loadedIds.has(garage.id) ? { ...garage, id: `prototype-${garage.id}` } : garage),
-    ]
-  }, [garages])
+      .map((garage) => ({
+        id: garage.id,
+        number: garage.number,
+        ownerName: garage.ownerName?.trim() || 'Владелец не указан',
+        phone: '',
+        peopleCount: garage.peopleCount,
+        floorCount: garage.floorCount,
+        balance: garage.balance,
+        overdueDebt: garage.overdueDebt,
+      })),
+    [garages],
+  )
   const selectedGarage = garageOptions.find((garage) => garage.id === selectedGarageId) ?? null
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = garageOptions
@@ -3163,12 +3103,12 @@ function PaymentsPrototypePanel({
           const restoredMonthTo = state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue()
           const isRestoredRealGarage = restoredGarageId !== null && realGarageIds.has(restoredGarageId)
           const restoredRealGarage = isRestoredRealGarage ? garageOptions.find((garage) => garage.id === restoredGarageId) ?? null : null
-          setSelectedGarageId(restoredGarageId)
-          setGarageSearch(state.payload.garageSearch ?? '')
+          setSelectedGarageId(isRestoredRealGarage ? restoredGarageId : null)
+          setGarageSearch(isRestoredRealGarage ? state.payload.garageSearch ?? '' : '')
           setIncomeWorksheetMonthFrom(restoredMonthFrom)
           setIncomeWorksheetMonthTo(restoredMonthTo)
-          setGarageRows(isRestoredRealGarage ? [] : Array.isArray(state.payload.garageRows) ? state.payload.garageRows : [])
-          setHistoryRows(isRestoredRealGarage ? [] : Array.isArray(state.payload.historyRows) ? normalizeGaragePaymentHistoryRows(state.payload.historyRows) : [])
+          setGarageRows([])
+          setHistoryRows([])
           if (restoredRealGarage) {
             setGarageWorksheetLoadingId(restoredRealGarage.id)
             void financeClient
@@ -3451,10 +3391,6 @@ function PaymentsPrototypePanel({
     monthFrom = incomeWorksheetMonthFrom,
     monthTo = incomeWorksheetMonthTo,
   ) {
-    if (!realGarageIds.has(garage.id)) {
-      return
-    }
-
     setGarageWorksheetLoadingId(garage.id)
     try {
       const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
@@ -3477,10 +3413,6 @@ function PaymentsPrototypePanel({
   }
 
   async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
-    if (!realGarageIds.has(garage.id)) {
-      return
-    }
-
     setGaragePaymentHistoryLoadingId(garage.id)
     try {
       const page = await financeClient.getOperationsPage(auth.accessToken, {
@@ -3592,12 +3524,11 @@ function PaymentsPrototypePanel({
   }
 
   function selectGarage(garage: PaymentsPrototypeGarage) {
-    const isRealGarage = realGarageIds.has(garage.id)
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
-    setGarageRows(isRealGarage ? [] : createGarageIncomePrototypeRows(garage.number))
+    setGarageRows([])
     setGarageWorksheetSummary(null)
-    setHistoryRows(isRealGarage ? [] : garage.number === '1' ? garagePaymentHistoryRows : [])
+    setHistoryRows([])
     setPaymentError(null)
     void loadGarageIncomeWorksheet(garage)
     void loadGaragePaymentHistory(garage)
