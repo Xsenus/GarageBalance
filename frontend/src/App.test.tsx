@@ -2520,6 +2520,27 @@ describe('App', () => {
     expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toBeInTheDocument()
   })
 
+  it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
+    const user = userEvent.setup()
+    const getFunds = vi.fn(async () => [])
+    const fundsClient = createFundsClient({ getFunds })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await waitFor(() => expect(getFunds).toHaveBeenCalledTimes(1))
+
+    expect(await within(fundsPanel).findByText('Фонды пока не настроены.')).toBeInTheDocument()
+    expect(within(fundsPanel).queryByText('Электроэнергия')).not.toBeInTheDocument()
+    expect(within(fundsPanel).queryByRole('button', { name: 'Пополнить фонд Электроэнергия' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('—')
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

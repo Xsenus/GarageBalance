@@ -5837,16 +5837,6 @@ type FundOperationDraft = {
   reason: string
 }
 
-const fundPrototypeRows: FundPrototypeRow[] = [
-  { id: 'electricity', name: 'Электроэнергия', amount: null },
-  { id: 'water', name: 'Водоснабжение', amount: null },
-  { id: 'trash', name: 'Вывоз мусора', amount: null },
-  { id: 'street-lighting', name: 'Наружное освещение', amount: null },
-  { id: 'membership', name: 'Членские взносы', amount: null, actions: false },
-  { id: 'target', name: 'Целевые взносы', amount: null },
-  { id: 'other', name: 'Прочее', amount: null, actions: false },
-]
-
 function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   return {
     id: fund.id,
@@ -5857,7 +5847,7 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
 }
 
 function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
-  const [rows, setRows] = useState<FundPrototypeRow[]>(() => fundPrototypeRows.map((row) => ({ ...row })))
+  const [rows, setRows] = useState<FundPrototypeRow[]>([])
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
@@ -5980,7 +5970,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.length > 0 ? rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.name}</td>
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
@@ -5999,7 +5989,11 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                   )}
                 </td>
               </tr>
-            ))}
+            )) : !isLoading ? (
+              <tr>
+                <td colSpan={4}>Фонды пока не настроены.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
