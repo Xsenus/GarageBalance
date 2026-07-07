@@ -50,7 +50,7 @@ import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey }
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './shared/financeWorkbench'
-import { buildAuditExportFileName, buildImportReportFileName, downloadBlob } from './shared/fileExports'
+import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob } from './shared/fileExports'
 import type { ChangePreview } from './shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from './shared/changePreview'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
@@ -7087,6 +7087,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
   const [garageAccrualsGrouped, setGarageAccrualsGrouped] = useState(false)
   const [reportDataError, setReportDataError] = useState<string | null>(null)
+  const [reportExporting, setReportExporting] = useState<string | null>(null)
+  const [reportExportMessage, setReportExportMessage] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
@@ -7303,6 +7305,30 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       ...current,
       [key]: { dateFrom: today, dateTo: today },
     }))
+  }
+
+  async function downloadCashOrBankReport(type: 'cashPayments' | 'bankDeposits', extension: 'xlsx' | 'pdf') {
+    const filter = dateFilters[type]
+    const exportKey = `${type}-${extension}`
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = type === 'cashPayments'
+        ? extension === 'xlsx'
+          ? await reportClient.exportCashPaymentReportXlsx(auth.accessToken, filter)
+          : await reportClient.exportCashPaymentReportPdf(auth.accessToken, filter)
+        : extension === 'xlsx'
+          ? await reportClient.exportBankDepositReportXlsx(auth.accessToken, filter)
+          : await reportClient.exportBankDepositReportPdf(auth.accessToken, filter)
+      const reportType = type === 'cashPayments' ? 'cash-payments' : 'bank-deposits'
+      downloadBlob(blob, buildReportFileName(reportType, filter.dateFrom, filter.dateTo, extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
   }
 
   function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
@@ -7541,6 +7567,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
+            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('cashPayments', 'xlsx')}>
+              {reportExporting === 'cashPayments-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
+            </button>
+            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('cashPayments', 'pdf')}>
+              {reportExporting === 'cashPayments-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
+            </button>
+          </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по оплатам из кассы',
@@ -7561,6 +7595,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
+            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('bankDeposits', 'xlsx')}>
+              {reportExporting === 'bankDeposits-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
+            </button>
+            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('bankDeposits', 'pdf')}>
+              {reportExporting === 'bankDeposits-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
+            </button>
+          </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
@@ -7671,6 +7713,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
       {dictionaryError ? <FormError>{dictionaryError}</FormError> : null}
       {reportDataError ? <FormError>{reportDataError}</FormError> : null}
+      {reportExportMessage ? <p className="form-success">{reportExportMessage}</p> : null}
 
       <datalist id={garageOptionsId}>
         {garages.map((garage) => <option value={`Гараж ${garage.number}`} key={garage.id} />)}

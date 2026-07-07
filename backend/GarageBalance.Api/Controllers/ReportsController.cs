@@ -217,6 +217,42 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpPost("cash-payments/export/xlsx")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportCashPaymentReportXlsx(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportCashPaymentReportXlsxAsync(
+            new CashPaymentReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPost("cash-payments/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportCashPaymentReportPdf(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportCashPaymentReportPdfAsync(
+            new CashPaymentReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpGet("bank-deposits")]
     [ProducesResponseType<BankDepositReportDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -233,6 +269,42 @@ public sealed class ReportsController(IReportService reportService) : Controller
 
         return result.Succeeded
             ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPost("bank-deposits/export/xlsx")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportBankDepositReportXlsx(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportBankDepositReportXlsxAsync(
+            new BankDepositReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPost("bank-deposits/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportBankDepositReportPdf(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportBankDepositReportPdfAsync(
+            new BankDepositReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 

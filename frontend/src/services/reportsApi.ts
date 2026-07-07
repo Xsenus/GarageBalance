@@ -250,6 +250,22 @@ export type ReportClient = {
       limit?: number
     },
   ): Promise<CashPaymentReportDto>
+  exportCashPaymentReportXlsx(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+    },
+  ): Promise<Blob>
+  exportCashPaymentReportPdf(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+    },
+  ): Promise<Blob>
   getBankDepositReport(
     accessToken: string,
     params?: {
@@ -259,6 +275,22 @@ export type ReportClient = {
       limit?: number
     },
   ): Promise<BankDepositReportDto>
+  exportBankDepositReportXlsx(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+    },
+  ): Promise<Blob>
+  exportBankDepositReportPdf(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+    },
+  ): Promise<Blob>
   getFeeReport(
     accessToken: string,
     params?: {
@@ -495,9 +527,25 @@ export const reportsApi: ReportClient = {
     const query = buildCashPaymentReportQuery(params)
     return requestJson(accessToken, `/api/reports/cash-payments${query ? `?${query}` : ''}`)
   },
+  exportCashPaymentReportXlsx(accessToken, params = {}) {
+    const query = buildCashPaymentReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/cash-payments/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+  exportCashPaymentReportPdf(accessToken, params = {}) {
+    const query = buildCashPaymentReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/cash-payments/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
   getBankDepositReport(accessToken, params = {}) {
     const query = buildBankDepositReportQuery(params)
     return requestJson(accessToken, `/api/reports/bank-deposits${query ? `?${query}` : ''}`)
+  },
+  exportBankDepositReportXlsx(accessToken, params = {}) {
+    const query = buildBankDepositReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/bank-deposits/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+  exportBankDepositReportPdf(accessToken, params = {}) {
+    const query = buildBankDepositReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/bank-deposits/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getFeeReport(accessToken, params = {}) {
     const query = buildFeeReportQuery(params)

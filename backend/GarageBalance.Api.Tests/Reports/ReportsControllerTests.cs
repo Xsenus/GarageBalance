@@ -15,6 +15,10 @@ public sealed class ReportsControllerTests
     [InlineData(nameof(ReportsController.ExportIncomeReportPdf), "income/export/pdf")]
     [InlineData(nameof(ReportsController.ExportExpenseReportXlsx), "expense/export/xlsx")]
     [InlineData(nameof(ReportsController.ExportExpenseReportPdf), "expense/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportCashPaymentReportXlsx), "cash-payments/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportCashPaymentReportPdf), "cash-payments/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportBankDepositReportXlsx), "bank-deposits/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportBankDepositReportPdf), "bank-deposits/export/pdf")]
     public void ExportReportActions_UsePostBecauseExportsWriteAuditEvents(string actionName, string expectedRoute)
     {
         var method = typeof(ReportsController).GetMethod(actionName)!;
@@ -304,6 +308,75 @@ public sealed class ReportsControllerTests
         var result = await controller.GetBankDepositReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task ExportCashPaymentReportXlsx_ReturnsFile()
+    {
+        var content = new byte[] { 13, 14, 15 };
+        var export = new ReportExportFileDto(
+            "garagebalance-cash-payments-20260601-20260630.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        var controller = new ReportsController(new FakeReportService
+        {
+            CashPaymentXlsxExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        });
+
+        var result = await controller.ExportCashPaymentReportXlsx(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "чек", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+    }
+
+    [Fact]
+    public async Task ExportCashPaymentReportPdf_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            CashPaymentPdfExportResult = ReportResult<ReportExportFileDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.ExportCashPaymentReportPdf(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task ExportBankDepositReportPdf_ReturnsFile()
+    {
+        var content = new byte[] { 16, 17, 18 };
+        var export = new ReportExportFileDto("garagebalance-bank-deposits-20260601-20260630.pdf", "application/pdf", content);
+        var controller = new ReportsController(new FakeReportService
+        {
+            BankDepositPdfExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        });
+
+        var result = await controller.ExportBankDepositReportPdf(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+    }
+
+    [Fact]
+    public async Task ExportBankDepositReportXlsx_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            BankDepositXlsxExportResult = ReportResult<ReportExportFileDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.ExportBankDepositReportXlsx(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
         Assert.Equal("period_invalid", problem.Title);
     }
@@ -655,8 +728,16 @@ public sealed class ReportsControllerTests
         public ReportResult<CashPaymentReportDto> CashPaymentResult { get; init; } = ReportResult<CashPaymentReportDto>.Failure("not_configured", "Not configured.");
         public CashPaymentReportRequest? CashPaymentRequest { get; private set; }
 
+        public ReportResult<ReportExportFileDto> CashPaymentXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ReportExportFileDto> CashPaymentPdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
         public ReportResult<BankDepositReportDto> BankDepositResult { get; init; } = ReportResult<BankDepositReportDto>.Failure("not_configured", "Not configured.");
         public BankDepositReportRequest? BankDepositRequest { get; private set; }
+
+        public ReportResult<ReportExportFileDto> BankDepositXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ReportExportFileDto> BankDepositPdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<FeeReportDto> FeeResult { get; init; } = ReportResult<FeeReportDto>.Failure("not_configured", "Not configured.");
         public FeeReportRequest? FeeRequest { get; private set; }
@@ -709,10 +790,34 @@ public sealed class ReportsControllerTests
             return Task.FromResult(CashPaymentResult);
         }
 
+        public Task<ReportResult<ReportExportFileDto>> ExportCashPaymentReportXlsxAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
+        {
+            CashPaymentRequest = request;
+            return Task.FromResult(CashPaymentXlsxExportResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportCashPaymentReportPdfAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
+        {
+            CashPaymentRequest = request;
+            return Task.FromResult(CashPaymentPdfExportResult);
+        }
+
         public Task<ReportResult<BankDepositReportDto>> GetBankDepositReportAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
         {
             BankDepositRequest = request;
             return Task.FromResult(BankDepositResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportBankDepositReportXlsxAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
+        {
+            BankDepositRequest = request;
+            return Task.FromResult(BankDepositXlsxExportResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportBankDepositReportPdfAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
+        {
+            BankDepositRequest = request;
+            return Task.FromResult(BankDepositPdfExportResult);
         }
 
         public Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)

@@ -7131,7 +7131,13 @@ describe('App', () => {
 
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const exportBankDepositReportPdf = vi.fn(async () => new Blob(['bank pdf'], { type: 'application/pdf' }))
+    const reportClient = createReportClient({
+      exportCashPaymentReportXlsx,
+      exportBankDepositReportPdf,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -7163,12 +7169,16 @@ describe('App', () => {
     expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
     expect(cashPaymentsTable).toHaveTextContent('400,00')
     expect(cashPaymentsTable).not.toHaveTextContent('Назначение платежа')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' }))
+    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
 
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
     expect(within(reportsPanel).getByText('Отчёт по сдаче кассы в банк')).toBeInTheDocument()
     const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
     expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
     expect(bankDepositsTable).toHaveTextContent('3 000,00')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
+    await waitFor(() => expect(exportBankDepositReportPdf).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
 
     await openReportTab(user, reportsPanel, 'Сборы')
     expect(within(reportsPanel).getByText('Отчёт по сборам')).toBeInTheDocument()
@@ -8112,7 +8122,11 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     exportExpenseReportPdf: async () => new Blob(['expense pdf'], { type: 'application/pdf' }),
     getFundChangeReport: async () => createFundChangeReport(),
     getCashPaymentReport: async () => createCashPaymentReport(),
+    exportCashPaymentReportXlsx: async () => new Blob(['cash payments xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportCashPaymentReportPdf: async () => new Blob(['cash payments pdf'], { type: 'application/pdf' }),
     getBankDepositReport: async () => createBankDepositReport(),
+    exportBankDepositReportXlsx: async () => new Blob(['bank deposits xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportBankDepositReportPdf: async () => new Blob(['bank deposits pdf'], { type: 'application/pdf' }),
     getFeeReport: async (_token, params) => {
       const variation = params?.variation ?? 'Сбор на ворота'
       return variation.toLowerCase().includes('член')

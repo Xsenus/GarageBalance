@@ -911,6 +911,88 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         return ReportResult<CashPaymentReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<ReportExportFileDto>> ExportCashPaymentReportXlsxAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetCashPaymentReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Оплаты из кассы",
+                    ["Дата", "Сумма", "Наличие чека", "Назначение", "Поставщик", "Услуга", "Документ", "Комментарий"],
+                    report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Number(row.Amount),
+                        XlsxCell.Text(row.HasReceipt ? "Да" : "Нет"),
+                        XlsxCell.Text(row.Purpose),
+                        XlsxCell.Text(row.SupplierName),
+                        XlsxCell.Text(row.ExpenseTypeName),
+                        XlsxCell.Text(row.DocumentNumber),
+                        XlsxCell.Text(row.Comment)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Сумма", "Строк"],
+                    [
+                        [
+                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Number(report.Total),
+                            XlsxCell.Number(report.RowCount)
+                        ]
+                    ])
+            ]);
+
+        var file = new ReportExportFileDto(
+            BuildExportFileName("cash-payments", report.DateFrom, report.DateTo, "xlsx"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по оплатам из кассы", "xlsx", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportCashPaymentReportPdfAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetCashPaymentReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
+            $"Total: {FormatAmount(report.Total)} | Rows: {report.RowCount}",
+            string.Empty,
+            "Date | Amount | Receipt | Document | Purpose | Comment"
+        };
+        lines.AddRange(report.Rows.Select(row =>
+            string.Join(" | ",
+                row.Date.ToString("yyyy-MM-dd"),
+                FormatAmount(row.Amount),
+                row.HasReceipt ? "yes" : "no",
+                row.DocumentNumber ?? string.Empty,
+                row.Purpose,
+                row.Comment ?? string.Empty)));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance cash payments report", lines);
+        var file = new ReportExportFileDto(
+            BuildExportFileName("cash-payments", report.DateFrom, report.DateTo, "pdf"),
+            "application/pdf",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по оплатам из кассы", "pdf", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
     public async Task<ReportResult<BankDepositReportDto>> GetBankDepositReportAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
@@ -994,6 +1076,82 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             cancellationToken);
 
         return ReportResult<BankDepositReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportBankDepositReportXlsxAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetBankDepositReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Сдача кассы в банк",
+                    ["Дата", "Сумма", "Фонд", "Комментарий"],
+                    report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Number(row.Amount),
+                        XlsxCell.Text(row.FundName),
+                        XlsxCell.Text(row.Comment)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Сумма", "Строк"],
+                    [
+                        [
+                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Number(report.Total),
+                            XlsxCell.Number(report.RowCount)
+                        ]
+                    ])
+            ]);
+
+        var file = new ReportExportFileDto(
+            BuildExportFileName("bank-deposits", report.DateFrom, report.DateTo, "xlsx"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по сдаче кассы в банк", "xlsx", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportBankDepositReportPdfAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetBankDepositReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
+            $"Total: {FormatAmount(report.Total)} | Rows: {report.RowCount}",
+            string.Empty,
+            "Date | Amount | Fund | Comment"
+        };
+        lines.AddRange(report.Rows.Select(row =>
+            string.Join(" | ",
+                row.Date.ToString("yyyy-MM-dd"),
+                FormatAmount(row.Amount),
+                row.FundName ?? string.Empty,
+                row.Comment ?? string.Empty)));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance bank deposits report", lines);
+        var file = new ReportExportFileDto(
+            BuildExportFileName("bank-deposits", report.DateFrom, report.DateTo, "pdf"),
+            "application/pdf",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по сдаче кассы в банк", "pdf", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)

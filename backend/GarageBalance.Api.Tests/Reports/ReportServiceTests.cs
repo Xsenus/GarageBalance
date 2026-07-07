@@ -725,6 +725,137 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportCashPaymentReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
+
+        var result = await service.ExportCashPaymentReportXlsxAsync(
+            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "RKO-1", ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-cash-payments-20260601-20260630.xlsx", result.Value!.FileName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
+        AssertWorkbookContains(result.Value.Content, "Оплаты из кассы");
+        AssertWorkbookContains(result.Value.Content, "RKO-1");
+        AssertWorkbookContains(result.Value.Content, "Оплата воды");
+        AssertWorkbookDoesNotContain(result.Value.Content, "RKO-2");
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.cash_payments_exported" &&
+            auditEvent.ActorUserId == actorUserId &&
+            auditEvent.MetadataJson != null &&
+            auditEvent.MetadataJson.Contains("xlsx", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExportCashPaymentReportPdfAsync_ReturnsDocumentWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
+
+        var result = await service.ExportCashPaymentReportPdfAsync(
+            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "RKO-1"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-cash-payments-20260601-20260630.pdf", result.Value!.FileName);
+        Assert.Equal("application/pdf", result.Value.ContentType);
+        AssertPdfContains(result.Value.Content, "GarageBalance cash payments report");
+        AssertPdfContains(result.Value.Content, "RKO-1");
+    }
+
+    [Fact]
+    public async Task ExportBankDepositReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 3000m,
+                BalanceBefore = 0m,
+                BalanceAfter = 3000m,
+                Reason = "Сдача наличных в банк",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 500m,
+                BalanceBefore = 3000m,
+                BalanceAfter = 3500m,
+                Reason = "Вне периода",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 9, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ExportBankDepositReportXlsxAsync(
+            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-bank-deposits-20260601-20260630.xlsx", result.Value!.FileName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
+        AssertWorkbookContains(result.Value.Content, "Сдача кассы в банк");
+        AssertWorkbookContains(result.Value.Content, "Сдача наличных в банк");
+        AssertWorkbookDoesNotContain(result.Value.Content, "Вне периода");
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.bank_deposits_exported" &&
+            auditEvent.ActorUserId == actorUserId &&
+            auditEvent.MetadataJson != null &&
+            auditEvent.MetadataJson.Contains("xlsx", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExportBankDepositReportPdfAsync_ReturnsDocumentWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.Add(new FundOperation
+        {
+            Fund = fund,
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 3000m,
+            BalanceBefore = 0m,
+            BalanceAfter = 3000m,
+            Reason = "Сдача наличных в банк",
+            ActorUserId = actorUserId,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ExportBankDepositReportPdfAsync(
+            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-bank-deposits-20260601-20260630.pdf", result.Value!.FileName);
+        Assert.Equal("application/pdf", result.Value.ContentType);
+        AssertPdfContains(result.Value.Content, "GarageBalance bank deposits report");
+        AssertPdfContains(result.Value.Content, "2026-06-15");
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch()
     {
         await using var database = await TestDatabase.CreateAsync();
