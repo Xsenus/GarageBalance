@@ -83,6 +83,27 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task RestoreIrregularPayment_ReturnsOkActiveRecordAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            RestoreIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Success(new IrregularPaymentDto(paymentId, "Gate repair", 500m, true, false, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreIrregularPayment(paymentId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payment = Assert.IsType<IrregularPaymentDto>(ok.Value);
+        Assert.Equal(paymentId, payment.Id);
+        Assert.False(payment.IsArchived);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(paymentId, service.LastRestoreId);
+    }
+
+    [Fact]
     public async Task CreateOwner_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -542,6 +563,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<ChargeServiceSettingDto> UpdateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> RestoreChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> ArchiveIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<IrregularPaymentDto> RestoreIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
@@ -950,7 +972,7 @@ public sealed class DictionariesControllerTests
         {
             LastRestoreId = id;
             LastActorUserId = actorUserId;
-            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+            return Task.FromResult(RestoreIrregularPaymentResult);
         }
     }
 }

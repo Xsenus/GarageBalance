@@ -1530,6 +1530,33 @@ public sealed class DictionaryServiceTests
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_archived" && item.ActorUserId == actorUserId);
     }
 
+    [Fact]
+    public async Task RestoreIrregularPaymentAsync_RestoresUnusedPaymentAndRejectsDuplicateActiveName()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var archived = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Gate repair", 500m), null, CancellationToken.None);
+        await service.ArchiveIrregularPaymentAsync(archived.Value!.Id, "Finished", actorUserId, CancellationToken.None);
+
+        var restored = await service.RestoreIrregularPaymentAsync(archived.Value.Id, actorUserId, CancellationToken.None);
+        var activePayments = await service.GetIrregularPaymentsAsync("gate", CancellationToken.None);
+
+        await service.ArchiveIrregularPaymentAsync(restored.Value!.Id, "Check duplicate", actorUserId, CancellationToken.None);
+        await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Gate repair", 700m), null, CancellationToken.None);
+        var duplicateRestore = await service.RestoreIrregularPaymentAsync(archived.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(restored.Succeeded);
+        Assert.False(restored.Value.IsArchived);
+        Assert.Contains(activePayments, item => item.Id == archived.Value.Id && !item.IsArchived);
+        Assert.False(duplicateRestore.Succeeded);
+        Assert.Equal("irregular_payment_duplicate", duplicateRestore.ErrorCode);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.irregular_payment_restored" &&
+            item.ActorUserId == actorUserId &&
+            item.EntityId == archived.Value.Id.ToString());
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
