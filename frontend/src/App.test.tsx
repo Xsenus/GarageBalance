@@ -1047,9 +1047,13 @@ describe('App', () => {
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
-    expect(within(contractorsPanel).getByRole('button', { name: 'Показать всех поставщиков' })).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
     expect(within(suppliersTable).getByText('Энергосбыт')).toBeInTheDocument()
     expect(within(suppliersTable).getByText('ЭкоВывоз')).toBeInTheDocument()
+    expect(within(suppliersTable).getByText('Правовой центр')).toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Показать должников' }))
+    expect(within(contractorsPanel).getByRole('button', { name: 'Показать всех поставщиков' })).toBeInTheDocument()
     expect(within(suppliersTable).queryByText('Правовой центр')).not.toBeInTheDocument()
 
     await user.click(within(suppliersTable).getByRole('button', { name: 'Задолженность' }))
@@ -1087,6 +1091,9 @@ describe('App', () => {
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    expect(within(suppliersTable).getByText('Водоканал')).toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Показать должников' }))
     expect(within(suppliersTable).getByRole('cell', { name: 'Поставщиков с задолженностью не найдено.' })).toBeInTheDocument()
     expect(within(suppliersTable).queryByText('Водоканал')).not.toBeInTheDocument()
 

@@ -8334,6 +8334,7 @@ type ContractorOneTimeRow = {
 type ContractorSection = 'garages' | 'suppliers' | 'staff'
 type ContractorSortDirection = 'asc' | 'desc'
 type ContractorSortableSection = ContractorSection
+type ContractorDebtorFilterSection = 'garages' | 'suppliers'
 
 type ContractorGarageRow = {
   id: string
@@ -8965,7 +8966,7 @@ type ContractorsPrototypeSavedState = {
 
 function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
-  const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
+  const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
   const [garages, setGarages] = useState<ContractorGarageRow[]>([])
   const [owners, setOwners] = useState<OwnerDto[]>([])
@@ -9662,10 +9663,17 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     )
   }
 
-  const filteredGarages = showDebtorsOnly
+  const showGarageDebtorsOnly = debtorFilters.garages
+  const showSupplierDebtorsOnly = debtorFilters.suppliers
+  const showDebtorsOnly = activeSection === 'suppliers' ? showSupplierDebtorsOnly : activeSection === 'garages' ? showGarageDebtorsOnly : false
+  const toggleDebtorsFilter = (section: ContractorDebtorFilterSection) => {
+    setDebtorFilters((currentFilters) => ({ ...currentFilters, [section]: !currentFilters[section] }))
+  }
+
+  const filteredGarages = showGarageDebtorsOnly
     ? garages.filter((garage) => !garage.isDeleted && isContractorMoneyDebt(garage.overdueDebt))
     : garages
-  const filteredSuppliers = showDebtorsOnly
+  const filteredSuppliers = showSupplierDebtorsOnly
     ? suppliers.filter((supplier) => !supplier.isDeleted && isContractorMoneyDebt(supplier.debt))
     : suppliers
 
@@ -9719,13 +9727,13 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
         <div className="contractors-actions">
           {activeSection === 'garages' ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => setShowDebtorsOnly((value) => !value)}>{debtorsButtonLabel}</button>
+              <button className="secondary-button" type="button" onClick={() => toggleDebtorsFilter('garages')}>{debtorsButtonLabel}</button>
               <button className="secondary-button" type="button" onClick={() => setModal({ type: 'garage' })}>Добавить гараж</button>
             </>
           ) : null}
           {activeSection === 'suppliers' ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => setShowDebtorsOnly((value) => !value)}>{debtorsButtonLabel}</button>
+              <button className="secondary-button" type="button" onClick={() => toggleDebtorsFilter('suppliers')}>{debtorsButtonLabel}</button>
               <button className="secondary-button" type="button" onClick={() => setModal({ type: 'supplier' })}>Добавить поставщика</button>
               <button className="secondary-button" type="button" onClick={() => setModal({ type: 'service' })}>Добавить услугу</button>
             </>
@@ -9799,7 +9807,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
             ))}
             {visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{showDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
               </div>
             ) : null}
           </div>
@@ -9860,7 +9868,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
             })}
             {visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{showDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
               </div>
             ) : null}
           </div>
