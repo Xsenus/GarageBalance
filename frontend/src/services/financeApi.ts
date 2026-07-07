@@ -59,6 +59,8 @@ export type FinancePageParams = {
   monthTo?: string
   search?: string
   garageId?: string
+  supplierId?: string
+  staffMemberId?: string
   offset?: number
   limit?: number
 }
@@ -418,6 +420,8 @@ export const financeApi: FinanceClient = {
       operationKind: params.operationKind,
       search: params.search,
       garageId: params.garageId,
+      supplierId: params.supplierId,
+      staffMemberId: params.staffMemberId,
       offset: params.offset,
       limit: params.limit,
     }))
@@ -442,6 +446,7 @@ export const financeApi: FinanceClient = {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
       search: params.search,
+      supplierId: params.supplierId,
       offset: params.offset,
       limit: params.limit,
     }))

@@ -8386,6 +8386,28 @@ type ContractorStaffRow = {
   isDeleted: boolean
 }
 
+type ContractorFinancialReportTarget =
+  | { type: 'supplier'; row: ContractorSupplierRow }
+  | { type: 'employee'; row: ContractorStaffRow }
+
+type ContractorFinancialReportRow = {
+  id: string
+  accountingMonth: string
+  date: string
+  documentNumber: string
+  description: string
+  accrualAmount: number
+  paymentAmount: number
+  balanceAfter: number
+}
+
+type ContractorFinancialReport = {
+  accrualTotal: number
+  paymentTotal: number
+  balance: number
+  rows: ContractorFinancialReportRow[]
+}
+
 type ContractorDepartmentRow = {
   id: string
   name: string
@@ -8467,6 +8489,81 @@ function parsePrototypeMoney(value: string) {
   const normalized = value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function compareContractorReportEntries(
+  left: Omit<ContractorFinancialReportRow, 'balanceAfter'>,
+  right: Omit<ContractorFinancialReportRow, 'balanceAfter'>,
+) {
+  const monthComparison = left.accountingMonth.localeCompare(right.accountingMonth)
+  if (monthComparison !== 0) {
+    return monthComparison
+  }
+
+  const dateComparison = left.date.localeCompare(right.date)
+  if (dateComparison !== 0) {
+    return dateComparison
+  }
+
+  return left.description.localeCompare(right.description)
+}
+
+function buildContractorFinancialReport(entries: Array<Omit<ContractorFinancialReportRow, 'balanceAfter'>>): ContractorFinancialReport {
+  let balance = 0
+  let accrualTotal = 0
+  let paymentTotal = 0
+  const rows = [...entries].sort(compareContractorReportEntries).map((entry) => {
+    accrualTotal += entry.accrualAmount
+    paymentTotal += entry.paymentAmount
+    balance += entry.accrualAmount - entry.paymentAmount
+
+    return {
+      ...entry,
+      balanceAfter: balance,
+    }
+  })
+
+  return {
+    accrualTotal,
+    paymentTotal,
+    balance,
+    rows,
+  }
+}
+
+function getContractorReportMonthStarts(monthFrom: string, monthTo: string) {
+  const [fromYear, fromMonth] = monthFrom.split('-').map(Number)
+  const [toYear, toMonth] = monthTo.split('-').map(Number)
+  if (!fromYear || !fromMonth || !toYear || !toMonth) {
+    return []
+  }
+
+  const months: string[] = []
+  const cursor = new Date(fromYear, fromMonth - 1, 1)
+  const last = new Date(toYear, toMonth - 1, 1)
+  while (cursor <= last) {
+    months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-01`)
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+
+  return months
+}
+
+function createStaffFinancialReportEntries(row: ContractorStaffRow, monthFrom: string, monthTo: string) {
+  const rate = parsePrototypeMoney(row.rate)
+  if (rate <= 0) {
+    return []
+  }
+
+  return getContractorReportMonthStarts(monthFrom, monthTo).map((month) => ({
+    id: `staff-accrual-${row.id}-${month}`,
+    accountingMonth: month,
+    date: month,
+    documentNumber: '—',
+    description: 'Начисление зарплаты',
+    accrualAmount: rate,
+    paymentAmount: 0,
+  }))
 }
 
 function formatPrototypeNumber(value: number | null | undefined) {
@@ -8780,6 +8877,11 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   const [garageFinancialReportFilters, setGarageFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
   const [garageFinancialReportLoading, setGarageFinancialReportLoading] = useState(false)
   const [garageFinancialReportError, setGarageFinancialReportError] = useState<string | null>(null)
+  const [contractorFinancialReportTarget, setContractorFinancialReportTarget] = useState<ContractorFinancialReportTarget | null>(null)
+  const [contractorFinancialReport, setContractorFinancialReport] = useState<ContractorFinancialReport | null>(null)
+  const [contractorFinancialReportFilters, setContractorFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
+  const [contractorFinancialReportLoading, setContractorFinancialReportLoading] = useState(false)
+  const [contractorFinancialReportError, setContractorFinancialReportError] = useState<string | null>(null)
   const [supplierContextMenu, setSupplierContextMenu] = useState<{ row: ContractorSupplierRow; x: number; y: number } | null>(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState<ContractorSupplierRow | null>(null)
   const [supplierDeleteReason, setSupplierDeleteReason] = useState('')
@@ -8789,6 +8891,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
+  useRestoreFocusOnClose(Boolean(contractorFinancialReportTarget))
   useRestoreFocusOnClose(Boolean(supplierDeleteTarget))
   useRestoreFocusOnClose(Boolean(employeeDeleteTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
@@ -8797,6 +8900,8 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   const garageDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageDeleteTarget))
   const garageFinancialReportDialogRef = useFocusTrap<HTMLElement>(Boolean(garageFinancialReportTarget))
   const garageFinancialReportCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(garageFinancialReportTarget))
+  const contractorFinancialReportDialogRef = useFocusTrap<HTMLElement>(Boolean(contractorFinancialReportTarget))
+  const contractorFinancialReportCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contractorFinancialReportTarget))
   const supplierDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(supplierDeleteTarget))
   const supplierDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(supplierDeleteTarget))
   const employeeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(employeeDeleteTarget))
@@ -8805,6 +8910,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
   useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
   useEscapeKey(Boolean(garageFinancialReportTarget), () => closeGarageFinancialReport())
+  useEscapeKey(Boolean(contractorFinancialReportTarget), () => closeContractorFinancialReport())
   useEscapeKey(Boolean(supplierContextMenu), () => setSupplierContextMenu(null))
   useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
   useEscapeKey(Boolean(employeeContextMenu), () => setEmployeeContextMenu(null))
@@ -9047,6 +9153,93 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     setGarageFinancialReportLoading(false)
   }
 
+  async function loadContractorFinancialReport(target = contractorFinancialReportTarget, filters = contractorFinancialReportFilters) {
+    if (!target) {
+      return
+    }
+
+    if (!isBackendDictionaryId(target.row.id)) {
+      setContractorFinancialReport(null)
+      setContractorFinancialReportError('Финансовый отчет доступен для записи, сохраненной в справочнике.')
+      return
+    }
+
+    setContractorFinancialReportLoading(true)
+    setContractorFinancialReportError(null)
+
+    try {
+      const operationsPage = await financeClient.getOperationsPage(auth.accessToken, {
+        monthFrom: filters.monthFrom,
+        monthTo: filters.monthTo,
+        operationKind: 'expense',
+        supplierId: target.type === 'supplier' ? target.row.id : undefined,
+        staffMemberId: target.type === 'employee' ? target.row.id : undefined,
+        limit: 500,
+      })
+      const operationEntries = operationsPage.items
+        .filter((operation) => !operation.isCanceled)
+        .map((operation) => ({
+          id: `operation-${operation.id}`,
+          accountingMonth: operation.accountingMonth,
+          date: operation.operationDate,
+          documentNumber: operation.documentNumber ?? '—',
+          description: target.type === 'supplier'
+            ? operation.expenseTypeName ?? operation.comment ?? 'Выплата поставщику'
+            : operation.expenseTypeName ?? operation.comment ?? 'Выплата сотруднику',
+          accrualAmount: 0,
+          paymentAmount: operation.amount,
+        }))
+
+      if (target.type === 'supplier') {
+        const accrualsPage = await financeClient.getSupplierAccrualsPage(auth.accessToken, {
+          monthFrom: filters.monthFrom,
+          monthTo: filters.monthTo,
+          supplierId: target.row.id,
+          limit: 500,
+        })
+        const accrualEntries = accrualsPage.items
+          .filter((accrual) => !accrual.isCanceled)
+          .map((accrual) => ({
+            id: `supplier-accrual-${accrual.id}`,
+            accountingMonth: accrual.accountingMonth,
+            date: accrual.accountingMonth,
+            documentNumber: accrual.documentNumber ?? '—',
+            description: accrual.expenseTypeName,
+            accrualAmount: accrual.amount,
+            paymentAmount: 0,
+          }))
+        setContractorFinancialReport(buildContractorFinancialReport([...accrualEntries, ...operationEntries]))
+      } else {
+        const staffAccrualEntries = createStaffFinancialReportEntries(target.row, filters.monthFrom, filters.monthTo)
+        setContractorFinancialReport(buildContractorFinancialReport([...staffAccrualEntries, ...operationEntries]))
+      }
+    } catch (error) {
+      setContractorFinancialReportError(error instanceof Error ? error.message : 'Не удалось загрузить финансовый отчет контрагента.')
+      setContractorFinancialReport(null)
+    } finally {
+      setContractorFinancialReportLoading(false)
+    }
+  }
+
+  function openContractorFinancialReport(target: ContractorFinancialReportTarget) {
+    setSupplierContextMenu(null)
+    setEmployeeContextMenu(null)
+    setModal(null)
+    const filters = createDefaultGarageBalanceHistoryFilters()
+    setContractorFinancialReportTarget(target)
+    setContractorFinancialReportFilters(filters)
+    setContractorFinancialReport(null)
+    setContractorFinancialReportError(null)
+    void loadContractorFinancialReport(target, filters)
+  }
+
+  function closeContractorFinancialReport() {
+    setContractorFinancialReportTarget(null)
+    setContractorFinancialReport(null)
+    setContractorFinancialReportError(null)
+    setContractorFinancialReportLoading(false)
+  }
+
   const saveSupplier = async (supplier: ContractorSupplierRow) => {
     const normalizedSupplier = normalizeSupplierPrototype(supplier)
     const currentSupplier = suppliers.find((item) => item.id === normalizedSupplier.id)
@@ -9167,8 +9360,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   }
 
   function openSupplierFinancialReport(row: ContractorSupplierRow) {
-    setSupplierContextMenu(null)
-    void row
+    openContractorFinancialReport({ type: 'supplier', row })
   }
 
   const saveEmployee = async (employee: ContractorStaffRow) => {
@@ -9261,8 +9453,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   }
 
   function openEmployeeFinancialReport(row: ContractorStaffRow) {
-    setEmployeeContextMenu(null)
-    void row
+    openContractorFinancialReport({ type: 'employee', row })
   }
 
   const confirmRestore = async () => {
@@ -9324,6 +9515,14 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     : garages
   const visibleSuppliers = suppliers
   const visibleStaff = staff
+  const contractorFinancialReportTitle = contractorFinancialReportTarget?.type === 'supplier'
+    ? contractorFinancialReportTarget.row.name || 'Поставщик без названия'
+    : contractorFinancialReportTarget?.row.fullName || 'Сотрудник без ФИО'
+  const contractorFinancialReportDescription = contractorFinancialReportTarget?.type === 'supplier'
+    ? contractorFinancialReportTarget.row.service || contractorFinancialReportTarget.row.contactPerson || 'Услуга не указана'
+    : contractorFinancialReportTarget?.row.department || 'Отдел не указан'
+  const contractorFinancialReportDialogTitleId = 'contractor-financial-report-title'
+  const contractorFinancialReportDialogDescriptionId = 'contractor-financial-report-description'
 
   return (
     <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
@@ -9687,6 +9886,92 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
                     </tbody>
                   </table>
                   {garageFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
+                </div>
+              </>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+
+      {contractorFinancialReportTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeContractorFinancialReport}>
+          <section ref={contractorFinancialReportDialogRef} className="detail-dialog garage-balance-dialog" role="dialog" aria-modal="true" aria-labelledby={contractorFinancialReportDialogTitleId} aria-describedby={contractorFinancialReportDialogDescriptionId} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Финансовый отчет</p>
+                <h3 id={contractorFinancialReportDialogTitleId}>{contractorFinancialReportTitle}</h3>
+                <p id={contractorFinancialReportDialogDescriptionId}>{contractorFinancialReportDescription}</p>
+              </div>
+              <button ref={contractorFinancialReportCloseRef} className="icon-button" type="button" aria-label="Закрыть финансовый отчет контрагента" onClick={closeContractorFinancialReport}>
+                <X size={18} />
+              </button>
+            </div>
+            <form className="balance-history-filters" onSubmit={(event) => {
+              event.preventDefault()
+              void loadContractorFinancialReport()
+            }}>
+              <label>
+                Период с
+                <input aria-label="Начало периода финансового отчета контрагента" type="month" value={contractorFinancialReportFilters.monthFrom} onChange={(event) => setContractorFinancialReportFilters((value) => ({ ...value, monthFrom: event.target.value }))} required />
+              </label>
+              <label>
+                Период по
+                <input aria-label="Конец периода финансового отчета контрагента" type="month" value={contractorFinancialReportFilters.monthTo} onChange={(event) => setContractorFinancialReportFilters((value) => ({ ...value, monthTo: event.target.value }))} required />
+              </label>
+              <button className="secondary-button" type="submit" disabled={contractorFinancialReportLoading}>
+                <Search size={16} />
+                <span>{contractorFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
+              </button>
+            </form>
+            {contractorFinancialReportError ? <FormError>{contractorFinancialReportError}</FormError> : null}
+            {contractorFinancialReport ? (
+              <>
+                <div className="balance-history-summary" aria-label="Итоги финансового отчета контрагента">
+                  <div>
+                    <span>Начислено</span>
+                    <strong>{formatMoney(contractorFinancialReport.accrualTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Оплачено</span>
+                    <strong>{formatMoney(contractorFinancialReport.paymentTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>{formatDebtLabel(contractorFinancialReport.balance)}</span>
+                    <strong className={getDebtClassName(contractorFinancialReport.balance)}>{formatDebtAmount(contractorFinancialReport.balance)}</strong>
+                  </div>
+                  <div>
+                    <span>Строк</span>
+                    <strong>{contractorFinancialReport.rows.length}</strong>
+                  </div>
+                </div>
+                <div className="dictionary-table-scroll garage-balance-table-scroll">
+                  <table className="dictionary-data-table" aria-label={contractorFinancialReportTarget.type === 'supplier' ? 'Финансовый отчет поставщика' : 'Финансовый отчет сотрудника'}>
+                    <thead>
+                      <tr>
+                        <th>Месяц</th>
+                        <th>Дата</th>
+                        <th>Документ</th>
+                        <th>Операция</th>
+                        <th>Начислено</th>
+                        <th>Оплачено</th>
+                        <th>Остаток</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {contractorFinancialReport.rows.map((row) => (
+                        <tr key={row.id}>
+                          <td>{formatMonth(row.accountingMonth)}</td>
+                          <td>{formatDateOnly(row.date)}</td>
+                          <td>{row.documentNumber}</td>
+                          <td>{row.description}</td>
+                          <td className="money-accrual">{row.accrualAmount > 0 ? formatMoney(row.accrualAmount) : '—'}</td>
+                          <td className="money-expense">{row.paymentAmount > 0 ? formatMoney(row.paymentAmount) : '—'}</td>
+                          <td className={getDebtClassName(row.balanceAfter)}>{formatDebtAmount(row.balanceAfter)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {contractorFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
                 </div>
               </>
             ) : null}

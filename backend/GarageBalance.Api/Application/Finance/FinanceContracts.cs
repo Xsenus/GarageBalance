@@ -76,7 +76,9 @@ public sealed record FinancialOperationListRequest(
     string? Search,
     int? Limit = null,
     int? Offset = null,
-    Guid? GarageId = null);
+    Guid? GarageId = null,
+    Guid? SupplierId = null,
+    Guid? StaffMemberId = null);
 
 public sealed record AccrualDto(
     Guid Id,
@@ -191,7 +193,8 @@ public sealed record SupplierAccrualListRequest(
     DateOnly? MonthTo,
     string? Search,
     int? Limit = null,
-    int? Offset = null);
+    int? Offset = null,
+    Guid? SupplierId = null);
 
 public sealed record MeterReadingDto(
     Guid Id,

@@ -878,6 +878,119 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 30000)
 
+  it('opens financial reports for suppliers and staff from contractors tables', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const supplierId = '22222222-2222-4222-8222-222222222222'
+    const staffMemberId = '33333333-3333-4333-8333-333333333333'
+    const supplier = createSupplier({
+      id: supplierId,
+      name: 'Водоканал',
+      groupId: '44444444-4444-4444-8444-444444444444',
+      groupName: 'Коммунальные услуги',
+      contactPerson: 'Иванов П.В.',
+    })
+    const department = createStaffDepartment({
+      id: '55555555-5555-4555-8555-555555555555',
+      name: 'Бухгалтерия',
+    })
+    const staffMember = createStaffMember({
+      id: staffMemberId,
+      fullName: 'Петрова Ольга',
+      departmentId: department.id,
+      departmentName: department.name,
+      rate: 40000,
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => {
+      if (params?.supplierId === supplierId) {
+        return {
+          items: [createFinancialOperation({
+            id: 'operation-supplier-report',
+            operationKind: 'expense',
+            operationDate: '2026-06-20',
+            accountingMonth: '2026-06-01',
+            amount: 600,
+            documentNumber: 'RKO-1',
+            supplierId,
+            supplierName: supplier.name,
+            expenseTypeName: 'Водоснабжение',
+          })],
+          totalCount: 1,
+          offset: 0,
+          limit: 500,
+        }
+      }
+
+      if (params?.staffMemberId === staffMemberId) {
+        return {
+          items: [createFinancialOperation({
+            id: 'operation-staff-report',
+            operationKind: 'expense',
+            operationDate: '2026-06-21',
+            accountingMonth: '2026-06-01',
+            amount: 15000,
+            documentNumber: 'RKO-2',
+            staffMemberId,
+            staffMemberName: staffMember.fullName,
+            staffDepartmentName: department.name,
+            expenseTypeName: 'Зарплата',
+          })],
+          totalCount: 1,
+          offset: 0,
+          limit: 500,
+        }
+      }
+
+      return { items: [], totalCount: 0, offset: 0, limit: params?.limit ?? 500 }
+    })
+    const getSupplierAccrualsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getSupplierAccrualsPage']>[1]) => ({
+      items: params?.supplierId === supplierId
+        ? [createSupplierAccrual({
+          id: 'supplier-accrual-report',
+          supplierId,
+          supplierName: supplier.name,
+          expenseTypeName: 'Водоснабжение',
+          amount: 1000,
+          documentNumber: 'INV-1',
+        })]
+        : [],
+      totalCount: params?.supplierId === supplierId ? 1 : 0,
+      offset: 0,
+      limit: params?.limit ?? 500,
+    }))
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts: async () => [],
+      getStaffDepartments: async () => [department],
+      getStaffMembers: async () => [staffMember],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Водоканал' }))
+    const supplierReport = await screen.findByRole('dialog', { name: 'Водоканал' })
+    expect(within(supplierReport).getByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
+    expect(within(supplierReport).getByText('INV-1')).toBeInTheDocument()
+    expect(within(supplierReport).getByText('RKO-1')).toBeInTheDocument()
+    expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }))
+    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }))
+    await user.click(within(supplierReport).getByRole('button', { name: 'Закрыть финансовый отчет контрагента' }))
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Открыть финансовый отчет сотрудника Петрова Ольга' }))
+    const staffReport = await screen.findByRole('dialog', { name: 'Петрова Ольга' })
+    expect(within(staffReport).getByRole('table', { name: 'Финансовый отчет сотрудника' })).toBeInTheDocument()
+    expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(6)
+    expect(within(staffReport).getByText('RKO-2')).toBeInTheDocument()
+    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }))
+  }, 30000)
+
   it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
     const user = userEvent.setup()
     let updatedTariffRequest: UpsertTariffRequest | null = null

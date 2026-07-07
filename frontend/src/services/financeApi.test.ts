@@ -7,7 +7,7 @@ describe('financeApi', () => {
     vi.unstubAllGlobals()
   })
 
-  it('passes garageId to the operations page endpoint', async () => {
+  it('passes counterparty filters to finance page endpoints', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       items: [],
       totalCount: 0,
@@ -19,10 +19,22 @@ describe('financeApi', () => {
     await financeApi.getOperationsPage('token', {
       operationKind: 'income',
       garageId: 'garage-77',
+      supplierId: 'supplier-77',
+      staffMemberId: 'staff-77',
+      limit: 25,
+    })
+    await financeApi.getSupplierAccrualsPage('token', {
+      supplierId: 'supplier-77',
       limit: 25,
     })
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/finance/operations/page?operationKind=income&garageId=garage-77&limit=25', {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/operations/page?operationKind=income&garageId=garage-77&supplierId=supplier-77&staffMemberId=staff-77&limit=25', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/supplier-accruals/page?supplierId=supplier-77&limit=25', {
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token',

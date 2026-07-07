@@ -439,6 +439,52 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetOperationsPageAsync_FiltersExpenseHistoryBySupplierAndStaffMember()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId };
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var firstStaff = new StaffMember { FullName = "Петрова Ольга", Department = department, Rate = 40000m };
+        var secondStaff = new StaffMember { FullName = "Иванов Сергей", Department = department, Rate = 20000m };
+        var salaryExpenseType = new ExpenseType { Name = "Зарплата", Code = "salary" };
+        database.Context.AddRange(secondSupplier, department, firstStaff, secondStaff, salaryExpenseType);
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 100m, "RKO-supplier-1", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(secondSupplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 200m, "RKO-supplier-2", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(firstStaff.Id, new DateOnly(2026, 6, 22), new DateOnly(2026, 6, 1), 300m, "RKO-staff-1", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(secondStaff.Id, new DateOnly(2026, 6, 23), new DateOnly(2026, 6, 1), 400m, "RKO-staff-2", null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var supplierPage = await service.GetOperationsPageAsync(
+            new FinancialOperationListRequest(null, null, "expense", null, 25, 0, null, fixtures.Supplier.Id),
+            CancellationToken.None);
+        var staffPage = await service.GetOperationsPageAsync(
+            new FinancialOperationListRequest(null, null, "expense", null, 25, 0, null, null, firstStaff.Id),
+            CancellationToken.None);
+
+        var supplierOperation = Assert.Single(supplierPage.Items);
+        Assert.Equal(fixtures.Supplier.Id, supplierOperation.SupplierId);
+        Assert.Equal("RKO-supplier-1", supplierOperation.DocumentNumber);
+        var staffOperation = Assert.Single(staffPage.Items);
+        Assert.Equal(firstStaff.Id, staffOperation.StaffMemberId);
+        Assert.Equal("RKO-staff-1", staffOperation.DocumentNumber);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1442,6 +1488,27 @@ public sealed class FinanceServiceTests
         Assert.Single(result);
         Assert.Equal(new DateOnly(2026, 6, 1), result[0].AccountingMonth);
         Assert.Equal(1200m, result[0].Amount);
+    }
+
+    [Fact]
+    public async Task GetSupplierAccrualsPageAsync_FiltersBySupplierId()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId };
+        database.Context.Suppliers.Add(secondSupplier);
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 900m, "manual", "INV-1", "Счет первого поставщика"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(secondSupplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-2", "Счет второго поставщика"), null, CancellationToken.None)).Succeeded);
+
+        var page = await service.GetSupplierAccrualsPageAsync(new SupplierAccrualListRequest(null, null, null, 25, 0, fixtures.Supplier.Id), CancellationToken.None);
+
+        var accrual = Assert.Single(page.Items);
+        Assert.Equal(fixtures.Supplier.Id, accrual.SupplierId);
+        Assert.Equal("INV-1", accrual.DocumentNumber);
+        Assert.Equal(1, page.TotalCount);
     }
 
     [Fact]

@@ -14,9 +14,9 @@ public sealed class FinanceControllerTests
         var service = new FakeFinanceService();
         var controller = CreateController(service);
 
-        await controller.GetOperations(null, null, "income", "12", 50, CancellationToken.None);
+        await controller.GetOperations(null, null, "income", "12", 50, null, null, null, CancellationToken.None);
         await controller.GetAccruals(null, null, "12", 51, CancellationToken.None);
-        await controller.GetSupplierAccruals(null, null, "water", 52, CancellationToken.None);
+        await controller.GetSupplierAccruals(null, null, "water", 52, null, CancellationToken.None);
         await controller.GetMeterReadings(null, null, "electricity", "12", 53, CancellationToken.None);
         await controller.GetMissingMeterReadings(new DateOnly(2026, 6, 1), "water", "12", 54, CancellationToken.None);
 
@@ -27,6 +27,22 @@ public sealed class FinanceControllerTests
         Assert.Equal(54, service.LastMissingMeterReadingListRequest?.Limit);
         Assert.Equal(new DateOnly(2026, 6, 1), service.LastMissingMeterReadingListRequest?.AccountingMonth);
         Assert.Equal("water", service.LastMissingMeterReadingListRequest?.MeterKind);
+    }
+
+    [Fact]
+    public async Task ListEndpoints_PassCounterpartyFiltersToService()
+    {
+        var supplierId = Guid.NewGuid();
+        var staffMemberId = Guid.NewGuid();
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        await controller.GetOperationsPage(null, null, "expense", null, 0, 25, null, supplierId, staffMemberId, CancellationToken.None);
+        await controller.GetSupplierAccrualsPage(null, null, null, 0, 25, supplierId, CancellationToken.None);
+
+        Assert.Equal(supplierId, service.LastFinancialOperationListRequest?.SupplierId);
+        Assert.Equal(staffMemberId, service.LastFinancialOperationListRequest?.StaffMemberId);
+        Assert.Equal(supplierId, service.LastSupplierAccrualListRequest?.SupplierId);
     }
 
     [Fact]

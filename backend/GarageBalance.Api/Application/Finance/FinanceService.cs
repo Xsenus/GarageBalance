@@ -2369,6 +2369,16 @@ public sealed class FinanceService(
             query = query.Where(operation => operation.GarageId == request.GarageId);
         }
 
+        if (request.SupplierId is not null)
+        {
+            query = query.Where(operation => operation.SupplierId == request.SupplierId);
+        }
+
+        if (request.StaffMemberId is not null)
+        {
+            query = query.Where(operation => operation.StaffMemberId == request.StaffMemberId);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
@@ -2472,6 +2482,11 @@ public sealed class FinanceService(
                 accrual.ExpenseType.Name.ToLower().Contains(search) ||
                 (accrual.DocumentNumber != null && accrual.DocumentNumber.ToLower().Contains(search)) ||
                 (accrual.Comment != null && accrual.Comment.ToLower().Contains(search)));
+        }
+
+        if (request.SupplierId is not null)
+        {
+            query = query.Where(accrual => accrual.SupplierId == request.SupplierId);
         }
 
         return query;

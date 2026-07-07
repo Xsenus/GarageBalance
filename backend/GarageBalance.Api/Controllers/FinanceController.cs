@@ -19,9 +19,12 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] string? operationKind,
         [FromQuery] string? search,
         [FromQuery] int? limit,
+        [FromQuery] Guid? garageId,
+        [FromQuery] Guid? supplierId,
+        [FromQuery] Guid? staffMemberId,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetOperationsAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit), cancellationToken));
+        return Ok(await financeService.GetOperationsAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit, null, garageId, supplierId, staffMemberId), cancellationToken));
     }
 
     [HttpGet("operations/page")]
@@ -34,9 +37,11 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] int? offset,
         [FromQuery] int? limit,
         [FromQuery] Guid? garageId,
+        [FromQuery] Guid? supplierId,
+        [FromQuery] Guid? staffMemberId,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetOperationsPageAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit, offset, garageId), cancellationToken));
+        return Ok(await financeService.GetOperationsPageAsync(new FinancialOperationListRequest(dateFrom, dateTo, operationKind, search, limit, offset, garageId, supplierId, staffMemberId), cancellationToken));
     }
 
     [HttpGet("accruals")]
@@ -71,9 +76,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
         [FromQuery] int? limit,
+        [FromQuery] Guid? supplierId,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit), cancellationToken));
+        return Ok(await financeService.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit, null, supplierId), cancellationToken));
     }
 
     [HttpGet("supplier-accruals/page")]
@@ -84,9 +90,10 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         [FromQuery] string? search,
         [FromQuery] int? offset,
         [FromQuery] int? limit,
+        [FromQuery] Guid? supplierId,
         CancellationToken cancellationToken)
     {
-        return Ok(await financeService.GetSupplierAccrualsPageAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit, offset), cancellationToken));
+        return Ok(await financeService.GetSupplierAccrualsPageAsync(new SupplierAccrualListRequest(monthFrom, monthTo, search, limit, offset, supplierId), cancellationToken));
     }
 
     [HttpGet("meter-readings")]
