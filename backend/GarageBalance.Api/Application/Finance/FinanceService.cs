@@ -533,6 +533,7 @@ public sealed class FinanceService(
         var balanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Balance));
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
         var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
+        var bankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
         var cashAmount = MoneyMath.RoundMoney(collectedTotal - expenseTotal);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
@@ -542,7 +543,7 @@ public sealed class FinanceService(
             balanceTotal,
             collectedTotal,
             differenceTotal,
-            0m,
+            bankAmount,
             cashAmount,
             rows));
     }
@@ -692,6 +693,18 @@ public sealed class FinanceService(
         return MoneyMath.RoundMoney(Math.Max(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal - alreadyPaidOpeningDebt, 0m));
     }
 
+    private async Task<decimal> CalculateAvailableBankAmountAsync(CancellationToken cancellationToken)
+    {
+        var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
+            .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var expenseTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+
+        return MoneyMath.RoundMoney(Math.Max(bankDepositsTotal - expenseTotal, 0m));
+    }
+
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
@@ -712,12 +725,21 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
+        if (amount > availableBankAmount)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "bank_amount_insufficient",
+                $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+        }
+
         var operation = new FinancialOperation
         {
             OperationKind = FinancialOperationKinds.Expense,
             OperationDate = request.OperationDate,
             AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth),
-            Amount = MoneyMath.RoundMoney(request.Amount),
+            Amount = amount,
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
             SupplierId = supplier.Id,
@@ -768,6 +790,14 @@ public sealed class FinanceService(
         if (amount > availableAmount)
         {
             return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {availableAmount.ToString("0.00", RussianCulture)}.");
+        }
+
+        var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
+        if (amount > availableBankAmount)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "bank_amount_insufficient",
+                $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
         }
 
         var operation = new FinancialOperation
@@ -924,6 +954,14 @@ public sealed class FinanceService(
         if (ExpenseOperationMatches(operation, request.OperationDate, accountingMonth, amount, documentNumber, comment, supplier.Id, expenseType.Id))
         {
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+        }
+
+        var availableBankAmount = MoneyMath.RoundMoney(await CalculateAvailableBankAmountAsync(cancellationToken) + operation.Amount);
+        if (amount > availableBankAmount)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "bank_amount_insufficient",
+                $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
         }
 
         var previousSnapshot = FormatExpenseOperationSnapshot(operation);

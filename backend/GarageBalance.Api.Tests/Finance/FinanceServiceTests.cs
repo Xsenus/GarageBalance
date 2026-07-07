@@ -11,6 +11,8 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class FinanceServiceTests
 {
+    private const decimal SeededBankAmount = 1000000m;
+
     [Fact]
     public async Task CreateIncomeAsync_CreatesOperationAndWritesAudit()
     {
@@ -212,6 +214,36 @@ public sealed class FinanceServiceTests
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("Петрова Ольга", metadata.RootElement.GetProperty("staffMemberName").GetString());
         Assert.Equal("Бухгалтерия", metadata.RootElement.GetProperty("staffDepartmentName").GetString());
+    }
+
+    [Fact]
+    public async Task CreateStaffPaymentAsync_DoesNotCreateOperationWhenBankAmountIsInsufficient()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember { FullName = "Петрова Ольга", Department = department, Rate = 40000m };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
+        database.Context.AddRange(department, staffMember, salaryType);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(
+                staffMember.Id,
+                new DateOnly(2026, 6, 25),
+                new DateOnly(2026, 6, 1),
+                1m,
+                "PAY-no-bank",
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("bank_amount_insufficient", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.OperationKind == FinancialOperationKinds.Expense);
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]
@@ -915,6 +947,33 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_DoesNotCreateOperationWhenBankAmountIsInsufficient()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                1m,
+                "RKO-no-bank",
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("bank_amount_insufficient", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.OperationKind == FinancialOperationKinds.Expense);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsReplacementAfterCancel()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -992,6 +1051,47 @@ public sealed class FinanceServiceTests
         Assert.Contains("Документ", changedFields, StringComparison.Ordinal);
         Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
         Assert.Equal("4", metadata.RootElement.GetProperty("changesCount").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateExpenseAsync_DoesNotIncreasePaymentAboveAvailableBankAmount()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.Funds.RemoveRange(database.Context.Funds);
+        var bankFund = new Fund { Name = "Банк для проверки", NormalizedName = "БАНК ДЛЯ ПРОВЕРКИ", Balance = 300m };
+        database.Context.AddRange(bankFund, new FundOperation
+        {
+            Fund = bankFund,
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 300m,
+            BalanceBefore = 0m,
+            BalanceAfter = 300m,
+            Reason = "Сумма на банковском счете",
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+        });
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 250m, "RKO-bank-limit", null),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var updated = await service.UpdateExpenseAsync(
+            created.Value!.Id,
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 300.01m, "RKO-bank-limit-new", "Сверх банка"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(updated.Succeeded);
+        Assert.Equal("bank_amount_insufficient", updated.ErrorCode);
+        var stored = await database.Context.FinancialOperations.SingleAsync(operation => operation.Id == created.Value.Id);
+        Assert.Equal(250m, stored.Amount);
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]
@@ -2243,6 +2343,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(29000m, result.Value.CollectedTotal);
         Assert.Equal(-43000m, result.Value.DifferenceTotal);
         Assert.Equal(4000m, result.Value.CashAmount);
+        Assert.Equal(SeededBankAmount - 25000m, result.Value.BankAmount);
 
         var supplierRow = Assert.Single(result.Value.Rows, row => row.RowKind == "supplier");
         Assert.Equal(fixtures.Supplier.Id, supplierRow.SupplierId);
@@ -2297,8 +2398,19 @@ public sealed class FinanceServiceTests
             var supplier = new Supplier { Name = "Vodokanal", Group = group };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
+            var bankFund = new Fund { Name = "Тестовый банк", NormalizedName = "ТЕСТОВЫЙ БАНК", Balance = SeededBankAmount };
+            var bankDeposit = new FundOperation
+            {
+                Fund = bankFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = SeededBankAmount,
+                BalanceBefore = 0m,
+                BalanceAfter = SeededBankAmount,
+                Reason = "Тестовая сумма на банковском счете",
+                CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
 
-            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType);
+            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, bankFund, bankDeposit);
             await Context.SaveChangesAsync();
             return new Fixtures(garage, supplier, incomeType, expenseType);
         }

@@ -13,6 +13,8 @@ namespace GarageBalance.Api.Tests.Reports;
 
 public sealed class ReportServiceTests
 {
+    private const decimal SeededBankAmount = 1000000m;
+
     [Fact]
     public async Task GetConsolidatedReportAsync_ReturnsMonthlyTotalsAndGarageRows()
     {
@@ -1107,8 +1109,19 @@ public sealed class ReportServiceTests
             var supplier = new Supplier { Name = "Vodokanal", Group = group };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
+            var bankFund = new Fund { Name = "Тестовый банк", NormalizedName = "ТЕСТОВЫЙ БАНК", Balance = SeededBankAmount };
+            var bankDeposit = new FundOperation
+            {
+                Fund = bankFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = SeededBankAmount,
+                BalanceBefore = 0m,
+                BalanceAfter = SeededBankAmount,
+                Reason = "Тестовая сумма на банковском счете",
+                CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
 
-            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType);
+            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, bankFund, bankDeposit);
             await Context.SaveChangesAsync();
             return new Fixtures(firstGarage, secondGarage, supplier, incomeType, expenseType);
         }
