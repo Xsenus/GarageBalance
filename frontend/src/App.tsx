@@ -8332,6 +8332,8 @@ type ContractorOneTimeRow = {
 }
 
 type ContractorSection = 'garages' | 'suppliers' | 'staff'
+type ContractorSortDirection = 'asc' | 'desc'
+type ContractorSortableSection = ContractorSection
 
 type ContractorGarageRow = {
   id: string
@@ -8432,6 +8434,14 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 }
 
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
+type ContractorSupplierSortKey = 'name' | 'service' | 'contactPerson' | 'phone' | 'email' | 'debt'
+type ContractorStaffSortKey = 'fullName' | 'department' | 'rate'
+type ContractorSortKey = Exclude<ContractorGarageColumnKey, 'actions'> | ContractorSupplierSortKey | ContractorStaffSortKey
+type ContractorSortState = {
+  section: ContractorSortableSection
+  key: ContractorSortKey
+  direction: ContractorSortDirection
+}
 
 const contractorGarageColumnStorageKey = 'garagebalance.contractors.garageColumnWidths'
 const contractorsDictionaryListLimit = 500
@@ -8489,6 +8499,50 @@ function parsePrototypeMoney(value: string) {
   const normalized = value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function comparePrototypeText(left: string, right: string) {
+  return left.localeCompare(right, 'ru', { numeric: true, sensitivity: 'base' })
+}
+
+function applyContractorSortDirection(value: number, direction: ContractorSortDirection) {
+  return direction === 'asc' ? value : -value
+}
+
+function isContractorMoneyDebt(value: string) {
+  return parsePrototypeMoney(value) > 0
+}
+
+function compareContractorGarages(left: ContractorGarageRow, right: ContractorGarageRow, key: Exclude<ContractorGarageColumnKey, 'actions'>) {
+  if (key === 'peopleCount' || key === 'floorCount' || key === 'overdueDebt') {
+    return parsePrototypeMoney(left[key]) - parsePrototypeMoney(right[key])
+  }
+
+  return comparePrototypeText(left[key], right[key])
+}
+
+function compareContractorSuppliers(left: ContractorSupplierRow, right: ContractorSupplierRow, key: ContractorSupplierSortKey) {
+  if (key === 'debt') {
+    return parsePrototypeMoney(left.debt) - parsePrototypeMoney(right.debt)
+  }
+
+  if (key === 'contactPerson' || key === 'phone' || key === 'email') {
+    const leftContact = getSupplierPrimaryContact(left)
+    const rightContact = getSupplierPrimaryContact(right)
+    const leftValue = key === 'contactPerson' ? leftContact?.fullName ?? left.contactPerson : key === 'phone' ? leftContact?.phone ?? left.phone : leftContact?.email ?? left.email
+    const rightValue = key === 'contactPerson' ? rightContact?.fullName ?? right.contactPerson : key === 'phone' ? rightContact?.phone ?? right.phone : rightContact?.email ?? right.email
+    return comparePrototypeText(leftValue, rightValue)
+  }
+
+  return comparePrototypeText(left[key], right[key])
+}
+
+function compareContractorStaff(left: ContractorStaffRow, right: ContractorStaffRow, key: ContractorStaffSortKey) {
+  if (key === 'rate') {
+    return parsePrototypeMoney(left.rate) - parsePrototypeMoney(right.rate)
+  }
+
+  return comparePrototypeText(left[key], right[key])
 }
 
 function compareContractorReportEntries(
@@ -8857,6 +8911,7 @@ type ContractorsPrototypeSavedState = {
 function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
+  const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
   const [garages, setGarages] = useState<ContractorGarageRow[]>([])
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>([])
@@ -9510,11 +9565,76 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, serviceName]))
   }
 
-  const visibleGarages = showDebtorsOnly
-    ? garages.filter((garage) => !garage.isDeleted && garage.overdueDebt.trim())
+  const changeContractorSort = (section: ContractorSortableSection, key: ContractorSortKey) => {
+    setContractorSort((currentSort) => {
+      if (currentSort.section === section && currentSort.key === key) {
+        return {
+          ...currentSort,
+          direction: currentSort.direction === 'asc' ? 'desc' : 'asc',
+        }
+      }
+
+      return { section, key, direction: 'asc' }
+    })
+  }
+
+  const renderContractorSortHeader = (section: ContractorSortableSection, key: ContractorSortKey, label: string) => {
+    const isActiveSort = contractorSort.section === section && contractorSort.key === key
+    const indicator = isActiveSort ? (contractorSort.direction === 'asc' ? '↑' : '↓') : ''
+
+    return (
+      <button
+        className="ghost-button contractors-sort-button"
+        type="button"
+        title={`Сортировать: ${label}`}
+        aria-pressed={isActiveSort}
+        onClick={() => changeContractorSort(section, key)}
+      >
+        <span>{label}</span>
+        <span className="contractors-sort-indicator" aria-hidden="true">{indicator}</span>
+      </button>
+    )
+  }
+
+  const filteredGarages = showDebtorsOnly
+    ? garages.filter((garage) => !garage.isDeleted && isContractorMoneyDebt(garage.overdueDebt))
     : garages
-  const visibleSuppliers = suppliers
-  const visibleStaff = staff
+  const filteredSuppliers = showDebtorsOnly
+    ? suppliers.filter((supplier) => !supplier.isDeleted && isContractorMoneyDebt(supplier.debt))
+    : suppliers
+
+  const visibleGarages = useMemo(() => {
+    const rows = [...filteredGarages]
+    if (contractorSort.section !== 'garages') {
+      return rows
+    }
+
+    const sortKey = contractorSort.key as Exclude<ContractorGarageColumnKey, 'actions'>
+    return rows.sort((left, right) => applyContractorSortDirection(compareContractorGarages(left, right, sortKey), contractorSort.direction))
+  }, [filteredGarages, contractorSort])
+
+  const visibleSuppliers = useMemo(() => {
+    const rows = [...filteredSuppliers]
+    if (contractorSort.section !== 'suppliers') {
+      return rows
+    }
+
+    const sortKey = contractorSort.key as ContractorSupplierSortKey
+    return rows.sort((left, right) => applyContractorSortDirection(compareContractorSuppliers(left, right, sortKey), contractorSort.direction))
+  }, [filteredSuppliers, contractorSort])
+
+  const visibleStaff = useMemo(() => {
+    const rows = [...staff]
+    if (contractorSort.section !== 'staff') {
+      return rows
+    }
+
+    const sortKey = contractorSort.key as ContractorStaffSortKey
+    return rows.sort((left, right) => applyContractorSortDirection(compareContractorStaff(left, right, sortKey), contractorSort.direction))
+  }, [staff, contractorSort])
+  const debtorsButtonLabel = activeSection === 'suppliers'
+    ? showDebtorsOnly ? 'Показать всех поставщиков' : 'Показать должников'
+    : showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
   const contractorFinancialReportTitle = contractorFinancialReportTarget?.type === 'supplier'
     ? contractorFinancialReportTarget.row.name || 'Поставщик без названия'
     : contractorFinancialReportTarget?.row.fullName || 'Сотрудник без ФИО'
@@ -9533,12 +9653,13 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
         <div className="contractors-actions">
           {activeSection === 'garages' ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => setShowDebtorsOnly((value) => !value)}>{showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'}</button>
+              <button className="secondary-button" type="button" onClick={() => setShowDebtorsOnly((value) => !value)}>{debtorsButtonLabel}</button>
               <button className="secondary-button" type="button" onClick={() => setModal({ type: 'garage' })}>Добавить гараж</button>
             </>
           ) : null}
           {activeSection === 'suppliers' ? (
             <>
+              <button className="secondary-button" type="button" onClick={() => setShowDebtorsOnly((value) => !value)}>{debtorsButtonLabel}</button>
               <button className="secondary-button" type="button" onClick={() => setModal({ type: 'supplier' })}>Добавить поставщика</button>
               <button className="secondary-button" type="button" onClick={() => setModal({ type: 'service' })}>Добавить услугу</button>
             </>
@@ -9567,7 +9688,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorGarageColumnDefinitions.map((column) => (
                 <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
-                  <span>{column.label}</span>
+                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('garages', column.key, column.label)}
                   {column.key !== 'actions' ? (
                     <button
                       className="icon-button contractors-column-resizer"
@@ -9618,12 +9739,12 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
         <section className="contractors-directory-card" aria-label="Поставщики">
           <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики">
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">Поставщик</span>
-              <span role="columnheader">Услуга</span>
-              <span role="columnheader">Контактное лицо</span>
-              <span role="columnheader">Телефон</span>
-              <span role="columnheader">Почта</span>
-              <span role="columnheader">Задолженность</span>
+              <span role="columnheader">{renderContractorSortHeader('suppliers', 'name', 'Поставщик')}</span>
+              <span role="columnheader">{renderContractorSortHeader('suppliers', 'service', 'Услуга')}</span>
+              <span role="columnheader">{renderContractorSortHeader('suppliers', 'contactPerson', 'Контактное лицо')}</span>
+              <span role="columnheader">{renderContractorSortHeader('suppliers', 'phone', 'Телефон')}</span>
+              <span role="columnheader">{renderContractorSortHeader('suppliers', 'email', 'Почта')}</span>
+              <span role="columnheader">{renderContractorSortHeader('suppliers', 'debt', 'Задолженность')}</span>
               <span role="columnheader">Действия</span>
             </div>
             {visibleSuppliers.map((row) => {
@@ -9668,9 +9789,9 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
         <section className="contractors-directory-card" aria-label="Персонал">
           <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал">
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">ФИО</span>
-              <span role="columnheader">Отдел</span>
-              <span role="columnheader">Ставка</span>
+              <span role="columnheader">{renderContractorSortHeader('staff', 'fullName', 'ФИО')}</span>
+              <span role="columnheader">{renderContractorSortHeader('staff', 'department', 'Отдел')}</span>
+              <span role="columnheader">{renderContractorSortHeader('staff', 'rate', 'Ставка')}</span>
               <span role="columnheader">Действия</span>
             </div>
             {visibleStaff.map((row) => (

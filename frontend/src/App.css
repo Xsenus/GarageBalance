@@ -1037,6 +1037,49 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.contractors-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.contractors-sort-button:hover,
+.contractors-sort-button[aria-pressed='true'] {
+  color: #155eef;
+}
+
+.contractors-sort-button:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.22);
+  outline-offset: 2px;
+}
+
+.contractors-sort-button > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.contractors-sort-indicator {
+  width: 12px;
+  flex: 0 0 12px;
+  color: #155eef;
+  font-size: 12px;
+  line-height: 1;
+}
+
 .contractors-column-resizer {
   position: absolute;
   top: 0;

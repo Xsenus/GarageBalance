@@ -991,6 +991,62 @@ describe('App', () => {
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }))
   }, 30000)
 
+  it('filters contractor debtors and sorts visible contractor rows', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const firstOwner = createOwner({ id: 'owner-garage-1', lastName: 'Иванов', firstName: 'Иван' })
+    const secondOwner = createOwner({ id: 'owner-garage-12', lastName: 'Петров', firstName: 'Петр' })
+    const thirdOwner = createOwner({ id: 'owner-garage-27', lastName: 'Сидорова', firstName: 'Анна' })
+    const supplierGroup = createGroup({ id: 'supplier-group-services', name: 'Услуги' })
+    const suppliers = [
+      createSupplier({ id: 'supplier-energy', name: 'Энергосбыт', groupId: supplierGroup.id, groupName: 'Электроэнергия', startingBalance: 39000 }),
+      createSupplier({ id: 'supplier-legal', name: 'Правовой центр', groupId: supplierGroup.id, groupName: 'Юридические услуги', startingBalance: 0 }),
+      createSupplier({ id: 'supplier-waste', name: 'ЭкоВывоз', groupId: supplierGroup.id, groupName: 'Вывоз мусора', startingBalance: 15000 }),
+    ]
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [firstOwner, secondOwner, thirdOwner],
+      getGarages: async () => [
+        createGarage({ id: 'garage-1', number: '1', ownerId: firstOwner.id, ownerName: firstOwner.fullName, peopleCount: 3, floorCount: 1, overdueDebt: 1300 }),
+        createGarage({ id: 'garage-12', number: '12', ownerId: secondOwner.id, ownerName: secondOwner.fullName, peopleCount: 1, floorCount: 2, overdueDebt: 0 }),
+        createGarage({ id: 'garage-27', number: '27', ownerId: thirdOwner.id, ownerName: thirdOwner.fullName, peopleCount: 2, floorCount: 1, overdueDebt: 1700 }),
+      ],
+      getSupplierGroups: async () => [supplierGroup],
+      getSuppliers: async () => suppliers,
+      getSupplierContacts: async () => [],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Показать должников' }))
+    const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
+    expect(within(garagesTable).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(within(garagesTable).getByText('Сидорова Анна')).toBeInTheDocument()
+    expect(within(garagesTable).queryByText('Петров Петр')).not.toBeInTheDocument()
+
+    await user.click(within(garagesTable).getByRole('button', { name: 'Просроченная задолженность' }))
+    await user.click(within(garagesTable).getByRole('button', { name: 'Просроченная задолженность' }))
+    const sortedGarageRows = within(garagesTable).getAllByRole('row').slice(1)
+    expect(within(sortedGarageRows[0]).getAllByRole('cell')[0]).toHaveTextContent('27')
+    expect(within(sortedGarageRows[1]).getAllByRole('cell')[0]).toHaveTextContent('1')
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    expect(within(contractorsPanel).getByRole('button', { name: 'Показать всех поставщиков' })).toBeInTheDocument()
+    expect(within(suppliersTable).getByText('Энергосбыт')).toBeInTheDocument()
+    expect(within(suppliersTable).getByText('ЭкоВывоз')).toBeInTheDocument()
+    expect(within(suppliersTable).queryByText('Правовой центр')).not.toBeInTheDocument()
+
+    await user.click(within(suppliersTable).getByRole('button', { name: 'Задолженность' }))
+    await user.click(within(suppliersTable).getByRole('button', { name: 'Задолженность' }))
+    const sortedSupplierRows = within(suppliersTable).getAllByRole('row').slice(1)
+    expect(within(sortedSupplierRows[0]).getByText('Энергосбыт')).toBeInTheDocument()
+    expect(within(sortedSupplierRows[1]).getByText('ЭкоВывоз')).toBeInTheDocument()
+  }, 30000)
+
   it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
     const user = userEvent.setup()
     let updatedTariffRequest: UpsertTariffRequest | null = null
