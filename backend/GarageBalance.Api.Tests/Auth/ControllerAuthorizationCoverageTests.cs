@@ -64,6 +64,11 @@ public sealed class ControllerAuthorizationCoverageTests
     [InlineData(nameof(DictionariesController.UpdateChargeServiceSetting))]
     [InlineData(nameof(DictionariesController.ArchiveChargeServiceSetting))]
     [InlineData(nameof(DictionariesController.RestoreChargeServiceSetting))]
+    [InlineData(nameof(DictionariesController.CreateIrregularPayment))]
+    [InlineData(nameof(DictionariesController.UpdateIrregularPayment))]
+    [InlineData(nameof(DictionariesController.SetIrregularPaymentStatus))]
+    [InlineData(nameof(DictionariesController.ArchiveIrregularPayment))]
+    [InlineData(nameof(DictionariesController.RestoreIrregularPayment))]
     public void TariffWriteActionsRequireTariffManagementPermission(string actionName)
     {
         var action = typeof(DictionariesController).GetMethod(actionName);
