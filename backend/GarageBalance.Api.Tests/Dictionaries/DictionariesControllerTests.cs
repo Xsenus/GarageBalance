@@ -122,6 +122,68 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateIrregularPayment_ReturnsCreatedAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Success(new IrregularPaymentDto(paymentId, "Gate repair", 500m, true, false, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateIrregularPayment(new UpsertIrregularPaymentRequest("Gate repair", 500m), CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var payment = Assert.IsType<IrregularPaymentDto>(created.Value);
+        Assert.Equal(paymentId, payment.Id);
+        Assert.Equal(nameof(DictionariesController.GetIrregularPayments), created.ActionName);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateIrregularPayment_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Success(new IrregularPaymentDto(paymentId, "Gate repair", 700m, true, false, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateIrregularPayment(paymentId, new UpsertIrregularPaymentRequest("Gate repair", 700m), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payment = Assert.IsType<IrregularPaymentDto>(ok.Value);
+        Assert.Equal(paymentId, payment.Id);
+        Assert.Equal(700m, payment.Amount);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(paymentId, service.LastIrregularPaymentId);
+    }
+
+    [Fact]
+    public async Task SetIrregularPaymentStatus_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            SetIrregularPaymentStatusResult = DictionaryResult<IrregularPaymentDto>.Success(new IrregularPaymentDto(paymentId, "Gate repair", 500m, false, false, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.SetIrregularPaymentStatus(paymentId, new UpdateIrregularPaymentStatusRequest(false, "Temporarily disabled"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payment = Assert.IsType<IrregularPaymentDto>(ok.Value);
+        Assert.Equal(paymentId, payment.Id);
+        Assert.False(payment.IsActive);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(paymentId, service.LastIrregularPaymentId);
+    }
+
+    [Fact]
     public async Task CreateOwner_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -666,6 +728,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
+        public Guid? LastIrregularPaymentId { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -690,6 +753,9 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<ChargeServiceSettingDto> UpdateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> ArchiveChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> RestoreChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<IrregularPaymentDto> CreateIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<IrregularPaymentDto> UpdateIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<IrregularPaymentDto> SetIrregularPaymentStatusResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> ArchiveIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> RestoreIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
 
@@ -1074,19 +1140,21 @@ public sealed class DictionariesControllerTests
         public Task<DictionaryResult<IrregularPaymentDto>> CreateIrregularPaymentAsync(UpsertIrregularPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
-            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+            return Task.FromResult(CreateIrregularPaymentResult);
         }
 
         public Task<DictionaryResult<IrregularPaymentDto>> UpdateIrregularPaymentAsync(Guid id, UpsertIrregularPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastIrregularPaymentId = id;
             LastActorUserId = actorUserId;
-            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+            return Task.FromResult(UpdateIrregularPaymentResult);
         }
 
         public Task<DictionaryResult<IrregularPaymentDto>> SetIrregularPaymentStatusAsync(Guid id, UpdateIrregularPaymentStatusRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastIrregularPaymentId = id;
             LastActorUserId = actorUserId;
-            return Task.FromResult(DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured."));
+            return Task.FromResult(SetIrregularPaymentStatusResult);
         }
 
         public Task<DictionaryResult<IrregularPaymentDto>> ArchiveIrregularPaymentAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
