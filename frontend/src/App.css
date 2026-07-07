@@ -997,13 +997,13 @@ h1 {
 }
 
 .contractors-directory-table--suppliers .contractors-directory-row {
-  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(130px, 0.8fr) 132px;
-  min-width: 1060px;
+  grid-template-columns: var(--supplier-col-name, 180px) var(--supplier-col-service, 190px) var(--supplier-col-contactPerson, 190px) var(--supplier-col-phone, 160px) var(--supplier-col-email, 180px) var(--supplier-col-debt, 150px) var(--supplier-col-actions, 132px);
+  min-width: max-content;
 }
 
 .contractors-directory-table--staff .contractors-directory-row {
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(120px, 0.5fr) 132px;
-  min-width: 660px;
+  grid-template-columns: var(--staff-col-fullName, 260px) var(--staff-col-department, 220px) var(--staff-col-rate, 150px) var(--staff-col-actions, 132px);
+  min-width: max-content;
 }
 
 .contractors-directory-row--header {

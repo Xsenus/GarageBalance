@@ -768,6 +768,12 @@ describe('App', () => {
     expect(addSupplierButton).toHaveFocus()
 
     const suppliersTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
+    const supplierResizeHandle = within(suppliersTable).getByRole('button', { name: 'Изменить ширину столбца Поставщик' })
+    fireEvent.mouseDown(supplierResizeHandle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 135 })
+    fireEvent.mouseUp(document)
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.supplierColumnWidths') ?? '{}').name).toBe(215))
+
     let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     expect(within(supplierRow as HTMLElement).getByText('Смирнов С.С.')).toBeInTheDocument()
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
@@ -839,6 +845,12 @@ describe('App', () => {
     expect(addEmployeeButton).toHaveFocus()
 
     const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
+    const staffResizeHandle = within(staffTable).getByRole('button', { name: 'Изменить ширину столбца Ставка' })
+    fireEvent.mouseDown(staffResizeHandle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 130 })
+    fireEvent.mouseUp(document)
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.staffColumnWidths') ?? '{}').rate).toBe(180))
+
     const employeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
     expect(within(employeeRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Смирнов Алексей' })).toBeInTheDocument()
     await user.click(within(employeeRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Смирнов Алексей' }))

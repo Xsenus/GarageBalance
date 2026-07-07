@@ -8436,18 +8436,23 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
 type ContractorSupplierSortKey = 'name' | 'service' | 'contactPerson' | 'phone' | 'email' | 'debt'
 type ContractorStaffSortKey = 'fullName' | 'department' | 'rate'
+type ContractorSupplierColumnKey = ContractorSupplierSortKey | 'actions'
+type ContractorStaffColumnKey = ContractorStaffSortKey | 'actions'
 type ContractorSortKey = Exclude<ContractorGarageColumnKey, 'actions'> | ContractorSupplierSortKey | ContractorStaffSortKey
 type ContractorSortState = {
   section: ContractorSortableSection
   key: ContractorSortKey
   direction: ContractorSortDirection
 }
+type ContractorColumnDefinition<TKey extends string> = { key: TKey; label: string; defaultWidth: number; minWidth: number }
 
 const contractorGarageColumnStorageKey = 'garagebalance.contractors.garageColumnWidths'
+const contractorSupplierColumnStorageKey = 'garagebalance.contractors.supplierColumnWidths'
+const contractorStaffColumnStorageKey = 'garagebalance.contractors.staffColumnWidths'
 const contractorsDictionaryListLimit = 500
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const contractorGarageColumnDefinitions: Array<{ key: ContractorGarageColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
+const contractorGarageColumnDefinitions: Array<ContractorColumnDefinition<ContractorGarageColumnKey>> = [
   { key: 'number', label: 'Номер', defaultWidth: 96, minWidth: 72 },
   { key: 'peopleCount', label: 'Количество человек', defaultWidth: 170, minWidth: 132 },
   { key: 'floorCount', label: 'Количество этажей', defaultWidth: 170, minWidth: 132 },
@@ -8457,11 +8462,28 @@ const contractorGarageColumnDefinitions: Array<{ key: ContractorGarageColumnKey;
   { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
 ]
 
-function getDefaultGarageColumnWidths() {
-  return contractorGarageColumnDefinitions.reduce<Record<ContractorGarageColumnKey, number>>((widths, column) => {
+const contractorSupplierColumnDefinitions: Array<ContractorColumnDefinition<ContractorSupplierColumnKey>> = [
+  { key: 'name', label: 'Поставщик', defaultWidth: 180, minWidth: 140 },
+  { key: 'service', label: 'Услуга', defaultWidth: 190, minWidth: 140 },
+  { key: 'contactPerson', label: 'Контактное лицо', defaultWidth: 190, minWidth: 150 },
+  { key: 'phone', label: 'Телефон', defaultWidth: 160, minWidth: 130 },
+  { key: 'email', label: 'Почта', defaultWidth: 180, minWidth: 140 },
+  { key: 'debt', label: 'Задолженность', defaultWidth: 150, minWidth: 130 },
+  { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
+]
+
+const contractorStaffColumnDefinitions: Array<ContractorColumnDefinition<ContractorStaffColumnKey>> = [
+  { key: 'fullName', label: 'ФИО', defaultWidth: 260, minWidth: 180 },
+  { key: 'department', label: 'Отдел', defaultWidth: 220, minWidth: 160 },
+  { key: 'rate', label: 'Ставка', defaultWidth: 150, minWidth: 120 },
+  { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
+]
+
+function getDefaultContractorColumnWidths<TKey extends string>(definitions: Array<ContractorColumnDefinition<TKey>>) {
+  return definitions.reduce<Record<TKey, number>>((widths, column) => {
     widths[column.key] = column.defaultWidth
     return widths
-  }, {} as Record<ContractorGarageColumnKey, number>)
+  }, {} as Record<TKey, number>)
 }
 
 function getSupplierServiceOptions(services: string[]) {
@@ -8860,32 +8882,65 @@ function formatSupplierContactSummary(contacts: ContractorSupplierContact[]) {
     .join('; ')
 }
 
-function loadGarageColumnWidths() {
-  const defaults = getDefaultGarageColumnWidths()
+function loadContractorColumnWidths<TKey extends string>(storageKey: string, definitions: Array<ContractorColumnDefinition<TKey>>) {
+  const defaults = getDefaultContractorColumnWidths(definitions)
 
   try {
-    const rawValue = window.localStorage.getItem(contractorGarageColumnStorageKey)
+    const rawValue = window.localStorage.getItem(storageKey)
     if (!rawValue) {
       return defaults
     }
 
-    const parsed = JSON.parse(rawValue) as Partial<Record<ContractorGarageColumnKey, number>>
-    return contractorGarageColumnDefinitions.reduce<Record<ContractorGarageColumnKey, number>>((widths, column) => {
+    const parsed = JSON.parse(rawValue) as Partial<Record<TKey, number>>
+    return definitions.reduce<Record<TKey, number>>((widths, column) => {
       const value = parsed[column.key]
       widths[column.key] = typeof value === 'number' && Number.isFinite(value) ? Math.max(column.minWidth, value) : defaults[column.key]
       return widths
-    }, {} as Record<ContractorGarageColumnKey, number>)
+    }, {} as Record<TKey, number>)
   } catch {
     return defaults
   }
 }
 
-function saveGarageColumnWidths(widths: Record<ContractorGarageColumnKey, number>) {
+function saveContractorColumnWidths<TKey extends string>(storageKey: string, widths: Record<TKey, number>) {
   try {
-    window.localStorage.setItem(contractorGarageColumnStorageKey, JSON.stringify(widths))
+    window.localStorage.setItem(storageKey, JSON.stringify(widths))
   } catch {
     // Column widths are a UI preference; the table must work if localStorage is unavailable.
   }
+}
+
+function loadGarageColumnWidths() {
+  return loadContractorColumnWidths(contractorGarageColumnStorageKey, contractorGarageColumnDefinitions)
+}
+
+function startContractorColumnResize<TKey extends string>(
+  definitions: Array<ContractorColumnDefinition<TKey>>,
+  widths: Record<TKey, number>,
+  setWidths: (updater: (currentWidths: Record<TKey, number>) => Record<TKey, number>) => void,
+  columnKey: TKey,
+  event: MouseEvent<HTMLButtonElement>,
+) {
+  event.preventDefault()
+  event.stopPropagation()
+  const column = definitions.find((item) => item.key === columnKey)
+  if (!column) {
+    return
+  }
+
+  const startX = event.clientX
+  const startWidth = widths[columnKey]
+  const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+    const nextWidth = Math.max(column.minWidth, startWidth + moveEvent.clientX - startX)
+    setWidths((currentWidths) => ({ ...currentWidths, [columnKey]: nextWidth }))
+  }
+  const handleMouseUp = () => {
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', handleMouseUp)
+  }
+
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
 }
 
 function getContractorRestoreTitle(target: ContractorRestoreTarget) {
@@ -8924,6 +8979,8 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
   const [garageColumnWidths, setGarageColumnWidths] = useState(loadGarageColumnWidths)
+  const [supplierColumnWidths, setSupplierColumnWidths] = useState(() => loadContractorColumnWidths(contractorSupplierColumnStorageKey, contractorSupplierColumnDefinitions))
+  const [staffColumnWidths, setStaffColumnWidths] = useState(() => loadContractorColumnWidths(contractorStaffColumnStorageKey, contractorStaffColumnDefinitions))
   const [garageContextMenu, setGarageContextMenu] = useState<{ row: ContractorGarageRow; x: number; y: number } | null>(null)
   const [garageDeleteTarget, setGarageDeleteTarget] = useState<ContractorGarageRow | null>(null)
   const [garageDeleteReason, setGarageDeleteReason] = useState('')
@@ -9051,8 +9108,16 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   }, [auth.accessToken, departments, formStateClient, formStateLoaded, garages, staff, supplierServices, suppliers])
 
   useEffect(() => {
-    saveGarageColumnWidths(garageColumnWidths)
+    saveContractorColumnWidths(contractorGarageColumnStorageKey, garageColumnWidths)
   }, [garageColumnWidths])
+
+  useEffect(() => {
+    saveContractorColumnWidths(contractorSupplierColumnStorageKey, supplierColumnWidths)
+  }, [supplierColumnWidths])
+
+  useEffect(() => {
+    saveContractorColumnWidths(contractorStaffColumnStorageKey, staffColumnWidths)
+  }, [staffColumnWidths])
 
   const garageTableStyle = useMemo(() => {
     return contractorGarageColumnDefinitions.reduce<CSSProperties>((style, column) => {
@@ -9060,27 +9125,28 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     }, {})
   }, [garageColumnWidths])
 
+  const supplierTableStyle = useMemo(() => {
+    return contractorSupplierColumnDefinitions.reduce<CSSProperties>((style, column) => {
+      return { ...style, [`--supplier-col-${column.key}`]: `${supplierColumnWidths[column.key]}px` }
+    }, {})
+  }, [supplierColumnWidths])
+
+  const staffTableStyle = useMemo(() => {
+    return contractorStaffColumnDefinitions.reduce<CSSProperties>((style, column) => {
+      return { ...style, [`--staff-col-${column.key}`]: `${staffColumnWidths[column.key]}px` }
+    }, {})
+  }, [staffColumnWidths])
+
   const resizeGarageColumn = (columnKey: ContractorGarageColumnKey, event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const column = contractorGarageColumnDefinitions.find((item) => item.key === columnKey)
-    if (!column) {
-      return
-    }
+    startContractorColumnResize(contractorGarageColumnDefinitions, garageColumnWidths, setGarageColumnWidths, columnKey, event)
+  }
 
-    const startX = event.clientX
-    const startWidth = garageColumnWidths[columnKey]
-    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const nextWidth = Math.max(column.minWidth, startWidth + moveEvent.clientX - startX)
-      setGarageColumnWidths((currentWidths) => ({ ...currentWidths, [columnKey]: nextWidth }))
-    }
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
+  const resizeSupplierColumn = (columnKey: ContractorSupplierColumnKey, event: MouseEvent<HTMLButtonElement>) => {
+    startContractorColumnResize(contractorSupplierColumnDefinitions, supplierColumnWidths, setSupplierColumnWidths, columnKey, event)
+  }
 
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+  const resizeStaffColumn = (columnKey: ContractorStaffColumnKey, event: MouseEvent<HTMLButtonElement>) => {
+    startContractorColumnResize(contractorStaffColumnDefinitions, staffColumnWidths, setStaffColumnWidths, columnKey, event)
   }
 
   const saveGarage = async (garage: ContractorGarageRow) => {
@@ -9737,15 +9803,21 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
 
       {activeSection === 'suppliers' ? (
         <section className="contractors-directory-card" aria-label="Поставщики">
-          <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики">
+          <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики" style={supplierTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">{renderContractorSortHeader('suppliers', 'name', 'Поставщик')}</span>
-              <span role="columnheader">{renderContractorSortHeader('suppliers', 'service', 'Услуга')}</span>
-              <span role="columnheader">{renderContractorSortHeader('suppliers', 'contactPerson', 'Контактное лицо')}</span>
-              <span role="columnheader">{renderContractorSortHeader('suppliers', 'phone', 'Телефон')}</span>
-              <span role="columnheader">{renderContractorSortHeader('suppliers', 'email', 'Почта')}</span>
-              <span role="columnheader">{renderContractorSortHeader('suppliers', 'debt', 'Задолженность')}</span>
-              <span role="columnheader">Действия</span>
+              {contractorSupplierColumnDefinitions.map((column) => (
+                <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('suppliers', column.key, column.label)}
+                  {column.key !== 'actions' ? (
+                    <button
+                      className="icon-button contractors-column-resizer"
+                      type="button"
+                      aria-label={`Изменить ширину столбца ${column.label}`}
+                      onMouseDown={(event) => resizeSupplierColumn(column.key, event)}
+                    />
+                  ) : null}
+                </span>
+              ))}
             </div>
             {visibleSuppliers.map((row) => {
               const primaryContact = getSupplierPrimaryContact(row)
@@ -9787,12 +9859,21 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
 
       {activeSection === 'staff' ? (
         <section className="contractors-directory-card" aria-label="Персонал">
-          <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал">
+          <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              <span role="columnheader">{renderContractorSortHeader('staff', 'fullName', 'ФИО')}</span>
-              <span role="columnheader">{renderContractorSortHeader('staff', 'department', 'Отдел')}</span>
-              <span role="columnheader">{renderContractorSortHeader('staff', 'rate', 'Ставка')}</span>
-              <span role="columnheader">Действия</span>
+              {contractorStaffColumnDefinitions.map((column) => (
+                <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('staff', column.key, column.label)}
+                  {column.key !== 'actions' ? (
+                    <button
+                      className="icon-button contractors-column-resizer"
+                      type="button"
+                      aria-label={`Изменить ширину столбца ${column.label}`}
+                      onMouseDown={(event) => resizeStaffColumn(column.key, event)}
+                    />
+                  ) : null}
+                </span>
+              ))}
             </div>
             {visibleStaff.map((row) => (
               <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
