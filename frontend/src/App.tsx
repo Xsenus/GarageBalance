@@ -467,7 +467,7 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} />
+          <ContractorsPrototypePanel auth={auth} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -8964,7 +8964,7 @@ type ContractorsPrototypeSavedState = {
   supplierServices: string[]
 }
 
-function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
+function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; auditClient: AuditClient; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
@@ -8995,6 +8995,9 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   const [contractorFinancialReportFilters, setContractorFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
   const [contractorFinancialReportLoading, setContractorFinancialReportLoading] = useState(false)
   const [contractorFinancialReportError, setContractorFinancialReportError] = useState<string | null>(null)
+  const [contractorHistoryEvents, setContractorHistoryEvents] = useState<AuditEventDto[]>([])
+  const [contractorHistoryLoading, setContractorHistoryLoading] = useState(false)
+  const [contractorHistoryError, setContractorHistoryError] = useState<string | null>(null)
   const [supplierContextMenu, setSupplierContextMenu] = useState<{ row: ContractorSupplierRow; x: number; y: number } | null>(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState<ContractorSupplierRow | null>(null)
   const [supplierDeleteReason, setSupplierDeleteReason] = useState('')
@@ -9137,6 +9140,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
       return { ...style, [`--staff-col-${column.key}`]: `${staffColumnWidths[column.key]}px` }
     }, {})
   }, [staffColumnWidths])
+  const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
 
   const resizeGarageColumn = (columnKey: ContractorGarageColumnKey, event: MouseEvent<HTMLButtonElement>) => {
     startContractorColumnResize(contractorGarageColumnDefinitions, garageColumnWidths, setGarageColumnWidths, columnKey, event)
@@ -9343,6 +9347,40 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     }
   }
 
+  async function loadContractorHistory(target = contractorFinancialReportTarget) {
+    if (!target) {
+      return
+    }
+
+    if (!isBackendDictionaryId(target.row.id)) {
+      setContractorHistoryEvents([])
+      setContractorHistoryError(null)
+      return
+    }
+
+    if (!canReadContractorHistory) {
+      setContractorHistoryEvents([])
+      setContractorHistoryError(null)
+      return
+    }
+
+    setContractorHistoryLoading(true)
+    setContractorHistoryError(null)
+
+    try {
+      const events = await auditClient.getEvents(auth.accessToken, {
+        relatedCounterparty: target.row.id,
+        limit: 5,
+      })
+      setContractorHistoryEvents(events)
+    } catch (error) {
+      setContractorHistoryEvents([])
+      setContractorHistoryError(error instanceof Error ? error.message : 'Не удалось загрузить историю изменений контрагента.')
+    } finally {
+      setContractorHistoryLoading(false)
+    }
+  }
+
   function openContractorFinancialReport(target: ContractorFinancialReportTarget) {
     setSupplierContextMenu(null)
     setEmployeeContextMenu(null)
@@ -9352,7 +9390,10 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     setContractorFinancialReportFilters(filters)
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)
+    setContractorHistoryEvents([])
+    setContractorHistoryError(null)
     void loadContractorFinancialReport(target, filters)
+    void loadContractorHistory(target)
   }
 
   function closeContractorFinancialReport() {
@@ -9360,6 +9401,9 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)
     setContractorFinancialReportLoading(false)
+    setContractorHistoryEvents([])
+    setContractorHistoryError(null)
+    setContractorHistoryLoading(false)
   }
 
   const saveSupplier = async (supplier: ContractorSupplierRow) => {
@@ -10198,6 +10242,35 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
                   </table>
                   {contractorFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
                 </div>
+                <section className="contractor-history-section" aria-label="История изменений контрагента">
+                  <h4>История изменений</h4>
+                  {!canReadContractorHistory ? <p className="empty-state" role="status" aria-live="polite">История изменений доступна пользователям с правом просмотра audit-событий.</p> : null}
+                  {contractorHistoryLoading ? <p className="prototype-status" role="status">Загружаем историю изменений...</p> : null}
+                  {contractorHistoryError ? <FormError>{contractorHistoryError}</FormError> : null}
+                  {canReadContractorHistory && !contractorHistoryLoading && !contractorHistoryError ? (
+                    <div className="dictionary-table-scroll">
+                      <table className="dictionary-data-table" aria-label="История изменений контрагента">
+                        <thead>
+                          <tr>
+                            <th>Дата</th>
+                            <th>Действие</th>
+                            <th>Причина</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {contractorHistoryEvents.map((event) => (
+                            <tr key={event.id}>
+                              <td>{formatDateTime(event.createdAtUtc)}</td>
+                              <td>{event.summary}</td>
+                              <td>{event.reason || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {contractorHistoryEvents.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Истории изменений по контрагенту пока нет</p> : null}
+                    </div>
+                  ) : null}
+                </section>
               </>
             ) : null}
           </section>

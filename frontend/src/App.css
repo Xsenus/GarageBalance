@@ -2705,6 +2705,19 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.contractor-history-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.contractor-history-section h4 {
+  margin: 0;
+  color: #101828;
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .finance-workbench {
   display: grid;
   gap: 12px;

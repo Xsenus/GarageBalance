@@ -976,8 +976,20 @@ describe('App', () => {
       getStaffDepartments: async () => [department],
       getStaffMembers: async () => [staffMember],
     })
+    const getEvents = vi.fn(async (_token: string, params?: Parameters<AuditClient['getEvents']>[1]) => [
+      createAuditEvent({
+        id: `audit-${params?.relatedCounterparty ?? 'none'}`,
+        action: 'dictionary.supplier_updated',
+        entityType: params?.relatedCounterparty === staffMemberId ? 'staff_member' : 'supplier',
+        relatedCounterpartyId: params?.relatedCounterparty ?? null,
+        relatedCounterpartyName: params?.relatedCounterparty === staffMemberId ? staffMember.fullName : supplier.name,
+        summary: params?.relatedCounterparty === staffMemberId ? 'Изменена ставка сотрудника.' : 'Изменен контакт поставщика.',
+        reason: 'Проверка карточки',
+      }),
+    ])
+    const auditClient = createAuditClient({ getEvents })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -990,8 +1002,12 @@ describe('App', () => {
     expect(within(supplierReport).getByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
     expect(within(supplierReport).getByText('INV-1')).toBeInTheDocument()
     expect(within(supplierReport).getByText('RKO-1')).toBeInTheDocument()
+    expect(await within(supplierReport).findByRole('table', { name: 'История изменений контрагента' })).toBeInTheDocument()
+    expect(within(supplierReport).getByText('Изменен контакт поставщика.')).toBeInTheDocument()
+    expect(within(supplierReport).getByText('Проверка карточки')).toBeInTheDocument()
     expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }))
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }))
+    expect(getEvents).toHaveBeenCalledWith('token', expect.objectContaining({ relatedCounterparty: supplierId, limit: 5 }))
     await user.click(within(supplierReport).getByRole('button', { name: 'Закрыть финансовый отчет контрагента' }))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
@@ -1000,7 +1016,9 @@ describe('App', () => {
     expect(within(staffReport).getByRole('table', { name: 'Финансовый отчет сотрудника' })).toBeInTheDocument()
     expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(6)
     expect(within(staffReport).getByText('RKO-2')).toBeInTheDocument()
+    expect(await within(staffReport).findByText('Изменена ставка сотрудника.')).toBeInTheDocument()
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }))
+    expect(getEvents).toHaveBeenCalledWith('token', expect.objectContaining({ relatedCounterparty: staffMemberId, limit: 5 }))
   }, 30000)
 
   it('filters contractor debtors and sorts visible contractor rows', async () => {
