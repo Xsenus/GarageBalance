@@ -198,6 +198,42 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpPost("fund-changes/export/xlsx")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportFundChangeReportXlsx(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportFundChangeReportXlsxAsync(
+            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPost("fund-changes/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportFundChangeReportPdf(
+        [FromQuery] DateOnly? dateFrom,
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportFundChangeReportPdfAsync(
+            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpGet("cash-payments")]
     [ProducesResponseType<CashPaymentReportDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

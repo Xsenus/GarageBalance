@@ -254,6 +254,22 @@ export type ReportClient = {
       limit?: number
     },
   ): Promise<FundChangeReportDto>
+  exportFundChangeReportXlsx(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+    },
+  ): Promise<Blob>
+  exportFundChangeReportPdf(
+    accessToken: string,
+    params?: {
+      dateFrom?: string
+      dateTo?: string
+      search?: string
+    },
+  ): Promise<Blob>
   getCashPaymentReport(
     accessToken: string,
     params?: {
@@ -547,6 +563,14 @@ export const reportsApi: ReportClient = {
   getFundChangeReport(accessToken, params = {}) {
     const query = buildFundChangeReportQuery(params)
     return requestJson(accessToken, `/api/reports/fund-changes${query ? `?${query}` : ''}`)
+  },
+  exportFundChangeReportXlsx(accessToken, params = {}) {
+    const query = buildFundChangeReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/fund-changes/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+  exportFundChangeReportPdf(accessToken, params = {}) {
+    const query = buildFundChangeReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/fund-changes/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getCashPaymentReport(accessToken, params = {}) {
     const query = buildCashPaymentReportQuery(params)

@@ -7351,6 +7351,25 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
   }
 
+  async function downloadFundChangeReport(extension: 'xlsx' | 'pdf') {
+    const filter = dateFilters.funds
+    const exportKey = `funds-${extension}`
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = extension === 'xlsx'
+        ? await reportClient.exportFundChangeReportXlsx(auth.accessToken, filter)
+        : await reportClient.exportFundChangeReportPdf(auth.accessToken, filter)
+      downloadBlob(blob, buildReportFileName('fund-changes', filter.dateFrom, filter.dateTo, extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
+  }
+
   function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
     const filter = monthlyFilters[key]
     return (
@@ -7732,17 +7751,27 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       row.fundName,
       row.date,
       row.changeName,
+      formatMoney(row.amount),
       formatMoney(row.balanceBefore),
       formatMoney(row.balanceAfter),
       row.actorDisplayName ?? '',
+      row.reason,
     ]) ?? []
     const visibleFundRows = fundRows.length > 0
       ? fundRows
-      : [['', '', 'Операций за период нет', '', '', '']]
+      : [['', '', 'Операций за период нет', '', '', '', '', '']]
 
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
         {renderDateFilter('funds', { from: 'С', to: 'По' })}
+        <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по изменению фондов">
+          <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFundChangeReport('xlsx')}>
+            {reportExporting === 'funds-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
+          </button>
+          <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFundChangeReport('pdf')}>
+            {reportExporting === 'funds-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
+          </button>
+        </div>
         {fundChangeReportLoading ? <p className="prototype-status" role="status">Загружаем изменения фондов...</p> : null}
         {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
         {fundChangeReport ? (
@@ -7752,7 +7781,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <strong>Операций: {fundChangeReport.rowCount}</strong>
           </div>
         ) : null}
-        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма до', 'Сумма после', 'Пользователь'], visibleFundRows)}
+        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма', 'Сумма до', 'Сумма после', 'Пользователь', 'Комментарий'], visibleFundRows)}
       </ReportWorkbookSheet>
     )
   }

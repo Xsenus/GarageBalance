@@ -532,6 +532,116 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportFundChangeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var operatorUser = new AppUser
+        {
+            Id = actorUserId,
+            Email = "funds-export@example.test",
+            NormalizedEmail = "FUNDS-EXPORT@EXAMPLE.TEST",
+            DisplayName = "Администратор ГСК",
+            PasswordHash = "hash"
+        };
+        var fund = new Fund { Name = "Электроэнергия", NormalizedName = "ЭЛЕКТРОЭНЕРГИЯ", SortOrder = 10 };
+        database.Context.Users.Add(operatorUser);
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 1500m,
+                BalanceBefore = 0m,
+                BalanceAfter = 1500m,
+                Reason = "Распределение средств",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Withdraw,
+                Amount = 300m,
+                BalanceBefore = 1500m,
+                BalanceAfter = 1200m,
+                Reason = "Оплата счета",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 11, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 500m,
+                BalanceBefore = 1200m,
+                BalanceAfter = 1700m,
+                Reason = "Вне периода",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 9, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ExportFundChangeReportXlsxAsync(
+            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-fund-changes-20260601-20260630.xlsx", result.Value!.FileName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
+        AssertWorkbookContains(result.Value.Content, "Изменение фондов");
+        AssertWorkbookContains(result.Value.Content, "Пополнение");
+        AssertWorkbookContains(result.Value.Content, "Изъятие");
+        AssertWorkbookContains(result.Value.Content, "Распределение средств");
+        AssertWorkbookDoesNotContain(result.Value.Content, "Вне периода");
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.fund_changes_exported" &&
+            auditEvent.ActorUserId == actorUserId &&
+            auditEvent.MetadataJson != null &&
+            auditEvent.MetadataJson.Contains("xlsx", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExportFundChangeReportPdfAsync_ReturnsDocumentWithFilteredRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var fund = new Fund { Name = "Электроэнергия", NormalizedName = "ЭЛЕКТРОЭНЕРГИЯ", SortOrder = 10 };
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.Add(new FundOperation
+        {
+            Fund = fund,
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 1500m,
+            BalanceBefore = 0m,
+            BalanceAfter = 1500m,
+            Reason = "Распределение средств",
+            ActorUserId = actorUserId,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ExportFundChangeReportPdfAsync(
+            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-fund-changes-20260601-20260630.pdf", result.Value!.FileName);
+        Assert.Equal("application/pdf", result.Value.ContentType);
+        AssertPdfContains(result.Value.Content, "GarageBalance fund changes report");
+        AssertPdfContains(result.Value.Content, "2026-06-10");
+        AssertPdfContains(result.Value.Content, "1500.00");
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.fund_changes_exported" &&
+            auditEvent.ActorUserId == actorUserId &&
+            auditEvent.MetadataJson != null &&
+            auditEvent.MetadataJson.Contains("pdf", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task GetCashPaymentReportAsync_ReturnsExpenseRowsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

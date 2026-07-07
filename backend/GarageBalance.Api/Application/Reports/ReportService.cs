@@ -840,6 +840,91 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         return ReportResult<FundChangeReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<ReportExportFileDto>> ExportFundChangeReportXlsxAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetFundChangeReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Изменение фондов",
+                    ["Фонд", "Дата", "Операция", "Сумма", "Сумма до", "Сумма после", "Пользователь", "Комментарий"],
+                    report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.FundName),
+                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.ChangeName),
+                        XlsxCell.Number(row.Amount),
+                        XlsxCell.Number(row.BalanceBefore),
+                        XlsxCell.Number(row.BalanceAfter),
+                        XlsxCell.Text(row.ActorDisplayName),
+                        XlsxCell.Text(row.Reason)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Пополнено", "Изъято", "Строк"],
+                    [
+                        [
+                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Number(report.DepositTotal),
+                            XlsxCell.Number(report.WithdrawalTotal),
+                            XlsxCell.Number(report.RowCount)
+                        ]
+                    ])
+            ]);
+
+        var file = new ReportExportFileDto(
+            BuildExportFileName("fund-changes", report.DateFrom, report.DateTo, "xlsx"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по изменению фондов", "xlsx", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportFundChangeReportPdfAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetFundChangeReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
+            $"Deposits: {FormatAmount(report.DepositTotal)} | Withdrawals: {FormatAmount(report.WithdrawalTotal)} | Rows: {report.RowCount}",
+            string.Empty,
+            "Fund | Date | Operation | Amount | Before | After | User | Comment"
+        };
+        lines.AddRange(report.Rows.Select(row =>
+            string.Join(" | ",
+                row.FundName,
+                row.Date.ToString("yyyy-MM-dd"),
+                row.ChangeName,
+                FormatAmount(row.Amount),
+                FormatAmount(row.BalanceBefore),
+                FormatAmount(row.BalanceAfter),
+                row.ActorDisplayName ?? string.Empty,
+                row.Reason)));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance fund changes report", lines);
+        var file = new ReportExportFileDto(
+            BuildExportFileName("fund-changes", report.DateFrom, report.DateTo, "pdf"),
+            "application/pdf",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по изменению фондов", "pdf", file.FileName, report.DateFrom, report.DateTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
     public async Task<ReportResult<CashPaymentReportDto>> GetCashPaymentReportAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);

@@ -7134,10 +7134,12 @@ describe('App', () => {
     const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const exportBankDepositReportPdf = vi.fn(async () => new Blob(['bank pdf'], { type: 'application/pdf' }))
     const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
       exportCashPaymentReportXlsx,
       exportBankDepositReportPdf,
       exportFeeReportXlsx,
+      exportFundChangeReportXlsx,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -7221,8 +7223,12 @@ describe('App', () => {
     expect(fundChangesTable).toHaveTextContent('Электроэнергия')
     expect(fundChangesTable).toHaveTextContent('Пополнение')
     expect(fundChangesTable).toHaveTextContent('Изъятие')
+    expect(fundChangesTable).toHaveTextContent('1 500,00')
+    expect(fundChangesTable).toHaveTextContent('Распределение средств')
     expect(fundChangesTable).toHaveTextContent('Администратор ГСК')
     expect(fundChangesTable).not.toHaveTextContent('Резервный фонд')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' }))
+    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
   })
   it('shows login errors without opening protected workspace', async () => {
     const user = userEvent.setup()
@@ -8137,6 +8143,8 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     exportExpenseReportXlsx: async () => new Blob(['expense xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportExpenseReportPdf: async () => new Blob(['expense pdf'], { type: 'application/pdf' }),
     getFundChangeReport: async () => createFundChangeReport(),
+    exportFundChangeReportXlsx: async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportFundChangeReportPdf: async () => new Blob(['fund changes pdf'], { type: 'application/pdf' }),
     getCashPaymentReport: async () => createCashPaymentReport(),
     exportCashPaymentReportXlsx: async () => new Blob(['cash payments xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportCashPaymentReportPdf: async () => new Blob(['cash payments pdf'], { type: 'application/pdf' }),

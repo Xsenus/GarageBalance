@@ -15,6 +15,8 @@ public sealed class ReportsControllerTests
     [InlineData(nameof(ReportsController.ExportIncomeReportPdf), "income/export/pdf")]
     [InlineData(nameof(ReportsController.ExportExpenseReportXlsx), "expense/export/xlsx")]
     [InlineData(nameof(ReportsController.ExportExpenseReportPdf), "expense/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportFundChangeReportXlsx), "fund-changes/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportFundChangeReportPdf), "fund-changes/export/pdf")]
     [InlineData(nameof(ReportsController.ExportCashPaymentReportXlsx), "cash-payments/export/xlsx")]
     [InlineData(nameof(ReportsController.ExportCashPaymentReportPdf), "cash-payments/export/pdf")]
     [InlineData(nameof(ReportsController.ExportBankDepositReportXlsx), "bank-deposits/export/xlsx")]
@@ -244,6 +246,50 @@ public sealed class ReportsControllerTests
         var result = await controller.GetFundChangeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task ExportFundChangeReportXlsx_ReturnsFile()
+    {
+        var content = new byte[] { 25, 26, 27 };
+        var export = new ReportExportFileDto(
+            "garagebalance-fund-changes-20260601-20260630.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        var service = new FakeReportService
+        {
+            FundChangeXlsxExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        };
+        var actorUserId = Guid.NewGuid();
+        var controller = new ReportsController(service);
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())]))
+        };
+
+        var result = await controller.ExportFundChangeReportXlsx(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+        Assert.Equal("электро", service.FundChangeRequest?.Search);
+        Assert.Equal(actorUserId, service.FundChangeRequest?.ActorUserId);
+    }
+
+    [Fact]
+    public async Task ExportFundChangeReportPdf_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            FundChangePdfExportResult = ReportResult<ReportExportFileDto>.Failure("period_invalid", "Invalid period.")
+        });
+
+        var result = await controller.ExportFundChangeReportPdf(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
         Assert.Equal("period_invalid", problem.Title);
     }
@@ -771,6 +817,10 @@ public sealed class ReportsControllerTests
         public ReportResult<FundChangeReportDto> FundChangeResult { get; init; } = ReportResult<FundChangeReportDto>.Failure("not_configured", "Not configured.");
         public FundChangeReportRequest? FundChangeRequest { get; private set; }
 
+        public ReportResult<ReportExportFileDto> FundChangeXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ReportExportFileDto> FundChangePdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
         public ReportResult<CashPaymentReportDto> CashPaymentResult { get; init; } = ReportResult<CashPaymentReportDto>.Failure("not_configured", "Not configured.");
         public CashPaymentReportRequest? CashPaymentRequest { get; private set; }
 
@@ -832,6 +882,18 @@ public sealed class ReportsControllerTests
         {
             FundChangeRequest = request;
             return Task.FromResult(FundChangeResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportFundChangeReportXlsxAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
+        {
+            FundChangeRequest = request;
+            return Task.FromResult(FundChangeXlsxExportResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportFundChangeReportPdfAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
+        {
+            FundChangeRequest = request;
+            return Task.FromResult(FundChangePdfExportResult);
         }
 
         public Task<ReportResult<CashPaymentReportDto>> GetCashPaymentReportAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
