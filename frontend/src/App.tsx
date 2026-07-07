@@ -9797,6 +9797,11 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
                 </span>
               </div>
             ))}
+            {visibleGarages.length === 0 ? (
+              <div className="contractors-directory-row contractors-directory-row--empty" role="row">
+                <span className="contractors-directory-empty-cell" role="cell">{showDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -9853,6 +9858,11 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
                 </div>
               )
             })}
+            {visibleSuppliers.length === 0 ? (
+              <div className="contractors-directory-row contractors-directory-row--empty" role="row">
+                <span className="contractors-directory-empty-cell" role="cell">{showDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -9901,6 +9911,11 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
                 </span>
               </div>
             ))}
+            {visibleStaff.length === 0 ? (
+              <div className="contractors-directory-row contractors-directory-row--empty" role="row">
+                <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}

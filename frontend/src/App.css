@@ -1127,10 +1127,19 @@ h1 {
   opacity: 0.72;
 }
 
+.contractors-directory-row--empty {
+  color: #667085;
+}
+
 .contractors-directory-row > span {
   min-width: 0;
   border-bottom: 1px solid #eaecf0;
   padding: 11px 12px;
+}
+
+.contractors-directory-empty-cell {
+  grid-column: 1 / -1;
+  text-align: center;
 }
 
 .contractors-directory-cell--center {

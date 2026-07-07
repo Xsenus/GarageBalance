@@ -1059,6 +1059,42 @@ describe('App', () => {
     expect(within(sortedSupplierRows[1]).getByText('ЭкоВывоз')).toBeInTheDocument()
   }, 30000)
 
+  it('shows empty states for contractor debtor filters and empty staff', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const owner = createOwner({ id: 'owner-no-debt', lastName: 'Петров', firstName: 'Петр' })
+    const supplierGroup = createGroup({ id: 'supplier-group-no-debt', name: 'Услуги' })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [owner],
+      getGarages: async () => [createGarage({ id: 'garage-no-debt', number: '12', ownerId: owner.id, ownerName: owner.fullName, overdueDebt: 0 })],
+      getSupplierGroups: async () => [supplierGroup],
+      getSuppliers: async () => [createSupplier({ id: 'supplier-no-debt', name: 'Водоканал', groupId: supplierGroup.id, groupName: supplierGroup.name, startingBalance: 0 })],
+      getSupplierContacts: async () => [],
+      getStaffDepartments: async () => [],
+      getStaffMembers: async () => [],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Показать должников' }))
+    const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
+    expect(within(garagesTable).getByRole('cell', { name: 'Гаражей с задолженностью не найдено.' })).toBeInTheDocument()
+    expect(within(garagesTable).queryByText('Петров Петр')).not.toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    expect(within(suppliersTable).getByRole('cell', { name: 'Поставщиков с задолженностью не найдено.' })).toBeInTheDocument()
+    expect(within(suppliersTable).queryByText('Водоканал')).not.toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    const staffTable = await within(contractorsPanel).findByRole('table', { name: 'Персонал' })
+    expect(within(staffTable).getByRole('cell', { name: 'Сотрудники пока не настроены.' })).toBeInTheDocument()
+  }, 30000)
+
   it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
     const user = userEvent.setup()
     let updatedTariffRequest: UpsertTariffRequest | null = null
