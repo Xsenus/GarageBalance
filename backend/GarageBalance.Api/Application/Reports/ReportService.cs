@@ -1173,7 +1173,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
 
         if (incomeTypeIds.Count == 0)
         {
-            var emptyReport = new FeeReportDto(variation ?? "Все сборы", 0m, 0m, 0m, 0, [], []);
+            var emptyReport = new FeeReportDto(variation ?? "Все сборы", 0m, 0m, 0m, 0, [], [], []);
             await AddFeeReportAuditAsync(request, emptyReport, cancellationToken);
             return ReportResult<FeeReportDto>.Success(emptyReport);
         }
@@ -1243,30 +1243,71 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 LastPaymentDate = group.Max(operation => (DateOnly?)operation.OperationDate)
             })
             .ToListAsync(cancellationToken);
+        var allGarageIds = accrualsByGarage
+            .Select(row => row.GarageId)
+            .Concat(paymentsByGarage.Select(row => row.GarageId))
+            .Distinct()
+            .ToList();
+        var garageLookup = await dbContext.Garages.AsNoTracking()
+            .Include(garage => garage.Owner)
+            .Where(garage => allGarageIds.Contains(garage.Id))
+            .Select(garage => new
+            {
+                garage.Id,
+                garage.Number,
+                OwnerLastName = garage.Owner != null ? garage.Owner.LastName : null,
+                OwnerFirstName = garage.Owner != null ? garage.Owner.FirstName : null,
+                OwnerMiddleName = garage.Owner != null ? garage.Owner.MiddleName : null
+            })
+            .ToDictionaryAsync(row => row.Id, cancellationToken);
+        var accrualLookup = accrualsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
         var paymentLookup = paymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
         var incomeTypeNames = incomeTypes.ToDictionary(incomeType => incomeType.Id, incomeType => incomeType.Name);
-        var debtorRows = accrualsByGarage
-            .Select(row =>
+        var feeGarageRows = accrualLookup.Keys
+            .Concat(paymentLookup.Keys)
+            .Distinct()
+            .Select(key =>
             {
-                paymentLookup.TryGetValue((row.GarageId, row.IncomeTypeId), out var payment);
+                accrualLookup.TryGetValue(key, out var accrual);
+                paymentLookup.TryGetValue(key, out var payment);
+                garageLookup.TryGetValue(key.GarageId, out var garage);
+                var accrued = accrual?.Accrued ?? 0m;
                 var paid = payment?.Paid ?? 0m;
-                return new FeeReportDebtorRowDto(
-                    row.GarageId,
-                    row.GarageNumber,
-                    FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
-                    row.IncomeTypeId,
-                    incomeTypeNames[row.IncomeTypeId],
+                return new FeeReportGarageRowDto(
+                    key.GarageId,
+                    accrual?.GarageNumber ?? garage?.Number ?? string.Empty,
+                    FormatOwnerName(
+                        accrual?.OwnerLastName ?? garage?.OwnerLastName,
+                        accrual?.OwnerFirstName ?? garage?.OwnerFirstName,
+                        accrual?.OwnerMiddleName ?? garage?.OwnerMiddleName),
+                    key.IncomeTypeId,
+                    incomeTypeNames[key.IncomeTypeId],
+                    accrued,
                     paid,
                     payment?.LastPaymentDate,
-                    row.Accrued - paid);
+                    accrued - paid);
             })
+            .OrderBy(row => row.FeeName)
+            .ThenBy(row => row.GarageNumber)
+            .ToList();
+        var debtorRows = feeGarageRows
             .Where(row => row.Debt > 0)
+            .Select(row => new FeeReportDebtorRowDto(
+                row.GarageId,
+                row.GarageNumber,
+                row.OwnerName,
+                row.IncomeTypeId,
+                row.FeeName,
+                row.Paid,
+                row.LastPaymentDate,
+                row.Debt))
             .OrderBy(row => row.FeeName)
             .ThenBy(row => row.GarageNumber)
             .ToList();
 
-        var rowCount = summaryRows.Count + debtorRows.Count;
+        var rowCount = summaryRows.Count + feeGarageRows.Count;
         var visibleSummaryRows = ApplyRowLimit(summaryRows, request.Limit);
+        var visibleGarageRows = ApplyRowLimit(feeGarageRows, request.Limit);
         var visibleDebtorRows = ApplyRowLimit(debtorRows, request.Limit);
         var report = new FeeReportDto(
             variation ?? "Все сборы",
@@ -1275,6 +1316,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             debtorRows.Sum(row => row.Debt),
             rowCount,
             visibleSummaryRows,
+            visibleGarageRows,
             visibleDebtorRows);
 
         await AddFeeReportAuditAsync(request, report, cancellationToken);

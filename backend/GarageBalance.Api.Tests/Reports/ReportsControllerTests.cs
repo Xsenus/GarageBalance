@@ -704,6 +704,7 @@ public sealed class ReportsControllerTests
             300m,
             2,
             [new FeeReportSummaryRowDto(incomeTypeId, "Сбор на ворота", "Сбор", 500m, 200m)],
+            [new FeeReportGarageRowDto(garageId, "12", "Иванов Иван", incomeTypeId, "Сбор на ворота", 500m, 200m, new DateOnly(2026, 6, 10), 300m)],
             [new FeeReportDebtorRowDto(garageId, "12", "Иванов Иван", incomeTypeId, "Сбор на ворота", 200m, new DateOnly(2026, 6, 10), 300m)]);
     }
 

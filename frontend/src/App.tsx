@@ -7085,6 +7085,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [bankDepositReport, setBankDepositReport] = useState<BankDepositReportDto | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
+  const [feeDetailMode, setFeeDetailMode] = useState<'debtors' | 'all'>('debtors')
   const [garageAccrualsGrouped, setGarageAccrualsGrouped] = useState(false)
   const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [reportExporting, setReportExporting] = useState<string | null>(null)
@@ -7616,17 +7617,37 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
     if (activeReportTab === 'fees') {
       const summaryRows = feeReport?.summaryRows.map((row) => [
-        row.name,
+        <button
+          className="link-button"
+          type="button"
+          aria-label={`Открыть детализацию сбора ${row.name}`}
+          onClick={() => {
+            setFeeVariationFilter(row.name)
+            setFeeDebtorsVisible(true)
+            setFeeDetailMode('all')
+          }}
+        >
+          {row.name}
+        </button>,
         row.goal,
         formatMoney(row.feeAmount),
         formatMoney(row.collected),
       ]) ?? []
-      const debtorRows = feeReport?.debtorRows.map((row) => [
+      const feeDetailRows = (feeDetailMode === 'debtors'
+        ? feeReport?.garageRows.filter((row) => row.debt > 0)
+        : feeReport?.garageRows) ?? []
+      const feeDetailTableRows = feeDetailRows.map((row) => [
         row.garageNumber,
+        row.ownerName ?? '',
+        formatMoney(row.accrued),
         formatMoney(row.paid),
         row.lastPaymentDate ?? '',
         formatMoney(row.debt),
-      ]) ?? []
+      ])
+      const feeDetailEmptyRow = feeDetailMode === 'debtors'
+        ? ['', '', '', '', '', 'Должников нет']
+        : ['', '', '', '', '', 'Данных по гаражам нет']
+      const feeDetailTableName = feeDetailMode === 'debtors' ? 'Должники по сбору' : 'Гаражи по сбору'
       return (
         <ReportWorkbookSheet title="Отчёт по сборам">
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
@@ -7659,10 +7680,18 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               </button>
               {feeDebtorsVisible ? (
                 <div id="fee-debtors-report">
+                  <div className="report-workbook-toolbar" role="group" aria-label="Режим детализации сбора">
+                    <button className="secondary-button" type="button" aria-pressed={feeDetailMode === 'debtors'} onClick={() => setFeeDetailMode('debtors')}>
+                      Только должники
+                    </button>
+                    <button className="secondary-button" type="button" aria-pressed={feeDetailMode === 'all'} onClick={() => setFeeDetailMode('all')}>
+                      Все гаражи
+                    </button>
+                  </div>
                   {renderReportTable(
-                    'Должники по сбору',
-                    ['Гараж', 'Оплачено', 'Дата', 'Задолженность'],
-                    debtorRows.length > 0 ? debtorRows : [['', '', '', 'Должников нет']],
+                    feeDetailTableName,
+                    ['Гараж', 'Владелец', 'Начислено', 'Оплачено', 'Дата', 'Задолженность'],
+                    feeDetailTableRows.length > 0 ? feeDetailTableRows : [feeDetailEmptyRow],
                   )}
                 </div>
               ) : null}

@@ -7186,9 +7186,21 @@ describe('App', () => {
     await waitFor(() => expect(reportsPanel.querySelector('datalist option[value="Членский взнос"]')).not.toBeNull())
     await user.clear(feeFilter)
     await user.type(feeFilter, 'Членский взнос')
-    await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
+    const feeSummaryTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })
+    await waitFor(() => expect(feeSummaryTable).toHaveTextContent('Членский взнос'))
     expect(within(reportsPanel).queryByRole('table', { name: 'Должники по сбору' })).not.toBeInTheDocument()
     const showFeeDebtorsButton = within(reportsPanel).getByRole('button', { name: 'Показать должников' })
+    await user.click(within(feeSummaryTable).getByRole('button', { name: 'Открыть детализацию сбора Членский взнос' }))
+    const allFeeGaragesTable = within(reportsPanel).getByRole('table', { name: 'Гаражи по сбору' })
+    expect(allFeeGaragesTable).toHaveTextContent('12')
+    expect(allFeeGaragesTable).toHaveTextContent('1 000,00')
+    expect(showFeeDebtorsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(showFeeDebtorsButton).toHaveTextContent('Скрыть должников')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Только должники' }))
+    const feeDebtorsTableFromSelectedFee = within(reportsPanel).getByRole('table', { name: 'Должники по сбору' })
+    expect(feeDebtorsTableFromSelectedFee).toHaveTextContent('12')
+    expect(feeDebtorsTableFromSelectedFee).toHaveTextContent('800,00')
+    await user.click(showFeeDebtorsButton)
     expect(showFeeDebtorsButton).toHaveAttribute('aria-expanded', 'false')
     await user.click(showFeeDebtorsButton)
     expect(showFeeDebtorsButton).toHaveAttribute('aria-expanded', 'true')
@@ -8136,6 +8148,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
             collectedTotal: 200,
             debtTotal: 800,
             summaryRows: [{ incomeTypeId: 'income-type-membership', name: 'Членский взнос', goal: 'Членский взнос', feeAmount: 1000, collected: 200 }],
+            garageRows: [{ garageId: 'garage-12', garageNumber: '12', ownerName: 'Иванов Иван', incomeTypeId: 'income-type-membership', feeName: 'Членский взнос', accrued: 1000, paid: 200, lastPaymentDate: '2026-06-10', debt: 800 }],
             debtorRows: [{ garageId: 'garage-12', garageNumber: '12', ownerName: 'Иванов Иван', incomeTypeId: 'income-type-membership', feeName: 'Членский взнос', paid: 200, lastPaymentDate: '2026-06-10', debt: 800 }],
           })
         : createFeeReport({ variation })
@@ -9502,6 +9515,30 @@ function createFeeReport(overrides: Partial<FeeReportDto> = {}): FeeReportDto {
         goal: 'Сбор',
         feeAmount: 500,
         collected: 200,
+      },
+    ],
+    garageRows: [
+      {
+        garageId: 'garage-12',
+        garageNumber: '12',
+        ownerName: 'Иванов Иван',
+        incomeTypeId: 'income-type-fee',
+        feeName: 'Сбор на ворота',
+        accrued: 500,
+        paid: 200,
+        lastPaymentDate: '2026-06-10',
+        debt: 300,
+      },
+      {
+        garageId: 'garage-21',
+        garageNumber: '21',
+        ownerName: 'Петров Петр',
+        incomeTypeId: 'income-type-fee',
+        feeName: 'Сбор на ворота',
+        accrued: 500,
+        paid: 500,
+        lastPaymentDate: '2026-06-11',
+        debt: 0,
       },
     ],
     debtorRows: [

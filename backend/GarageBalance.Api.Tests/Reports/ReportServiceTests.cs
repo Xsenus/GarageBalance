@@ -636,6 +636,9 @@ public sealed class ReportServiceTests
         var summary = Assert.Single(result.Value.SummaryRows);
         Assert.Equal("Членский взнос", summary.Name);
         Assert.Equal("Членский взнос", summary.Goal);
+        Assert.Equal(2, result.Value.GarageRows.Count);
+        Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "12" && row.Accrued == 500m && row.Paid == 200m && row.Debt == 300m);
+        Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "21" && row.Accrued == 500m && row.Paid == 0m && row.Debt == 500m);
         Assert.Equal(2, result.Value.DebtorRows.Count);
         Assert.Contains(result.Value.DebtorRows, row => row.GarageNumber == "12" && row.Paid == 200m && row.Debt == 300m);
         Assert.Contains(result.Value.DebtorRows, row => row.GarageNumber == "21" && row.Paid == 0m && row.Debt == 500m);

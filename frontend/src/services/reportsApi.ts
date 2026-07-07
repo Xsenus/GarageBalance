@@ -169,6 +169,18 @@ export type FeeReportDebtorRowDto = {
   debt: number
 }
 
+export type FeeReportGarageRowDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  incomeTypeId: string
+  feeName: string
+  accrued: number
+  paid: number
+  lastPaymentDate: string | null
+  debt: number
+}
+
 export type FeeReportDto = {
   variation: string
   accruedTotal: number
@@ -176,6 +188,7 @@ export type FeeReportDto = {
   debtTotal: number
   rowCount: number
   summaryRows: FeeReportSummaryRowDto[]
+  garageRows: FeeReportGarageRowDto[]
   debtorRows: FeeReportDebtorRowDto[]
 }
 

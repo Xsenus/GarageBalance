@@ -200,6 +200,7 @@ public sealed record FeeReportDto(
     decimal DebtTotal,
     int RowCount,
     IReadOnlyList<FeeReportSummaryRowDto> SummaryRows,
+    IReadOnlyList<FeeReportGarageRowDto> GarageRows,
     IReadOnlyList<FeeReportDebtorRowDto> DebtorRows);
 
 public sealed record FeeReportSummaryRowDto(
@@ -215,6 +216,17 @@ public sealed record FeeReportDebtorRowDto(
     string? OwnerName,
     Guid IncomeTypeId,
     string FeeName,
+    decimal Paid,
+    DateOnly? LastPaymentDate,
+    decimal Debt);
+
+public sealed record FeeReportGarageRowDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    Guid IncomeTypeId,
+    string FeeName,
+    decimal Accrued,
     decimal Paid,
     DateOnly? LastPaymentDate,
     decimal Debt);
