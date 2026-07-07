@@ -42,7 +42,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return result.ErrorCode switch
         {
             "fund_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "fund_operation_not_allowed" or "fund_balance_insufficient" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

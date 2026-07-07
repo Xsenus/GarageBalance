@@ -2,6 +2,7 @@ export type FundDto = {
   id: string
   name: string
   balance: number
+  availableToDistribute: number
   sortOrder: number
   allowOperations: boolean
   isSystem: boolean

@@ -6,6 +6,7 @@ public sealed record FundDto(
     Guid Id,
     string Name,
     decimal Balance,
+    decimal AvailableToDistribute,
     int SortOrder,
     bool AllowOperations,
     bool IsSystem);

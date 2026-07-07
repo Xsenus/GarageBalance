@@ -2944,16 +2944,24 @@ describe('App', () => {
 
     await user.click(depositTargetButton)
     const reopenedDepositDialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
+    expect(within(reopenedDepositDialog).getByText(/Доступно к пополнению:\s*100[\s\u00A0]000,00 руб\./)).toBeInTheDocument()
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
     expect(within(reopenedDepositDialog).getByRole('alert')).toHaveTextContent('Укажите сумму больше нуля.')
-    await user.type(within(reopenedDepositDialog).getByLabelText('Сумма операции фонда'), '1500')
+    const reopenedAmountInput = within(reopenedDepositDialog).getByLabelText('Сумма операции фонда')
+    await user.type(reopenedAmountInput, '100000,01')
+    await user.type(within(reopenedDepositDialog).getByLabelText('Причина операции фонда'), 'Сверх лимита')
+    await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
+    expect(within(reopenedDepositDialog).getByRole('alert')).toHaveTextContent('Сумма пополнения не может превышать доступную к распределению сумму 100 000,00 руб.')
+    await user.clear(reopenedAmountInput)
+    await user.type(reopenedAmountInput, '1500')
+    await user.clear(within(reopenedDepositDialog).getByLabelText('Причина операции фонда'))
     await user.type(within(reopenedDepositDialog).getByLabelText('Причина операции фонда'), 'Распределение средств')
     expect(within(reopenedDepositDialog).getByText(/1[\s\u00A0]500,00 руб\./)).toBeInTheDocument()
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
 
     expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getAllByText(/1[\s\u00A0]500,00 руб\./).length).toBeGreaterThanOrEqual(1)
-    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toBeInTheDocument()
+    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('98 500,00 руб.')
   })
 
   it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
@@ -7877,6 +7885,7 @@ function createFund(overrides: Partial<FundDto> = {}): FundDto {
     id: 'fund-electricity',
     name: 'Электроэнергия',
     balance: 0,
+    availableToDistribute: 100000,
     sortOrder: 10,
     allowOperations: true,
     isSystem: true,
@@ -7920,11 +7929,22 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
 
       const balanceBefore = fund.balance
       const balanceAfter = request.operationKind === 'deposit' ? balanceBefore + request.amount : balanceBefore - request.amount
+      const availableToDistribute = fund.availableToDistribute
+      if (request.operationKind === 'deposit' && request.amount > availableToDistribute) {
+        throw new Error(`Сумма пополнения не может превышать доступную к распределению сумму ${formatMoney(availableToDistribute)} руб.`)
+      }
       if (balanceAfter < 0) {
         throw new Error('Недостаточно средств фонда.')
       }
 
-      funds = funds.map((item) => (item.id === fundId ? { ...item, balance: balanceAfter } : item))
+      const nextAvailableToDistribute = request.operationKind === 'deposit'
+        ? Math.max(0, availableToDistribute - request.amount)
+        : availableToDistribute + request.amount
+      funds = funds.map((item) => ({
+        ...item,
+        availableToDistribute: nextAvailableToDistribute,
+        ...(item.id === fundId ? { balance: balanceAfter } : {}),
+      }))
       return createFundOperation({
         fundId,
         fundName: fund.name,

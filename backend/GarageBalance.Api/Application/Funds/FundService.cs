@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -21,13 +22,15 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
     public async Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
     {
         await EnsureDefaultFundsAsync(cancellationToken);
+        var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
 
-        return await dbContext.Funds
+        var funds = await dbContext.Funds
             .AsNoTracking()
             .OrderBy(fund => fund.SortOrder)
             .ThenBy(fund => fund.Name)
-            .Select(fund => ToDto(fund))
             .ToListAsync(cancellationToken);
+
+        return funds.Select(fund => ToDto(fund, availableToDistribute)).ToList();
     }
 
     public async Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -61,6 +64,17 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         var balanceAfter = operationKind == FundOperationKinds.Deposit
             ? balanceBefore + amount
             : balanceBefore - amount;
+        if (operationKind == FundOperationKinds.Deposit)
+        {
+            var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+            if (amount > availableToDistribute)
+            {
+                return FundResult<FundOperationDto>.Failure(
+                    "fund_distribution_amount_exceeded",
+                    $"Сумма пополнения не может превышать доступную к распределению сумму {availableToDistribute:0.00} руб.");
+            }
+        }
+
         if (balanceAfter < 0)
         {
             return FundResult<FundOperationDto>.Failure("fund_balance_insufficient", "Нельзя изъять из фонда больше собранной суммы.");
@@ -118,6 +132,23 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         }
     }
 
+    private async Task<decimal> CalculateAvailableToDistributeAsync(CancellationToken cancellationToken)
+    {
+        var incomeTotal = await dbContext.FinancialOperations
+            .AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var expenseTotal = await dbContext.FinancialOperations
+            .AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var allocatedFundTotal = await dbContext.Funds
+            .AsNoTracking()
+            .SumAsync(fund => (decimal?)fund.Balance, cancellationToken) ?? 0m;
+
+        return MoneyMath.RoundMoney(Math.Max(incomeTotal - expenseTotal - allocatedFundTotal, 0m));
+    }
+
     private void AddAudit(Fund fund, FundOperation operation, Guid? actorUserId)
     {
         var actionLabel = operation.OperationKind == FundOperationKinds.Deposit ? "Пополнен" : "Выполнено изъятие из";
@@ -152,9 +183,9 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
             }));
     }
 
-    private static FundDto ToDto(Fund fund)
+    private static FundDto ToDto(Fund fund, decimal availableToDistribute)
     {
-        return new FundDto(fund.Id, fund.Name, fund.Balance, fund.SortOrder, fund.AllowOperations, fund.IsSystem);
+        return new FundDto(fund.Id, fund.Name, fund.Balance, availableToDistribute, fund.SortOrder, fund.AllowOperations, fund.IsSystem);
     }
 
     private static FundOperationDto ToDto(FundOperation operation)

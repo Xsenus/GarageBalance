@@ -4744,6 +4744,7 @@ function BankDepositPrototypeDialog({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const availableToDistribute = funds.length > 0 ? funds[0].availableToDistribute : null
   useEscapeKey(true, onClose)
 
   useEffect(() => {
@@ -4792,6 +4793,10 @@ function BankDepositPrototypeDialog({
     }
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setError('Укажите сумму сдачи больше нуля.')
+      return
+    }
+    if (availableToDistribute !== null && parsedAmount > availableToDistribute) {
+      setError(`Сумма сдачи не может превышать доступную к распределению сумму ${formatMoney(availableToDistribute)} руб.`)
       return
     }
 
@@ -4843,6 +4848,7 @@ function BankDepositPrototypeDialog({
               setError(null)
             }} disabled={saving} />
           </FormField>
+          {availableToDistribute !== null ? <p className="form-hint">Доступно к распределению: {formatMoney(availableToDistribute)} руб.</p> : null}
           <FormField label="Дата">
             <input aria-label="Дата учета суммы в банке" type="date" value={operationDate} onChange={(event) => {
               setOperationDate(event.target.value)
@@ -5779,6 +5785,7 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
 
 function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
+  const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
@@ -5801,6 +5808,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
         const funds = await fundsClient.getFunds(auth.accessToken)
         if (!cancelled) {
           setRows(funds.map(mapFundDtoToPrototypeRow))
+          setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
         }
       } catch (error: unknown) {
         if (!cancelled) {
@@ -5859,6 +5867,11 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
       return
     }
 
+    if (operation.kind === 'deposit' && availableToDistribute !== null && amount > availableToDistribute) {
+      setOperationError(`Сумма пополнения не может превышать доступную к распределению сумму ${formatMoney(availableToDistribute)} руб.`)
+      return
+    }
+
     setSavingOperation(true)
     try {
       const savedOperation = await fundsClient.createOperation(auth.accessToken, operation.fundId, {
@@ -5869,6 +5882,16 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
       setRows((currentRows) => currentRows.map((row) => (
         row.id === savedOperation.fundId ? { ...row, amount: savedOperation.balanceAfter } : row
       )))
+      setAvailableToDistribute((current) => {
+        if (current === null) {
+          return current
+        }
+
+        const nextAmount = operation.kind === 'deposit'
+          ? current - savedOperation.amount
+          : current + savedOperation.amount
+        return Math.max(0, nextAmount)
+      })
       setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${savedOperation.fundName}" сохранено и записано в историю изменений.`)
       closeFundOperation()
     } catch (error: unknown) {
@@ -5878,7 +5901,6 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
     }
   }
 
-  const distributionAmount = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
   const operationAmount = operation ? parseFundOperationAmount(operation.amount) : null
   const operationActionLabel = operation?.kind === 'deposit' ? 'Пополнить фонд' : 'Изъять из фонда'
 
@@ -5931,7 +5953,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
 
       <div className="funds-distribution" aria-label="Сумма к распределению">
         <span>Сумма к распределению</span>
-        <strong>{distributionAmount === 0 ? '—' : `${formatMoney(distributionAmount)} руб.`}</strong>
+        <strong>{availableToDistribute === null || availableToDistribute === 0 ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
       </div>
 
       {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
@@ -5965,6 +5987,9 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                   placeholder="0,00"
                 />
               </FormField>
+              {operation.kind === 'deposit' && availableToDistribute !== null ? (
+                <p className="form-hint">Доступно к пополнению: {formatMoney(availableToDistribute)} руб.</p>
+              ) : null}
               <FormField label="Причина">
                 <textarea
                   aria-label="Причина операции фонда"
