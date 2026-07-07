@@ -589,6 +589,7 @@ describe('App', () => {
       initialElectricityMeterValue: 49,
     })
     let savedGarageStartingBalance: number | null = null
+    let deletedSupplierContactReason: string | null = null
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
@@ -609,6 +610,40 @@ describe('App', () => {
           initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
           comment: request.comment ?? null,
         })
+      },
+      createSupplier: async (_token, request) => createSupplier({
+        id: '22222222-2222-4222-8222-222222222222',
+        name: request.name,
+        groupId: request.groupId,
+        groupName: 'Коммунальные услуги',
+        inn: request.inn ?? null,
+        legalAddress: request.legalAddress ?? null,
+        contactPerson: request.contactPerson ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        startingBalance: request.startingBalance,
+        comment: request.comment ?? null,
+      }),
+      createSupplierContact: async (_token, request) => createSupplierContact({
+        id: '33333333-3333-4333-8333-333333333333',
+        supplierId: request.supplierId,
+        supplierName: 'Новый подрядчик',
+        fullName: request.fullName,
+        position: request.position ?? null,
+        phone: request.phone ?? null,
+        email: request.email ?? null,
+        status: request.status,
+        comment: request.comment ?? null,
+      }),
+      restoreSupplier: async (_token, id) => createSupplier({
+        id,
+        name: 'Новый подрядчик',
+        groupId: 'group-1',
+        groupName: 'Коммунальные услуги',
+        isArchived: false,
+      }),
+      archiveSupplierContact: async (_token, _id, reason) => {
+        deletedSupplierContactReason = reason
       },
     })
     let requestedGarageFinancialReportId: string | null = null
@@ -677,7 +712,7 @@ describe('App', () => {
     expect(garageSaveButton).toHaveFocus()
     await user.click(garageSaveButton)
     const reopenedGarageChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения гаража' })
-    await user.click(within(reopenedGarageChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await user.click(within(reopenedGarageChangeDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
     expect(savedGarageStartingBalance).toBe(100)
 
@@ -786,6 +821,11 @@ describe('App', () => {
     await user.pointer({ keys: '[MouseRight]', target: supplierContactRow as HTMLElement })
     const contactContextMenu = await screen.findByRole('menu', { name: 'Действия контакта Смирнов С.С.' })
     await user.click(within(contactContextMenu).getByRole('menuitem', { name: 'Удалить контакт' }))
+    const deleteContactDialog = await screen.findByRole('dialog', { name: 'Удалить контакт?' })
+    expect(within(deleteContactDialog).getByText('Смирнов С.С.')).toBeInTheDocument()
+    expect(within(deleteContactDialog).getByRole('button', { name: 'Удалить' })).toBeDisabled()
+    await user.type(within(deleteContactDialog).getByLabelText('Причина удаления контакта'), 'Контакт больше не работает')
+    await user.click(within(deleteContactDialog).getByRole('button', { name: 'Удалить' }))
     expect(within(editSupplierDialog).getByLabelText('Контакт 1: телефон')).toBeDisabled()
     await user.pointer({ keys: '[MouseRight]', target: supplierContactRow as HTMLElement })
     const deletedContactContextMenu = await screen.findByRole('menu', { name: 'Действия контакта Смирнов С.С.' })
@@ -799,7 +839,22 @@ describe('App', () => {
     expect(within(supplierChangeDialog).getByText('Контакты')).toBeInTheDocument()
     expect(within(supplierChangeDialog).getByText(/22-33/)).toBeInTheDocument()
     expect(within(supplierChangeDialog).getByText(/22-44/)).toBeInTheDocument()
-    await user.click(within(supplierChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await user.click(within(supplierChangeDialog).getByRole('button', { name: 'Сохранить' }))
+
+    supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
+    const reopenSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
+    const reopenedSupplierContactRow = within(reopenSupplierDialog).getByLabelText('Контакт 1: ФИО').closest('[role="row"]')!
+    await user.pointer({ keys: '[MouseRight]', target: reopenedSupplierContactRow as HTMLElement })
+    const reopenedContactContextMenu = await screen.findByRole('menu', { name: 'Действия контакта Смирнов С.С.' })
+    await user.click(within(reopenedContactContextMenu).getByRole('menuitem', { name: 'Удалить контакт' }))
+    const reopenedDeleteContactDialog = await screen.findByRole('dialog', { name: 'Удалить контакт?' })
+    await user.type(within(reopenedDeleteContactDialog).getByLabelText('Причина удаления контакта'), 'Контакт больше не работает')
+    await user.click(within(reopenedDeleteContactDialog).getByRole('button', { name: 'Удалить' }))
+    await user.click(within(reopenSupplierDialog).getByRole('button', { name: /Сохранить/i }))
+    const deleteContactChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения поставщика' })
+    await user.click(within(deleteContactChangeDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(deletedSupplierContactReason).toBe('Контакт больше не работает')
 
     supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     await user.pointer({ keys: '[MouseRight]', target: supplierRow as HTMLElement })
@@ -865,7 +920,7 @@ describe('App', () => {
     expect(within(employeeChangeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
     expect(within(employeeChangeDialog).getByText('Ставка')).toBeInTheDocument()
     expect(within(employeeChangeDialog).getByText(/25\s*000\s*->\s*30000/)).toBeInTheDocument()
-    await user.click(within(employeeChangeDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await user.click(within(employeeChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
     const updatedEmployeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
     await user.pointer({ keys: '[MouseRight]', target: updatedEmployeeRow as HTMLElement })

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import {
   ArrowLeft,
   Bell,
@@ -8379,6 +8379,7 @@ type ContractorSupplierContact = {
   status: 'Работает' | 'Не работает'
   comment: string
   isDeleted: boolean
+  deleteReason?: string
 }
 
 type ContractorStaffRow = {
@@ -9426,7 +9427,7 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
       for (const contact of normalizedSupplier.contacts) {
         if (contact.isDeleted) {
           if (isBackendDictionaryId(contact.id)) {
-            await dictionaryClient.archiveSupplierContact(auth.accessToken, contact.id, 'Контакт удален из карточки поставщика.')
+            await dictionaryClient.archiveSupplierContact(auth.accessToken, contact.id, contact.deleteReason?.trim() || 'Контакт удален из карточки поставщика.')
           }
 
           savedContacts.push({
@@ -10551,11 +10552,64 @@ function PrototypeChangeConfirmationDialog({
           ))}
         </dl>
         <div className="detail-dialog-actions contractors-dialog-actions">
-          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
           <button className="secondary-button" type="button" onClick={onConfirm}>
             <Save size={16} />
-            <span>Сохранить изменения</span>
+            <span>Сохранить</span>
           </button>
+          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function SupplierContactDeleteConfirmationDialog({
+  contact,
+  reason,
+  cancelRef,
+  dialogRef,
+  onReasonChange,
+  onCancel,
+  onConfirm,
+}: {
+  contact: ContractorSupplierContact
+  reason: string
+  cancelRef: RefObject<HTMLButtonElement | null>
+  dialogRef: RefObject<HTMLElement | null>
+  onReasonChange: (reason: string) => void
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-contact-delete-title" aria-describedby="supplier-contact-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Удаление</p>
+            <h3 id="supplier-contact-delete-title">Удалить контакт?</h3>
+            <p>{contact.fullName || 'Контакт без ФИО'}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления контакта" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <p className="confirmation-text" id="supplier-contact-delete-description">Контакт будет скрыт в карточке поставщика, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+        <label className="field-label" htmlFor="supplier-contact-delete-reason">Причина удаления</label>
+        <textarea
+          id="supplier-contact-delete-reason"
+          aria-label="Причина удаления контакта"
+          maxLength={1000}
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+          placeholder="Например: контакт больше не работает у поставщика"
+          required
+        />
+        <div className="detail-dialog-actions contractors-dialog-actions">
+          <button className="secondary-button danger-button" type="button" onClick={onConfirm} disabled={!reason.trim()}>
+            <Trash2 size={16} />
+            <span>Удалить</span>
+          </button>
+          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
         </div>
       </section>
     </div>
@@ -10694,10 +10748,16 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
   const [form, setForm] = useState<ContractorSupplierRow>(item ?? { ...createEmptySupplierPrototype(), service: services[0] ?? '' })
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [contactContextMenu, setContactContextMenu] = useState<{ contact: ContractorSupplierContact; x: number; y: number } | null>(null)
+  const [contactDeleteTarget, setContactDeleteTarget] = useState<ContractorSupplierContact | null>(null)
+  const [contactDeleteReason, setContactDeleteReason] = useState('')
   useRestoreFocusOnClose(true)
-  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
-  useEscapeKey(saveChanges.length === 0, onClose)
+  useRestoreFocusOnClose(Boolean(contactDeleteTarget))
+  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0 && !contactDeleteTarget)
+  const contactDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(contactDeleteTarget))
+  const contactDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactDeleteTarget))
+  useEscapeKey(saveChanges.length === 0 && !contactDeleteTarget, onClose)
   useEscapeKey(Boolean(contactContextMenu), () => setContactContextMenu(null))
+  useEscapeKey(Boolean(contactDeleteTarget), () => closeContactDeleteDialog())
 
   function saveAndClose() {
     onSave(normalizeSupplierPrototype(form))
@@ -10738,9 +10798,24 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
     setContactContextMenu({ contact, x: event.clientX, y: event.clientY })
   }
 
-  function deleteContact(contact: ContractorSupplierContact) {
+  function requestDeleteContact(contact: ContractorSupplierContact) {
     setContactContextMenu(null)
-    updateContact(contact.id, { isDeleted: true, status: 'Не работает' })
+    setContactDeleteTarget(contact)
+    setContactDeleteReason(contact.deleteReason ?? '')
+  }
+
+  function closeContactDeleteDialog() {
+    setContactDeleteTarget(null)
+    setContactDeleteReason('')
+  }
+
+  function confirmContactDelete() {
+    if (!contactDeleteTarget || !contactDeleteReason.trim()) {
+      return
+    }
+
+    updateContact(contactDeleteTarget.id, { isDeleted: true, status: 'Не работает', deleteReason: contactDeleteReason.trim() })
+    closeContactDeleteDialog()
   }
 
   function restoreContact(contact: ContractorSupplierContact) {
@@ -10748,7 +10823,7 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
     setForm((currentForm) => ({
       ...currentForm,
       isDeleted: false,
-      contacts: currentForm.contacts.map((itemContact) => (itemContact.id === contact.id ? { ...itemContact, isDeleted: false, status: 'Работает' } : itemContact)),
+      contacts: currentForm.contacts.map((itemContact) => (itemContact.id === contact.id ? { ...itemContact, isDeleted: false, status: 'Работает', deleteReason: undefined } : itemContact)),
     }))
   }
 
@@ -10843,7 +10918,7 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
                 </button>
               </>
             ) : (
-              <button className="context-menu-danger" type="button" role="menuitem" onClick={() => deleteContact(contactContextMenu.contact)}>
+              <button className="context-menu-danger" type="button" role="menuitem" onClick={() => requestDeleteContact(contactContextMenu.contact)}>
                 <Trash2 size={16} />
                 <span>Удалить контакт</span>
               </button>
@@ -10854,6 +10929,17 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
 
       {item && saveChanges.length > 0 ? (
         <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Поставщик'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения поставщика" />
+      ) : null}
+      {contactDeleteTarget ? (
+        <SupplierContactDeleteConfirmationDialog
+          contact={contactDeleteTarget}
+          reason={contactDeleteReason}
+          cancelRef={contactDeleteCancelRef}
+          dialogRef={contactDeleteDialogRef}
+          onReasonChange={setContactDeleteReason}
+          onCancel={closeContactDeleteDialog}
+          onConfirm={confirmContactDelete}
+        />
       ) : null}
     </>
   )
