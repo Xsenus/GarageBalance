@@ -8400,14 +8400,6 @@ type ContractorOneTimeRow = {
   isUsed: boolean
 }
 
-const contractorOneTimeRows = [
-  { id: 'entry-fee', name: 'Вступительный взнос', amount: '', isActive: true, isDeleted: false, isUsed: true },
-  { id: 'sewerage-connection', name: 'Подключение канализации', amount: '', isActive: true, isDeleted: false, isUsed: false },
-  { id: 'electricity-connection', name: 'Подключение к линии электросети', amount: '', isActive: true, isDeleted: false, isUsed: false },
-  { id: 'fine-that', name: 'Штраф за то', amount: '', isActive: true, isDeleted: false, isUsed: false },
-  { id: 'fine-this', name: 'Штраф за это', amount: '', isActive: true, isDeleted: false, isUsed: false },
-]
-
 type ContractorSection = 'garages' | 'suppliers' | 'staff'
 
 type ContractorGarageRow = {
@@ -10619,6 +10611,11 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
   })
 }
 
+function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[]) {
+  const rowsBackedByTariffs = contractorTariffRows.filter((row) => Boolean(row.calculationBase && findTariffForPrototypeRow(tariffs, row)))
+  return mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, tariffs), settings)
+}
+
 function getContractorTariffMonthNumber(monthValue?: string | null) {
   if (!monthValue) {
     return null
@@ -10828,14 +10825,13 @@ type TariffsPrototypeSavedState = {
 
 function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; formStateClient: FormStateClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
-  const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>(contractorTariffRows)
+  const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
-  const [backendIrregularPayments, setBackendIrregularPayments] = useState<IrregularPaymentDto[]>([])
-  const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>(contractorOneTimeRows)
-  const [tariffDrafts, setTariffDrafts] = useState(() => createEditableDrafts(contractorTariffRows))
-  const [oneTimeDrafts, setOneTimeDrafts] = useState(() => createEditableDrafts(contractorOneTimeRows))
+  const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>([])
+  const [tariffDrafts, setTariffDrafts] = useState<Record<string, Partial<ContractorTariffRow>>>({})
+  const [oneTimeDrafts, setOneTimeDrafts] = useState<Record<string, Partial<ContractorOneTimeRow>>>({})
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
@@ -10863,12 +10859,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
         if (!ignore) {
-          const mergedRows = mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(contractorTariffRows, loadedTariffs), loadedChargeServices)
-          const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows(contractorOneTimeRows, loadedIrregularPayments)
+          const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices)
+          const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows([], loadedIrregularPayments, true)
           setBackendTariffs(loadedTariffs)
           setBackendIncomeTypes(loadedIncomeTypes)
           setBackendChargeServices(loadedChargeServices)
-          setBackendIrregularPayments(loadedIrregularPayments)
           setTariffRows(mergedRows)
           setOneTimeRows(mergedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
@@ -10896,22 +10891,6 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
     let ignore = false
     formStateClient
       .getState<TariffsPrototypeSavedState>(auth.accessToken, tariffsFormStateScope)
-      .then((state) => {
-        if (ignore) {
-          return
-        }
-
-        if (state?.payload) {
-          const savedTariffRows = Array.isArray(state.payload.tariffRows) ? state.payload.tariffRows : contractorTariffRows
-          const savedOneTimeRows = Array.isArray(state.payload.oneTimeRows) ? state.payload.oneTimeRows : contractorOneTimeRows
-          const mergedSavedTariffRows = mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(savedTariffRows, backendTariffs), backendChargeServices)
-          const mergedSavedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows(savedOneTimeRows, backendIrregularPayments, true)
-          setTariffRows(mergedSavedTariffRows)
-          setOneTimeRows(mergedSavedOneTimeRows)
-          setTariffDrafts(createEditableDrafts(mergedSavedTariffRows))
-          setOneTimeDrafts(createEditableDrafts(mergedSavedOneTimeRows))
-        }
-      })
       .catch((error: unknown) => {
         if (!ignore) {
           setTariffPersistenceError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние тарифов.')
@@ -10926,10 +10905,10 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, backendChargeServices, backendIrregularPayments, backendTariffs, formStateClient])
+  }, [auth.accessToken, formStateClient])
 
   useEffect(() => {
-    if (!formStateLoaded) {
+    if (!formStateLoaded || tariffsLoading) {
       return
     }
 
@@ -10943,7 +10922,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
     }, 400)
 
     return () => window.clearTimeout(handle)
-  }, [auth.accessToken, formStateClient, formStateLoaded, oneTimeRows, tariffRows])
+  }, [auth.accessToken, formStateClient, formStateLoaded, oneTimeRows, tariffRows, tariffsLoading])
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
@@ -11315,7 +11294,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
 
   const commitTariffDateChange = async (row: ContractorTariffRow) => {
     const draft = tariffDrafts[row.id] ?? { title: row.title, amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
-    const nextDay = draft.dateDay.trim().padStart(2, '0')
+    const nextDay = (draft.dateDay ?? '').trim().padStart(2, '0')
     const nextMonth = draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value
     const dateError = getContractorTariffDateError(nextDay, nextMonth)
 
@@ -11704,6 +11683,15 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
                 ) : null}
               </Fragment>
             ))}
+            {tariffRows.length === 0 && !tariffsLoading ? (
+              <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
+                <span role="cell">Тарифы и услуги пока не настроены.</span>
+                <span role="cell" />
+                <span role="cell" />
+                <span role="cell" />
+                <span role="cell" />
+              </div>
+            ) : null}
           </div>
 
           <div className="contractors-bottom-grid">
@@ -11738,6 +11726,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
                   </span>
                 </div>
               ))}
+              {oneTimeRows.length === 0 && !tariffsLoading ? <p className="form-hint">Нерегулярные платежи пока не настроены.</p> : null}
             </section>
           </div>
       </>

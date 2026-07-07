@@ -326,7 +326,7 @@ describe('App', () => {
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
     expect(within(serviceDialog).getByLabelText('Цена за единицу 1')).toBeInTheDocument()
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveAttribute('list', 'contractor-service-unit-options')
-    expect(Array.from(serviceDialog.querySelectorAll<HTMLDataListElement>('#contractor-service-unit-options option')).map((option) => option.value)).toEqual(['руб.', 'дн.'])
+    expect(Array.from(serviceDialog.querySelectorAll<HTMLDataListElement>('#contractor-service-unit-options option')).map((option) => option.value)).toEqual(['руб.'])
     expect(within(serviceDialog).getByLabelText('По счетчику').closest('.contractors-service-flags')).toContainElement(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     expect(within(serviceDialog).queryByLabelText('Цена за единицу 1')).not.toBeInTheDocument()
@@ -351,8 +351,40 @@ describe('App', () => {
 
   it('edits tariffs and one-time payments without local history access', async () => {
     const user = userEvent.setup()
+    const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 1250 })
+    const electricityTariff = createTariff({
+      id: 'tariff-electricity',
+      name: 'Электроэнергия',
+      calculationBase: 'meter_electricity',
+      rate: 4,
+      electricityFirstThreshold: 1,
+      electricitySecondThreshold: 3,
+      electricityFirstTierName: 'От 0 кВт',
+      electricitySecondTierName: 'От 1 кВт',
+      electricityThirdTierName: 'От 3 кВт',
+      electricityFirstRate: 2,
+      electricitySecondRate: 3,
+      electricityThirdRate: 5,
+    })
+    const membershipSetting = createChargeServiceSetting({
+      id: 'membership',
+      name: 'Членский взнос',
+      isRegular: true,
+      periodicityMonths: 12,
+      accrualStartMonth: 1,
+      paymentDueDay: 30,
+      paymentDueMonth: 6,
+      overdueGraceDays: 30,
+      unitName: 'руб.',
+    })
     const dictionaryClient = createDictionaryClient({
-      getTariffs: async () => [],
+      getTariffs: async () => [waterTariff, electricityTariff],
+      getChargeServiceSettings: async () => [membershipSetting],
+      getIrregularPayments: async () => [
+        createIrregularPayment({ id: 'irregular-entry-fee', name: 'Вступительный взнос', isUsed: true }),
+        createIrregularPayment({ id: 'irregular-fine-that', name: 'Штраф за то' }),
+        createIrregularPayment({ id: 'irregular-fine-this', name: 'Штраф за это' }),
+      ],
       createTariff: async (_token, request) => createTariff({
         id: 'tariff-water-created',
         name: request.name,
@@ -393,9 +425,7 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i }))
 
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
-    const waterRateInput = within(tariffsPanel).getByLabelText('Вода: Тариф на воду: значение')
-    await user.type(waterRateInput, '1250{Enter}')
-    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
+    const waterRateInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
     expect(waterRateInput).toHaveValue('1250')
 
     await user.clear(waterRateInput)
@@ -466,9 +496,6 @@ describe('App', () => {
     expect(electricityThresholdInput).toHaveValue('7.5')
 
     const entryFeeInput = within(tariffsPanel).getByLabelText('Сумма: Вступительный взнос')
-    await user.type(entryFeeInput, '5000{Enter}')
-    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
-    expect(entryFeeInput).toHaveValue('5000')
     await user.clear(entryFeeInput)
     await user.type(entryFeeInput, '5500{Enter}')
     const entryFeeConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
@@ -853,7 +880,6 @@ describe('App', () => {
 
   it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
     const user = userEvent.setup()
-    let createdTariffRequest: UpsertTariffRequest | null = null
     let updatedTariffRequest: UpsertTariffRequest | null = null
     const electricityTariff = createTariff({
       id: 'tariff-electricity',
@@ -872,17 +898,6 @@ describe('App', () => {
     })
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [electricityTariff],
-      createTariff: async (_token, request) => {
-        createdTariffRequest = request
-        return createTariff({
-          id: 'tariff-created',
-          name: request.name,
-          calculationBase: request.calculationBase,
-          rate: request.rate,
-          effectiveFrom: request.effectiveFrom,
-          comment: request.comment ?? null,
-        })
-      },
       updateTariff: async (_token, id, request) => {
         updatedTariffRequest = request
         return createTariff({
@@ -910,10 +925,6 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
-
-    const waterAmount = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
-    await user.type(waterAmount, '42{Enter}')
-    await waitFor(() => expect(createdTariffRequest).toMatchObject({ name: 'Тариф на воду', calculationBase: 'meter_water', rate: 42 }))
 
     const firstTierName = within(tariffsPanel).getByLabelText('Электроэнергия: От 0 кВт: наименование')
     await user.clear(firstTierName)
@@ -1121,6 +1132,63 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveValue('дек')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
+  })
+
+  it('keeps empty backend tariff dictionaries empty despite stale saved tariff form state', async () => {
+    const user = userEvent.setup()
+    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'tariffs-and-fees-prototype'
+      ? {
+        scope,
+        payload: {
+          tariffRows: [
+            {
+              id: 'stale-water-rate',
+              group: 'Вода',
+              category: 'Вода',
+              title: 'Старый тариф без БД',
+              amount: '1',
+              unit: 'руб.',
+              byMeter: false,
+              tiered: false,
+              calculationBase: 'meter_water',
+            },
+          ],
+          oneTimeRows: [
+            {
+              id: 'stale-one-time',
+              name: 'Старый нерегулярный платеж',
+              amount: '10',
+              isActive: true,
+              isDeleted: false,
+              isUsed: false,
+            },
+          ],
+        },
+        updatedAtUtc: '2026-06-29T03:00:00Z',
+        updatedByUserId: 'admin-user',
+      }
+      : null)
+    const getTariffs = vi.fn(async () => [])
+    const dictionaryClient = createDictionaryClient({
+      getTariffs,
+      getIncomeTypes: async () => [],
+      getIrregularPayments: async () => [],
+      getChargeServiceSettings: async () => [],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await waitFor(() => expect(getTariffs).toHaveBeenCalledTimes(1))
+
+    expect(await within(tariffsPanel).findByText('Тарифы и услуги пока не настроены.')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Нерегулярные платежи пока не настроены.')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Старый тариф без БД')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Старый нерегулярный платеж')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByLabelText('Вода: Старый тариф без БД: значение')).not.toBeInTheDocument()
   })
 
   it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {
