@@ -7024,6 +7024,28 @@ function aggregateGarageIncomeReportRows(report: IncomeReportDto | null): Report
     .sort((left, right) => left.monthLabel.localeCompare(right.monthLabel, 'ru') || left.garageNumber.localeCompare(right.garageNumber, 'ru') || left.serviceName.localeCompare(right.serviceName, 'ru'))
 }
 
+function aggregateGarageIncomeRowsByGarage(rows: ReportGarageServiceRow[]): ReportGarageServiceRow[] {
+  const totals = new Map<string, ReportGarageServiceRow>()
+  rows.forEach((row) => {
+    const key = `${row.monthLabel}|${row.garageNumber}`
+    const current = totals.get(key) ?? {
+      monthLabel: row.monthLabel,
+      garageNumber: row.garageNumber,
+      serviceName: 'ИТОГО',
+      accrualAmount: 0,
+      incomeAmount: 0,
+      debt: 0,
+    }
+    current.accrualAmount += row.accrualAmount
+    current.incomeAmount += row.incomeAmount
+    current.debt = current.accrualAmount - current.incomeAmount
+    totals.set(key, current)
+  })
+
+  return Array.from(totals.values())
+    .sort((left, right) => left.monthLabel.localeCompare(right.monthLabel, 'ru') || left.garageNumber.localeCompare(right.garageNumber, 'ru'))
+}
+
 function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
@@ -7063,6 +7085,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
   const [bankDepositReport, setBankDepositReport] = useState<BankDepositReportDto | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
+  const [garageAccrualsGrouped, setGarageAccrualsGrouped] = useState(false)
   const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
@@ -7378,14 +7401,35 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
 
     if (activeReportTab === 'garages') {
       const garageRowsByService = aggregateGarageIncomeReportRows(garageIncomeDetailReport)
-      const reportRows = garageRowsByService.map((row) => [
-        row.monthLabel,
-        row.garageNumber,
-        formatMoney(row.accrualAmount),
-        row.serviceName,
-        formatMoney(row.incomeAmount),
-        formatMoney(row.debt),
-      ])
+      const groupedGarageRows = aggregateGarageIncomeRowsByGarage(garageRowsByService)
+      const visibleGarageRows = garageAccrualsGrouped ? groupedGarageRows : garageRowsByService
+      const garageReportColumns = garageAccrualsGrouped
+        ? ['Месяц', 'Гараж', 'Начисления', 'Поступления', 'Разница']
+        : ['Месяц', 'Гараж', 'Начисления', 'Услуга', 'Поступления', 'Разница']
+      const reportRows = visibleGarageRows.map((row) => garageAccrualsGrouped
+        ? [
+          row.monthLabel,
+          row.garageNumber,
+          formatMoney(row.accrualAmount),
+          formatMoney(row.incomeAmount),
+          formatMoney(row.debt),
+        ]
+        : [
+          row.monthLabel,
+          row.garageNumber,
+          formatMoney(row.accrualAmount),
+          row.serviceName,
+          formatMoney(row.incomeAmount),
+          formatMoney(row.debt),
+        ])
+      const emptyGarageRow = garageAccrualsGrouped
+        ? ['', garageFilterLabel, '', 'Данных за период нет', '']
+        : ['', garageFilterLabel, '', 'Данных за период нет', '', '']
+      const garageReportFooter = garageReport
+        ? garageAccrualsGrouped
+          ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), formatMoney(garageReport.incomeTotal), formatMoney(garageReport.debt)]
+          : ['ИТОГО', '', formatMoney(garageReport.accrualTotal), '', formatMoney(garageReport.incomeTotal), formatMoney(garageReport.debt)]
+        : undefined
       return (
         <ReportWorkbookSheet title="Отчёт по гаражам">
           {renderMonthlyFilter('garages', {
@@ -7403,11 +7447,16 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             <strong>ИТОГО поступлений</strong>
             <strong>Разница</strong>
           </div>
+          <div className="report-workbook-toolbar" role="group" aria-label="Группировка отчета по гаражам">
+            <button className="secondary-button" type="button" aria-pressed={garageAccrualsGrouped} onClick={() => setGarageAccrualsGrouped((current) => !current)}>
+              {garageAccrualsGrouped ? 'Разгруппировать начисления' : 'Сгруппировать начисления'}
+            </button>
+          </div>
           {renderReportTable(
             'Отчет по гаражам',
-            ['Месяц', 'Гараж', 'Начисления', 'Услуга', 'Поступления', 'Разница'],
-            reportRows.length > 0 ? reportRows : [['', garageFilterLabel, '', 'Данных за период нет', '', '']],
-            garageReport ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), '', formatMoney(garageReport.incomeTotal), formatMoney(garageReport.debt)] : undefined,
+            garageReportColumns,
+            reportRows.length > 0 ? reportRows : [emptyGarageRow],
+            garageReportFooter,
           )}
         </ReportWorkbookSheet>
       )

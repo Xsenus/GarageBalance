@@ -4146,6 +4146,17 @@ button.operation-row:focus-visible {
   text-align: left;
 }
 
+.report-workbook-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 16px;
+}
+
+.report-workbook-toolbar .secondary-button {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
 .report-workbook-table {
   overflow-x: auto;
   margin: 0 16px 16px;
