@@ -739,6 +739,54 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task RestoreStaffMemberAsync_RestoresOnlyWhenDepartmentIsActiveAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Accounting"), actorUserId, CancellationToken.None);
+        var member = await service.CreateStaffMemberAsync(new UpsertStaffMemberRequest("Olga Petrova", department.Value!.Id, 40000m), actorUserId, CancellationToken.None);
+
+        var archivedMember = await service.ArchiveStaffMemberAsync(member.Value!.Id, "Employee left", actorUserId, CancellationToken.None);
+        var activeMembers = await service.GetStaffMembersAsync(department.Value.Id, null, CancellationToken.None);
+        var allMembers = await service.GetStaffMembersAsync(department.Value.Id, null, CancellationToken.None, includeArchived: true);
+        var archivedDepartment = await service.ArchiveStaffDepartmentAsync(department.Value.Id, "Department closed", actorUserId, CancellationToken.None);
+        var restoreWithArchivedDepartment = await service.RestoreStaffMemberAsync(member.Value.Id, actorUserId, CancellationToken.None);
+
+        var restoredDepartment = await service.RestoreStaffDepartmentAsync(department.Value.Id, actorUserId, CancellationToken.None);
+        var restoredMember = await service.RestoreStaffMemberAsync(member.Value.Id, actorUserId, CancellationToken.None);
+        var activeMembersAfterRestore = await service.GetStaffMembersAsync(department.Value.Id, "olga", CancellationToken.None);
+
+        Assert.True(archivedMember.Succeeded);
+        Assert.True(archivedMember.Value!.IsArchived);
+        Assert.Empty(activeMembers);
+        Assert.Contains(allMembers, item => item.Id == member.Value.Id && item.IsArchived);
+        Assert.True(archivedDepartment.Succeeded);
+        Assert.False(restoreWithArchivedDepartment.Succeeded);
+        Assert.Equal("staff_department_not_found", restoreWithArchivedDepartment.ErrorCode);
+        Assert.True(restoredDepartment.Succeeded);
+        Assert.True(restoredMember.Succeeded);
+        Assert.False(restoredMember.Value!.IsArchived);
+        Assert.Contains(activeMembersAfterRestore, item => item.Id == member.Value.Id && !item.IsArchived);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.staff_member_archived" &&
+            item.ActorUserId == actorUserId &&
+            item.Summary.Contains("Olga Petrova", StringComparison.Ordinal) &&
+            item.MetadataJson != null &&
+            item.MetadataJson.Contains("Employee left", StringComparison.Ordinal));
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.staff_department_archived" &&
+            item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.staff_department_restored" &&
+            item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.staff_member_restored" &&
+            item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task RestoreSupplierGroupAsync_RejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
