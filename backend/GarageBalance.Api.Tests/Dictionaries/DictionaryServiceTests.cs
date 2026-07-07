@@ -1327,6 +1327,39 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task RestoreChargeServiceSettingAsync_RestoresArchivedSettingAndRejectsDuplicateActiveName()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var archived = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Electricity", true, 1, 1, 30, 6, 30, true, true, "kWh"),
+            null,
+            CancellationToken.None);
+        await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "No longer used", actorUserId, CancellationToken.None);
+
+        var restored = await service.RestoreChargeServiceSettingAsync(archived.Value.Id, actorUserId, CancellationToken.None);
+        var activeSettings = await service.GetChargeServiceSettingsAsync("electric", CancellationToken.None);
+
+        await service.ArchiveChargeServiceSettingAsync(restored.Value!.Id, "Check duplicate", actorUserId, CancellationToken.None);
+        await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Electricity", true, 1, 1, 30, 6, 30, true, true, "kWh"),
+            null,
+            CancellationToken.None);
+        var duplicateRestore = await service.RestoreChargeServiceSettingAsync(archived.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(restored.Succeeded);
+        Assert.False(restored.Value.IsArchived);
+        Assert.Contains(activeSettings, item => item.Id == archived.Value.Id && !item.IsArchived);
+        Assert.False(duplicateRestore.Succeeded);
+        Assert.Equal("charge_service_duplicate", duplicateRestore.ErrorCode);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.charge_service_restored" &&
+            item.ActorUserId == actorUserId &&
+            item.EntityId == archived.Value.Id.ToString());
+    }
+
+    [Fact]
     public async Task UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();

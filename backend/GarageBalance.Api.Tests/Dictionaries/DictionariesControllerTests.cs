@@ -370,6 +370,27 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task RestoreChargeServiceSetting_ReturnsOkActiveRecordAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            RestoreChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Electricity", true, 1, 1, 30, 6, 30, null, null, true, true, "kWh", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreChargeServiceSetting(serviceId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ChargeServiceSettingDto>(ok.Value);
+        Assert.Equal(serviceId, dto.Id);
+        Assert.False(dto.IsArchived);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(serviceId, service.LastRestoreId);
+    }
+
+    [Fact]
     public async Task SupplierContactsAndStaffEndpoints_PassFiltersAndActorToService()
     {
         var actorId = Guid.NewGuid();
