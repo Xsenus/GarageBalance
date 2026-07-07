@@ -748,6 +748,94 @@ public sealed class DictionariesControllerTests
         Assert.IsType<CreatedAtActionResult>(staffResult.Result);
     }
 
+    [Fact]
+    public async Task CreateSupplierContact_ReturnsNotFoundForMissingSupplier()
+    {
+        var actorUserId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateSupplierContactResult = DictionaryResult<SupplierContactDto>.Failure("supplier_not_found", "Поставщик не найден.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateSupplierContact(
+            new UpsertSupplierContactRequest(supplierId, "Петров", "Директор", "+7", "mail@example.com", "Работает", null),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("supplier_not_found", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateSupplierContact_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var contactId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateSupplierContactResult = DictionaryResult<SupplierContactDto>.Success(new SupplierContactDto(contactId, supplierId, "Водоканал", "Петров", "Менеджер", "+7", "mail@example.com", "Не работает", "Уволен", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateSupplierContact(
+            contactId,
+            new UpsertSupplierContactRequest(supplierId, "Петров", "Менеджер", "+7", "mail@example.com", "Не работает", "Уволен"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<SupplierContactDto>(ok.Value);
+        Assert.Equal(contactId, dto.Id);
+        Assert.Equal("Менеджер", dto.Position);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(contactId, service.LastSupplierContactId);
+    }
+
+    [Fact]
+    public async Task ArchiveSupplierContact_ReturnsNoContentAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var contactId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            ArchiveSupplierContactResult = DictionaryResult<SupplierContactDto>.Success(new SupplierContactDto(contactId, supplierId, "Водоканал", "Петров", "Директор", "+7", "mail@example.com", "Работает", null, true))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ArchiveSupplierContact(contactId, new ArchiveDictionaryEntryRequest("Контакт больше не работает"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(contactId, service.LastSupplierContactId);
+        Assert.Equal("Контакт больше не работает", service.LastArchiveReason);
+    }
+
+    [Fact]
+    public async Task RestoreSupplierContact_ReturnsOkActiveRecordAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var contactId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            RestoreSupplierContactResult = DictionaryResult<SupplierContactDto>.Success(new SupplierContactDto(contactId, supplierId, "Водоканал", "Петров", "Директор", "+7", "mail@example.com", "Работает", null, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreSupplierContact(contactId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<SupplierContactDto>(ok.Value);
+        Assert.Equal(contactId, dto.Id);
+        Assert.False(dto.IsArchived);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(contactId, service.LastRestoreId);
+    }
+
     private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
     {
         var controller = new DictionariesController(service);
@@ -898,6 +986,7 @@ public sealed class DictionariesControllerTests
         public string? LastArchiveReason { get; private set; }
         public Guid? LastChargeServiceSettingId { get; private set; }
         public Guid? LastIrregularPaymentId { get; private set; }
+        public Guid? LastSupplierContactId { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -906,6 +995,8 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<SupplierGroupDto> RestoreSupplierGroupResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> RestoreSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierContactDto> CreateSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierContactDto> UpdateSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierContactDto> ArchiveSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierContactDto> RestoreSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffDepartmentDto> CreateStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffDepartmentDto> RestoreStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
@@ -1083,14 +1174,16 @@ public sealed class DictionariesControllerTests
         public Task<DictionaryResult<SupplierContactDto>> UpdateSupplierContactAsync(Guid id, UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
-            return Task.FromResult(DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Not found."));
+            LastSupplierContactId = id;
+            return Task.FromResult(UpdateSupplierContactResult);
         }
 
         public Task<DictionaryResult<SupplierContactDto>> ArchiveSupplierContactAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastSupplierContactId = id;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Not found."));
+            return Task.FromResult(ArchiveSupplierContactResult);
         }
 
         public Task<DictionaryResult<SupplierContactDto>> RestoreSupplierContactAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
