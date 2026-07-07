@@ -21,6 +21,8 @@ describe('reportsApi', () => {
     await reportsApi.exportCashPaymentReportPdf('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'чек' })
     await reportsApi.exportBankDepositReportXlsx('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'банк' })
     await reportsApi.exportBankDepositReportPdf('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'банк' })
+    await reportsApi.exportFeeReportXlsx('token', { variation: 'Сбор на ворота' })
+    await reportsApi.exportFeeReportPdf('token', { variation: 'Сбор на ворота' })
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/consolidated/export/xlsx?monthFrom=2026-06-01&monthTo=2026-06-01&search=12', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/consolidated/export/pdf?monthFrom=2026-06-01&monthTo=2026-06-01&search=12', postRequest())
@@ -32,6 +34,8 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(8, '/api/reports/cash-payments/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/reports/bank-deposits/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%B1%D0%B0%D0%BD%D0%BA', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/reports/bank-deposits/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%B1%D0%B0%D0%BD%D0%BA', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/reports/fees/export/xlsx?variation=%D0%A1%D0%B1%D0%BE%D1%80+%D0%BD%D0%B0+%D0%B2%D0%BE%D1%80%D0%BE%D1%82%D0%B0', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(12, '/api/reports/fees/export/pdf?variation=%D0%A1%D0%B1%D0%BE%D1%80+%D0%BD%D0%B0+%D0%B2%D0%BE%D1%80%D0%BE%D1%82%D0%B0', postRequest())
   })
 
   it('loads cash, bank and fee reports through dedicated filtered endpoints', async () => {

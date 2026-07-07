@@ -4,6 +4,10 @@ export function buildReportFileName(type: 'consolidated' | 'income' | 'expense' 
   return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
 }
 
+export function buildSnapshotReportFileName(type: 'fees', extension: 'xlsx' | 'pdf'): string {
+  return `garagebalance-${type}.${extension}`
+}
+
 export function buildImportReportFileName(run: AccessImportRunDto): string {
   const startedAt = run.startedAtUtc.slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '-')
   const sourceName = run.originalFileName.replace(/\.[^.]+$/, '').replaceAll(' ', '-').toLowerCase()

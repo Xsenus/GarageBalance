@@ -1324,6 +1324,133 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         return ReportResult<FeeReportDto>.Success(report);
     }
 
+    public async Task<ReportResult<ReportExportFileDto>> ExportFeeReportXlsxAsync(FeeReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetFeeReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet(
+                    "Сборы",
+                    ["Наименование", "Цель", "Сумма сбора", "Собрано", "Задолженность"],
+                    report.SummaryRows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.Name),
+                        XlsxCell.Text(row.Goal),
+                        XlsxCell.Number(row.FeeAmount),
+                        XlsxCell.Number(row.Collected),
+                        XlsxCell.Number(Math.Max(row.FeeAmount - row.Collected, 0m))
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Гаражи",
+                    ["Сбор", "Гараж", "Владелец", "Начислено", "Оплачено", "Дата платежа", "Задолженность"],
+                    report.GarageRows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.FeeName),
+                        XlsxCell.Text(row.GarageNumber),
+                        XlsxCell.Text(row.OwnerName),
+                        XlsxCell.Number(row.Accrued),
+                        XlsxCell.Number(row.Paid),
+                        XlsxCell.Text(row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty),
+                        XlsxCell.Number(row.Debt)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Должники",
+                    ["Сбор", "Гараж", "Владелец", "Оплачено", "Дата платежа", "Задолженность"],
+                    report.DebtorRows.Select(row => (IReadOnlyList<XlsxCell>)
+                    [
+                        XlsxCell.Text(row.FeeName),
+                        XlsxCell.Text(row.GarageNumber),
+                        XlsxCell.Text(row.OwnerName),
+                        XlsxCell.Number(row.Paid),
+                        XlsxCell.Text(row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty),
+                        XlsxCell.Number(row.Debt)
+                    ]).ToArray()),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Вариация", "Начислено", "Собрано", "Задолженность", "Строк"],
+                    [
+                        [
+                            XlsxCell.Text(report.Variation),
+                            XlsxCell.Number(report.AccruedTotal),
+                            XlsxCell.Number(report.CollectedTotal),
+                            XlsxCell.Number(report.DebtTotal),
+                            XlsxCell.Number(report.RowCount)
+                        ]
+                    ])
+            ]);
+
+        var file = new ReportExportFileDto(
+            BuildSnapshotExportFileName("fees", "xlsx"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        await AddFeeReportExportAuditAsync(request, report, "xlsx", file.FileName, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportFeeReportPdfAsync(FeeReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await GetFeeReportAsync(request, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Variation: {report.Variation}",
+            $"Accrued: {FormatAmount(report.AccruedTotal)} | Collected: {FormatAmount(report.CollectedTotal)} | Debt: {FormatAmount(report.DebtTotal)} | Rows: {report.RowCount}",
+            string.Empty,
+            "Fees",
+            "Name | Goal | Accrued | Collected"
+        };
+        lines.AddRange(report.SummaryRows.Select(row =>
+            string.Join(" | ",
+                row.Name,
+                row.Goal,
+                FormatAmount(row.FeeAmount),
+                FormatAmount(row.Collected))));
+        lines.Add(string.Empty);
+        lines.Add("Garages");
+        lines.Add("Fee | Garage | Owner | Accrued | Paid | Payment date | Debt");
+        lines.AddRange(report.GarageRows.Select(row =>
+            string.Join(" | ",
+                row.FeeName,
+                row.GarageNumber,
+                row.OwnerName ?? string.Empty,
+                FormatAmount(row.Accrued),
+                FormatAmount(row.Paid),
+                row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty,
+                FormatAmount(row.Debt))));
+        lines.Add(string.Empty);
+        lines.Add("Debtors");
+        lines.Add("Fee | Garage | Owner | Paid | Payment date | Debt");
+        lines.AddRange(report.DebtorRows.Select(row =>
+            string.Join(" | ",
+                row.FeeName,
+                row.GarageNumber,
+                row.OwnerName ?? string.Empty,
+                FormatAmount(row.Paid),
+                row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty,
+                FormatAmount(row.Debt))));
+
+        var content = PdfReportDocumentBuilder.Build("GarageBalance fees report", lines);
+        var file = new ReportExportFileDto(
+            BuildSnapshotExportFileName("fees", "pdf"),
+            "application/pdf",
+            content);
+        await AddFeeReportExportAuditAsync(request, report, "pdf", file.FileName, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
     public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
         var reportResult = await GetIncomeReportAsync(request, cancellationToken);
@@ -2113,6 +2240,35 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             cancellationToken);
     }
 
+    private async Task AddFeeReportExportAuditAsync(FeeReportRequest request, FeeReportDto report, string format, string fileName, CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.fees_exported",
+            "Отчет по сборам",
+            "exported",
+            today,
+            today,
+            report.RowCount,
+            request.Variation,
+            new Dictionary<string, object?>
+            {
+                ["reportType"] = "fees",
+                ["format"] = format,
+                ["fileName"] = fileName,
+                ["visibleSummaryRowCount"] = report.SummaryRows.Count,
+                ["visibleGarageRowCount"] = report.GarageRows.Count,
+                ["visibleDebtorRowCount"] = report.DebtorRows.Count,
+                ["accruedTotal"] = report.AccruedTotal,
+                ["collectedTotal"] = report.CollectedTotal,
+                ["debtTotal"] = report.DebtTotal,
+                ["variation"] = report.Variation,
+                ["limit"] = request.Limit
+            },
+            cancellationToken);
+    }
+
     private static string NormalizeReportActionName(string reportTitle)
     {
         return reportTitle switch
@@ -2139,6 +2295,11 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
     private static string BuildExportFileName(string reportType, DateOnly dateFrom, DateOnly dateTo, string extension)
     {
         return $"garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.{extension}";
+    }
+
+    private static string BuildSnapshotExportFileName(string reportType, string extension)
+    {
+        return $"garagebalance-{reportType}.{extension}";
     }
 
     private static IReadOnlyList<T> ApplyRowLimit<T>(IReadOnlyList<T> rows, int? limit)

@@ -7133,9 +7133,11 @@ describe('App', () => {
     const user = userEvent.setup()
     const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const exportBankDepositReportPdf = vi.fn(async () => new Blob(['bank pdf'], { type: 'application/pdf' }))
+    const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
       exportCashPaymentReportXlsx,
       exportBankDepositReportPdf,
+      exportFeeReportXlsx,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -7188,6 +7190,8 @@ describe('App', () => {
     await user.type(feeFilter, 'Членский взнос')
     const feeSummaryTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })
     await waitFor(() => expect(feeSummaryTable).toHaveTextContent('Членский взнос'))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' }))
+    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), { variation: 'Членский взнос' }))
     expect(within(reportsPanel).queryByRole('table', { name: 'Должники по сбору' })).not.toBeInTheDocument()
     const showFeeDebtorsButton = within(reportsPanel).getByRole('button', { name: 'Показать должников' })
     await user.click(within(feeSummaryTable).getByRole('button', { name: 'Открыть детализацию сбора Членский взнос' }))
@@ -8139,6 +8143,8 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     getBankDepositReport: async () => createBankDepositReport(),
     exportBankDepositReportXlsx: async () => new Blob(['bank deposits xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportBankDepositReportPdf: async () => new Blob(['bank deposits pdf'], { type: 'application/pdf' }),
+    exportFeeReportXlsx: async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportFeeReportPdf: async () => new Blob(['fees pdf'], { type: 'application/pdf' }),
     getFeeReport: async (_token, params) => {
       const variation = params?.variation ?? 'Сбор на ворота'
       return variation.toLowerCase().includes('член')

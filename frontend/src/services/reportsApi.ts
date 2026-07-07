@@ -311,6 +311,18 @@ export type ReportClient = {
       limit?: number
     },
   ): Promise<FeeReportDto>
+  exportFeeReportXlsx(
+    accessToken: string,
+    params?: {
+      variation?: string
+    },
+  ): Promise<Blob>
+  exportFeeReportPdf(
+    accessToken: string,
+    params?: {
+      variation?: string
+    },
+  ): Promise<Blob>
   exportExpenseReportXlsx(
     accessToken: string,
     params?: {
@@ -563,6 +575,14 @@ export const reportsApi: ReportClient = {
   getFeeReport(accessToken, params = {}) {
     const query = buildFeeReportQuery(params)
     return requestJson(accessToken, `/api/reports/fees${query ? `?${query}` : ''}`)
+  },
+  exportFeeReportXlsx(accessToken, params = {}) {
+    const query = buildFeeReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/fees/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+  exportFeeReportPdf(accessToken, params = {}) {
+    const query = buildFeeReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/fees/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportExpenseReportXlsx(accessToken, params = {}) {
     const query = buildExpenseReportQuery(params)

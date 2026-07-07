@@ -325,6 +325,38 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpPost("fees/export/xlsx")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportFeeReportXlsx(
+        [FromQuery] string? variation,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportFeeReportXlsxAsync(
+            new FeeReportRequest(variation, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPost("fees/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportFeeReportPdf(
+        [FromQuery] string? variation,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.ExportFeeReportPdfAsync(
+            new FeeReportRequest(variation, ActorUserId: GetActorUserId()),
+            cancellationToken);
+
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpPost("expense/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

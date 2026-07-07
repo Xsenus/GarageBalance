@@ -859,6 +859,60 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportFeeReportXlsxAsync_ReturnsWorkbookWithSummaryGaragesAndDebtors()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 500m, "PKO-2", "Полная оплата"), null, CancellationToken.None);
+
+        var result = await service.ExportFeeReportXlsxAsync(
+            new FeeReportRequest("член", ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-fees.xlsx", result.Value!.FileName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
+        AssertWorkbookContains(result.Value.Content, "Сборы");
+        AssertWorkbookContains(result.Value.Content, "Гаражи");
+        AssertWorkbookContains(result.Value.Content, "Должники");
+        AssertWorkbookContains(result.Value.Content, "Иванов Иван");
+        AssertWorkbookContains(result.Value.Content, "Петров Петр");
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.fees_exported" &&
+            auditEvent.ActorUserId == actorUserId &&
+            auditEvent.MetadataJson != null &&
+            auditEvent.MetadataJson.Contains("xlsx", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExportFeeReportPdfAsync_ReturnsDocumentWithTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"), null, CancellationToken.None);
+
+        var result = await service.ExportFeeReportPdfAsync(
+            new FeeReportRequest("член"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("garagebalance-fees.pdf", result.Value!.FileName);
+        Assert.Equal("application/pdf", result.Value.ContentType);
+        AssertPdfContains(result.Value.Content, "GarageBalance fees report");
+        AssertPdfContains(result.Value.Content, "500.00");
+        AssertPdfContains(result.Value.Content, "300.00");
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -19,6 +19,8 @@ public sealed class ReportsControllerTests
     [InlineData(nameof(ReportsController.ExportCashPaymentReportPdf), "cash-payments/export/pdf")]
     [InlineData(nameof(ReportsController.ExportBankDepositReportXlsx), "bank-deposits/export/xlsx")]
     [InlineData(nameof(ReportsController.ExportBankDepositReportPdf), "bank-deposits/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportFeeReportXlsx), "fees/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportFeeReportPdf), "fees/export/pdf")]
     public void ExportReportActions_UsePostBecauseExportsWriteAuditEvents(string actionName, string expectedRoute)
     {
         var method = typeof(ReportsController).GetMethod(actionName)!;
@@ -400,6 +402,49 @@ public sealed class ReportsControllerTests
     }
 
     [Fact]
+    public async Task ExportFeeReportXlsx_ReturnsFile()
+    {
+        var content = new byte[] { 19, 20, 21 };
+        var export = new ReportExportFileDto(
+            "garagebalance-fees.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        var service = new FakeReportService
+        {
+            FeeXlsxExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        };
+        var controller = new ReportsController(service);
+
+        var result = await controller.ExportFeeReportXlsx("ворота", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+        Assert.Equal("ворота", service.FeeRequest?.Variation);
+    }
+
+    [Fact]
+    public async Task ExportFeeReportPdf_ReturnsFile()
+    {
+        var content = new byte[] { 22, 23, 24 };
+        var export = new ReportExportFileDto("garagebalance-fees.pdf", "application/pdf", content);
+        var service = new FakeReportService
+        {
+            FeePdfExportResult = ReportResult<ReportExportFileDto>.Success(export)
+        };
+        var controller = new ReportsController(service);
+
+        var result = await controller.ExportFeeReportPdf("ворота", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(export.ContentType, file.ContentType);
+        Assert.Same(content, file.FileContents);
+        Assert.Equal("ворота", service.FeeRequest?.Variation);
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsx_ReturnsFile()
     {
         var content = new byte[] { 1, 2, 3 };
@@ -743,6 +788,10 @@ public sealed class ReportsControllerTests
         public ReportResult<FeeReportDto> FeeResult { get; init; } = ReportResult<FeeReportDto>.Failure("not_configured", "Not configured.");
         public FeeReportRequest? FeeRequest { get; private set; }
 
+        public ReportResult<ReportExportFileDto> FeeXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ReportExportFileDto> FeePdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
         public ReportResult<ReportExportFileDto> IncomeExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<ReportExportFileDto> ExpenseExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
@@ -825,6 +874,18 @@ public sealed class ReportsControllerTests
         {
             FeeRequest = request;
             return Task.FromResult(FeeResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportFeeReportXlsxAsync(FeeReportRequest request, CancellationToken cancellationToken)
+        {
+            FeeRequest = request;
+            return Task.FromResult(FeeXlsxExportResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportFeeReportPdfAsync(FeeReportRequest request, CancellationToken cancellationToken)
+        {
+            FeeRequest = request;
+            return Task.FromResult(FeePdfExportResult);
         }
 
         public Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)

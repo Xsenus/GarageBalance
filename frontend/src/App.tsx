@@ -50,7 +50,7 @@ import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey }
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from './shared/dictionaryWorkbench'
 import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './shared/financeWorkbench'
-import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, downloadBlob } from './shared/fileExports'
+import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, buildSnapshotReportFileName, downloadBlob } from './shared/fileExports'
 import type { ChangePreview } from './shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from './shared/changePreview'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
@@ -7332,6 +7332,25 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
   }
 
+  async function downloadFeeReport(extension: 'xlsx' | 'pdf') {
+    const exportKey = `fees-${extension}`
+    const variation = feeVariationFilter.trim() || undefined
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = extension === 'xlsx'
+        ? await reportClient.exportFeeReportXlsx(auth.accessToken, { variation })
+        : await reportClient.exportFeeReportPdf(auth.accessToken, { variation })
+      downloadBlob(blob, buildSnapshotReportFileName('fees', extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
+  }
+
   function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
     const filter = monthlyFilters[key]
     return (
@@ -7655,6 +7674,14 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
               <span>Вариация сбора</span>
               <input aria-label="Вариация сбора" list={feeOptionsId} value={feeVariationFilter} onChange={(event) => setFeeVariationFilter(event.target.value)} placeholder="Название сбора" />
             </label>
+          </div>
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сборам">
+            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFeeReport('xlsx')}>
+              {reportExporting === 'fees-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
+            </button>
+            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFeeReport('pdf')}>
+              {reportExporting === 'fees-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
+            </button>
           </div>
           <div className="report-workbook-split">
             {renderReportTable(
