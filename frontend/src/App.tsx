@@ -527,8 +527,6 @@ function Workspace({
     }
   }
 
-  const showTopbarSearch = activeSection !== 'dashboard' && activeSection !== 'tariffsAndFees' && activeSection !== 'contractors' && activeSection !== 'meterReadings' && activeSection !== 'payments' && activeSection !== 'funds' && activeSection !== 'reports'
-
   return (
     <>
       <header className={activeSection === 'dashboard' ? 'topbar topbar--dashboard' : 'topbar'}>
@@ -536,12 +534,6 @@ function Workspace({
           <button className="icon-button topbar-back-button" type="button" aria-label="Назад к выбору раздела" title="Назад к выбору раздела" onClick={() => onOpenSection('dashboard')}>
             <ArrowLeft size={19} />
           </button>
-        ) : null}
-        {showTopbarSearch ? (
-          <div className="search">
-            <Search size={18} />
-            <span>Поиск по гаражу, владельцу или поставщику</span>
-          </div>
         ) : null}
         <div className="user-panel">
           <div>

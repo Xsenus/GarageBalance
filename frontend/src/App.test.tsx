@@ -2084,6 +2084,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Справочники' })).toHaveAttribute('aria-current', 'page')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(dictionaryPanel).toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Тарифы' })).not.toBeInTheDocument()
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
@@ -2093,21 +2094,25 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     expect(screen.getByRole('button', { name: 'Платежи' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
 
     await openSection(user, 'Отчеты')
     expect(screen.getByRole('button', { name: 'Отчеты' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('region', { name: 'Отчеты' })).toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Платежи' })).not.toBeInTheDocument()
 
     await openSection(user, 'Импорт')
     expect(screen.getByRole('button', { name: 'Импорт' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('region', { name: 'Импорт Access' })).toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Отчеты' })).not.toBeInTheDocument()
 
     await openSection(user, 'Что нового')
     expect(screen.getByRole('button', { name: 'Что нового' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('region', { name: 'Что нового' })).toBeInTheDocument()
+    expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Импорт Access' })).not.toBeInTheDocument()
   })
 
