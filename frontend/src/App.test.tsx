@@ -1401,9 +1401,50 @@ describe('App', () => {
           ],
         })
       },
-      getGarageIncomeWorksheet: async () => {
-        throw new Error('Серверная ведомость недоступна')
-      },
+      getGarageIncomeWorksheet: async () => createGarageIncomeWorksheet({
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        accrualTotal: 10174,
+        incomeTotal: 0,
+        debtTotal: 10174,
+        closingDebt: 10174,
+        rows: [
+          {
+            accountingMonth: '2026-06-01',
+            incomeTypeId: incomeType.id,
+            incomeTypeName: incomeType.name,
+            meterKind: 'electricity',
+            meterValue: 86,
+            meterConsumption: 18,
+            accrualAmount: 5674,
+            incomeAmount: 0,
+            debt: 5674,
+          },
+          {
+            accountingMonth: '2026-06-01',
+            incomeTypeId: waterIncomeType.id,
+            incomeTypeName: waterIncomeType.name,
+            meterKind: 'water',
+            meterValue: 59,
+            meterConsumption: 4,
+            accrualAmount: 4500,
+            incomeAmount: 0,
+            debt: 4500,
+          },
+          {
+            accountingMonth: '2026-05-01',
+            incomeTypeId: null,
+            incomeTypeName: 'Членский взнос',
+            meterKind: null,
+            meterValue: null,
+            meterConsumption: null,
+            accrualAmount: 0,
+            incomeAmount: 0,
+            debt: 0,
+          },
+        ],
+      }),
     })
     const fundsClient = createFundsClient({
       createOperation: async (_token, fundId, request) => {
@@ -1440,13 +1481,14 @@ describe('App', () => {
     expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('Просроченная задолженность')
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Иванов Иван')
     expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
-    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toBeInTheDocument()
-    expect(within(prototype).getAllByText('Электроэнергия').length).toBeGreaterThan(0)
+    const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
+    await within(incomeTable).findByText('Электроэнергия')
     expect(within(prototype).getByText('май.26')).toBeInTheDocument()
 
     const electricityPaymentInput = within(prototype).getByLabelText('Платеж Электроэнергия июн.26')
-    expect(electricityPaymentInput).toHaveValue('5674')
+    expect(electricityPaymentInput).toHaveValue('')
     await user.click(electricityPaymentInput)
+    await user.type(electricityPaymentInput, '5674')
     await user.keyboard('{Enter}')
     await waitFor(() => expect(savedIncomeRequests[0]).toMatchObject({
       garageId: garage.id,
@@ -1501,7 +1543,7 @@ describe('App', () => {
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(within(fullPaymentDialog).getByLabelText('Период полной оплаты')).toHaveValue('full')
     const fullPaymentAmount = within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')
-    expect(fullPaymentAmount).toHaveValue('4500')
+    expect(fullPaymentAmount).toHaveValue('6500')
     expect(fullPaymentAmount).toHaveAttribute('readonly')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
@@ -1511,7 +1553,7 @@ describe('App', () => {
       incomeTypeId: waterIncomeType.id,
       operationDate: '2026-06-30',
       accountingMonth: '2026-06-01',
-      amount: 4500,
+      amount: 6500,
       comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
@@ -1651,6 +1693,47 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Кузнецова Мария')
     expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('4')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
+  })
+
+  it('does not show prototype income rows while selected real garage worksheet is unavailable', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({
+      id: 'garage-1',
+      number: '1',
+      ownerName: 'Иванов Иван',
+      peopleCount: 3,
+      floorCount: 1,
+    })
+    render(
+      <App
+        authClient={createAuthClient()}
+        dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })}
+        financeClient={createFinanceClient({
+          getGarageIncomeWorksheet: async () => {
+            throw new Error('Серверная ведомость недоступна')
+          },
+          getOperationsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 500 }),
+        })}
+        importClient={createImportClient()}
+        reportClient={createReportClient()}
+        releaseClient={createReleaseClient()}
+        userClient={createUserClient()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), 'Иванов')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
+
+    expect(await within(prototype).findByText('Серверная ведомость недоступна')).toBeInTheDocument()
+    const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
+    expect(within(incomeTable).getByText('Начислений и поступлений за выбранный период пока нет.')).toBeInTheDocument()
+    expect(within(incomeTable).queryByText('Электроэнергия')).not.toBeInTheDocument()
+    expect(within(incomeTable).queryByText('май.26')).not.toBeInTheDocument()
   })
 
   it('loads selected garage income worksheet from finance backend', async () => {
@@ -1935,9 +2018,28 @@ describe('App', () => {
     const garage = createGarage({ id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', peopleCount: 2, floorCount: 1, startingBalance: -1700 })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({
       createDebtTransfer: createDebtTransferMock,
-      getGarageIncomeWorksheet: async () => {
-        throw new Error('Серверная ведомость недоступна')
-      },
+      getGarageIncomeWorksheet: async () => createGarageIncomeWorksheet({
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        accrualTotal: 4210,
+        incomeTotal: 2510,
+        debtTotal: 1700,
+        closingDebt: 1700,
+        rows: [
+          {
+            accountingMonth: '2026-06-01',
+            incomeTypeId: 'income-electricity',
+            incomeTypeName: 'Электроэнергия',
+            meterKind: 'electricity',
+            meterValue: 74,
+            meterConsumption: 13,
+            accrualAmount: 4210,
+            incomeAmount: 2510,
+            debt: 1700,
+          },
+        ],
+      }),
     })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')

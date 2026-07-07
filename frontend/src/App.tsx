@@ -3544,11 +3544,12 @@ function PaymentsPrototypePanel({
   }
 
   function selectGarage(garage: PaymentsPrototypeGarage) {
+    const isRealGarage = realGarageIds.has(garage.id)
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
-    setGarageRows(createGarageIncomePrototypeRows(garage.number))
+    setGarageRows(isRealGarage ? [] : createGarageIncomePrototypeRows(garage.number))
     setGarageWorksheetSummary(null)
-    setHistoryRows(realGarageIds.has(garage.id) ? [] : garage.number === '1' ? garagePaymentHistoryRows : [])
+    setHistoryRows(isRealGarage ? [] : garage.number === '1' ? garagePaymentHistoryRows : [])
     setPaymentError(null)
     void loadGarageIncomeWorksheet(garage)
     void loadGaragePaymentHistory(garage)
@@ -4412,6 +4413,11 @@ function PaymentsPrototypePanel({
                       </Fragment>
                     )
                   })}
+                  {groupedGarageRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? 'Загружаем поступления...' : 'Начислений и поступлений за выбранный период пока нет.'}</td>
+                    </tr>
+                  ) : null}
                   <tr className="payments-prototype-total-row">
                     <td />
                     <td>ИТОГО</td>
