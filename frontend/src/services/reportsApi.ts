@@ -52,6 +52,7 @@ export type IncomeReportRowDto = {
   documentNumber: string | null
   comment: string | null
   createdAtUtc: string | null
+  debtAfterPayment?: number | null
 }
 
 export type IncomeReportDto = {

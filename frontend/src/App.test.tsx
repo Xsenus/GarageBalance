@@ -7152,6 +7152,8 @@ describe('App', () => {
     expect(incomeReportTable).toBeInTheDocument()
     expect(incomeReportTable).toHaveTextContent('10:24')
     expect(incomeReportTable).toHaveTextContent('1 500,00')
+    expect(incomeReportTable).toHaveTextContent('Остаток долга после платежа')
+    expect(incomeReportTable).toHaveTextContent('500,00')
     expect(incomeReportTable).not.toHaveTextContent('Начисление за июнь')
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
@@ -9354,6 +9356,7 @@ function createIncomeReport(overrides: Partial<IncomeReportDto> = {}): IncomeRep
         documentNumber: 'PKO-1',
         comment: 'Оплата за июнь',
         createdAtUtc: '2026-06-10T10:24:00+07:00',
+        debtAfterPayment: 500,
       },
     ],
     ...overrides,

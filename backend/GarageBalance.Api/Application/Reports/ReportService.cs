@@ -375,7 +375,9 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             var paymentRows = await paymentsQuery
                 .OrderBy(operation => operation.OperationDate)
                 .ThenBy(operation => operation.Garage!.Number)
+                .ThenBy(operation => operation.Id)
                 .ToListAsync(cancellationToken);
+            var debtAfterPayments = await CalculateIncomeDebtAfterPaymentsAsync(paymentRows, cancellationToken);
 
             rows.AddRange(paymentRows.Select(operation => new IncomeReportRowDto(
                 IncomeReportPaymentRows,
@@ -392,7 +394,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 -operation.Amount,
                 operation.DocumentNumber,
                 operation.Comment,
-                operation.CreatedAtUtc)));
+                operation.CreatedAtUtc,
+                debtAfterPayments.GetValueOrDefault(operation.Id))));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -437,6 +440,87 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             cancellationToken);
 
         return ReportResult<IncomeReportDto>.Success(report);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateIncomeDebtAfterPaymentsAsync(
+        IReadOnlyList<FinancialOperation> operations,
+        CancellationToken cancellationToken)
+    {
+        if (operations.Count == 0)
+        {
+            return new Dictionary<Guid, decimal>();
+        }
+
+        var garageIds = operations
+            .Select(operation => operation.GarageId!.Value)
+            .Distinct()
+            .ToArray();
+        var targetAccountingMonths = operations.ToDictionary(operation => operation.Id, operation => operation.AccountingMonth);
+        var maxOperationDate = operations.Max(operation => operation.OperationDate);
+        var maxAccountingMonth = operations.Max(operation => operation.AccountingMonth);
+
+        var startingBalances = await dbContext.Garages.AsNoTracking()
+            .Where(garage => garageIds.Contains(garage.Id))
+            .Select(garage => new { garage.Id, garage.StartingBalance })
+            .ToDictionaryAsync(garage => garage.Id, garage => garage.StartingBalance, cancellationToken);
+
+        var accrualTotals = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                garageIds.Contains(accrual.GarageId) &&
+                accrual.AccountingMonth <= maxAccountingMonth)
+            .GroupBy(accrual => new { accrual.GarageId, accrual.AccountingMonth })
+            .Select(group => new IncomeDebtAccrualRow(group.Key.GarageId, group.Key.AccountingMonth, group.Sum(accrual => accrual.Amount)))
+            .ToListAsync(cancellationToken);
+        var accrualsByGarage = accrualTotals
+            .GroupBy(row => row.GarageId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderBy(row => row.AccountingMonth).ToArray());
+
+        var relatedPayments = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId != null &&
+                garageIds.Contains(operation.GarageId.Value) &&
+                operation.OperationDate <= maxOperationDate)
+            .Select(operation => new IncomeDebtPaymentRow(
+                operation.Id,
+                operation.GarageId!.Value,
+                operation.OperationDate,
+                operation.CreatedAtUtc,
+                operation.Amount))
+            .ToListAsync(cancellationToken);
+
+        var result = new Dictionary<Guid, decimal>();
+        foreach (var garageGroup in relatedPayments
+            .GroupBy(payment => payment.GarageId)
+            .OrderBy(group => group.Key))
+        {
+            var paidTotal = 0m;
+            var startingBalance = startingBalances.GetValueOrDefault(garageGroup.Key);
+            var garageAccruals = accrualsByGarage.GetValueOrDefault(garageGroup.Key) ?? [];
+
+            foreach (var payment in garageGroup
+                .OrderBy(payment => payment.OperationDate)
+                .ThenBy(payment => payment.CreatedAtUtc)
+                .ThenBy(payment => payment.OperationId))
+            {
+                paidTotal += payment.Amount;
+                if (!targetAccountingMonths.TryGetValue(payment.OperationId, out var accountingMonth))
+                {
+                    continue;
+                }
+
+                var accrualTotal = garageAccruals
+                    .Where(accrual => accrual.AccountingMonth <= accountingMonth)
+                    .Sum(accrual => accrual.Amount);
+                result[payment.OperationId] = MoneyMath.RoundMoney(startingBalance + accrualTotal - paidTotal);
+            }
+        }
+
+        return result;
     }
 
     public async Task<ReportResult<ExpenseReportDto>> GetExpenseReportAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
@@ -1053,7 +1137,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             [
                 new XlsxSheet(
                     "Поступления",
-                    ["Тип", "Дата", "Месяц учета", "Гараж", "Владелец", "Вид поступления", "Начислено", "Оплачено", "Разница", "Документ", "Комментарий"],
+                    ["Тип", "Дата", "Месяц учета", "Гараж", "Владелец", "Вид поступления", "Начислено", "Оплачено", "Разница", "Остаток после платежа", "Документ", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatIncomeRowType(row.RowType)),
@@ -1065,6 +1149,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                         XlsxCell.Number(row.AccrualAmount),
                         XlsxCell.Number(row.IncomeAmount),
                         XlsxCell.Number(row.Debt),
+                        row.DebtAfterPayment.HasValue ? XlsxCell.Number(row.DebtAfterPayment.Value) : XlsxCell.Text(string.Empty),
                         XlsxCell.Text(row.DocumentNumber),
                         XlsxCell.Text(row.Comment)
                     ]).ToArray()),
@@ -1106,20 +1191,16 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
             $"Accrued: {FormatAmount(report.AccrualTotal)} | Paid: {FormatAmount(report.IncomeTotal)} | Difference: {FormatAmount(report.Debt)} | Rows: {report.RowCount}",
             string.Empty,
-            "Type | Date | Month | Garage | Owner | Income type | Accrued | Paid | Difference | Document"
+            "Date | Garage | Paid | Debt after payment | Document | Income type"
         };
         lines.AddRange(report.Rows.Select(row =>
             string.Join(" | ",
-                FormatIncomeRowType(row.RowType),
                 row.Date.ToString("yyyy-MM-dd"),
-                row.AccountingMonth.ToString("yyyy-MM"),
                 row.GarageNumber,
-                row.OwnerName ?? string.Empty,
-                row.IncomeTypeName,
-                FormatAmount(row.AccrualAmount),
                 FormatAmount(row.IncomeAmount),
-                FormatAmount(row.Debt),
-                row.DocumentNumber ?? string.Empty)));
+                row.DebtAfterPayment.HasValue ? FormatAmount(row.DebtAfterPayment.Value) : string.Empty,
+                row.DocumentNumber ?? string.Empty,
+                row.IncomeTypeName)));
 
         var content = PdfReportDocumentBuilder.Build("GarageBalance income report", lines);
         var file = new ReportExportFileDto(
@@ -1485,9 +1566,11 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             var paymentRows = await ApplyReportRowLimit(
                     paymentsQuery
                         .OrderBy(operation => operation.OperationDate)
-                        .ThenBy(operation => operation.Garage!.Number),
+                        .ThenBy(operation => operation.Garage!.Number)
+                        .ThenBy(operation => operation.Id),
                     request.Limit)
                 .ToListAsync(cancellationToken);
+            var debtAfterPayments = await CalculateIncomeDebtAfterPaymentsAsync(paymentRows, cancellationToken);
 
             rows.AddRange(paymentRows.Select(operation => new IncomeReportRowDto(
                 IncomeReportPaymentRows,
@@ -1504,7 +1587,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 -operation.Amount,
                 operation.DocumentNumber,
                 operation.Comment,
-                operation.CreatedAtUtc)));
+                operation.CreatedAtUtc,
+                debtAfterPayments.GetValueOrDefault(operation.Id))));
         }
 
         var visibleRows = ApplyRowLimit(
@@ -1971,6 +2055,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
     private readonly record struct CountByMonth(DateOnly Month, int Count);
     private readonly record struct AmountByGarage(Guid GarageId, decimal Amount);
     private readonly record struct CountByGarage(Guid GarageId, int Count);
+    private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
+    private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
     private sealed record FundOperationReportRow(
         Guid Id,
         Guid FundId,

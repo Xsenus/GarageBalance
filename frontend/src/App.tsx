@@ -7505,6 +7505,7 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         formatPaymentPrototypeOperationTime(row.createdAtUtc),
         formatMoney(row.incomeAmount),
         row.incomeTypeName,
+        row.debtAfterPayment === null || row.debtAfterPayment === undefined ? '' : formatMoney(row.debtAfterPayment),
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчет по поступлениям">
@@ -7521,9 +7522,9 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по поступлениям',
-            ['Гараж', 'Дата', 'Время', 'Сумма платежа', 'Назначение платежа'],
-            incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '']],
-            incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), ''] : undefined,
+            ['Гараж', 'Дата', 'Время', 'Сумма платежа', 'Назначение платежа', 'Остаток долга после платежа'],
+            incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '', '']],
+            incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), '', ''] : undefined,
           )}
         </ReportWorkbookSheet>
       )

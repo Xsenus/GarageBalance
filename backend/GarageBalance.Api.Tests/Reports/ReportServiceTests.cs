@@ -228,6 +228,31 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetIncomeReportAsync_ReturnsDebtAfterEachPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        var accrual = await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "manual", "Начисление за июнь"), null, CancellationToken.None);
+        Assert.True(accrual.Succeeded);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 700m, "PKO-1", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 300m, "PKO-2", null), null, CancellationToken.None);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "payments"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var rows = result.Value!.Rows.OrderBy(row => row.Date).ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.Equal("PKO-1", rows[0].DocumentNumber);
+        Assert.Equal(1300m, rows[0].DebtAfterPayment);
+        Assert.Equal("PKO-2", rows[1].DocumentNumber);
+        Assert.Equal(1000m, rows[1].DebtAfterPayment);
+    }
+
+    [Fact]
     public async Task GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt()
     {
         await using var database = await TestDatabase.CreateAsync();
