@@ -1891,6 +1891,87 @@ describe('App', () => {
     expect(within(incomeTable).queryByText('май.26')).not.toBeInTheDocument()
   })
 
+  it('does not restore stale saved payment rows for a real garage before backend worksheet loads', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({
+      id: 'garage-1',
+      number: '1',
+      ownerName: 'Иванов Иван',
+      peopleCount: 3,
+      floorCount: 1,
+    })
+    const getGarageIncomeWorksheet = vi.fn(async () => {
+      throw new Error('Серверная ведомость недоступна')
+    })
+    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'payments-prototype'
+      ? {
+          scope,
+          payload: {
+            selectedGarageId: garageFromDictionary.id,
+            garageSearch: 'Гараж 1 - Иванов Иван',
+            incomeWorksheetMonthFrom: '2026-05',
+            incomeWorksheetMonthTo: '2026-06',
+            garageRows: [
+              {
+                id: 'stale-income-row',
+                month: '2026-05',
+                monthLabel: 'май.26',
+                service: 'Старое начисление из сохраненного состояния',
+                meter: null,
+                difference: null,
+                payable: 9999,
+                paymentDraft: '',
+                paid: 0,
+                debt: 9999,
+              },
+            ],
+            historyRows: [
+              {
+                id: 'stale-history-row',
+                date: '01.05.2026',
+                time: '10:00',
+                amount: 9999,
+                purpose: 'Старая история из сохраненного состояния',
+                debtAfter: 9999,
+              },
+            ],
+          },
+          updatedAtUtc: '2026-06-30T03:00:00Z',
+          updatedByUserId: 'admin-user',
+        }
+      : null)
+    render(
+      <App
+        authClient={createAuthClient()}
+        dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })}
+        financeClient={createFinanceClient({
+          getGarageIncomeWorksheet,
+          getOperationsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 500 }),
+        })}
+        importClient={createImportClient()}
+        reportClient={createReportClient()}
+        releaseClient={createReleaseClient()}
+        userClient={createUserClient()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+
+    expect(await within(prototype).findByText('Серверная ведомость недоступна')).toBeInTheDocument()
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-1', {
+      monthFrom: '2026-05-01',
+      monthTo: '2026-06-01',
+    }))
+    const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
+    expect(within(incomeTable).getByText('Начислений и поступлений за выбранный период пока нет.')).toBeInTheDocument()
+    expect(within(incomeTable).queryByText('Старое начисление из сохраненного состояния')).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).not.toHaveTextContent('Старая история из сохраненного состояния')
+  })
+
   it('loads selected garage income worksheet from finance backend', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })

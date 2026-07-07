@@ -3158,12 +3158,70 @@ function PaymentsPrototypePanel({
         }
 
         if (state?.payload) {
-          setSelectedGarageId(state.payload.selectedGarageId ?? null)
+          const restoredGarageId = state.payload.selectedGarageId ?? null
+          const restoredMonthFrom = state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue())
+          const restoredMonthTo = state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue()
+          const isRestoredRealGarage = restoredGarageId !== null && realGarageIds.has(restoredGarageId)
+          const restoredRealGarage = isRestoredRealGarage ? garageOptions.find((garage) => garage.id === restoredGarageId) ?? null : null
+          setSelectedGarageId(restoredGarageId)
           setGarageSearch(state.payload.garageSearch ?? '')
-          setIncomeWorksheetMonthFrom(state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue()))
-          setIncomeWorksheetMonthTo(state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue())
-          setGarageRows(Array.isArray(state.payload.garageRows) ? state.payload.garageRows : [])
-          setHistoryRows(Array.isArray(state.payload.historyRows) ? normalizeGaragePaymentHistoryRows(state.payload.historyRows) : [])
+          setIncomeWorksheetMonthFrom(restoredMonthFrom)
+          setIncomeWorksheetMonthTo(restoredMonthTo)
+          setGarageRows(isRestoredRealGarage ? [] : Array.isArray(state.payload.garageRows) ? state.payload.garageRows : [])
+          setHistoryRows(isRestoredRealGarage ? [] : Array.isArray(state.payload.historyRows) ? normalizeGaragePaymentHistoryRows(state.payload.historyRows) : [])
+          if (restoredRealGarage) {
+            setGarageWorksheetLoadingId(restoredRealGarage.id)
+            void financeClient
+              .getGarageIncomeWorksheet(auth.accessToken, restoredRealGarage.id, {
+                monthFrom: `${restoredMonthFrom}-01`,
+                monthTo: `${restoredMonthTo}-01`,
+              })
+              .then((worksheet) => {
+                if (cancelled) {
+                  return
+                }
+
+                setGarageRows(createGarageIncomeRowsFromWorksheet(worksheet))
+                setGarageWorksheetSummary({
+                  openingDebt: worksheet.openingDebt,
+                  accrualTotal: worksheet.accrualTotal,
+                  incomeTotal: worksheet.incomeTotal,
+                  closingDebt: worksheet.closingDebt,
+                })
+              })
+              .catch((error: unknown) => {
+                if (!cancelled) {
+                  setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
+                }
+              })
+              .finally(() => {
+                if (!cancelled) {
+                  setGarageWorksheetLoadingId((currentId) => (currentId === restoredRealGarage.id ? null : currentId))
+                }
+              })
+            setGaragePaymentHistoryLoadingId(restoredRealGarage.id)
+            void financeClient
+              .getOperationsPage(auth.accessToken, {
+                operationKind: 'income',
+                garageId: restoredRealGarage.id,
+                limit: 500,
+              })
+              .then((page) => {
+                if (!cancelled) {
+                  setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
+                }
+              })
+              .catch((error: unknown) => {
+                if (!cancelled) {
+                  setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
+                }
+              })
+              .finally(() => {
+                if (!cancelled) {
+                  setGaragePaymentHistoryLoadingId((currentId) => (currentId === restoredRealGarage.id ? null : currentId))
+                }
+              })
+          }
         }
       })
       .catch((error: unknown) => {
@@ -3180,7 +3238,7 @@ function PaymentsPrototypePanel({
     return () => {
       cancelled = true
     }
-  }, [auth.accessToken, formStateClient])
+  }, [auth.accessToken, financeClient, formStateClient, garageOptions, realGarageIds])
 
   useEffect(() => {
     if (!formStateLoaded) {
