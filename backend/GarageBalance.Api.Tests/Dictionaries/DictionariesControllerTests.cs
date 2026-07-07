@@ -142,6 +142,24 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateIrregularPayment_ReturnsConflictForDuplicateName()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_duplicate", "Нерегулярный платеж с таким названием уже существует.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateIrregularPayment(new UpsertIrregularPaymentRequest("Gate repair", 500m), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("irregular_payment_duplicate", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task UpdateIrregularPayment_ReturnsOkAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -163,6 +181,46 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task UpdateIrregularPayment_ReturnsNotFoundForMissingPayment()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateIrregularPayment(paymentId, new UpsertIrregularPaymentRequest("Gate repair", 700m), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("irregular_payment_not_found", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(paymentId, service.LastIrregularPaymentId);
+    }
+
+    [Fact]
+    public async Task UpdateIrregularPayment_ReturnsConflictForDuplicateName()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_duplicate", "Нерегулярный платеж с таким названием уже существует.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateIrregularPayment(paymentId, new UpsertIrregularPaymentRequest("Gate repair", 700m), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("irregular_payment_duplicate", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(paymentId, service.LastIrregularPaymentId);
+    }
+
+    [Fact]
     public async Task SetIrregularPaymentStatus_ReturnsOkAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -179,6 +237,26 @@ public sealed class DictionariesControllerTests
         var payment = Assert.IsType<IrregularPaymentDto>(ok.Value);
         Assert.Equal(paymentId, payment.Id);
         Assert.False(payment.IsActive);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(paymentId, service.LastIrregularPaymentId);
+    }
+
+    [Fact]
+    public async Task SetIrregularPaymentStatus_ReturnsNotFoundForMissingPayment()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            SetIrregularPaymentStatusResult = DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.SetIrregularPaymentStatus(paymentId, new UpdateIrregularPaymentStatusRequest(false, "Temporarily disabled"), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("irregular_payment_not_found", problem.Title);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(paymentId, service.LastIrregularPaymentId);
     }
