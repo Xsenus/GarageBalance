@@ -2477,6 +2477,57 @@ public sealed class FinanceServiceTests
         Assert.Null(staffRow.Difference);
     }
 
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_KeepsCashAndBankEqualCollectedFundsAfterMixedExpenses()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.Funds.RemoveRange(database.Context.Funds);
+        var month = new DateOnly(2026, 6, 1);
+        var waterIncomeType = new IncomeType { Name = "Вода", Code = "water" };
+        var cashExpenseType = new ExpenseType { Name = "Выплата без чека", Code = "no_receipt" };
+        var bankFund = new Fund { Name = "Банк", NormalizedName = "БАНК", Balance = 400m };
+        database.Context.AddRange(
+            waterIncomeType,
+            cashExpenseType,
+            bankFund,
+            new FundOperation
+            {
+                Fund = bankFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 400m,
+                BalanceBefore = 0m,
+                BalanceAfter = 400m,
+                Reason = "Сдача кассы в банк",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, waterIncomeType.Id, new DateOnly(2026, 6, 10), month, 1000m, "PKO-reconcile", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), month, 150m, "BANK-reconcile", "Оплата с банка"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, cashExpenseType.Id, new DateOnly(2026, 6, 21), month, 200m, "CASH-reconcile", "Выплата из кассы"),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(250m, result.Value!.BankAmount);
+        Assert.Equal(400m, result.Value.CashAmount);
+        Assert.Equal(350m, result.Value.ExpenseTotal);
+        Assert.Equal(650m, result.Value.CashAmount + result.Value.BankAmount);
+        Assert.Equal(1000m - result.Value.ExpenseTotal, result.Value.CashAmount + result.Value.BankAmount);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
