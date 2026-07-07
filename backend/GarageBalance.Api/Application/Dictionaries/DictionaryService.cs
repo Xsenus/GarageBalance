@@ -348,6 +348,12 @@ public sealed class DictionaryService(
             (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
+    private static bool AccountingTypeMatchesSearch(string name, string? code, string normalizedSearch)
+    {
+        return name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+            (code?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
     private bool IsSqliteProvider()
     {
         return dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
@@ -496,21 +502,61 @@ public sealed class DictionaryService(
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
-    public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        return await dbContext.SupplierGroups.AsNoTracking()
-            .Where(group => includeArchived || !group.IsArchived)
+        var normalizedSearch = NormalizeSearch(search);
+        var query = dbContext.SupplierGroups.AsNoTracking().Where(group => includeArchived || !group.IsArchived);
+        var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        {
+            return (await query
+                    .OrderBy(group => group.Name)
+                    .ToListAsync(cancellationToken))
+                .Where(group => group.Name.Contains(searchValue, StringComparison.OrdinalIgnoreCase))
+                .Take(normalizedLimit)
+                .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
+                .ToList();
+        }
+
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(group => group.Name.ToLower().Contains(normalizedSearch));
+        }
+
+        return await query
             .OrderBy(group => group.Name)
-            .Take(NormalizeListLimit(limit))
+            .Take(normalizedLimit)
             .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    public async Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
+        var normalizedSearch = NormalizeSearch(search);
         var query = dbContext.SupplierGroups.AsNoTracking().Where(group => includeArchived || !group.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        {
+            var filteredGroups = (await query
+                    .OrderBy(group => group.Name)
+                    .ToListAsync(cancellationToken))
+                .Where(group => group.Name.Contains(searchValue, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var sqliteItems = filteredGroups
+                .Skip(normalizedOffset)
+                .Take(normalizedLimit)
+                .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
+                .ToList();
+
+            return new PagedResult<SupplierGroupDto>(sqliteItems, filteredGroups.Count, normalizedOffset, normalizedLimit);
+        }
+
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(group => group.Name.ToLower().Contains(normalizedSearch));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(group => group.Name)
@@ -1172,21 +1218,61 @@ public sealed class DictionaryService(
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
     }
 
-    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        return await dbContext.IncomeTypes.AsNoTracking()
-            .Where(item => includeArchived || !item.IsArchived)
+        var normalizedSearch = NormalizeSearch(search);
+        var query = dbContext.IncomeTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        {
+            return (await query
+                    .OrderBy(item => item.Name)
+                    .ToListAsync(cancellationToken))
+                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
+                .Take(normalizedLimit)
+                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
+                .ToList();
+        }
+
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
             .OrderBy(item => item.Name)
-            .Take(NormalizeListLimit(limit))
+            .Take(normalizedLimit)
             .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    public async Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
+        var normalizedSearch = NormalizeSearch(search);
         var query = dbContext.IncomeTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        {
+            var filteredTypes = (await query
+                    .OrderBy(item => item.Name)
+                    .ToListAsync(cancellationToken))
+                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
+                .ToList();
+            var sqliteItems = filteredTypes
+                .Skip(normalizedOffset)
+                .Take(normalizedLimit)
+                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
+                .ToList();
+
+            return new PagedResult<AccountingTypeDto>(sqliteItems, filteredTypes.Count, normalizedOffset, normalizedLimit);
+        }
+
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(item => item.Name)
@@ -1310,21 +1396,61 @@ public sealed class DictionaryService(
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
-    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        return await dbContext.ExpenseTypes.AsNoTracking()
-            .Where(item => includeArchived || !item.IsArchived)
+        var normalizedSearch = NormalizeSearch(search);
+        var query = dbContext.ExpenseTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        {
+            return (await query
+                    .OrderBy(item => item.Name)
+                    .ToListAsync(cancellationToken))
+                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
+                .Take(normalizedLimit)
+                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
+                .ToList();
+        }
+
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
             .OrderBy(item => item.Name)
-            .Take(NormalizeListLimit(limit))
+            .Take(normalizedLimit)
             .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    public async Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
+        var normalizedSearch = NormalizeSearch(search);
         var query = dbContext.ExpenseTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
+        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        {
+            var filteredTypes = (await query
+                    .OrderBy(item => item.Name)
+                    .ToListAsync(cancellationToken))
+                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
+                .ToList();
+            var sqliteItems = filteredTypes
+                .Skip(normalizedOffset)
+                .Take(normalizedLimit)
+                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
+                .ToList();
+
+            return new PagedResult<AccountingTypeDto>(sqliteItems, filteredTypes.Count, normalizedOffset, normalizedLimit);
+        }
+
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(item => item.Name)

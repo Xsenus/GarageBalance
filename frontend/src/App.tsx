@@ -1153,11 +1153,11 @@ function FinancePanel({
       try {
         const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getSupplierGroups(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
-          dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
           financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
@@ -7101,8 +7101,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
-          dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
 
         if (ignore) {
@@ -8908,7 +8908,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
         const [ownerRows, garageRows, groups, supplierRows, supplierContactRows, departmentRows, staffRows] = await Promise.all([
           dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-          dictionaryClient.getSupplierGroups(auth.accessToken, contractorsDictionaryListLimit, true),
+          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
@@ -10865,7 +10865,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, formStateClient 
       try {
         const [loadedTariffs, loadedIncomeTypes, loadedIrregularPayments, loadedChargeServices] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
@@ -12655,7 +12655,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
         const [loadedOwners, loadedGarages, loadedGroups] = await Promise.all([
           dictionaryClient.getOwners(auth.accessToken, undefined, 500),
           dictionaryClient.getGarages(auth.accessToken, undefined, 500),
-          dictionaryClient.getSupplierGroups(auth.accessToken, 500),
+          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500),
         ])
         if (!ignore) {
           setOwnerOptions(loadedOwners)
@@ -12719,8 +12719,8 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       setGarages(page.items as GarageDto[])
     } else if (section === 'supplierGroups') {
       page = dictionaryClient.getSupplierGroupsPage
-        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, query, 500, showArchived), offset, limit)
       setGroups(page.items as SupplierGroupDto[])
     } else if (section === 'suppliers') {
       page = dictionaryClient.getSuppliersPage
@@ -12729,13 +12729,13 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       setSuppliers(page.items as SupplierDto[])
     } else if (section === 'incomeTypes') {
       page = dictionaryClient.getIncomeTypesPage
-        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, query, 500, showArchived), offset, limit)
       setIncomeTypes(page.items as AccountingTypeDto[])
     } else if (section === 'expenseTypes') {
       page = dictionaryClient.getExpenseTypesPage
-        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived), offset, limit)
       setExpenseTypes(page.items as AccountingTypeDto[])
     } else {
       page = dictionaryClient.getTariffsPage
@@ -13062,7 +13062,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
       setGarageOptions(await dictionaryClient.getGarages(auth.accessToken, undefined, 500))
     }
     if (section === 'supplierGroups') {
-      setGroupOptions(await dictionaryClient.getSupplierGroups(auth.accessToken, 500))
+      setGroupOptions(await dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500))
     }
   }
 
@@ -13864,10 +13864,10 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
         const [loadedOwners, loadedGarages, loadedGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
           dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getSupplierGroups(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, dictionaryScreenRequestLimit),
-          dictionaryClient.getExpenseTypes(auth.accessToken, dictionaryScreenRequestLimit),
+          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
         if (!ignore) {

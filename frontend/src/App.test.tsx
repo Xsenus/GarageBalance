@@ -3206,7 +3206,7 @@ describe('App', () => {
         requestedLimits.garages = limit
         return { items: [createGarage()], totalCount: 1, offset: 0, limit: limit ?? 25 }
       },
-      getSupplierGroupsPage: async (_token, _offset, limit) => {
+      getSupplierGroupsPage: async (_token, _search, _offset, limit) => {
         requestedLimits.supplierGroups = limit
         return { items: [createGroup()], totalCount: 1, offset: 0, limit: limit ?? 25 }
       },
@@ -3214,11 +3214,11 @@ describe('App', () => {
         requestedLimits.suppliers = limit
         return { items: [createSupplier()], totalCount: 1, offset: 0, limit: limit ?? 25 }
       },
-      getIncomeTypesPage: async (_token, _offset, limit) => {
+      getIncomeTypesPage: async (_token, _search, _offset, limit) => {
         requestedLimits.incomeTypes = limit
         return { items: [createAccountingType({ name: 'Членский взнос' })], totalCount: 1, offset: 0, limit: limit ?? 25 }
       },
-      getExpenseTypesPage: async (_token, _offset, limit) => {
+      getExpenseTypesPage: async (_token, _search, _offset, limit) => {
         requestedLimits.expenseTypes = limit
         return { items: [createAccountingType({ name: 'Электроэнергия' })], totalCount: 1, offset: 0, limit: limit ?? 25 }
       },
@@ -3234,7 +3234,7 @@ describe('App', () => {
         requestedLimits.garages = limit
         return [createGarage()]
       },
-      getSupplierGroups: async (_token, limit) => {
+      getSupplierGroups: async (_token, _search, limit) => {
         requestedLimits.supplierGroups = limit
         return [createGroup()]
       },
@@ -3242,11 +3242,11 @@ describe('App', () => {
         requestedLimits.suppliers = limit
         return [createSupplier()]
       },
-      getIncomeTypes: async (_token, limit) => {
+      getIncomeTypes: async (_token, _search, limit) => {
         requestedLimits.incomeTypes = limit
         return [createAccountingType({ name: 'Членский взнос' })]
       },
-      getExpenseTypes: async (_token, limit) => {
+      getExpenseTypes: async (_token, _search, limit) => {
         requestedLimits.expenseTypes = limit
         return [createAccountingType({ name: 'Электроэнергия' })]
       },
@@ -3463,6 +3463,61 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Альфа-Банк')).toBeInTheDocument()
   })
 
+  it('searches supplier groups and operation types from dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    let groupSearch: string | undefined
+    let incomeSearch: string | undefined
+    let expenseSearch: string | undefined
+    const utilityGroup = createGroup({ id: 'group-1', name: 'Коммунальные услуги' })
+    const bankGroup = createGroup({ id: 'group-2', name: 'Банковские услуги' })
+    const membershipType = createAccountingType({ id: 'income-type-1', name: 'Членский взнос', code: 'membership_fee' })
+    const targetType = createAccountingType({ id: 'income-type-2', name: 'Целевой сбор', code: 'target_fee' })
+    const electricityExpense = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия поставщику', code: 'electricity_supplier' })
+    const salaryExpense = createAccountingType({ id: 'expense-type-2', name: 'Зарплата бухгалтера', code: 'salary_accountant' })
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async (_token, search) => {
+        groupSearch = search
+        return search?.toLocaleLowerCase('ru-RU').includes('банк') ? [bankGroup] : [utilityGroup, bankGroup]
+      },
+      getIncomeTypes: async (_token, search) => {
+        incomeSearch = search
+        return search?.toLocaleLowerCase('ru-RU').includes('target') ? [targetType] : [membershipType, targetType]
+      },
+      getExpenseTypes: async (_token, search) => {
+        expenseSearch = search
+        return search?.toLocaleLowerCase('ru-RU').includes('электро') ? [electricityExpense] : [electricityExpense, salaryExpense]
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    await user.type(within(dictionaryPanel).getByLabelText('Поиск: Группы поставщиков и персонала'), 'банк')
+    await waitFor(() => expect(groupSearch).toBe('банк'))
+    expect(await within(dictionaryPanel).findByText('Банковские услуги')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Коммунальные услуги')).not.toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
+    const incomeSearchInput = within(dictionaryPanel).getByLabelText('Поиск: Виды поступлений')
+    await user.clear(incomeSearchInput)
+    await user.type(incomeSearchInput, 'target')
+    await waitFor(() => expect(incomeSearch).toBe('target'))
+    expect(await within(dictionaryPanel).findByText('Целевой сбор')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Членский взнос')).not.toBeInTheDocument()
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    const expenseSearchInput = within(dictionaryPanel).getByLabelText('Поиск: Виды выплат')
+    await user.clear(expenseSearchInput)
+    await user.type(expenseSearchInput, 'электро')
+    await waitFor(() => expect(expenseSearch).toBe('электро'))
+    expect(await within(dictionaryPanel).findByText('Электроэнергия поставщику')).toBeInTheDocument()
+    expect(within(dictionaryPanel).queryByText('Зарплата бухгалтера')).not.toBeInTheDocument()
+  })
+
   it('archives owner from dictionaries workspace', async () => {
     const user = userEvent.setup()
     let archivedOwnerId: string | null = null
@@ -3633,7 +3688,7 @@ describe('App', () => {
 
         return {
           dictionaryClient: createDictionaryClient({
-            getSupplierGroups: async (_token, _limit, includeArchived) => [activeGroup, archivedGroup].filter((group) => includeArchived || !group.isArchived),
+            getSupplierGroups: async (_token, _search, _limit, includeArchived) => [activeGroup, archivedGroup].filter((group) => includeArchived || !group.isArchived),
             restoreSupplierGroup,
           }),
           restore: restoreSupplierGroup,
@@ -3679,7 +3734,7 @@ describe('App', () => {
 
         return {
           dictionaryClient: createDictionaryClient({
-            getIncomeTypes: async (_token, _limit, includeArchived) => [activeType, archivedType].filter((type) => includeArchived || !type.isArchived),
+            getIncomeTypes: async (_token, _search, _limit, includeArchived) => [activeType, archivedType].filter((type) => includeArchived || !type.isArchived),
             restoreIncomeType,
           }),
           restore: restoreIncomeType,
@@ -3701,7 +3756,7 @@ describe('App', () => {
 
         return {
           dictionaryClient: createDictionaryClient({
-            getExpenseTypes: async (_token, _limit, includeArchived) => [activeType, archivedType].filter((type) => includeArchived || !type.isArchived),
+            getExpenseTypes: async (_token, _search, _limit, includeArchived) => [activeType, archivedType].filter((type) => includeArchived || !type.isArchived),
             restoreExpenseType,
           }),
           restore: restoreExpenseType,

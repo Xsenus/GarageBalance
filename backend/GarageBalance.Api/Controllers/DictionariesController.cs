@@ -146,16 +146,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("supplier-groups")]
     [ProducesResponseType<IReadOnlyList<SupplierGroupDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups([FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetSupplierGroupsAsync(cancellationToken, limit, includeArchived));
+        return Ok(await dictionaryService.GetSupplierGroupsAsync(search, cancellationToken, limit, includeArchived));
     }
 
     [HttpGet("supplier-groups/page")]
     [ProducesResponseType<PagedResult<SupplierGroupDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<SupplierGroupDto>>> GetSupplierGroupsPage([FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<SupplierGroupDto>>> GetSupplierGroupsPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetSupplierGroupsPageAsync(offset, limit, cancellationToken, includeArchived));
+        return Ok(await dictionaryService.GetSupplierGroupsPageAsync(search, offset, limit, cancellationToken, includeArchived));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -457,16 +457,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("income-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes([FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetIncomeTypes([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetIncomeTypesAsync(cancellationToken, limit, includeArchived));
+        return Ok(await dictionaryService.GetIncomeTypesAsync(search, cancellationToken, limit, includeArchived));
     }
 
     [HttpGet("income-types/page")]
     [ProducesResponseType<PagedResult<AccountingTypeDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<AccountingTypeDto>>> GetIncomeTypesPage([FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<AccountingTypeDto>>> GetIncomeTypesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetIncomeTypesPageAsync(offset, limit, cancellationToken, includeArchived));
+        return Ok(await dictionaryService.GetIncomeTypesPageAsync(search, offset, limit, cancellationToken, includeArchived));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -525,16 +525,16 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("expense-types")]
     [ProducesResponseType<IReadOnlyList<AccountingTypeDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetExpenseTypes([FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<AccountingTypeDto>>> GetExpenseTypes([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetExpenseTypesAsync(cancellationToken, limit, includeArchived));
+        return Ok(await dictionaryService.GetExpenseTypesAsync(search, cancellationToken, limit, includeArchived));
     }
 
     [HttpGet("expense-types/page")]
     [ProducesResponseType<PagedResult<AccountingTypeDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<AccountingTypeDto>>> GetExpenseTypesPage([FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<AccountingTypeDto>>> GetExpenseTypesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetExpenseTypesPageAsync(offset, limit, cancellationToken, includeArchived));
+        return Ok(await dictionaryService.GetExpenseTypesPageAsync(search, offset, limit, cancellationToken, includeArchived));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]

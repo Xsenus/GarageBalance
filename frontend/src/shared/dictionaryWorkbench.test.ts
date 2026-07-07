@@ -164,10 +164,10 @@ describe('dictionary workbench metadata', () => {
     expect(Object.fromEntries(dictionarySectionOptions.map((section) => [section.key, supportsDictionarySearch(section.key)]))).toEqual({
       owners: true,
       garages: true,
-      supplierGroups: false,
+      supplierGroups: true,
       suppliers: true,
-      incomeTypes: false,
-      expenseTypes: false,
+      incomeTypes: true,
+      expenseTypes: true,
       tariffs: true,
     })
   })
@@ -176,10 +176,10 @@ describe('dictionary workbench metadata', () => {
     expect(Object.fromEntries(dictionarySectionOptions.map((section) => [section.key, getDictionarySearchPlaceholder(section.key)]))).toEqual({
       owners: 'ФИО или телефон',
       garages: 'Номер гаража или ФИО владельца',
-      supplierGroups: 'Поиск для этого справочника пока не применяется',
+      supplierGroups: 'Название группы',
       suppliers: 'Название, ИНН или контакт',
-      incomeTypes: 'Поиск для этого справочника пока не применяется',
-      expenseTypes: 'Поиск для этого справочника пока не применяется',
+      incomeTypes: 'Название или код поступления',
+      expenseTypes: 'Название или код выплаты',
       tariffs: 'Название или база расчета',
     })
   })

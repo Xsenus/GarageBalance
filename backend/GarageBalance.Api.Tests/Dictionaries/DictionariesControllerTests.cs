@@ -17,19 +17,19 @@ public sealed class DictionariesControllerTests
 
         await controller.GetOwners("ivan", 40, true, CancellationToken.None);
         await controller.GetGarages("12", 41, true, CancellationToken.None);
-        await controller.GetSupplierGroups(42, true, CancellationToken.None);
+        await controller.GetSupplierGroups("group", 42, true, CancellationToken.None);
         await controller.GetSuppliers(groupId, "water", 43, true, CancellationToken.None);
-        await controller.GetIncomeTypes(44, true, CancellationToken.None);
-        await controller.GetExpenseTypes(45, true, CancellationToken.None);
+        await controller.GetIncomeTypes("income", 44, true, CancellationToken.None);
+        await controller.GetExpenseTypes("expense", 45, true, CancellationToken.None);
         await controller.GetTariffs("meter", 46, true, CancellationToken.None);
         await controller.GetIrregularPayments("fine", 47, true, CancellationToken.None);
 
         Assert.Equal(("ivan", 40, true), service.LastOwnerListRequest);
         Assert.Equal(("12", 41, true), service.LastGarageListRequest);
-        Assert.Equal((42, true), service.LastSupplierGroupListRequest);
+        Assert.Equal(("group", 42, true), service.LastSupplierGroupListRequest);
         Assert.Equal((groupId, "water", 43, true), service.LastSupplierListRequest);
-        Assert.Equal((44, true), service.LastIncomeTypeListRequest);
-        Assert.Equal((45, true), service.LastExpenseTypeListRequest);
+        Assert.Equal(("income", 44, true), service.LastIncomeTypeListRequest);
+        Assert.Equal(("expense", 45, true), service.LastExpenseTypeListRequest);
         Assert.Equal(("meter", 46, true), service.LastTariffListRequest);
         Assert.Equal(("fine", 47, true), service.LastIrregularPaymentListRequest);
     }
@@ -507,13 +507,13 @@ public sealed class DictionariesControllerTests
         public Guid? LastRestoreId { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastOwnerListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
-        public (int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
         public (Guid? SupplierId, string? Search, int? Limit, bool IncludeArchived) LastSupplierContactListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastStaffDepartmentListRequest { get; private set; }
         public (Guid? DepartmentId, string? Search, int? Limit, bool IncludeArchived) LastStaffMemberListRequest { get; private set; }
-        public (int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
-        public (int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
@@ -614,13 +614,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreGarageResult);
         }
 
-        public Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        public Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastSupplierGroupListRequest = (limit, includeArchived);
+            LastSupplierGroupListRequest = (search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<SupplierGroupDto>>([]);
         }
 
-        public Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+        public Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<SupplierGroupDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -779,13 +779,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreStaffMemberResult);
         }
 
-        public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        public Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastIncomeTypeListRequest = (limit, includeArchived);
+            LastIncomeTypeListRequest = (search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
         }
 
-        public Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+        public Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<AccountingTypeDto>([], 0, offset ?? 0, limit ?? 100));
         }
@@ -813,13 +813,13 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreIncomeTypeResult);
         }
 
-        public Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        public Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
-            LastExpenseTypeListRequest = (limit, includeArchived);
+            LastExpenseTypeListRequest = (search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<AccountingTypeDto>>([]);
         }
 
-        public Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+        public Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
         {
             return Task.FromResult(new PagedResult<AccountingTypeDto>([], 0, offset ?? 0, limit ?? 100));
         }

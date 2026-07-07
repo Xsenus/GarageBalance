@@ -96,11 +96,34 @@ public sealed class DictionaryServiceTests
 
         Assert.Equal(2, (await service.GetOwnersAsync(null, CancellationToken.None, 2)).Count);
         Assert.Equal(2, (await service.GetGaragesAsync(null, CancellationToken.None, 2)).Count);
-        Assert.Equal(2, (await service.GetSupplierGroupsAsync(CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetSupplierGroupsAsync(null, CancellationToken.None, 2)).Count);
         Assert.Equal(2, (await service.GetSuppliersAsync(null, null, CancellationToken.None, 2)).Count);
-        Assert.Equal(2, (await service.GetIncomeTypesAsync(CancellationToken.None, 2)).Count);
-        Assert.Equal(2, (await service.GetExpenseTypesAsync(CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetIncomeTypesAsync(null, CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetExpenseTypesAsync(null, CancellationToken.None, 2)).Count);
         Assert.Equal(2, (await service.GetTariffsAsync(null, CancellationToken.None, 2)).Count);
+    }
+
+    [Fact]
+    public async Task ListMethods_SearchSupplierGroupsAndAccountingTypes()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+
+        Assert.True((await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Бухгалтерия"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership_fee"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой сбор", "target_fee"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия поставщику", "electricity_supplier"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Зарплата бухгалтера", "salary_accountant"), null, CancellationToken.None)).Succeeded);
+
+        var supplierGroups = await service.GetSupplierGroupsAsync("коммун", CancellationToken.None);
+        var incomeTypes = await service.GetIncomeTypesAsync("membership", CancellationToken.None);
+        var expenseTypesPage = await service.GetExpenseTypesPageAsync("электро", 0, 25, CancellationToken.None);
+
+        Assert.Equal("Коммунальные услуги", Assert.Single(supplierGroups).Name);
+        Assert.Equal("Членский взнос", Assert.Single(incomeTypes).Name);
+        Assert.Equal(1, expenseTypesPage.TotalCount);
+        Assert.Equal("Электроэнергия поставщику", Assert.Single(expenseTypesPage.Items).Name);
     }
 
     [Fact]
@@ -159,19 +182,19 @@ public sealed class DictionaryServiceTests
 
         Assert.Empty(await service.GetOwnersAsync(null, CancellationToken.None));
         Assert.Empty(await service.GetGaragesAsync(null, CancellationToken.None));
-        Assert.Empty(await service.GetSupplierGroupsAsync(CancellationToken.None));
+        Assert.Empty(await service.GetSupplierGroupsAsync(null, CancellationToken.None));
         Assert.Empty(await service.GetSuppliersAsync(null, null, CancellationToken.None));
-        Assert.Empty(await service.GetIncomeTypesAsync(CancellationToken.None));
-        Assert.Empty(await service.GetExpenseTypesAsync(CancellationToken.None));
+        Assert.Empty(await service.GetIncomeTypesAsync(null, CancellationToken.None));
+        Assert.Empty(await service.GetExpenseTypesAsync(null, CancellationToken.None));
         Assert.Empty(await service.GetTariffsAsync(null, CancellationToken.None));
 
         Assert.Single(await service.GetOwnersAsync(null, CancellationToken.None, includeArchived: true));
         Assert.Single((await service.GetOwnersPageAsync(null, 0, 10, CancellationToken.None, includeArchived: true)).Items);
         Assert.Single(await service.GetGaragesAsync(null, CancellationToken.None, includeArchived: true));
-        Assert.Single(await service.GetSupplierGroupsAsync(CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetSupplierGroupsAsync(null, CancellationToken.None, includeArchived: true));
         Assert.Single(await service.GetSuppliersAsync(null, null, CancellationToken.None, includeArchived: true));
-        Assert.Single(await service.GetIncomeTypesAsync(CancellationToken.None, includeArchived: true));
-        Assert.Single(await service.GetExpenseTypesAsync(CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetIncomeTypesAsync(null, CancellationToken.None, includeArchived: true));
+        Assert.Single(await service.GetExpenseTypesAsync(null, CancellationToken.None, includeArchived: true));
         Assert.Single(await service.GetTariffsAsync(null, CancellationToken.None, includeArchived: true));
     }
 

@@ -128,10 +128,10 @@ export const dictionarySectionOptions: DictionarySectionOption[] = [
 const dictionarySearchPlaceholders: Record<DictionarySectionKey, string> = {
   owners: 'ФИО или телефон',
   garages: 'Номер гаража или ФИО владельца',
-  supplierGroups: 'Поиск для этого справочника пока не применяется',
+  supplierGroups: 'Название группы',
   suppliers: 'Название, ИНН или контакт',
-  incomeTypes: 'Поиск для этого справочника пока не применяется',
-  expenseTypes: 'Поиск для этого справочника пока не применяется',
+  incomeTypes: 'Название или код поступления',
+  expenseTypes: 'Название или код выплаты',
   tariffs: 'Название или база расчета',
 }
 
@@ -315,7 +315,7 @@ export function createEmptyOwnerGarageLinkForm(): OwnerGarageLinkForm {
 }
 
 export function supportsDictionarySearch(section: DictionarySectionKey) {
-  return section === 'owners' || section === 'garages' || section === 'suppliers' || section === 'tariffs'
+  return dictionarySectionOptions.some((item) => item.key === section)
 }
 
 export function getDictionarySearchPlaceholder(section: DictionarySectionKey) {
