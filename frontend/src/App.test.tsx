@@ -1123,6 +1123,117 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
   })
 
+  it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {
+    const user = userEvent.setup()
+    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'contractors-prototype'
+      ? {
+        scope,
+        payload: {
+          garages: [
+            { id: 'stale-garage', ownerId: null, number: '999', peopleCount: '9', floorCount: '9', owner: 'Stale Owner', phone: '', address: '', startingBalance: '0', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: '', comment: '', isDeleted: false },
+          ],
+          suppliers: [
+            { id: 'stale-supplier', name: 'Stale Supplier', service: 'Stale Service', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', contacts: [], debt: '', comment: '', isDeleted: false },
+          ],
+          staff: [
+            { id: 'stale-staff', fullName: 'Stale Staff', department: 'Stale Department', rate: '1', isDeleted: false },
+          ],
+          departments: [
+            { id: 'stale-department', name: 'Stale Department' },
+          ],
+          supplierServices: ['Stale Service'],
+        },
+        updatedAtUtc: '2026-06-29T03:00:00Z',
+        updatedByUserId: 'admin-user',
+      }
+      : null)
+    const contractorOwner = createOwner({ id: 'owner-backend', lastName: 'Backend', firstName: 'Owner' })
+    const contractorGarage = createGarage({ id: 'garage-backend', number: '77', ownerId: contractorOwner.id, ownerName: contractorOwner.fullName })
+    const supplierGroup = createGroup({ id: 'group-backend', name: 'Backend Service' })
+    const supplier = createSupplier({ id: 'supplier-backend', name: 'Backend Supplier', groupId: supplierGroup.id, groupName: supplierGroup.name })
+    const supplierContact = createSupplierContact({ id: 'contact-backend', supplierId: supplier.id, supplierName: supplier.name, fullName: 'Backend Contact' })
+    const staffDepartment = createStaffDepartment({ id: 'department-backend', name: 'Backend Department' })
+    const staffMember = createStaffMember({ id: 'staff-backend', fullName: 'Backend Staff', departmentId: staffDepartment.id, departmentName: staffDepartment.name })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [contractorOwner],
+      getGarages: async () => [contractorGarage],
+      getSupplierGroups: async () => [supplierGroup],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts: async () => [supplierContact],
+      getStaffDepartments: async () => [staffDepartment],
+      getStaffMembers: async () => [staffMember],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    await waitFor(() => expect(within(contractorsPanel).getByText('Backend Owner')).toBeInTheDocument())
+    expect(within(contractorsPanel).queryByText('Stale Owner')).not.toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await waitFor(() => expect(within(contractorsPanel).getByText('Backend Supplier')).toBeInTheDocument())
+    expect(within(contractorsPanel).getByText('Backend Service')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Stale Supplier')).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Stale Service')).not.toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    await waitFor(() => expect(within(contractorsPanel).getByText('Backend Staff')).toBeInTheDocument())
+    expect(within(contractorsPanel).getByText('Backend Department')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Stale Staff')).not.toBeInTheDocument()
+  })
+
+  it('keeps empty backend contractor dictionaries empty despite stale saved contractor form state', async () => {
+    const user = userEvent.setup()
+    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'contractors-prototype'
+      ? {
+        scope,
+        payload: {
+          garages: [
+            { id: 'stale-empty-garage', ownerId: null, number: '404', peopleCount: '1', floorCount: '1', owner: 'Stale Empty Owner', phone: '', address: '', startingBalance: '0', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: '', comment: '', isDeleted: false },
+          ],
+          suppliers: [
+            { id: 'stale-empty-supplier', name: 'Stale Empty Supplier', service: 'Stale Empty Service', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', contacts: [], debt: '', comment: '', isDeleted: false },
+          ],
+          staff: [
+            { id: 'stale-empty-staff', fullName: 'Stale Empty Staff', department: 'Stale Empty Department', rate: '1', isDeleted: false },
+          ],
+          departments: [
+            { id: 'stale-empty-department', name: 'Stale Empty Department' },
+          ],
+          supplierServices: ['Stale Empty Service'],
+        },
+        updatedAtUtc: '2026-06-29T03:00:00Z',
+        updatedByUserId: 'admin-user',
+      }
+      : null)
+    const getGarages = vi.fn(async () => [])
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [],
+      getGarages,
+      getSupplierGroups: async () => [],
+      getSuppliers: async () => [],
+      getSupplierContacts: async () => [],
+      getStaffDepartments: async () => [],
+      getStaffMembers: async () => [],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await waitFor(() => expect(getGarages).toHaveBeenCalled())
+
+    expect(within(contractorsPanel).queryByText('Stale Empty Owner')).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Stale Empty Supplier')).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Stale Empty Staff')).not.toBeInTheDocument()
+  })
+
   it('shows meter readings prototype as a yearly garage table', async () => {
     const user = userEvent.setup()
     let createdMeterReadingRequest: CreateMeterReadingRequest | null = null

@@ -8486,30 +8486,6 @@ type ContractorRestoreTarget =
   | { type: 'supplier'; item: ContractorSupplierRow }
   | { type: 'employee'; item: ContractorStaffRow }
 
-const contractorGarageRows: ContractorGarageRow[] = [
-  { id: 'garage-1', ownerId: null, number: '1', peopleCount: '3', floorCount: '1', owner: 'Иванов Иван', phone: '+7 900 000-00-01', address: 'ГСК, ряд 1', startingBalance: '5300', balance: '5300', overdueDebt: '1300 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
-  { id: 'garage-12', ownerId: null, number: '12', peopleCount: '1', floorCount: '2', owner: 'Петров Петр', phone: '+7 900 000-00-12', address: 'ГСК, ряд 2', startingBalance: '0', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: 'Вода, электроэнергия', comment: '', isDeleted: false },
-  { id: 'garage-27', ownerId: null, number: '27', peopleCount: '2', floorCount: '1', owner: 'Сидорова Анна', phone: '+7 900 000-00-27', address: 'ГСК, ряд 4', startingBalance: '1700', balance: '1700', overdueDebt: '1700 руб.', initialWater: '', initialElectricity: '', meters: 'Электроэнергия', comment: '', isDeleted: false },
-]
-
-const contractorSupplierRows: ContractorSupplierRow[] = [
-  { id: 'supplier-electricity', name: 'Энергосбыт', service: 'Электроэнергия', inn: '5401000000', legalAddress: '', contactPerson: 'Петров И.А.', phone: '+7 900 100-10-10', email: 'energy@example.test', contacts: [{ id: 'supplier-electricity-contact-1', fullName: 'Петров И.А.', position: 'Директор', phone: '+7 900 100-10-10', email: 'energy@example.test', status: 'Работает', comment: '', isDeleted: false }], debt: '39 000', comment: '', isDeleted: false },
-  { id: 'supplier-water', name: 'Водоканал', service: 'Водоснабжение', inn: '5402000000', legalAddress: '', contactPerson: 'Иванов П.В.', phone: '+7 900 200-20-20', email: 'water@example.test', contacts: [{ id: 'supplier-water-contact-1', fullName: 'Иванов П.В.', position: 'Менеджер', phone: '+7 900 200-20-20', email: 'water@example.test', status: 'Работает', comment: '', isDeleted: false }], debt: '32 000', comment: '', isDeleted: false },
-  { id: 'supplier-waste', name: 'ЭкоВывоз', service: 'Вывоз мусора', inn: '', legalAddress: '', contactPerson: 'Орлова Мария', phone: '+7 900 300-30-30', email: '', contacts: [{ id: 'supplier-waste-contact-1', fullName: 'Орлова Мария', position: 'Специалист', phone: '+7 900 300-30-30', email: '', status: 'Работает', comment: '', isDeleted: false }], debt: '15 000', comment: '', isDeleted: false },
-  { id: 'supplier-law', name: 'Правовой центр', service: 'Юридические услуги', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', contacts: [], debt: '', comment: '', isDeleted: false },
-]
-
-const contractorStaffRows: ContractorStaffRow[] = [
-  { id: 'staff-electrician', fullName: 'Иванов Сергей', department: 'Электрики', rate: '20000', isDeleted: false },
-  { id: 'staff-accountant', fullName: 'Петрова Ольга', department: 'Бухгалтерия', rate: '40000', isDeleted: false },
-]
-
-const contractorDepartmentRows: ContractorDepartmentRow[] = [
-  { id: 'department-electricians', name: 'Электрики' },
-  { id: 'department-accounting', name: 'Бухгалтерия' },
-  { id: 'department-management', name: 'Руководство' },
-]
-
 const contractorSectionLabels: Record<ContractorSection, string> = {
   garages: 'Гаражи',
   suppliers: 'Поставщики',
@@ -8867,14 +8843,13 @@ type ContractorsPrototypeSavedState = {
 function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
-  const [garages, setGarages] = useState<ContractorGarageRow[]>(contractorGarageRows)
+  const [garages, setGarages] = useState<ContractorGarageRow[]>([])
   const [owners, setOwners] = useState<OwnerDto[]>([])
-  const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>(contractorSupplierRows)
-  const [staff, setStaff] = useState<ContractorStaffRow[]>(contractorStaffRows)
-  const [departments, setDepartments] = useState<ContractorDepartmentRow[]>(contractorDepartmentRows)
+  const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>([])
+  const [staff, setStaff] = useState<ContractorStaffRow[]>([])
+  const [departments, setDepartments] = useState<ContractorDepartmentRow[]>([])
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
-  const [backendContractorsLoaded, setBackendContractorsLoaded] = useState(false)
-  const [supplierServices, setSupplierServices] = useState(() => getSupplierServiceOptions(contractorSupplierRows.map((supplier) => supplier.service)))
+  const [supplierServices, setSupplierServices] = useState<string[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [modal, setModal] = useState<ContractorModal | null>(null)
@@ -8922,19 +8897,6 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     let cancelled = false
     formStateClient
       .getState<ContractorsPrototypeSavedState>(auth.accessToken, contractorsFormStateScope)
-      .then((state) => {
-        if (cancelled) {
-          return
-        }
-
-        if (state?.payload && !backendContractorsLoaded) {
-          setGarages(Array.isArray(state.payload.garages) ? state.payload.garages : contractorGarageRows)
-          setSuppliers(Array.isArray(state.payload.suppliers) ? state.payload.suppliers : contractorSupplierRows)
-          setStaff(Array.isArray(state.payload.staff) ? state.payload.staff : contractorStaffRows)
-          setDepartments(Array.isArray(state.payload.departments) ? state.payload.departments : contractorDepartmentRows)
-          setSupplierServices(Array.isArray(state.payload.supplierServices) ? getSupplierServiceOptions(state.payload.supplierServices) : getSupplierServiceOptions(contractorSupplierRows.map((supplier) => supplier.service)))
-        }
-      })
       .catch((error: unknown) => {
         if (!cancelled) {
           setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние контрагентов.')
@@ -8949,7 +8911,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
     return () => {
       cancelled = true
     }
-  }, [auth.accessToken, backendContractorsLoaded, formStateClient])
+  }, [auth.accessToken, formStateClient])
 
   useEffect(() => {
     let cancelled = false
@@ -8970,29 +8932,15 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
           return
         }
 
+        const nextSuppliers = supplierRows.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
+
         setOwners(ownerRows)
-        if (garageRows.length > 0) {
-          setGarages(garageRows.map((garage) => createGarageRowFromDto(garage, ownerRows)))
-        }
-
+        setGarages(garageRows.map((garage) => createGarageRowFromDto(garage, ownerRows)))
         setSupplierGroups(groups)
-        if (supplierRows.length > 0) {
-          const nextSuppliers = supplierRows.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
-          setSuppliers(nextSuppliers)
-          setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
-        }
-
-        if (departmentRows.length > 0) {
-          setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
-        }
-
-        if (staffRows.length > 0) {
-          setStaff(staffRows.map(createStaffRowFromDto))
-        }
-
-        if (garageRows.length > 0 || supplierRows.length > 0 || departmentRows.length > 0 || staffRows.length > 0) {
-          setBackendContractorsLoaded(true)
-        }
+        setSuppliers(nextSuppliers)
+        setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
+        setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
+        setStaff(staffRows.map(createStaffRowFromDto))
       } catch (error) {
         if (!cancelled) {
           setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контрагентов из справочников.')
