@@ -83,6 +83,24 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task ArchiveIrregularPayment_ReturnsNoContentAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            ArchiveIrregularPaymentResult = DictionaryResult<IrregularPaymentDto>.Success(new IrregularPaymentDto(paymentId, "Gate repair", 500m, true, true, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ArchiveIrregularPayment(paymentId, new ArchiveDictionaryEntryRequest("No longer used"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal("No longer used", service.LastArchiveReason);
+    }
+
+    [Fact]
     public async Task RestoreIrregularPayment_ReturnsOkActiveRecordAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();

@@ -1584,14 +1584,21 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Штраф за пропуск", 300m), null, CancellationToken.None);
 
+        var emptyReason = await service.ArchiveIrregularPaymentAsync(created.Value!.Id, " ", actorUserId, CancellationToken.None);
         var archive = await service.ArchiveIrregularPaymentAsync(created.Value!.Id, "Больше не применяется", actorUserId, CancellationToken.None);
         var activePayments = await service.GetIrregularPaymentsAsync(null, CancellationToken.None);
         var archivedPayments = await service.GetIrregularPaymentsAsync(null, CancellationToken.None, includeArchived: true);
 
+        Assert.False(emptyReason.Succeeded);
+        Assert.Equal("dictionary_archive_reason_required", emptyReason.ErrorCode);
         Assert.True(archive.Succeeded);
         Assert.Empty(activePayments);
         Assert.True(Assert.Single(archivedPayments).IsArchived);
-        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_archived" && item.ActorUserId == actorUserId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.irregular_payment_archived");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(created.Value.Id.ToString(), audit.EntityId);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Больше не применяется", metadata.RootElement.GetProperty("reason").GetString());
     }
 
     [Fact]
