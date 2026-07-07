@@ -17,7 +17,32 @@ public sealed class FinanceService(
     private const int MaxBalanceHistoryMonths = 60;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
     private const string DebtTransferIncomeTypeName = "Перенос задолженности";
+    private const string AdvancePaymentExpenseTypeName = "Авансовые выплаты";
+    private const string NoReceiptPaymentExpenseTypeName = "Выплата без чека";
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
+    private static readonly string[] CashExpenseTypeCodes =
+    [
+        "advance",
+        "advance_payment",
+        "advance_payments",
+        "cash_advance",
+        "no_receipt",
+        "without_receipt",
+        "no_check",
+        "without_check",
+        "cash_no_receipt"
+    ];
+
+    private static readonly string[] CashExpenseTypeNames =
+    [
+        AdvancePaymentExpenseTypeName,
+        NoReceiptPaymentExpenseTypeName
+    ];
+
+    private static readonly HashSet<string> CashExpenseTypeKeys = CashExpenseTypeCodes
+        .Select(NormalizeFinanceLookupKey)
+        .Concat(CashExpenseTypeNames.Select(NormalizeFinanceLookupKey))
+        .ToHashSet(StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, string> FinanceFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["operationDate"] = "Дата операции",
@@ -534,7 +559,7 @@ public sealed class FinanceService(
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
         var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
         var bankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
-        var cashAmount = MoneyMath.RoundMoney(collectedTotal - expenseTotal);
+        var cashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
             accountingMonth,
@@ -698,11 +723,36 @@ public sealed class FinanceService(
         var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
             .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
             .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var expenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
+        var bankExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                (operation.ExpenseType == null ||
+                    !((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                    CashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
             .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
 
-        return MoneyMath.RoundMoney(Math.Max(bankDepositsTotal - expenseTotal, 0m));
+        return MoneyMath.RoundMoney(Math.Max(bankDepositsTotal - bankExpenseTotal, 0m));
+    }
+
+    private async Task<decimal> CalculateAvailableCashAmountAsync(CancellationToken cancellationToken)
+    {
+        var incomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
+            .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var cashExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.ExpenseType != null &&
+                ((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                    CashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+
+        return MoneyMath.RoundMoney(Math.Max(incomeTotal - bankDepositsTotal - cashExpenseTotal, 0m));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -726,12 +776,25 @@ public sealed class FinanceService(
         }
 
         var amount = MoneyMath.RoundMoney(request.Amount);
-        var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
-        if (amount > availableBankAmount)
+        if (IsCashExpenseType(expenseType))
         {
-            return FinanceResult<FinancialOperationDto>.Failure(
-                "bank_amount_insufficient",
-                $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+            var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
+            if (amount > availableCashAmount)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "cash_amount_insufficient",
+                    $"Сумма выплаты превышает доступный остаток в кассе {availableCashAmount.ToString("0.00", RussianCulture)}.");
+            }
+        }
+        else
+        {
+            var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
+            if (amount > availableBankAmount)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "bank_amount_insufficient",
+                    $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+            }
         }
 
         var operation = new FinancialOperation
@@ -956,12 +1019,27 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
         }
 
-        var availableBankAmount = MoneyMath.RoundMoney(await CalculateAvailableBankAmountAsync(cancellationToken) + operation.Amount);
-        if (amount > availableBankAmount)
+        var wasCashExpense = IsCashExpenseType(operation.ExpenseType);
+        var isCashExpense = IsCashExpenseType(expenseType);
+        if (isCashExpense)
         {
-            return FinanceResult<FinancialOperationDto>.Failure(
-                "bank_amount_insufficient",
-                $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+            var availableCashAmount = MoneyMath.RoundMoney(await CalculateAvailableCashAmountAsync(cancellationToken) + (wasCashExpense ? operation.Amount : 0m));
+            if (amount > availableCashAmount)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "cash_amount_insufficient",
+                    $"Сумма выплаты превышает доступный остаток в кассе {availableCashAmount.ToString("0.00", RussianCulture)}.");
+            }
+        }
+        else
+        {
+            var availableBankAmount = MoneyMath.RoundMoney(await CalculateAvailableBankAmountAsync(cancellationToken) + (wasCashExpense ? 0m : operation.Amount));
+            if (amount > availableBankAmount)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "bank_amount_insufficient",
+                    $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+            }
         }
 
         var previousSnapshot = FormatExpenseOperationSnapshot(operation);
@@ -3088,6 +3166,17 @@ public sealed class FinanceService(
         }
 
         return collectedByIncomeKey.TryGetValue(NormalizeFinanceLookupKey(expenseTypeName), out var byName) ? byName : null;
+    }
+
+    private static bool IsCashExpenseType(ExpenseType? expenseType)
+    {
+        if (expenseType is null)
+        {
+            return false;
+        }
+
+        return (!string.IsNullOrWhiteSpace(expenseType.Code) && CashExpenseTypeKeys.Contains(NormalizeFinanceLookupKey(expenseType.Code))) ||
+            CashExpenseTypeKeys.Contains(NormalizeFinanceLookupKey(expenseType.Name));
     }
 
     private static string NormalizeFinanceLookupKey(string value)

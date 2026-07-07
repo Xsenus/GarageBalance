@@ -210,6 +210,23 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateExpense_ReturnsConflictWhenCashAmountIsInsufficient()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateExpenseResult = FinanceResult<FinancialOperationDto>.Failure("cash_amount_insufficient", "Недостаточно денег в кассе.")
+        });
+
+        var result = await controller.CreateExpense(
+            new CreateExpenseOperationRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100m, "1", null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("cash_amount_insufficient", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateStaffPayment_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();

@@ -974,6 +974,76 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_AllowsCashExpenseWithoutBankWhenCashIsAvailable()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        var cashExpenseType = new ExpenseType { Name = "Авансовые выплаты", Code = "advance" };
+        database.Context.AddRange(
+            cashExpenseType,
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 10),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 500m,
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id
+            });
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                cashExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                "CASH-ADVANCE",
+                "Аванс из кассы"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(300m, result.Value!.Amount);
+        Assert.Equal("Авансовые выплаты", result.Value.ExpenseTypeName);
+        var worksheet = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)), CancellationToken.None);
+        Assert.True(worksheet.Succeeded);
+        Assert.Equal(0m, worksheet.Value!.BankAmount);
+        Assert.Equal(200m, worksheet.Value.CashAmount);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_DoesNotUseBankForCashExpenseWhenCashIsInsufficient()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var cashExpenseType = new ExpenseType { Name = "Выплата без чека", Code = "no_receipt" };
+        database.Context.Add(cashExpenseType);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                cashExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                1m,
+                "CASH-NO-RECEIPT",
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("cash_amount_insufficient", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.OperationKind == FinancialOperationKinds.Expense);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsReplacementAfterCancel()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1091,6 +1161,47 @@ public sealed class FinanceServiceTests
         Assert.Equal("bank_amount_insufficient", updated.ErrorCode);
         var stored = await database.Context.FinancialOperations.SingleAsync(operation => operation.Id == created.Value.Id);
         Assert.Equal(250m, stored.Amount);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateExpenseAsync_DoesNotConvertBankPaymentToCashAboveAvailableCash()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var cashExpenseType = new ExpenseType { Name = "Авансовые выплаты", Code = "advance" };
+        database.Context.AddRange(
+            cashExpenseType,
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 10),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 200m,
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id
+            });
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 100m, "RKO-bank-to-cash", null),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var updated = await service.UpdateExpenseAsync(
+            created.Value!.Id,
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, cashExpenseType.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 200.01m, "RKO-bank-to-cash-new", "Сверх кассы"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(updated.Succeeded);
+        Assert.Equal("cash_amount_insufficient", updated.ErrorCode);
+        var stored = await database.Context.FinancialOperations.SingleAsync(operation => operation.Id == created.Value.Id);
+        Assert.Equal(fixtures.ExpenseType.Id, stored.ExpenseTypeId);
+        Assert.Equal(100m, stored.Amount);
         Assert.Empty(database.Context.AuditEvents);
     }
 
@@ -2342,7 +2453,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(47000m, result.Value.BalanceTotal);
         Assert.Equal(29000m, result.Value.CollectedTotal);
         Assert.Equal(-43000m, result.Value.DifferenceTotal);
-        Assert.Equal(4000m, result.Value.CashAmount);
+        Assert.Equal(0m, result.Value.CashAmount);
         Assert.Equal(SeededBankAmount - 25000m, result.Value.BankAmount);
 
         var supplierRow = Assert.Single(result.Value.Rows, row => row.RowKind == "supplier");
