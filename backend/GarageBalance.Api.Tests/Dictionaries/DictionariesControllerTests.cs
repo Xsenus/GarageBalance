@@ -432,6 +432,26 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceSetting_ReturnsConflictForDuplicateName()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Активная услуга с таким названием уже существует.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateChargeServiceSetting(
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("charge_service_duplicate", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task UpdateChargeServiceSetting_ReturnsBadRequestForInvalidPaymentDay()
     {
         var controller = CreateController(new FakeDictionaryService
@@ -447,6 +467,52 @@ public sealed class DictionariesControllerTests
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
         Assert.Equal("charge_service_payment_day_invalid", problem.Title);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceSetting_ReturnsNotFoundForMissingSetting()
+    {
+        var actorUserId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Услуга не найдена.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateChargeServiceSetting(
+            serviceId,
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("charge_service_not_found", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(serviceId, service.LastChargeServiceSettingId);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceSetting_ReturnsConflictForDuplicateName()
+    {
+        var actorUserId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Активная услуга с таким названием уже существует.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateChargeServiceSetting(
+            serviceId,
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("charge_service_duplicate", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(serviceId, service.LastChargeServiceSettingId);
     }
 
     [Fact]
