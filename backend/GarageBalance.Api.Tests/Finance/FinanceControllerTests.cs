@@ -46,6 +46,29 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task PagedListEndpoints_PassOffsetAndLimitToService()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+
+        await controller.GetOperationsPage(null, null, "income", "12", 10, 25, null, null, null, CancellationToken.None);
+        Assert.Equal(10, service.LastFinancialOperationListRequest?.Offset);
+        Assert.Equal(25, service.LastFinancialOperationListRequest?.Limit);
+
+        await controller.GetAccrualsPage(null, null, "12", 20, 30, CancellationToken.None);
+        Assert.Equal(20, service.LastAccrualListRequest?.Offset);
+        Assert.Equal(30, service.LastAccrualListRequest?.Limit);
+
+        await controller.GetSupplierAccrualsPage(null, null, "water", 40, 50, null, CancellationToken.None);
+        Assert.Equal(40, service.LastSupplierAccrualListRequest?.Offset);
+        Assert.Equal(50, service.LastSupplierAccrualListRequest?.Limit);
+
+        await controller.GetMeterReadingsPage(null, null, "electricity", "12", 60, 70, CancellationToken.None);
+        Assert.Equal(60, service.LastMeterReadingListRequest?.Offset);
+        Assert.Equal(70, service.LastMeterReadingListRequest?.Limit);
+    }
+
+    [Fact]
     public async Task GetGarageBalanceHistory_PassesGarageAndPeriodToService()
     {
         var garageId = Guid.NewGuid();
