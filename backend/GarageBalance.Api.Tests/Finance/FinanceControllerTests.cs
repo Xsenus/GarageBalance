@@ -176,6 +176,40 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateGarageDebtPayment_ReturnsNotFoundForMissingGarage()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateGarageDebtPaymentResult = FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж не найден.")
+        });
+
+        var result = await controller.CreateGarageDebtPayment(
+            new CreateGarageDebtPaymentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 900m, "Оплата долга"),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("garage_not_found", problem.Title);
+    }
+
+    [Fact]
+    public async Task CreateGarageDebtPayment_ReturnsConflictForDuplicateOperation()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateGarageDebtPaymentResult = FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция уже внесена.")
+        });
+
+        var result = await controller.CreateGarageDebtPayment(
+            new CreateGarageDebtPaymentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 900m, "Оплата долга"),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("operation_duplicate", problem.Title);
+    }
+
+    [Fact]
     public async Task UpdateIncome_ReturnsOkAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
