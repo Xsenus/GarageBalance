@@ -2490,7 +2490,15 @@ describe('App', () => {
 
     const regularAccrualButton = within(prototype).getByRole('button', { name: 'Сформировать начисления' })
     await user.click(regularAccrualButton)
-    const regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
+    let regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
+    await waitFor(() => expect(within(regularAccrualDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать начисления' })).not.toBeInTheDocument())
+    expect(savedRegularAccrualRequests).toHaveLength(0)
+    await waitFor(() => expect(regularAccrualButton).toHaveFocus())
+
+    await user.click(regularAccrualButton)
+    regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
     expect(within(regularAccrualDialog).queryByLabelText('Вид регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).queryByLabelText('Тариф регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).getByLabelText('Месяц регулярного начисления')).toHaveValue('2026-06')
