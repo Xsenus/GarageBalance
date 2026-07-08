@@ -10820,6 +10820,45 @@ function SupplierContactDeleteConfirmationDialog({
   )
 }
 
+function SupplierContactRestoreConfirmationDialog({
+  contact,
+  cancelRef,
+  dialogRef,
+  onCancel,
+  onConfirm,
+}: {
+  contact: ContractorSupplierContact
+  cancelRef: RefObject<HTMLButtonElement | null>
+  dialogRef: RefObject<HTMLElement | null>
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-contact-restore-title" aria-describedby="supplier-contact-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Восстановление</p>
+            <h3 id="supplier-contact-restore-title">Восстановить контакт?</h3>
+            <p>{contact.fullName || 'Контакт без ФИО'}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления контакта" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <p className="confirmation-text" id="supplier-contact-restore-description">Контакт снова станет активным. Если поставщик был скрыт, он тоже будет восстановлен после сохранения карточки.</p>
+        <div className="detail-dialog-actions contractors-dialog-actions">
+          <button className="secondary-button" type="button" onClick={onConfirm}>
+            <RotateCcw size={16} />
+            <span>Восстановить</span>
+          </button>
+          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow, reason?: string) => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
@@ -10954,14 +10993,19 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
   const [contactContextMenu, setContactContextMenu] = useState<{ contact: ContractorSupplierContact; x: number; y: number } | null>(null)
   const [contactDeleteTarget, setContactDeleteTarget] = useState<ContractorSupplierContact | null>(null)
   const [contactDeleteReason, setContactDeleteReason] = useState('')
+  const [contactRestoreTarget, setContactRestoreTarget] = useState<ContractorSupplierContact | null>(null)
   useRestoreFocusOnClose(true)
   useRestoreFocusOnClose(Boolean(contactDeleteTarget))
-  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0 && !contactDeleteTarget)
+  useRestoreFocusOnClose(Boolean(contactRestoreTarget))
+  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0 && !contactDeleteTarget && !contactRestoreTarget)
   const contactDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(contactDeleteTarget))
   const contactDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactDeleteTarget))
-  useEscapeKey(saveChanges.length === 0 && !contactDeleteTarget, onClose)
+  const contactRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(contactRestoreTarget))
+  const contactRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactRestoreTarget))
+  useEscapeKey(saveChanges.length === 0 && !contactDeleteTarget && !contactRestoreTarget, onClose)
   useEscapeKey(Boolean(contactContextMenu), () => setContactContextMenu(null))
   useEscapeKey(Boolean(contactDeleteTarget), () => closeContactDeleteDialog())
+  useEscapeKey(Boolean(contactRestoreTarget), () => closeContactRestoreDialog())
 
   function saveAndClose() {
     onSave(normalizeSupplierPrototype(form))
@@ -11013,6 +11057,15 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
     setContactDeleteReason('')
   }
 
+  function requestRestoreContact(contact: ContractorSupplierContact) {
+    setContactContextMenu(null)
+    setContactRestoreTarget(contact)
+  }
+
+  function closeContactRestoreDialog() {
+    setContactRestoreTarget(null)
+  }
+
   function confirmContactDelete() {
     if (!contactDeleteTarget || !contactDeleteReason.trim()) {
       return
@@ -11022,13 +11075,17 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
     closeContactDeleteDialog()
   }
 
-  function restoreContact(contact: ContractorSupplierContact) {
-    setContactContextMenu(null)
+  function confirmContactRestore() {
+    if (!contactRestoreTarget) {
+      return
+    }
+
     setForm((currentForm) => ({
       ...currentForm,
       isDeleted: false,
-      contacts: currentForm.contacts.map((itemContact) => (itemContact.id === contact.id ? { ...itemContact, isDeleted: false, status: 'Работает', deleteReason: undefined } : itemContact)),
+      contacts: currentForm.contacts.map((itemContact) => (itemContact.id === contactRestoreTarget.id ? { ...itemContact, isDeleted: false, status: 'Работает', deleteReason: undefined } : itemContact)),
     }))
+    closeContactRestoreDialog()
   }
 
   const availableServices = getSupplierServiceOptions([...services, form.service])
@@ -11116,7 +11173,7 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
             {contactContextMenu.contact.isDeleted ? (
               <>
                 <p className="context-menu-hint">При восстановлении контакта будет восстановлен и поставщик.</p>
-                <button type="button" role="menuitem" onClick={() => restoreContact(contactContextMenu.contact)}>
+                <button type="button" role="menuitem" onClick={() => requestRestoreContact(contactContextMenu.contact)}>
                   <RotateCcw size={16} />
                   <span>Восстановить контакт</span>
                 </button>
@@ -11143,6 +11200,15 @@ function SupplierPrototypeDialog({ item, services, onClose, onOpenFinancialRepor
           onReasonChange={setContactDeleteReason}
           onCancel={closeContactDeleteDialog}
           onConfirm={confirmContactDelete}
+        />
+      ) : null}
+      {contactRestoreTarget ? (
+        <SupplierContactRestoreConfirmationDialog
+          contact={contactRestoreTarget}
+          cancelRef={contactRestoreCancelRef}
+          dialogRef={contactRestoreDialogRef}
+          onCancel={closeContactRestoreDialog}
+          onConfirm={confirmContactRestore}
         />
       ) : null}
     </>
