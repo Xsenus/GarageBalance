@@ -1113,6 +1113,79 @@ public sealed class FinanceService(
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
+    public async Task<FinanceResult<FinancialOperationDto>> RestoreOperationAsync(Guid operationId, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var operation = await dbContext.FinancialOperations
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage!.Owner)
+            .Include(item => item.IncomeType)
+            .Include(item => item.Supplier)
+            .Include(item => item.StaffMember)
+            .ThenInclude(staffMember => staffMember!.Department)
+            .Include(item => item.ExpenseType)
+            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        if (operation is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
+        }
+
+        if (!operation.IsCanceled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_not_canceled", "Финансовая операция уже активна.");
+        }
+
+        if (await HasDocumentDuplicateAsync(operation.OperationKind, operation.DocumentNumber, operation.OperationDate, operation.Id, cancellationToken))
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
+        }
+
+        if (operation.OperationKind == FinancialOperationKinds.Expense)
+        {
+            if (operation.StaffMemberId is not null)
+            {
+                var paidThisMonth = await dbContext.FinancialOperations.AsNoTracking()
+                    .Where(item =>
+                        !item.IsCanceled &&
+                        item.OperationKind == FinancialOperationKinds.Expense &&
+                        item.StaffMemberId == operation.StaffMemberId &&
+                        item.AccountingMonth == operation.AccountingMonth)
+                    .SumAsync(item => item.Amount, cancellationToken);
+                var availableStaffAmount = MoneyMath.RoundMoney((operation.StaffMember?.Rate ?? 0m) - paidThisMonth);
+                if (operation.Amount > availableStaffAmount)
+                {
+                    return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {availableStaffAmount.ToString("0.00", RussianCulture)}.");
+                }
+            }
+
+            if (IsCashExpenseType(operation.ExpenseType))
+            {
+                var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
+                if (operation.Amount > availableCashAmount)
+                {
+                    return FinanceResult<FinancialOperationDto>.Failure(
+                        "cash_amount_insufficient",
+                        $"Сумма выплаты превышает доступный остаток в кассе {availableCashAmount.ToString("0.00", RussianCulture)}.");
+                }
+            }
+            else
+            {
+                var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
+                if (operation.Amount > availableBankAmount)
+                {
+                    return FinanceResult<FinancialOperationDto>.Failure(
+                        "bank_amount_insufficient",
+                        $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+                }
+            }
+        }
+
+        operation.IsCanceled = false;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.operation_restored", operation, FormatOperationRestoredAuditSummary(operation));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
     public async Task<FinanceResult<AccrualDto>> CancelAccrualAsync(Guid accrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var reason = NormalizeOptional(request.Reason);
@@ -2303,6 +2376,20 @@ public sealed class FinanceService(
         return operation.StaffMember is not null
             ? $"Отменена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}"
             : $"Отменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}";
+    }
+
+    private static string FormatOperationRestoredAuditSummary(FinancialOperation operation)
+    {
+        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
+        if (operation.OperationKind == FinancialOperationKinds.Income)
+        {
+            return $"Восстановлено поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}.";
+        }
+
+        return operation.StaffMember is not null
+            ? $"Восстановлена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}."
+            : $"Восстановлена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
     }
 
     private static string FormatAccrualCreatedAuditSummary(Accrual accrual)

@@ -916,6 +916,78 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RestoreOperationAsync_RestoresCanceledIncomeAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-restore", "Ошибочно отменили"),
+            null,
+            CancellationToken.None);
+        await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Проверка восстановления"), null, CancellationToken.None);
+
+        var result = await service.RestoreOperationAsync(created.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsCanceled);
+        Assert.Single(await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None));
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Equal(400m, summary.IncomeTotal);
+        Assert.Equal(600m, summary.Debt);
+        Assert.Equal(1, summary.OperationCount);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_restored");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("restore", audit.ActionKind);
+        Assert.Contains("Восстановлено поступление 400,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ PKO-restore", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreOperationAsync_RejectsActiveDocumentDuplicate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var request = new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-restore-duplicate", null);
+        var created = await service.CreateIncomeAsync(request, null, CancellationToken.None);
+        await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Заменили документ"), null, CancellationToken.None);
+        Assert.True((await service.CreateIncomeAsync(request with { Amount = 500m }, null, CancellationToken.None)).Succeeded);
+
+        var result = await service.RestoreOperationAsync(created.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("operation_duplicate", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.operation_restored");
+    }
+
+    [Fact]
+    public async Task RestoreOperationAsync_RejectsExpenseWhenBankAmountIsInsufficient()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200m, "RKO-restore-bank", null),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+        await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Проверка остатка"), null, CancellationToken.None);
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.RestoreOperationAsync(created.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("bank_amount_insufficient", result.ErrorCode);
+        Assert.True(await database.Context.FinancialOperations.AnyAsync(operation => operation.Id == created.Value.Id && operation.IsCanceled));
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.operation_restored");
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_ReturnsNotFoundForMissingSupplier()
     {
         await using var database = await TestDatabase.CreateAsync();
