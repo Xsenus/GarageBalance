@@ -464,6 +464,28 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task UpdateAccrual_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var accrual = CreateAccrual(amount: 250m);
+        var service = new FakeFinanceService
+        {
+            UpdateAccrualResult = FinanceResult<AccrualDto>.Success(accrual)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateAccrual(
+            accrual.Id,
+            new CreateAccrualRequest(accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Amount, accrual.Source, "Recalculation"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(accrual, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(accrual.Id, service.LastUpdatedAccrualId);
+    }
+
+    [Fact]
     public async Task CancelAccrual_ReturnsBadRequestForBlankCancelReason()
     {
         var service = new FakeFinanceService();
@@ -528,6 +550,28 @@ public sealed class FinanceControllerTests
         Assert.Same(accrual, ok.Value);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(accrual.Id, service.LastCanceledSupplierAccrualId);
+    }
+
+    [Fact]
+    public async Task UpdateSupplierAccrual_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var accrual = CreateSupplierAccrual(amount: 320m);
+        var service = new FakeFinanceService
+        {
+            UpdateSupplierAccrualResult = FinanceResult<SupplierAccrualDto>.Success(accrual)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateSupplierAccrual(
+            accrual.Id,
+            new CreateSupplierAccrualRequest(accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Amount, accrual.Source, accrual.DocumentNumber, "Invoice recalculation"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(accrual, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(accrual.Id, service.LastUpdatedSupplierAccrualId);
     }
 
     [Fact]
@@ -787,17 +831,17 @@ public sealed class FinanceControllerTests
             false);
     }
 
-    private static AccrualDto CreateAccrual()
+    private static AccrualDto CreateAccrual(Guid? id = null, decimal amount = 100m)
     {
         return new AccrualDto(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             Guid.NewGuid(),
             "12",
             "Иванов Иван",
             Guid.NewGuid(),
             "Членский взнос",
             new DateOnly(2026, 6, 1),
-            100m,
+            amount,
             "regular",
             null,
             false);
@@ -821,16 +865,16 @@ public sealed class FinanceControllerTests
             isCanceled);
     }
 
-    private static SupplierAccrualDto CreateSupplierAccrual()
+    private static SupplierAccrualDto CreateSupplierAccrual(Guid? id = null, decimal amount = 100m)
     {
         return new SupplierAccrualDto(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             Guid.NewGuid(),
             "Водоканал",
             Guid.NewGuid(),
             "Вода",
             new DateOnly(2026, 6, 1),
-            100m,
+            amount,
             "regular",
             "INV-1",
             null,
@@ -906,7 +950,9 @@ public sealed class FinanceControllerTests
         public Guid? LastActorUserId { get; private set; }
         public Guid? LastCanceledOperationId { get; private set; }
         public Guid? LastUpdatedOperationId { get; private set; }
+        public Guid? LastUpdatedAccrualId { get; private set; }
         public Guid? LastCanceledAccrualId { get; private set; }
+        public Guid? LastUpdatedSupplierAccrualId { get; private set; }
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
         public Guid? LastUpdatedMeterReadingId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
@@ -1091,6 +1137,7 @@ public sealed class FinanceControllerTests
         public Task<FinanceResult<AccrualDto>> UpdateAccrualAsync(Guid accrualId, CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastUpdatedAccrualId = accrualId;
             return Task.FromResult(UpdateAccrualResult);
         }
 
@@ -1111,6 +1158,7 @@ public sealed class FinanceControllerTests
         public Task<FinanceResult<SupplierAccrualDto>> UpdateSupplierAccrualAsync(Guid supplierAccrualId, CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastUpdatedSupplierAccrualId = supplierAccrualId;
             return Task.FromResult(UpdateSupplierAccrualResult);
         }
 
