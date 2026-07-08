@@ -795,6 +795,8 @@ describe('App', () => {
     let archivedSupplierReason: string | null = null
     let deletedSupplierContactReason: string | null = null
     let archivedStaffMemberReason: string | null = null
+    const restoredSupplierIds: string[] = []
+    const restoredStaffMemberIds: string[] = []
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
@@ -849,13 +851,16 @@ describe('App', () => {
         status: request.status,
         comment: request.comment ?? null,
       }),
-      restoreSupplier: async (_token, id) => createSupplier({
-        id,
-        name: 'Новый подрядчик',
-        groupId: 'group-1',
-        groupName: 'Коммунальные услуги',
-        isArchived: false,
-      }),
+      restoreSupplier: async (_token, id) => {
+        restoredSupplierIds.push(id)
+        return createSupplier({
+          id,
+          name: 'Новый подрядчик',
+          groupId: 'group-1',
+          groupName: 'Коммунальные услуги',
+          isArchived: false,
+        })
+      },
       archiveSupplier: async (_token, _id, reason) => {
         archivedSupplierReason = reason
       },
@@ -872,14 +877,17 @@ describe('App', () => {
       archiveStaffMember: async (_token, _id, reason) => {
         archivedStaffMemberReason = reason
       },
-      restoreStaffMember: async (_token, id) => createStaffMember({
-        id,
-        fullName: 'Смирнов Алексей',
-        departmentId: 'staff-department-2',
-        departmentName: 'Охрана',
-        rate: 30000,
-        isArchived: false,
-      }),
+      restoreStaffMember: async (_token, id) => {
+        restoredStaffMemberIds.push(id)
+        return createStaffMember({
+          id,
+          fullName: 'Смирнов Алексей',
+          departmentId: 'staff-department-2',
+          departmentName: 'Охрана',
+          rate: 30000,
+          isArchived: false,
+        })
+      },
     })
     let requestedGarageFinancialReportId: string | null = null
     let requestedGarageFinancialReportPeriod: { monthFrom?: string; monthTo?: string } | null = null
@@ -1135,10 +1143,21 @@ describe('App', () => {
     await user.click(within(reopenedDeleteSupplierDialog).getByRole('button', { name: 'Удалить поставщика' }))
     await waitFor(() => expect(archivedSupplierReason).toBe('Договор больше не действует'))
     await waitFor(() => expect(within(supplierRow as HTMLElement).getByText('Удален')).toBeInTheDocument())
-    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Восстановить поставщика Новый подрядчик' }))
+    const restoreSupplierButton = within(supplierRow as HTMLElement).getByRole('button', { name: 'Восстановить поставщика Новый подрядчик' })
+    await user.click(restoreSupplierButton)
     const restoreSupplierDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
     expect(within(restoreSupplierDialog).getByText('Новый подрядчик')).toBeInTheDocument()
-    await user.click(within(restoreSupplierDialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(within(restoreSupplierDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Вернуть запись?' })).not.toBeInTheDocument()
+    expect(restoredSupplierIds).toHaveLength(0)
+    expect(within(supplierRow as HTMLElement).getByText('Удален')).toBeInTheDocument()
+    expect(restoreSupplierButton).toHaveFocus()
+
+    await user.click(restoreSupplierButton)
+    const reopenedRestoreSupplierDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
+    await user.click(within(reopenedRestoreSupplierDialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(restoredSupplierIds).toEqual(['22222222-2222-4222-8222-222222222222']))
     await waitFor(() => expect(within(supplierRow as HTMLElement).queryByText('Удален')).not.toBeInTheDocument())
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
 
@@ -1208,10 +1227,21 @@ describe('App', () => {
     await user.click(within(reopenedDeleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' }))
     await waitFor(() => expect(archivedStaffMemberReason).toBe('Больше не работает'))
     await waitFor(() => expect(within(updatedEmployeeRow as HTMLElement).getByText('Удален')).toBeInTheDocument())
-    await user.click(within(updatedEmployeeRow as HTMLElement).getByRole('button', { name: 'Восстановить сотрудника Смирнов Алексей' }))
+    const restoreEmployeeButton = within(updatedEmployeeRow as HTMLElement).getByRole('button', { name: 'Восстановить сотрудника Смирнов Алексей' })
+    await user.click(restoreEmployeeButton)
     const restoreEmployeeDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
     expect(within(restoreEmployeeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
-    await user.click(within(restoreEmployeeDialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(within(restoreEmployeeDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Вернуть запись?' })).not.toBeInTheDocument()
+    expect(restoredStaffMemberIds).toHaveLength(0)
+    expect(within(updatedEmployeeRow as HTMLElement).getByText('Удален')).toBeInTheDocument()
+    expect(restoreEmployeeButton).toHaveFocus()
+
+    await user.click(restoreEmployeeButton)
+    const reopenedRestoreEmployeeDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
+    await user.click(within(reopenedRestoreEmployeeDialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(restoredStaffMemberIds).toEqual(['44444444-4444-4444-8444-444444444444']))
     await waitFor(() => expect(within(updatedEmployeeRow as HTMLElement).queryByText('Удален')).not.toBeInTheDocument())
     expect(within(updatedEmployeeRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Смирнов Алексей' })).toBeInTheDocument()
 
