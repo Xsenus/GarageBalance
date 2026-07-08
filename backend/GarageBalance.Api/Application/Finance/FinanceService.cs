@@ -1216,6 +1216,42 @@ public sealed class FinanceService(
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
+    public async Task<FinanceResult<AccrualDto>> RestoreAccrualAsync(Guid accrualId, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var accrual = await dbContext.Accruals
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == accrualId, cancellationToken);
+        if (accrual is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
+        }
+
+        if (!accrual.IsCanceled)
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_not_canceled", "Начисление уже активно.");
+        }
+
+        if (await dbContext.Accruals.AnyAsync(item =>
+            !item.IsCanceled &&
+            item.Id != accrual.Id &&
+            item.GarageId == accrual.GarageId &&
+            item.IncomeTypeId == accrual.IncomeTypeId &&
+            item.AccountingMonth == accrual.AccountingMonth &&
+            item.Source == accrual.Source,
+            cancellationToken))
+        {
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
+        }
+
+        accrual.IsCanceled = false;
+        accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.accrual_restored", accrual, FormatAccrualRestoredAuditSummary(accrual));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+    }
+
     public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
@@ -1642,6 +1678,42 @@ public sealed class FinanceService(
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
         AddAudit(actorUserId, "finance.supplier_accrual_canceled", accrual, FormatSupplierAccrualCanceledAuditSummary(accrual, reason));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
+    }
+
+    public async Task<FinanceResult<SupplierAccrualDto>> RestoreSupplierAccrualAsync(Guid supplierAccrualId, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var accrual = await dbContext.SupplierAccruals
+            .Include(item => item.Supplier)
+            .Include(item => item.ExpenseType)
+            .SingleOrDefaultAsync(item => item.Id == supplierAccrualId, cancellationToken);
+        if (accrual is null)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_found", "Начисление поставщику не найдено.");
+        }
+
+        if (!accrual.IsCanceled)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_canceled", "Начисление поставщику уже активно.");
+        }
+
+        if (await dbContext.SupplierAccruals.AnyAsync(item =>
+            !item.IsCanceled &&
+            item.Id != accrual.Id &&
+            item.SupplierId == accrual.SupplierId &&
+            item.ExpenseTypeId == accrual.ExpenseTypeId &&
+            item.AccountingMonth == accrual.AccountingMonth &&
+            item.Source == accrual.Source &&
+            item.DocumentNumber == accrual.DocumentNumber,
+            cancellationToken))
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
+        }
+
+        accrual.IsCanceled = false;
+        accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.supplier_accrual_restored", accrual, FormatSupplierAccrualRestoredAuditSummary(accrual));
         await dbContext.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -2411,6 +2483,12 @@ public sealed class FinanceService(
         return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}. Причина: {reason}";
     }
 
+    private static string FormatAccrualRestoredAuditSummary(Accrual accrual)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        return $"Восстановлено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
+    }
+
     private static string FormatSupplierAccrualCreatedAuditSummary(SupplierAccrual accrual)
     {
         var amount = accrual.Amount.ToString("0.00", RussianCulture);
@@ -2447,6 +2525,13 @@ public sealed class FinanceService(
         var amount = accrual.Amount.ToString("0.00", RussianCulture);
         var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
         return $"Отменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}. Причина: {reason}";
+    }
+
+    private static string FormatSupplierAccrualRestoredAuditSummary(SupplierAccrual accrual)
+    {
+        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
+        return $"Восстановлено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
     }
 
     private static string FormatMeterReadingCanceledAuditSummary(MeterReading reading, string reason)

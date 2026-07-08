@@ -1587,6 +1587,54 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RestoreAccrualAsync_RestoresCanceledAccrualAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Ручная корректировка"),
+            null,
+            CancellationToken.None);
+        await service.CancelAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Временно исключили"), null, CancellationToken.None);
+
+        var result = await service.RestoreAccrualAsync(created.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsCanceled);
+        Assert.Single(await service.GetAccrualsAsync(new AccrualListRequest(null, null, null), CancellationToken.None));
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Equal(700m, summary.AccrualTotal);
+        Assert.Equal(700m, summary.Debt);
+        Assert.Equal(1, summary.AccrualCount);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_restored");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("restore", audit.ActionKind);
+        Assert.Contains("Восстановлено начисление 700,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreAccrualAsync_RejectsDuplicateActiveAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var request = new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null);
+        var created = await service.CreateAccrualAsync(request, null, CancellationToken.None);
+        await service.CancelAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Начисление заменено"), null, CancellationToken.None);
+        Assert.True((await service.CreateAccrualAsync(request with { Amount = 800m }, null, CancellationToken.None)).Succeeded);
+
+        var result = await service.RestoreAccrualAsync(created.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("accrual_duplicate", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.accrual_restored");
+    }
+
+    [Fact]
     public async Task CreateSupplierAccrualAsync_CreatesManualAccrualAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1776,6 +1824,51 @@ public sealed class FinanceServiceTests
         Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ INV-cancel", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Причина: Счет заменен", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreSupplierAccrualAsync_RestoresCanceledAccrualAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-restore", "Счет поставщика"),
+            null,
+            CancellationToken.None);
+        await service.CancelSupplierAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Временно исключили"), null, CancellationToken.None);
+
+        var result = await service.RestoreSupplierAccrualAsync(created.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsCanceled);
+        var activeAccrual = Assert.Single(await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, null), CancellationToken.None));
+        Assert.Equal(1200m, activeAccrual.Amount);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_restored");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("restore", audit.ActionKind);
+        Assert.Contains("Восстановлено начисление 1200,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("документ INV-restore", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreSupplierAccrualAsync_RejectsDuplicateActiveAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var request = new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-supplier-restore-duplicate", null);
+        var created = await service.CreateSupplierAccrualAsync(request, null, CancellationToken.None);
+        await service.CancelSupplierAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Счет заменен"), null, CancellationToken.None);
+        Assert.True((await service.CreateSupplierAccrualAsync(request with { Amount = 1300m }, null, CancellationToken.None)).Succeeded);
+
+        var result = await service.RestoreSupplierAccrualAsync(created.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_accrual_duplicate", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_restored");
     }
 
     [Fact]
