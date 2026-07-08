@@ -320,8 +320,13 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.ContributionAmount).HasPrecision(18, 2);
             entity.Property(item => item.TargetAmount).HasPrecision(18, 2);
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(item => item.IncomeTypeId);
             entity.HasIndex(item => item.StartsOn);
             entity.HasIndex(item => item.IsArchived);
+            entity.HasOne(item => item.IncomeType)
+                .WithMany()
+                .HasForeignKey(item => item.IncomeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<FinancialOperation>(entity =>

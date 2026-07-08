@@ -1250,18 +1250,47 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
     public async Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)
     {
         var variation = request.Variation?.Trim();
-        var incomeTypes = await dbContext.IncomeTypes.AsNoTracking()
-            .Where(incomeType => !incomeType.IsArchived)
-            .OrderBy(incomeType => incomeType.Name)
+        var campaigns = await dbContext.FeeCampaigns.AsNoTracking()
+            .Include(campaign => campaign.IncomeType)
+            .Where(campaign => !campaign.IsArchived && !campaign.IncomeType.IsArchived)
+            .OrderBy(campaign => campaign.StartsOn)
+            .ThenBy(campaign => campaign.Name)
             .ToListAsync(cancellationToken);
+        var hasFeeCampaigns = campaigns.Count > 0;
 
-        if (!string.IsNullOrWhiteSpace(variation))
+        if (hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
+        {
+            var normalizedVariation = variation.ToUpperInvariant();
+            campaigns = campaigns
+                .Where(campaign =>
+                    campaign.Name.ToUpperInvariant().Contains(normalizedVariation, StringComparison.Ordinal) ||
+                    (campaign.Goal != null && campaign.Goal.ToUpperInvariant().Contains(normalizedVariation, StringComparison.Ordinal)) ||
+                    campaign.IncomeType.Name.ToUpperInvariant().Contains(normalizedVariation, StringComparison.Ordinal))
+                .ToList();
+        }
+
+        var campaignByIncomeType = campaigns
+            .GroupBy(campaign => campaign.IncomeTypeId)
+            .ToDictionary(group => group.Key, group => group.First());
+        var incomeTypes = hasFeeCampaigns
+            ? campaigns
+                .Select(campaign => campaign.IncomeType)
+                .DistinctBy(incomeType => incomeType.Id)
+                .OrderBy(incomeType => incomeType.Name)
+                .ToList()
+            : await dbContext.IncomeTypes.AsNoTracking()
+                .Where(incomeType => !incomeType.IsArchived)
+                .OrderBy(incomeType => incomeType.Name)
+                .ToListAsync(cancellationToken);
+
+        if (!hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
         {
             var normalizedVariation = variation.ToUpperInvariant();
             incomeTypes = incomeTypes
                 .Where(incomeType => incomeType.Name.ToUpperInvariant().Contains(normalizedVariation, StringComparison.Ordinal))
                 .ToList();
         }
+
         var incomeTypeIds = incomeTypes.Select(incomeType => incomeType.Id).ToList();
 
         if (incomeTypeIds.Count == 0)
@@ -1291,6 +1320,16 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             {
                 accrualTotals.TryGetValue(incomeType.Id, out var accrued);
                 collectedTotals.TryGetValue(incomeType.Id, out var collected);
+                if (campaignByIncomeType.TryGetValue(incomeType.Id, out var campaign))
+                {
+                    return new FeeReportSummaryRowDto(
+                        incomeType.Id,
+                        campaign.Name,
+                        string.IsNullOrWhiteSpace(campaign.Goal) ? BuildFeeGoal(campaign.Name) : campaign.Goal.Trim(),
+                        campaign.TargetAmount,
+                        collected);
+                }
+
                 return new FeeReportSummaryRowDto(incomeType.Id, incomeType.Name, BuildFeeGoal(incomeType.Name), accrued, collected);
             })
             .Where(row => row.FeeAmount != 0 || row.Collected != 0 || !string.IsNullOrWhiteSpace(variation))
@@ -1355,7 +1394,9 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             .ToDictionaryAsync(row => row.Id, cancellationToken);
         var accrualLookup = accrualsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
         var paymentLookup = paymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
-        var incomeTypeNames = incomeTypes.ToDictionary(incomeType => incomeType.Id, incomeType => incomeType.Name);
+        var incomeTypeNames = incomeTypes.ToDictionary(
+            incomeType => incomeType.Id,
+            incomeType => campaignByIncomeType.TryGetValue(incomeType.Id, out var campaign) ? campaign.Name : incomeType.Name);
         var feeGarageRows = accrualLookup.Keys
             .Concat(paymentLookup.Keys)
             .Distinct()

@@ -11,6 +11,7 @@ erDiagram
 
     garages ||--o{ accruals : charged
     income_types ||--o{ accruals : classifies
+    income_types ||--o{ fee_campaigns : fee_kind
     garages ||--o{ meter_readings : measures
 
     garages ||--o{ financial_operations : receives_income
@@ -99,6 +100,7 @@ erDiagram
 
     fee_campaigns {
         uuid Id PK
+        uuid IncomeTypeId FK
         string Name
         string Goal
         decimal ContributionAmount
@@ -260,7 +262,7 @@ erDiagram
 - `suppliers` - поставщики с группой, ИНН, контактами и стартовым балансом. Связь `Supplier.GroupId -> supplier_groups.Id` с `DeleteBehavior.Restrict`; поиск поддержан индексами по `Name`, `GroupId`, `Inn` и `ContactPerson`.
 - `income_types` и `expense_types` - виды поступлений и выплат. `Name` уникален, `Code` индексируется, системные значения seeded через migration `DefaultAccountingTypes`.
 - `tariffs` - тарифы с базой расчета `fixed`, `people`, `meter_water`, `meter_electricity`, ставкой и датой действия. Уникальность: `Name + EffectiveFrom`.
-- `fee_campaigns` - объявленные сборы: название, цель, сумма взноса, плановая сумма сбора, период действия, правило участия всех гаражей и срок переноса долга в просроченный. Активное название уникально через filtered unique index по `Name` при `IsArchived = false`; индексы покрывают `StartsOn` и `IsArchived`.
+- `fee_campaigns` - объявленные сборы: название, связанный вид поступления, цель, сумма взноса, плановая сумма сбора, период действия, правило участия всех гаражей и срок переноса долга в просроченный. Активное название уникально через filtered unique index по `Name` при `IsArchived = false`; индексы покрывают `IncomeTypeId`, `StartsOn` и `IsArchived`.
 
 ## Финансы
 

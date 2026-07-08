@@ -2095,7 +2095,9 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<FeeCampaignDto>> GetFeeCampaignsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.FeeCampaigns.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var query = dbContext.FeeCampaigns
+            .AsNoTracking()
+            .Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         if (normalizedSearch is not null)
         {
@@ -2108,7 +2110,19 @@ public sealed class DictionaryService(
             .OrderBy(item => item.StartsOn)
             .ThenBy(item => item.Name)
             .Take(NormalizeListLimit(limit))
-            .Select(item => ToFeeCampaignDto(item))
+            .Select(item => new FeeCampaignDto(
+                item.Id,
+                item.Name,
+                item.IncomeTypeId,
+                item.IncomeType.Name,
+                item.Goal,
+                item.ContributionAmount,
+                item.TargetAmount,
+                item.StartsOn,
+                item.EndsOn,
+                item.AppliesToAllGarages,
+                item.OverdueGraceDays,
+                item.IsArchived))
             .ToListAsync(cancellationToken);
     }
 
@@ -2125,8 +2139,15 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
+        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
+        }
+
         var campaign = new FeeCampaign { Name = name };
         ApplyFeeCampaign(campaign, request);
+        campaign.IncomeType = incomeType;
 
         dbContext.FeeCampaigns.Add(campaign);
         AddAudit(actorUserId, "dictionary.fee_campaign_created", "fee_campaign", campaign.Id, $"Объявлен сбор {campaign.Name}.");
@@ -2141,7 +2162,9 @@ public sealed class DictionaryService(
             return validationError;
         }
 
-        var campaign = await dbContext.FeeCampaigns.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var campaign = await dbContext.FeeCampaigns
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
@@ -2153,6 +2176,12 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
+        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        if (incomeType is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
+        }
+
         if (FeeCampaignMatches(campaign, request))
         {
             return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
@@ -2160,6 +2189,7 @@ public sealed class DictionaryService(
 
         var oldValues = ToFeeCampaignAuditValues(campaign);
         ApplyFeeCampaign(campaign, request);
+        campaign.IncomeType = incomeType;
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
         var newValues = ToFeeCampaignAuditValues(campaign);
 
@@ -2175,7 +2205,9 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var campaign = await dbContext.FeeCampaigns.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var campaign = await dbContext.FeeCampaigns
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
@@ -2191,7 +2223,9 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<FeeCampaignDto>> RestoreFeeCampaignAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.FeeCampaigns.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var campaign = await dbContext.FeeCampaigns
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден в архиве.");
@@ -2501,6 +2535,11 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_name_required", "Наименование сбора обязательно.");
         }
 
+        if (request.IncomeTypeId == Guid.Empty)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_income_type_required", "Для сбора нужно выбрать вид поступления.");
+        }
+
         if (MoneyMath.RoundMoney(request.ContributionAmount) < 0m)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса не может быть отрицательной.");
@@ -2527,6 +2566,7 @@ public sealed class DictionaryService(
     private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request)
     {
         campaign.Name = request.Name.Trim();
+        campaign.IncomeTypeId = request.IncomeTypeId;
         campaign.Goal = NormalizeOptional(request.Goal);
         campaign.ContributionAmount = MoneyMath.RoundMoney(request.ContributionAmount);
         campaign.TargetAmount = MoneyMath.RoundMoney(request.TargetAmount);
@@ -2539,6 +2579,7 @@ public sealed class DictionaryService(
     private static bool FeeCampaignMatches(FeeCampaign campaign, UpsertFeeCampaignRequest request)
     {
         return StringEquals(campaign.Name, request.Name.Trim()) &&
+            campaign.IncomeTypeId == request.IncomeTypeId &&
             StringEquals(campaign.Goal, NormalizeOptional(request.Goal)) &&
             campaign.ContributionAmount == MoneyMath.RoundMoney(request.ContributionAmount) &&
             campaign.TargetAmount == MoneyMath.RoundMoney(request.TargetAmount) &&
@@ -2553,6 +2594,8 @@ public sealed class DictionaryService(
         return new Dictionary<string, object?>
         {
             ["name"] = campaign.Name,
+            ["incomeTypeId"] = campaign.IncomeTypeId,
+            ["incomeTypeName"] = campaign.IncomeType?.Name,
             ["goal"] = campaign.Goal,
             ["contributionAmount"] = campaign.ContributionAmount,
             ["targetAmount"] = campaign.TargetAmount,
@@ -2821,6 +2864,8 @@ public sealed class DictionaryService(
         return new FeeCampaignDto(
             campaign.Id,
             campaign.Name,
+            campaign.IncomeTypeId,
+            campaign.IncomeType?.Name ?? string.Empty,
             campaign.Goal,
             campaign.ContributionAmount,
             campaign.TargetAmount,

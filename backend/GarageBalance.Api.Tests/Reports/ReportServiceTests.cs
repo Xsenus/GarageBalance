@@ -787,6 +787,48 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetFeeReportAsync_UsesFeeCampaignGoalAndTargetAmountWhenCampaignExists()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = new FinanceService(database.Context);
+        var service = new ReportService(database.Context);
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор на ворота",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Замена ворот",
+            ContributionAmount = 500m,
+            TargetAmount = 33500m,
+            StartsOn = new DateOnly(2026, 5, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.FeeCampaigns.Add(campaign);
+        await database.Context.SaveChangesAsync();
+        Assert.True((await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"), null, CancellationToken.None)).Succeeded);
+
+        var result = await service.GetFeeReportAsync(
+            new FeeReportRequest("ворота", 10),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(33500m, result.Value!.AccruedTotal);
+        Assert.Equal(200m, result.Value.CollectedTotal);
+        var summary = Assert.Single(result.Value.SummaryRows);
+        Assert.Equal("Сбор на ворота", summary.Name);
+        Assert.Equal("Замена ворот", summary.Goal);
+        Assert.Equal(33500m, summary.FeeAmount);
+        var garageRow = Assert.Single(result.Value.GarageRows);
+        Assert.Equal("Сбор на ворота", garageRow.FeeName);
+        Assert.Equal(500m, garageRow.Accrued);
+        Assert.Equal(200m, garageRow.Paid);
+        Assert.Equal(300m, garageRow.Debt);
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();

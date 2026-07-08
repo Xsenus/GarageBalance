@@ -116,6 +116,7 @@
 | `finance.supplier_accrual_updated` | `supplier_accrual` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, месяца, документа, комментария |
 | `finance.supplier_accrual_canceled` | `supplier_accrual` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
 | `finance.regular_accruals_generated` | `accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация начислений |
+| `finance.fee_campaign_accruals_generated` | `accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация начислений по объявленному сбору |
 | `finance.supplier_group_salary_accruals_generated` | `supplier_accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация зарплаты/поставщиков |
 | `finance.meter_reading_created` | `meter_reading` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, тип счетчика, расход |
 | `finance.meter_reading_updated` | `meter_reading` | Да | Нет | Да | `FinanceServiceTests` | diff показаний и расхода |

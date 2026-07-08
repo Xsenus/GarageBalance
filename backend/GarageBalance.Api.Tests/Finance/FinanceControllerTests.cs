@@ -860,6 +860,24 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GenerateFeeCampaignAccruals_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            GenerateFeeCampaignAccrualsResult = FinanceResult<FeeCampaignAccrualGenerationResultDto>.Success(CreateFeeCampaignGenerationResult())
+        };
+        var controller = CreateController(service, actorUserId);
+        var request = new GenerateFeeCampaignAccrualsRequest(Guid.NewGuid(), new DateOnly(2026, 6, 1), "Сбор");
+
+        var result = await controller.GenerateFeeCampaignAccruals(request, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastFeeCampaignAccrualGenerationRequest);
+    }
+
+    [Fact]
     public async Task GenerateSupplierGroupSalaryAccruals_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -1181,6 +1199,23 @@ public sealed class FinanceControllerTests
             []);
     }
 
+    private static FeeCampaignAccrualGenerationResultDto CreateFeeCampaignGenerationResult()
+    {
+        var accrual = CreateAccrual();
+        return new FeeCampaignAccrualGenerationResultDto(
+            new DateOnly(2026, 6, 1),
+            Guid.NewGuid(),
+            "Сбор на ворота",
+            accrual.IncomeTypeId,
+            accrual.IncomeTypeName,
+            accrual.Amount,
+            1,
+            0,
+            accrual.Amount,
+            [accrual],
+            []);
+    }
+
     private static SupplierGroupSalaryAccrualGenerationResultDto CreateSalaryGenerationResult()
     {
         var accrual = CreateSupplierAccrual();
@@ -1246,6 +1281,7 @@ public sealed class FinanceControllerTests
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
         public GenerateRegularAccrualsRequest? LastRegularAccrualGenerationRequest { get; private set; }
         public GenerateRegularCatalogAccrualsRequest? LastRegularCatalogAccrualGenerationRequest { get; private set; }
+        public GenerateFeeCampaignAccrualsRequest? LastFeeCampaignAccrualGenerationRequest { get; private set; }
         public GenerateSupplierGroupSalaryAccrualsRequest? LastSupplierGroupSalaryAccrualGenerationRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
@@ -1269,6 +1305,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<SupplierAccrualDto> RestoreSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularCatalogAccrualGenerationResultDto> GenerateRegularCatalogAccrualsResult { get; init; } = FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FeeCampaignAccrualGenerationResultDto> GenerateFeeCampaignAccrualsResult { get; init; } = FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto> GenerateSupplierGroupSalaryAccrualsResult { get; init; } = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> UpdateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
@@ -1484,6 +1521,13 @@ public sealed class FinanceControllerTests
             LastActorUserId = actorUserId;
             LastRegularCatalogAccrualGenerationRequest = request;
             return Task.FromResult(GenerateRegularCatalogAccrualsResult);
+        }
+
+        public Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastFeeCampaignAccrualGenerationRequest = request;
+            return Task.FromResult(GenerateFeeCampaignAccrualsResult);
         }
 
         public Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)

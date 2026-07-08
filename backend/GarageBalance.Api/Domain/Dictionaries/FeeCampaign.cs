@@ -4,6 +4,8 @@ public sealed class FeeCampaign
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Name { get; set; }
+    public Guid IncomeTypeId { get; set; }
+    public IncomeType IncomeType { get; set; } = null!;
     public string? Goal { get; set; }
     public decimal ContributionAmount { get; set; }
     public decimal TargetAmount { get; set; }

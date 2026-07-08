@@ -299,11 +299,14 @@ public sealed class DictionariesControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var campaignId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
             CreateFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(
                 campaignId,
                 "Gate campaign",
+                incomeTypeId,
+                "Gate fee",
                 "Gate replacement",
                 500m,
                 33500m,
@@ -316,7 +319,7 @@ public sealed class DictionariesControllerTests
         var controller = CreateController(service, actorUserId);
 
         var result = await controller.CreateFeeCampaign(
-            new UpsertFeeCampaignRequest("Gate campaign", "Gate replacement", 500m, 33500m, new DateOnly(2026, 5, 4), new DateOnly(2026, 6, 30), true, 30),
+            new UpsertFeeCampaignRequest("Gate campaign", incomeTypeId, "Gate replacement", 500m, 33500m, new DateOnly(2026, 5, 4), new DateOnly(2026, 6, 30), true, 30),
             CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
@@ -331,6 +334,7 @@ public sealed class DictionariesControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var campaignId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
             UpdateFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Duplicate.")
@@ -339,7 +343,7 @@ public sealed class DictionariesControllerTests
 
         var result = await controller.UpdateFeeCampaign(
             campaignId,
-            new UpsertFeeCampaignRequest("Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
+            new UpsertFeeCampaignRequest("Gate campaign", incomeTypeId, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
             CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
@@ -354,9 +358,10 @@ public sealed class DictionariesControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var campaignId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            ArchiveFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, true))
+            ArchiveFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, true))
         };
         var controller = CreateController(service, actorUserId);
 
@@ -373,9 +378,10 @@ public sealed class DictionariesControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var campaignId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            RestoreFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, false))
+            RestoreFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, false))
         };
         var controller = CreateController(service, actorUserId);
 

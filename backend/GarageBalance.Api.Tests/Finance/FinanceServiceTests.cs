@@ -2005,6 +2005,90 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_CreatesAccrualsForActiveGaragesAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
+        var secondGarage = new Garage { Number = "22", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
+        var archivedGarage = new Garage { Number = "99", PeopleCount = 1, FloorCount = 1, Owner = secondOwner, IsArchived = true };
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор на ворота",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Замена ворот",
+            ContributionAmount = 500m,
+            TargetAmount = 33500m,
+            StartsOn = new DateOnly(2026, 5, 1),
+            EndsOn = new DateOnly(2026, 7, 31),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.AddRange(secondOwner, secondGarage, archivedGarage, campaign);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 15), "Июньский сбор"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
+        Assert.Equal(campaign.Id, result.Value.FeeCampaignId);
+        Assert.Equal(fixtures.IncomeType.Id, result.Value.IncomeTypeId);
+        Assert.Equal(2, result.Value.CreatedCount);
+        Assert.Equal(0, result.Value.SkippedCount);
+        Assert.Equal(1000m, result.Value.TotalAmount);
+        Assert.All(result.Value.CreatedAccruals, accrual =>
+        {
+            Assert.Equal(500m, accrual.Amount);
+            Assert.Equal("regular", accrual.Source);
+            Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+            Assert.Contains("Сбор на ворота", accrual.Comment, StringComparison.Ordinal);
+            Assert.Contains("Июньский сбор", accrual.Comment, StringComparison.Ordinal);
+        });
+        Assert.DoesNotContain(result.Value.CreatedAccruals, accrual => accrual.GarageNumber == archivedGarage.Number);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.fee_campaign_accruals_generated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(campaign.Id.ToString(), audit.EntityId);
+        Assert.Contains("Сбор на ворота", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("createdCount", audit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_RejectsSecondRunForSameMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор на ворота",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 33500m,
+            StartsOn = new DateOnly(2026, 5, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.Add(campaign);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var request = new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null);
+
+        var first = await service.GenerateFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+        var second = await service.GenerateFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.False(second.Succeeded);
+        Assert.Equal("fee_campaign_accruals_empty", second.ErrorCode);
+        Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_KeepsExistingAccrualAmountAfterTariffUpdate()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -209,6 +209,8 @@ public sealed record UpdateIrregularPaymentStatusRequest(
 public sealed record FeeCampaignDto(
     Guid Id,
     string Name,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
     string? Goal,
     decimal ContributionAmount,
     decimal TargetAmount,
@@ -220,6 +222,7 @@ public sealed record FeeCampaignDto(
 
 public sealed record UpsertFeeCampaignRequest(
     [Required, MaxLength(200)] string Name,
+    Guid IncomeTypeId,
     [MaxLength(500)] string? Goal,
     [Range(0, 999999999)] decimal ContributionAmount,
     [Range(0.01, 999999999)] decimal TargetAmount,

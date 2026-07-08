@@ -448,6 +448,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("accruals/generate-fee-campaign")]
+    [ProducesResponseType<FeeCampaignAccrualGenerationResultDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccruals(GenerateFeeCampaignAccrualsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await financeService.GenerateFeeCampaignAccrualsAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetAccruals), new { monthFrom = result.Value!.AccountingMonth, monthTo = result.Value.AccountingMonth }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("supplier-accruals/generate-salary")]
     [ProducesResponseType<SupplierGroupSalaryAccrualGenerationResultDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

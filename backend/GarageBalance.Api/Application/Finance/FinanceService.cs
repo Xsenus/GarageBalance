@@ -1921,6 +1921,127 @@ public sealed class FinanceService(
         return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Success(result);
     }
 
+    public async Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var campaign = await dbContext.FeeCampaigns
+            .Include(item => item.IncomeType)
+            .SingleOrDefaultAsync(item => item.Id == request.FeeCampaignId && !item.IsArchived, cancellationToken);
+        if (campaign is null)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
+        }
+
+        if (campaign.IncomeType.IsArchived)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
+        }
+
+        if (campaign.StartsOn > month)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_started", "Сбор еще не действует в выбранном месяце.");
+        }
+
+        if (campaign.EndsOn.HasValue && MonthPeriod.Normalize(campaign.EndsOn.Value) < month)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_finished", "Сбор уже завершен в выбранном месяце.");
+        }
+
+        var amount = MoneyMath.RoundMoney(campaign.ContributionAmount);
+        if (amount <= 0m)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса по сбору должна быть больше нуля для начисления.");
+        }
+
+        if (!campaign.AppliesToAllGarages)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_participants_not_supported", "Для сбора пока поддержано начисление всем активным гаражам.");
+        }
+
+        var garages = await dbContext.Garages
+            .Include(garage => garage.Owner)
+            .Where(garage => !garage.IsArchived)
+            .OrderBy(garage => garage.Number)
+            .ToListAsync(cancellationToken);
+        if (garages.Count == 0)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");
+        }
+
+        var created = new List<AccrualDto>();
+        var skipped = new List<string>();
+        foreach (var garage in garages)
+        {
+            var duplicate = await dbContext.Accruals.AnyAsync(
+                accrual =>
+                    !accrual.IsCanceled &&
+                    accrual.GarageId == garage.Id &&
+                    accrual.IncomeTypeId == campaign.IncomeTypeId &&
+                    accrual.AccountingMonth == month &&
+                    accrual.Source == AccrualSources.Regular,
+                cancellationToken);
+            if (duplicate)
+            {
+                skipped.Add($"Гараж {garage.Number}: начисление сбора уже есть.");
+                continue;
+            }
+
+            var accrual = new Accrual
+            {
+                GarageId = garage.Id,
+                Garage = garage,
+                IncomeTypeId = campaign.IncomeTypeId,
+                IncomeType = campaign.IncomeType,
+                AccountingMonth = month,
+                Amount = amount,
+                Source = AccrualSources.Regular,
+                Comment = BuildFeeCampaignAccrualComment(campaign, request.Comment)
+            };
+            dbContext.Accruals.Add(accrual);
+            created.Add(ToDto(accrual));
+        }
+
+        if (created.Count == 0)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_accruals_empty", "По сбору не создано ни одного начисления.");
+        }
+
+        AddAudit(
+            actorUserId,
+            "finance.fee_campaign_accruals_generated",
+            "accrual",
+            campaign.Id,
+            FormatFeeCampaignAccrualGenerationAuditSummary(month, campaign, created, skipped),
+            relatedAccountingMonth: month,
+            relatedDocumentNumber: $"{campaign.Name} {month:MM.yyyy}",
+            metadata: new Dictionary<string, object?>
+            {
+                ["financeEntityType"] = "accrual",
+                ["feeCampaignId"] = campaign.Id,
+                ["feeCampaignName"] = campaign.Name,
+                ["incomeTypeId"] = campaign.IncomeTypeId,
+                ["incomeTypeName"] = campaign.IncomeType.Name,
+                ["createdCount"] = created.Count,
+                ["skippedCount"] = skipped.Count,
+                ["totalAmount"] = created.Sum(item => item.Amount)
+            });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var result = new FeeCampaignAccrualGenerationResultDto(
+            month,
+            campaign.Id,
+            campaign.Name,
+            campaign.IncomeTypeId,
+            campaign.IncomeType.Name,
+            amount,
+            created.Count,
+            skipped.Count,
+            created.Sum(item => item.Amount),
+            created,
+            skipped);
+        return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Success(result);
+    }
+
     public async Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
@@ -2312,6 +2433,26 @@ public sealed class FinanceService(
             : $"{userComment}; {snapshot}.";
     }
 
+    private static string BuildFeeCampaignAccrualComment(FeeCampaign campaign, string? comment)
+    {
+        var snapshot = $"сбор {campaign.Name}: взнос {campaign.ContributionAmount.ToString("0.00", RussianCulture)}, цель {campaign.TargetAmount.ToString("0.00", RussianCulture)}, действует с {campaign.StartsOn:dd.MM.yyyy}";
+        if (campaign.EndsOn.HasValue)
+        {
+            snapshot = $"{snapshot} по {campaign.EndsOn.Value:dd.MM.yyyy}";
+        }
+
+        var goal = NormalizeOptional(campaign.Goal);
+        if (goal is not null)
+        {
+            snapshot = $"{snapshot}, назначение: {goal}";
+        }
+
+        var userComment = NormalizeOptional(comment);
+        return userComment is null
+            ? $"Начисление сбора; {snapshot}."
+            : $"{userComment}; {snapshot}.";
+    }
+
     private async Task<IncomeType> GetOrCreateDebtTransferIncomeTypeAsync(CancellationToken cancellationToken)
     {
         var incomeType = await dbContext.IncomeTypes
@@ -2564,6 +2705,12 @@ public sealed class FinanceService(
     {
         var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
         return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff)}; пропущено {skipped.Count}.";
+    }
+
+    private static string FormatFeeCampaignAccrualGenerationAuditSummary(DateOnly month, FeeCampaign campaign, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
+    {
+        var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
+        return $"Создано начислений по сбору: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; сбор {campaign.Name}; вид {campaign.IncomeType.Name}; взнос {campaign.ContributionAmount.ToString("0.00", RussianCulture)}; пропущено {skipped.Count}.";
     }
 
     private static string FormatSupplierGroupSalaryAccrualGenerationAuditSummary(DateOnly month, string groupName, string expenseTypeName, IReadOnlyCollection<SupplierAccrualDto> created, IReadOnlyCollection<string> skipped)
