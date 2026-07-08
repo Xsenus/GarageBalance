@@ -1,13 +1,36 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Domain.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Reflection;
 using System.Text;
 
 namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditControllerTests
 {
+    [Fact]
+    public void Controller_RequiresAuditReadAndKeepsHistoryRoutesStable()
+    {
+        var controllerPolicy = typeof(AuditController)
+            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.AuditRead);
+        Assert.NotNull(controllerPolicy);
+
+        var route = typeof(AuditController)
+            .GetCustomAttributes<RouteAttribute>(inherit: true)
+            .Single();
+        Assert.Equal("api/audit", route.Template);
+
+        Assert.Equal("events", GetSingleHttpGetTemplate(nameof(AuditController.GetEvents)));
+        Assert.Equal("events/page", GetSingleHttpGetTemplate(nameof(AuditController.GetEventsPage)));
+        Assert.Equal("events/{id:guid}", GetSingleHttpGetTemplate(nameof(AuditController.GetEvent)));
+        Assert.Equal("events/export", GetSingleHttpGetTemplate(nameof(AuditController.ExportEvents)));
+        Assert.Equal("events/export/xlsx", GetSingleHttpGetTemplate(nameof(AuditController.ExportEventsXlsx)));
+    }
+
     [Fact]
     public async Task GetEvents_PassesFiltersToService()
     {
@@ -280,6 +303,15 @@ public sealed class AuditControllerTests
         Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
         Assert.Equal(title, problem.Title);
         Assert.Equal(detail, problem.Detail);
+    }
+
+    private static string? GetSingleHttpGetTemplate(string actionName)
+    {
+        var action = typeof(AuditController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+            .Single(method => method.Name == actionName);
+
+        return action.GetCustomAttributes<HttpGetAttribute>(inherit: true).Single().Template;
     }
 
     private sealed class FakeAuditService : IAuditService
