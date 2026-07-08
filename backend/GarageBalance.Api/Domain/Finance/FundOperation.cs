@@ -10,6 +10,8 @@ public sealed class FundOperation
     public decimal BalanceBefore { get; set; }
     public decimal BalanceAfter { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public bool IsCanceled { get; set; }
     public Guid? ActorUserId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAtUtc { get; set; }
 }

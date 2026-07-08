@@ -495,6 +495,18 @@ public sealed class ReportServiceTests
             new FundOperation
             {
                 Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 700m,
+                BalanceBefore = 1500m,
+                BalanceAfter = 2200m,
+                Reason = "Canceled fund operation",
+                ActorUserId = actorUserId,
+                IsCanceled = true,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 10, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
                 OperationKind = FundOperationKinds.Withdraw,
                 Amount = 300m,
                 BalanceBefore = 1500m,
@@ -527,6 +539,7 @@ public sealed class ReportServiceTests
         Assert.Equal(2, result.Value.Rows.Count);
         Assert.Contains(result.Value.Rows, row => row.ChangeKind == FundOperationKinds.Deposit && row.ChangeName == "Пополнение" && row.ActorDisplayName == "Администратор ГСК");
         Assert.Contains(result.Value.Rows, row => row.ChangeKind == FundOperationKinds.Withdraw && row.ChangeName == "Изъятие" && row.BalanceAfter == 1200m);
+        Assert.DoesNotContain(result.Value.Rows, row => row.Reason == "Canceled fund operation");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_generated" &&
             auditEvent.EntityId == "fund_changes" &&
@@ -695,6 +708,18 @@ public sealed class ReportServiceTests
             new FundOperation
             {
                 Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 900m,
+                BalanceBefore = 3000m,
+                BalanceAfter = 3900m,
+                Reason = "Canceled bank deposit",
+                ActorUserId = actorUserId,
+                IsCanceled = true,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
                 OperationKind = FundOperationKinds.Withdraw,
                 Amount = 1000m,
                 BalanceBefore = 3000m,
@@ -715,6 +740,7 @@ public sealed class ReportServiceTests
         var row = Assert.Single(result.Value.Rows);
         Assert.Equal(new DateOnly(2026, 6, 15), row.Date);
         Assert.Equal("Сдача наличных в банк", row.Comment);
+        Assert.DoesNotContain(result.Value.Rows, item => item.Comment == "Canceled bank deposit");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.bank_deposits_generated" &&
             auditEvent.EntityId == "bank_deposits" &&

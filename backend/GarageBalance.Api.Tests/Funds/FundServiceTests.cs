@@ -142,6 +142,114 @@ public sealed class FundServiceTests
         Assert.Empty(database.Context.AuditEvents);
     }
 
+    [Fact]
+    public async Task CancelOperationAsync_CancelsOperationRecalculatesBalanceAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var actorUserId = Guid.NewGuid();
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(
+            targetFund.Id,
+            new CreateFundOperationRequest("deposit", 700m, "Распределение"),
+            null,
+            CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+
+        var result = await service.CancelOperationAsync(
+            deposit.Value!.Id,
+            new CancelFundOperationRequest("Ошибочное распределение"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.IsCanceled);
+        Assert.Contains("Отменено: Ошибочное распределение", result.Value.Reason, StringComparison.Ordinal);
+        Assert.Equal(0m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
+        var fundsAfterCancel = await service.GetFundsAsync(CancellationToken.None);
+        Assert.All(fundsAfterCancel, fund => Assert.Equal(1000m, fund.AvailableToDistribute));
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.operation_canceled");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("cancel", audit.ActionKind);
+        Assert.Contains("Отменена операция фонда Электроэнергия", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CancelOperationAsync_RejectsDepositWhenActiveWithdrawWouldBecomeNegative()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        var withdraw = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("withdraw", 650m, "Изъятие"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        Assert.True(withdraw.Succeeded);
+
+        var result = await service.CancelOperationAsync(
+            deposit.Value!.Id,
+            new CancelFundOperationRequest("Убрали распределение"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_balance_insufficient", result.ErrorCode);
+        Assert.False(await database.Context.FundOperations.AnyAsync(operation => operation.Id == deposit.Value.Id && operation.IsCanceled));
+        Assert.Equal(50m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.operation_canceled");
+    }
+
+    [Fact]
+    public async Task RestoreOperationAsync_RestoresCanceledOperationRecalculatesBalanceAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var actorUserId = Guid.NewGuid();
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(
+            targetFund.Id,
+            new CreateFundOperationRequest("deposit", 700m, "Распределение"),
+            null,
+            CancellationToken.None);
+        await service.CancelOperationAsync(deposit.Value!.Id, new CancelFundOperationRequest("Ошибочное распределение"), null, CancellationToken.None);
+
+        var result = await service.RestoreOperationAsync(deposit.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsCanceled);
+        Assert.Equal(700m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
+        var fundsAfterRestore = await service.GetFundsAsync(CancellationToken.None);
+        Assert.All(fundsAfterRestore, fund => Assert.Equal(300m, fund.AvailableToDistribute));
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.operation_restored");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("restore", audit.ActionKind);
+        Assert.Contains("Восстановлена операция фонда Электроэнергия", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreOperationAsync_RejectsCanceledWithdrawWhenSequenceWouldBecomeNegative()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        var withdraw = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("withdraw", 650m, "Изъятие"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        Assert.True(withdraw.Succeeded);
+        await service.CancelOperationAsync(withdraw.Value!.Id, new CancelFundOperationRequest("Возврат"), null, CancellationToken.None);
+        await service.CancelOperationAsync(deposit.Value!.Id, new CancelFundOperationRequest("Убрали распределение"), null, CancellationToken.None);
+
+        var result = await service.RestoreOperationAsync(withdraw.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_balance_insufficient", result.ErrorCode);
+        Assert.True(await database.Context.FundOperations.AnyAsync(operation => operation.Id == withdraw.Value.Id && operation.IsCanceled));
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.operation_restored");
+    }
+
     private static async Task SeedIncomeAsync(GarageBalanceDbContext context, decimal amount)
     {
         var garage = new Garage { Number = $"G-{Guid.NewGuid():N}", PeopleCount = 1, FloorCount = 1 };

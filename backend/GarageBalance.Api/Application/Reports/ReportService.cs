@@ -715,7 +715,10 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var operationsQuery = dbContext.FundOperations.AsNoTracking()
             .Include(operation => operation.Fund)
-            .Where(operation => operation.CreatedAtUtc >= fromUtc && operation.CreatedAtUtc < toExclusiveUtc);
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.CreatedAtUtc >= fromUtc &&
+                operation.CreatedAtUtc < toExclusiveUtc);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -736,7 +739,10 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 .Include(operation => operation.Fund)
                 .ToListAsync(cancellationToken);
             var filteredOperations = sqliteOperations
-                .Where(operation => operation.CreatedAtUtc >= fromUtc && operation.CreatedAtUtc < toExclusiveUtc);
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.CreatedAtUtc >= fromUtc &&
+                    operation.CreatedAtUtc < toExclusiveUtc);
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
                 var normalizedSearch = request.Search.Trim();
@@ -1091,6 +1097,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
         var operationsQuery = dbContext.FundOperations.AsNoTracking()
             .Include(operation => operation.Fund)
             .Where(operation =>
+                !operation.IsCanceled &&
                 operation.OperationKind == FundOperationKinds.Deposit &&
                 operation.CreatedAtUtc >= fromUtc &&
                 operation.CreatedAtUtc < toExclusiveUtc);
@@ -1103,6 +1110,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 .ToListAsync(cancellationToken);
             operations = operations
                 .Where(operation =>
+                    !operation.IsCanceled &&
                     operation.OperationKind == FundOperationKinds.Deposit &&
                     operation.CreatedAtUtc >= fromUtc &&
                     operation.CreatedAtUtc < toExclusiveUtc)

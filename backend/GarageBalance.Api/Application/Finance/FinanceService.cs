@@ -721,7 +721,7 @@ public sealed class FinanceService(
     private async Task<decimal> CalculateAvailableBankAmountAsync(CancellationToken cancellationToken)
     {
         var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
-            .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
             .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
         var bankExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
@@ -741,7 +741,7 @@ public sealed class FinanceService(
             .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
             .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
         var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
-            .Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
             .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
         var cashExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>

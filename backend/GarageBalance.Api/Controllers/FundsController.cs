@@ -32,6 +32,34 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
             : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("operations/{operationId:guid}/cancel")]
+    [ProducesResponseType<FundOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FundOperationDto>> CancelOperation(Guid operationId, [FromBody] CancelFundOperationRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return BadRequest(ApiProblemDetails.Create("fund_operation_cancel_reason_required", "Для отмены операции фонда нужна причина.", StatusCodes.Status400BadRequest));
+        }
+
+        var result = await fundService.CancelOperationAsync(operationId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("operations/{operationId:guid}/restore")]
+    [ProducesResponseType<FundOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FundOperationDto>> RestoreOperation(Guid operationId, CancellationToken cancellationToken)
+    {
+        var result = await fundService.RestoreOperationAsync(operationId, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
@@ -41,8 +69,8 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
     {
         return result.ErrorCode switch
         {
-            "fund_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "fund_not_found" or "fund_operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }
