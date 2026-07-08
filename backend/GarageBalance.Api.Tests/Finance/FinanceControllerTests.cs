@@ -613,13 +613,13 @@ public sealed class FinanceControllerTests
             GenerateRegularAccrualsResult = FinanceResult<RegularAccrualGenerationResultDto>.Success(CreateGenerationResult())
         };
         var controller = CreateController(service, actorUserId);
+        var request = new GenerateRegularAccrualsRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), null);
 
-        var result = await controller.GenerateRegularAccruals(
-            new GenerateRegularAccrualsRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 1), null),
-            CancellationToken.None);
+        var result = await controller.GenerateRegularAccruals(request, CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastRegularAccrualGenerationRequest);
     }
 
     [Fact]
@@ -631,13 +631,13 @@ public sealed class FinanceControllerTests
             GenerateRegularCatalogAccrualsResult = FinanceResult<RegularCatalogAccrualGenerationResultDto>.Success(CreateCatalogGenerationResult())
         };
         var controller = CreateController(service, actorUserId);
+        var request = new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 6, 1), "Каталог");
 
-        var result = await controller.GenerateRegularCatalogAccruals(
-            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 6, 1), "Каталог"),
-            CancellationToken.None);
+        var result = await controller.GenerateRegularCatalogAccruals(request, CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastRegularCatalogAccrualGenerationRequest);
     }
 
     [Fact]
@@ -649,13 +649,13 @@ public sealed class FinanceControllerTests
             GenerateSupplierGroupSalaryAccrualsResult = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Success(CreateSalaryGenerationResult())
         };
         var controller = CreateController(service, actorUserId);
+        var request = new GenerateSupplierGroupSalaryAccrualsRequest(Guid.NewGuid(), new DateOnly(2026, 6, 1), 7000m, "PAY-06", null);
 
-        var result = await controller.GenerateSupplierGroupSalaryAccruals(
-            new GenerateSupplierGroupSalaryAccrualsRequest(Guid.NewGuid(), new DateOnly(2026, 6, 1), 7000m, "PAY-06", null),
-            CancellationToken.None);
+        var result = await controller.GenerateSupplierGroupSalaryAccruals(request, CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastSupplierGroupSalaryAccrualGenerationRequest);
     }
 
     [Fact]
@@ -970,6 +970,9 @@ public sealed class FinanceControllerTests
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
+        public GenerateRegularAccrualsRequest? LastRegularAccrualGenerationRequest { get; private set; }
+        public GenerateRegularCatalogAccrualsRequest? LastRegularCatalogAccrualGenerationRequest { get; private set; }
+        public GenerateSupplierGroupSalaryAccrualsRequest? LastSupplierGroupSalaryAccrualGenerationRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
@@ -1173,18 +1176,21 @@ public sealed class FinanceControllerTests
         public Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastRegularAccrualGenerationRequest = request;
             return Task.FromResult(GenerateRegularAccrualsResult);
         }
 
         public Task<FinanceResult<RegularCatalogAccrualGenerationResultDto>> GenerateRegularCatalogAccrualsAsync(GenerateRegularCatalogAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastRegularCatalogAccrualGenerationRequest = request;
             return Task.FromResult(GenerateRegularCatalogAccrualsResult);
         }
 
         public Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastSupplierGroupSalaryAccrualGenerationRequest = request;
             return Task.FromResult(GenerateSupplierGroupSalaryAccrualsResult);
         }
 
