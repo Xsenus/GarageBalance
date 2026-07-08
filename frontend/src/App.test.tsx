@@ -500,8 +500,16 @@ describe('App', () => {
     await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
     const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
     expect(within(generateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('2026-06')
-    await user.type(within(generateDialog).getByLabelText('Комментарий к начислению сбора'), 'Решение правления')
-    await user.click(within(generateDialog).getByRole('button', { name: 'Начислить' }))
+    await waitFor(() => expect(within(generateDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Начислить сбор?' })).not.toBeInTheDocument()
+    expect(generateRequests).toHaveLength(0)
+
+    await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
+    const reopenedGenerateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
+    expect(within(reopenedGenerateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('2026-06')
+    await user.type(within(reopenedGenerateDialog).getByLabelText('Комментарий к начислению сбора'), 'Решение правления')
+    await user.click(within(reopenedGenerateDialog).getByRole('button', { name: 'Начислить' }))
     await waitFor(() => expect(generateRequests).toHaveLength(1))
     expect(generateRequests[0]).toMatchObject({
       accountingMonth: '2026-06-01',
