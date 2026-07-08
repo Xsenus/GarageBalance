@@ -81,6 +81,39 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization()
+    {
+        var source = ReadApiSource("Application/Audit/AuditService.cs");
+        var requiredFilters = new[]
+        {
+            "auditEvent.CreatedAtUtc >= request.DateFrom.Value",
+            "auditEvent.CreatedAtUtc <= request.DateTo.Value",
+            "ApplyNonDateFilters(query, request)",
+            "auditEvent.Action == action",
+            "ApplySectionFilter(query, request.Section)",
+            "ApplyActionKindFilter(query, request.ActionKind)",
+            "auditEvent.EntityType == entityType",
+            "auditEvent.ActorUserId == request.ActorUserId.Value",
+            "ApplyQuickFilter(query, request.QuickFilter)",
+            "ApplyRelatedFilters(query, request)",
+            "auditEvent.RelatedGarageNumber",
+            "auditEvent.RelatedAccountingMonth",
+            "auditEvent.RelatedCounterpartyName",
+            "auditEvent.RelatedDocumentNumber"
+        };
+
+        Assert.Contains("GetEventsPageAsync", source, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"ApplyNonDateFilters\(query, request\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Skip\(offset\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            source);
+        Assert.Matches(
+            BoundedQueryRegex(@"OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            source);
+        Assert.All(requiredFilters, filter => Assert.Contains(filter, source, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void DictionarySearchQueries_KeepExplicitLimitForSearchAndDefaultLists()
     {
         var source = ReadApiSource("Application/Dictionaries/DictionaryService.cs");
