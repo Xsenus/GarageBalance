@@ -62,6 +62,12 @@ public sealed class DictionaryService(
         ["hasTieredTariff"] = "Пороговая тарификация",
         ["unitName"] = "Единица измерения",
         ["amount"] = "Сумма",
+        ["goal"] = "Цель",
+        ["contributionAmount"] = "Сумма взноса",
+        ["targetAmount"] = "Сумма сбора",
+        ["startsOn"] = "Дата начала",
+        ["endsOn"] = "Дата окончания",
+        ["appliesToAllGarages"] = "Участники",
         ["isActive"] = "Статус"
     };
 
@@ -2087,6 +2093,123 @@ public sealed class DictionaryService(
         return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
     }
 
+    public async Task<IReadOnlyList<FeeCampaignDto>> GetFeeCampaignsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        var query = dbContext.FeeCampaigns.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(item =>
+                item.Name.ToLower().Contains(normalizedSearch) ||
+                (item.Goal != null && item.Goal.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
+            .OrderBy(item => item.StartsOn)
+            .ThenBy(item => item.Name)
+            .Take(NormalizeListLimit(limit))
+            .Select(item => ToFeeCampaignDto(item))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<DictionaryResult<FeeCampaignDto>> CreateFeeCampaignAsync(UpsertFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateFeeCampaignRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var name = request.Name.Trim();
+        if (await dbContext.FeeCampaigns.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
+        }
+
+        var campaign = new FeeCampaign { Name = name };
+        ApplyFeeCampaign(campaign, request);
+
+        dbContext.FeeCampaigns.Add(campaign);
+        AddAudit(actorUserId, "dictionary.fee_campaign_created", "fee_campaign", campaign.Id, $"Объявлен сбор {campaign.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+    }
+
+    public async Task<DictionaryResult<FeeCampaignDto>> UpdateFeeCampaignAsync(Guid id, UpsertFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateFeeCampaignRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var campaign = await dbContext.FeeCampaigns.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (campaign is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
+        }
+
+        var name = request.Name.Trim();
+        if (await dbContext.FeeCampaigns.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
+        }
+
+        if (FeeCampaignMatches(campaign, request))
+        {
+            return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+        }
+
+        var oldValues = ToFeeCampaignAuditValues(campaign);
+        ApplyFeeCampaign(campaign, request);
+        campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var newValues = ToFeeCampaignAuditValues(campaign);
+
+        AddAudit(actorUserId, "dictionary.fee_campaign_updated", "fee_campaign", campaign.Id, $"Изменен сбор {campaign.Name}.", oldValues: oldValues, newValues: newValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+    }
+
+    public async Task<DictionaryResult<FeeCampaignDto>> ArchiveFeeCampaignAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<FeeCampaignDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var campaign = await dbContext.FeeCampaigns.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        if (campaign is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
+        }
+
+        campaign.IsArchived = true;
+        campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.fee_campaign_archived", "fee_campaign", campaign.Id, $"Архивирован сбор {campaign.Name}.", archiveReason);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+    }
+
+    public async Task<DictionaryResult<FeeCampaignDto>> RestoreFeeCampaignAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var campaign = await dbContext.FeeCampaigns.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        if (campaign is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден в архиве.");
+        }
+
+        if (await dbContext.FeeCampaigns.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == campaign.Name, cancellationToken))
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
+        }
+
+        campaign.IsArchived = false;
+        campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(actorUserId, "dictionary.fee_campaign_restored", "fee_campaign", campaign.Id, $"Восстановлен сбор {campaign.Name}.");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+    }
+
     private async Task<Owner?> FindOwnerOrNullAsync(Guid? ownerId, CancellationToken cancellationToken)
     {
         return ownerId is null
@@ -2371,6 +2494,75 @@ public sealed class DictionaryService(
         };
     }
 
+    private static DictionaryResult<FeeCampaignDto>? ValidateFeeCampaignRequest(UpsertFeeCampaignRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_name_required", "Наименование сбора обязательно.");
+        }
+
+        if (MoneyMath.RoundMoney(request.ContributionAmount) < 0m)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса не может быть отрицательной.");
+        }
+
+        if (MoneyMath.RoundMoney(request.TargetAmount) <= 0m)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_target_amount_invalid", "Сумма сбора должна быть больше нуля.");
+        }
+
+        if (request.OverdueGraceDays is < 0 or > 366)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_overdue_days_invalid", "Перенос долга в просроченный должен быть в диапазоне от 0 до 366 дней.");
+        }
+
+        if (request.EndsOn.HasValue && request.EndsOn.Value < request.StartsOn)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_period_invalid", "Дата окончания сбора не может быть раньше даты начала.");
+        }
+
+        return null;
+    }
+
+    private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request)
+    {
+        campaign.Name = request.Name.Trim();
+        campaign.Goal = NormalizeOptional(request.Goal);
+        campaign.ContributionAmount = MoneyMath.RoundMoney(request.ContributionAmount);
+        campaign.TargetAmount = MoneyMath.RoundMoney(request.TargetAmount);
+        campaign.StartsOn = request.StartsOn;
+        campaign.EndsOn = request.EndsOn;
+        campaign.AppliesToAllGarages = request.AppliesToAllGarages;
+        campaign.OverdueGraceDays = request.OverdueGraceDays;
+    }
+
+    private static bool FeeCampaignMatches(FeeCampaign campaign, UpsertFeeCampaignRequest request)
+    {
+        return StringEquals(campaign.Name, request.Name.Trim()) &&
+            StringEquals(campaign.Goal, NormalizeOptional(request.Goal)) &&
+            campaign.ContributionAmount == MoneyMath.RoundMoney(request.ContributionAmount) &&
+            campaign.TargetAmount == MoneyMath.RoundMoney(request.TargetAmount) &&
+            campaign.StartsOn == request.StartsOn &&
+            campaign.EndsOn == request.EndsOn &&
+            campaign.AppliesToAllGarages == request.AppliesToAllGarages &&
+            campaign.OverdueGraceDays == request.OverdueGraceDays;
+    }
+
+    private static Dictionary<string, object?> ToFeeCampaignAuditValues(FeeCampaign campaign)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["name"] = campaign.Name,
+            ["goal"] = campaign.Goal,
+            ["contributionAmount"] = campaign.ContributionAmount,
+            ["targetAmount"] = campaign.TargetAmount,
+            ["startsOn"] = campaign.StartsOn,
+            ["endsOn"] = campaign.EndsOn,
+            ["appliesToAllGarages"] = campaign.AppliesToAllGarages,
+            ["overdueGraceDays"] = campaign.OverdueGraceDays
+        };
+    }
+
     private static bool HasElectricityTiers(Tariff tariff)
     {
         return tariff.ElectricityFirstThreshold.HasValue
@@ -2622,6 +2814,21 @@ public sealed class DictionaryService(
             payment.IsActive,
             payment.IsArchived,
             await IsIrregularPaymentUsedAsync(payment.Name, cancellationToken));
+    }
+
+    private static FeeCampaignDto ToFeeCampaignDto(FeeCampaign campaign)
+    {
+        return new FeeCampaignDto(
+            campaign.Id,
+            campaign.Name,
+            campaign.Goal,
+            campaign.ContributionAmount,
+            campaign.TargetAmount,
+            campaign.StartsOn,
+            campaign.EndsOn,
+            campaign.AppliesToAllGarages,
+            campaign.OverdueGraceDays,
+            campaign.IsArchived);
     }
 
     private static TariffDto ToTariffDto(Tariff tariff)

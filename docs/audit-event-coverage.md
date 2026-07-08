@@ -37,7 +37,7 @@
 |---|---:|---|---|
 | Auth | 7 | actor для известных пользователей, metadata без паролей, rate-limit audit | у неизвестного email actor отсутствует по природе сценария; нет `было/стало` |
 | Users | 3 | create/update/restore, diff и причина отключения | отдельной матрицы прав пока нет |
-| Dictionaries | 28 | create/update/archive/restore для текущих справочников, diff на update, причина archive | контакты поставщиков, персонал, сборы и нерегулярные платежи пока не backend-модели |
+| Dictionaries | 32 | create/update/archive/restore для текущих справочников, diff на update, причина archive | начисление участников сборов и полная UI-связка сборов остаются следующим срезом |
 | Finance | 16 | create/update/cancel/generate, diff на update, связанные месяц/гараж/контрагент/документ | restore финансовых операций зависит от бизнес-решения |
 | Import | 5 | dry-run, отчет, карантин, fingerprints, безопасная metadata | фактический импорт/rollback еще не завершены |
 | Integrations | 1 | secret upsert без plaintext-секретов, diff состояния секрета | запуск синхронизации и конфликты будущих интеграций впереди |
@@ -95,6 +95,10 @@
 | `dictionary.tariff_updated` | `tariff` | Да | Нет | Да | `DictionaryServiceTests` | diff по ставке/периоду/порогам |
 | `dictionary.tariff_archived` | `tariff` | Нет | Да | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | archive вместо физического удаления |
 | `dictionary.tariff_restored` | `tariff` | Нет | Нет | Да | `DictionaryServiceTests` | проверяет конфликт активного тарифа |
+| `dictionary.fee_campaign_created` | `fee_campaign` | Нет | Нет | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | объявление сбора с целью, суммами, датами и переносом долга |
+| `dictionary.fee_campaign_updated` | `fee_campaign` | Да | Нет | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | diff по цели, суммам, периоду, участникам и дням просрочки |
+| `dictionary.fee_campaign_archived` | `fee_campaign` | Нет | Да | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | archive вместо физического удаления |
+| `dictionary.fee_campaign_restored` | `fee_campaign` | Нет | Нет | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | проверяет конфликт активного сбора с тем же названием |
 
 ## Finance
 
@@ -147,6 +151,6 @@
 ## Что Остается
 
 - Составить аналогичную инвентаризацию soft delete / archive / cancel действий backend и frontend.
-- После появления backend-моделей персонала, сборов, нерегулярных платежей и фондов добавить их события в эту таблицу.
+- Для будущего начисления участников сборов добавить отдельные финансовые события генерации/изменения долгов по гаражам.
 - После бизнес-решения по финансовому restore обновить строки `finance.*_canceled` и добавить обратные операции или restore-события.
 - Для отчетов можно усилить прямые service-tests на `reports.consolidated_exported` и `reports.expense_exported`, если потребуется отдельное подтверждение каждого action-кода.

@@ -60,6 +60,7 @@
 | Отчеты | фильтры и просмотр | generated/read | Backend API | generate/read, пишет audit для формирования |
 | Отчеты | XLSX/PDF export | export | Backend API | POST export, пишет audit |
 | История изменений | CSV/XLSX export | export | Backend API | export текущей выборки |
+| Сборы | объявление/изменение/архив/восстановление сбора | create/edit/archive/restore | Backend API | цель, суммы, период, участники, перенос долга; audit с причиной архива |
 | Тарифы-прототип | редактируемые значения, услуга, сбор | create/edit | React-state прототип | изменения тарифов с confirmation; локальные данные до backend |
 | Тарифы-прототип | нерегулярный платеж | delete/restore | React-state прототип | delete с причиной, restore с confirmation |
 | Контрагенты-прототип | гаражи, поставщики, персонал | create/edit | React-state прототип | модалки разделов; delete/restore локальные |
@@ -74,7 +75,7 @@
 
 ## Открытые Хвосты
 
-- Для всех будущих backend-моделей персонала, отделов, сборов, фондов и нерегулярных платежей добавить строки create/edit/archive/restore/cancel.
+- Для будущих backend-сценариев начисления участников сборов и пользовательских форм сборов добавить отдельные строки create/edit/archive/restore/cancel.
 - Для импортного resolve и будущего rollback решить, нужен ли отдельный confirmation dialog сверх текущего backend audit.
 - Для финансовых операций принять бизнес-решение: restore или обратная операция.
 - Следующим срезом проверить все UI controls: кнопки, icon-only кнопки, input, textarea, select, date/month/year controls, checkbox, toggle, tabs, dialogs, tables, pagination, filters, empty/loading/error states.

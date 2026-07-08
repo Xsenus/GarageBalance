@@ -23,6 +23,7 @@ public sealed class DictionariesControllerTests
         await controller.GetExpenseTypes("expense", 45, true, CancellationToken.None);
         await controller.GetTariffs("meter", 46, true, CancellationToken.None);
         await controller.GetIrregularPayments("fine", 47, true, CancellationToken.None);
+        await controller.GetFeeCampaigns("gate", 48, true, CancellationToken.None);
 
         Assert.Equal(("ivan", 40, true), service.LastOwnerListRequest);
         Assert.Equal(("12", 41, true), service.LastGarageListRequest);
@@ -32,6 +33,7 @@ public sealed class DictionariesControllerTests
         Assert.Equal(("expense", 45, true), service.LastExpenseTypeListRequest);
         Assert.Equal(("meter", 46, true), service.LastTariffListRequest);
         Assert.Equal(("fine", 47, true), service.LastIrregularPaymentListRequest);
+        Assert.Equal(("gate", 48, true), service.LastFeeCampaignListRequest);
     }
 
     [Fact]
@@ -290,6 +292,101 @@ public sealed class DictionariesControllerTests
         Assert.False(payment.IsArchived);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(paymentId, service.LastRestoreId);
+    }
+
+    [Fact]
+    public async Task CreateFeeCampaign_ReturnsCreatedAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var campaignId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(
+                campaignId,
+                "Gate campaign",
+                "Gate replacement",
+                500m,
+                33500m,
+                new DateOnly(2026, 5, 4),
+                new DateOnly(2026, 6, 30),
+                true,
+                30,
+                false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateFeeCampaign(
+            new UpsertFeeCampaignRequest("Gate campaign", "Gate replacement", 500m, 33500m, new DateOnly(2026, 5, 4), new DateOnly(2026, 6, 30), true, 30),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var campaign = Assert.IsType<FeeCampaignDto>(created.Value);
+        Assert.Equal(campaignId, campaign.Id);
+        Assert.Equal(nameof(DictionariesController.GetFeeCampaigns), created.ActionName);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateFeeCampaign_ReturnsConflictForDuplicateName()
+    {
+        var actorUserId = Guid.NewGuid();
+        var campaignId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Duplicate.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateFeeCampaign(
+            campaignId,
+            new UpsertFeeCampaignRequest("Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("fee_campaign_duplicate", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(campaignId, service.LastFeeCampaignId);
+    }
+
+    [Fact]
+    public async Task ArchiveFeeCampaign_ReturnsNoContentAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var campaignId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            ArchiveFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, true))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ArchiveFeeCampaign(campaignId, new ArchiveDictionaryEntryRequest("No longer used"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(campaignId, service.LastFeeCampaignId);
+        Assert.Equal("No longer used", service.LastArchiveReason);
+    }
+
+    [Fact]
+    public async Task RestoreFeeCampaign_ReturnsOkActiveRecordAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var campaignId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            RestoreFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreFeeCampaign(campaignId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var campaign = Assert.IsType<FeeCampaignDto>(ok.Value);
+        Assert.Equal(campaignId, campaign.Id);
+        Assert.False(campaign.IsArchived);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(campaignId, service.LastRestoreId);
     }
 
     [Fact]
@@ -1298,11 +1395,13 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived) LastFeeCampaignListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
         public Guid? LastGarageId { get; private set; }
         public Guid? LastSupplierId { get; private set; }
         public Guid? LastChargeServiceSettingId { get; private set; }
         public Guid? LastIrregularPaymentId { get; private set; }
+        public Guid? LastFeeCampaignId { get; private set; }
         public Guid? LastSupplierContactId { get; private set; }
         public Guid? LastStaffDepartmentId { get; private set; }
         public Guid? LastStaffMemberId { get; private set; }
@@ -1345,6 +1444,10 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<IrregularPaymentDto> SetIrregularPaymentStatusResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> ArchiveIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<IrregularPaymentDto> RestoreIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<FeeCampaignDto> CreateFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<FeeCampaignDto> UpdateFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<FeeCampaignDto> ArchiveFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<FeeCampaignDto> RestoreFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
@@ -1771,6 +1874,40 @@ public sealed class DictionariesControllerTests
             LastRestoreId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreIrregularPaymentResult);
+        }
+
+        public Task<IReadOnlyList<FeeCampaignDto>> GetFeeCampaignsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        {
+            LastFeeCampaignListRequest = (search, limit, includeArchived);
+            return Task.FromResult<IReadOnlyList<FeeCampaignDto>>([]);
+        }
+
+        public Task<DictionaryResult<FeeCampaignDto>> CreateFeeCampaignAsync(UpsertFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CreateFeeCampaignResult);
+        }
+
+        public Task<DictionaryResult<FeeCampaignDto>> UpdateFeeCampaignAsync(Guid id, UpsertFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastFeeCampaignId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateFeeCampaignResult);
+        }
+
+        public Task<DictionaryResult<FeeCampaignDto>> ArchiveFeeCampaignAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastFeeCampaignId = id;
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(ArchiveFeeCampaignResult);
+        }
+
+        public Task<DictionaryResult<FeeCampaignDto>> RestoreFeeCampaignAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastRestoreId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RestoreFeeCampaignResult);
         }
     }
 }

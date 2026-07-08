@@ -92,6 +92,7 @@ public sealed class DictionaryServiceTests
             Assert.True((await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest($"Поступление {index}", $"income_limit_{index}"), null, CancellationToken.None)).Succeeded);
             Assert.True((await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest($"Выплата {index}", $"expense_limit_{index}"), null, CancellationToken.None)).Succeeded);
             Assert.True((await service.CreateTariffAsync(new UpsertTariffRequest($"Тариф {index}", "fixed", 10 + index, new DateOnly(2026, 1, 1).AddMonths(index), null), null, CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateFeeCampaignAsync(new UpsertFeeCampaignRequest($"Сбор {index}", null, 100 + index, 1000 + index, new DateOnly(2026, 1, 1).AddMonths(index), null, true, 30), null, CancellationToken.None)).Succeeded);
         }
 
         Assert.Equal(2, (await service.GetOwnersAsync(null, CancellationToken.None, 2)).Count);
@@ -101,6 +102,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(2, (await service.GetIncomeTypesAsync(null, CancellationToken.None, 2)).Count);
         Assert.Equal(2, (await service.GetExpenseTypesAsync(null, CancellationToken.None, 2)).Count);
         Assert.Equal(2, (await service.GetTariffsAsync(null, CancellationToken.None, 2)).Count);
+        Assert.Equal(2, (await service.GetFeeCampaignsAsync(null, CancellationToken.None, 2)).Count);
     }
 
     [Fact]
@@ -1626,6 +1628,98 @@ public sealed class DictionaryServiceTests
             item.Action == "dictionary.irregular_payment_restored" &&
             item.ActorUserId == actorUserId &&
             item.EntityId == archived.Value.Id.ToString());
+    }
+
+    [Fact]
+    public async Task FeeCampaignAsync_CreatesUpdatesArchivesAndRestoresWithAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var created = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest(" Gate campaign ", "Gate replacement", 500m, 33500m, new DateOnly(2026, 5, 4), new DateOnly(2026, 6, 30), true, 30),
+            actorUserId,
+            CancellationToken.None);
+        var activeCampaigns = await service.GetFeeCampaignsAsync("gate", CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var updated = await service.UpdateFeeCampaignAsync(
+            created.Value!.Id,
+            new UpsertFeeCampaignRequest("Gate campaign", "Gate replacement and wiring", 600m, 34000m, new DateOnly(2026, 5, 4), new DateOnly(2026, 7, 1), true, 45),
+            actorUserId,
+            CancellationToken.None);
+        var noOp = await service.UpdateFeeCampaignAsync(
+            created.Value.Id,
+            new UpsertFeeCampaignRequest("Gate campaign", "Gate replacement and wiring", 600m, 34000m, new DateOnly(2026, 5, 4), new DateOnly(2026, 7, 1), true, 45),
+            actorUserId,
+            CancellationToken.None);
+        var emptyReason = await service.ArchiveFeeCampaignAsync(created.Value.Id, " ", actorUserId, CancellationToken.None);
+        var archived = await service.ArchiveFeeCampaignAsync(created.Value.Id, "No longer used", actorUserId, CancellationToken.None);
+        var visibleAfterArchive = await service.GetFeeCampaignsAsync("gate", CancellationToken.None);
+        var archivedCampaigns = await service.GetFeeCampaignsAsync("gate", CancellationToken.None, includeArchived: true);
+        var restored = await service.RestoreFeeCampaignAsync(created.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal("Gate campaign", created.Value.Name);
+        Assert.Single(activeCampaigns);
+        Assert.True(updated.Succeeded);
+        Assert.Equal(600m, updated.Value!.ContributionAmount);
+        Assert.Equal(34000m, updated.Value.TargetAmount);
+        Assert.True(noOp.Succeeded);
+        Assert.False(emptyReason.Succeeded);
+        Assert.Equal("dictionary_archive_reason_required", emptyReason.ErrorCode);
+        Assert.True(archived.Succeeded);
+        Assert.Empty(visibleAfterArchive);
+        Assert.True(Assert.Single(archivedCampaigns).IsArchived);
+        Assert.True(restored.Succeeded);
+        Assert.False(restored.Value!.IsArchived);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_updated" && item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_archived" && item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_restored" && item.ActorUserId == actorUserId);
+        Assert.Equal(3, database.Context.AuditEvents.Count());
+    }
+
+    [Fact]
+    public async Task FeeCampaignAsync_RejectsInvalidInputAndDuplicateRestore()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var emptyName = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest(" ", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+        var invalidTarget = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Invalid target", null, 500m, 0m, new DateOnly(2026, 5, 4), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+        var invalidPeriod = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Invalid period", null, 500m, 33500m, new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), true, 30),
+            actorUserId,
+            CancellationToken.None);
+        var archived = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Gate campaign", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+        await service.ArchiveFeeCampaignAsync(archived.Value!.Id, "Finished", actorUserId, CancellationToken.None);
+        var activeDuplicate = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Gate campaign", null, 700m, 40000m, new DateOnly(2026, 8, 1), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+        var duplicateRestore = await service.RestoreFeeCampaignAsync(archived.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.False(emptyName.Succeeded);
+        Assert.Equal("fee_campaign_name_required", emptyName.ErrorCode);
+        Assert.False(invalidTarget.Succeeded);
+        Assert.Equal("fee_campaign_target_amount_invalid", invalidTarget.ErrorCode);
+        Assert.False(invalidPeriod.Succeeded);
+        Assert.Equal("fee_campaign_period_invalid", invalidPeriod.ErrorCode);
+        Assert.True(activeDuplicate.Succeeded);
+        Assert.False(duplicateRestore.Succeeded);
+        Assert.Equal("fee_campaign_duplicate", duplicateRestore.ErrorCode);
     }
 
     private sealed class TestDatabase : IAsyncDisposable

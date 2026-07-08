@@ -205,3 +205,25 @@ public sealed record UpsertIrregularPaymentRequest(
 public sealed record UpdateIrregularPaymentStatusRequest(
     bool IsActive,
     [MaxLength(1000)] string? Reason);
+
+public sealed record FeeCampaignDto(
+    Guid Id,
+    string Name,
+    string? Goal,
+    decimal ContributionAmount,
+    decimal TargetAmount,
+    DateOnly StartsOn,
+    DateOnly? EndsOn,
+    bool AppliesToAllGarages,
+    int OverdueGraceDays,
+    bool IsArchived);
+
+public sealed record UpsertFeeCampaignRequest(
+    [Required, MaxLength(200)] string Name,
+    [MaxLength(500)] string? Goal,
+    [Range(0, 999999999)] decimal ContributionAmount,
+    [Range(0.01, 999999999)] decimal TargetAmount,
+    DateOnly StartsOn,
+    DateOnly? EndsOn,
+    bool AppliesToAllGarages,
+    [Range(0, 366)] int OverdueGraceDays);

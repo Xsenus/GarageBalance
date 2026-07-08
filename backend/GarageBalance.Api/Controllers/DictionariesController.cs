@@ -791,6 +791,68 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("fee-campaigns")]
+    [ProducesResponseType<IReadOnlyList<FeeCampaignDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<FeeCampaignDto>>> GetFeeCampaigns([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetFeeCampaignsAsync(search, cancellationToken, limit, includeArchived));
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("fee-campaigns")]
+    [ProducesResponseType<FeeCampaignDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FeeCampaignDto>> CreateFeeCampaign(UpsertFeeCampaignRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateFeeCampaignAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetFeeCampaigns), new { search = result.Value!.Name }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPut("fee-campaigns/{id:guid}")]
+    [ProducesResponseType<FeeCampaignDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FeeCampaignDto>> UpdateFeeCampaign(Guid id, UpsertFeeCampaignRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateFeeCampaignAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpDelete("fee-campaigns/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveFeeCampaign(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveFeeCampaignAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("fee-campaigns/{id:guid}/restore")]
+    [ProducesResponseType<FeeCampaignDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FeeCampaignDto>> RestoreFeeCampaign(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreFeeCampaignAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     private Guid? GetActorUserId()
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
@@ -810,8 +872,8 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         return result.ErrorCode switch
         {
-            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" or "fee_campaign_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

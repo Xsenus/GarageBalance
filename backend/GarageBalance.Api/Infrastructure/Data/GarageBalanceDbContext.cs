@@ -29,6 +29,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<ChargeServiceSetting> ChargeServiceSettings => Set<ChargeServiceSetting>();
     public DbSet<IrregularPayment> IrregularPayments => Set<IrregularPayment>();
+    public DbSet<FeeCampaign> FeeCampaigns => Set<FeeCampaign>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
@@ -308,6 +309,19 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.Amount).HasPrecision(18, 2);
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.IsActive);
+        });
+
+        modelBuilder.Entity<FeeCampaign>(entity =>
+        {
+            entity.ToTable("fee_campaigns");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Goal).HasMaxLength(500);
+            entity.Property(item => item.ContributionAmount).HasPrecision(18, 2);
+            entity.Property(item => item.TargetAmount).HasPrecision(18, 2);
+            entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(item => item.StartsOn);
+            entity.HasIndex(item => item.IsArchived);
         });
 
         modelBuilder.Entity<FinancialOperation>(entity =>
