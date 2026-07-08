@@ -761,6 +761,7 @@ describe('App', () => {
       initialElectricityMeterValue: 49,
     })
     let savedGarageStartingBalance: number | null = null
+    let archivedGarageReason: string | null = null
     let deletedSupplierContactReason: string | null = null
     let archivedStaffMemberReason: string | null = null
     const dictionaryClient = createDictionaryClient({
@@ -784,6 +785,15 @@ describe('App', () => {
           comment: request.comment ?? null,
         })
       },
+      archiveGarage: async (_token, _id, reason) => {
+        archivedGarageReason = reason
+      },
+      restoreGarage: async (_token, id) => createGarage({
+        ...contractorGarage,
+        id,
+        ownerName: 'Новый владелец',
+        isArchived: false,
+      }),
       createSupplier: async (_token, request) => createSupplier({
         id: '22222222-2222-4222-8222-222222222222',
         name: request.name,
@@ -932,8 +942,20 @@ describe('App', () => {
     const deleteGarageDialog = await screen.findByRole('dialog', { name: 'Удалить гараж?' })
     expect(within(deleteGarageDialog).getByText('Гараж 1')).toBeInTheDocument()
     expect(within(deleteGarageDialog).getByRole('button', { name: 'Удалить гараж' })).toBeDisabled()
-    await user.type(within(deleteGarageDialog).getByLabelText('Причина удаления гаража'), 'Дубликат карточки')
-    await user.click(within(deleteGarageDialog).getByRole('button', { name: 'Удалить гараж' }))
+    await waitFor(() => expect(within(deleteGarageDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Удалить гараж?' })).not.toBeInTheDocument()
+    expect(within(garageRow as HTMLElement).queryByText('Удален')).not.toBeInTheDocument()
+    expect(archivedGarageReason).toBeNull()
+
+    await user.pointer({ keys: '[MouseRight]', target: garageRow as HTMLElement })
+    const reopenedDeleteGarageContextMenu = await screen.findByRole('menu', { name: 'Действия гаража 1' })
+    await user.click(within(reopenedDeleteGarageContextMenu).getByRole('menuitem', { name: 'Удалить' }))
+    const reopenedDeleteGarageDialog = await screen.findByRole('dialog', { name: 'Удалить гараж?' })
+    expect(within(reopenedDeleteGarageDialog).getByRole('button', { name: 'Удалить гараж' })).toBeDisabled()
+    await user.type(within(reopenedDeleteGarageDialog).getByLabelText('Причина удаления гаража'), 'Дубликат карточки')
+    await user.click(within(reopenedDeleteGarageDialog).getByRole('button', { name: 'Удалить гараж' }))
+    await waitFor(() => expect(archivedGarageReason).toBe('Дубликат карточки'))
     await waitFor(() => expect(within(garageRow as HTMLElement).getByText('Удален')).toBeInTheDocument())
     const restoreGarageButton = within(garageRow as HTMLElement).getByRole('button', { name: 'Восстановить гараж 1' })
     await user.click(restoreGarageButton)
