@@ -129,6 +129,21 @@ export type ChargeServiceSettingDto = {
   isArchived: boolean
 }
 
+export type FeeCampaignDto = {
+  id: string
+  name: string
+  incomeTypeId: string
+  incomeTypeName: string
+  goal: string | null
+  contributionAmount: number
+  targetAmount: number
+  startsOn: string
+  endsOn: string | null
+  appliesToAllGarages: boolean
+  overdueGraceDays: number
+  isArchived: boolean
+}
+
 export type PagedResult<TItem> = {
   items: TItem[]
   totalCount: number
@@ -234,6 +249,18 @@ export type UpsertChargeServiceSettingRequest = {
   unitName?: string | null
 }
 
+export type UpsertFeeCampaignRequest = {
+  name: string
+  incomeTypeId: string
+  goal?: string | null
+  contributionAmount: number
+  targetAmount: number
+  startsOn: string
+  endsOn?: string | null
+  appliesToAllGarages: boolean
+  overdueGraceDays: number
+}
+
 export type DictionaryClient = {
   getOwners(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<OwnerDto[]>
   getOwnersPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<OwnerDto>>
@@ -297,6 +324,11 @@ export type DictionaryClient = {
   updateChargeServiceSetting(accessToken: string, id: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   archiveChargeServiceSetting(accessToken: string, id: string, reason: string): Promise<void>
   restoreChargeServiceSetting(accessToken: string, id: string): Promise<ChargeServiceSettingDto>
+  getFeeCampaigns(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<FeeCampaignDto[]>
+  createFeeCampaign(accessToken: string, request: UpsertFeeCampaignRequest): Promise<FeeCampaignDto>
+  updateFeeCampaign(accessToken: string, id: string, request: UpsertFeeCampaignRequest): Promise<FeeCampaignDto>
+  archiveFeeCampaign(accessToken: string, id: string, reason: string): Promise<void>
+  restoreFeeCampaign(accessToken: string, id: string): Promise<FeeCampaignDto>
   getIrregularPayments(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<IrregularPaymentDto[]>
   createIrregularPayment(accessToken: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
   updateIrregularPayment(accessToken: string, id: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
@@ -541,6 +573,21 @@ export const dictionariesApi: DictionaryClient = {
   },
   restoreChargeServiceSetting(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/restore`, { method: 'POST' })
+  },
+  getFeeCampaigns(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/fee-campaigns', { search, limit, includeArchived: includeArchived || undefined }))
+  },
+  createFeeCampaign(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/fee-campaigns', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateFeeCampaign(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  archiveFeeCampaign(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreFeeCampaign(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}/restore`, { method: 'POST' })
   },
   getIrregularPayments(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/irregular-payments', { search, limit, includeArchived: includeArchived || undefined }))

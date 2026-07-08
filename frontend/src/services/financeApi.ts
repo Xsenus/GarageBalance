@@ -74,7 +74,7 @@ export type AccrualDto = {
   incomeTypeName: string
   accountingMonth: string
   amount: number
-  source: 'manual' | 'regular' | 'debt_transfer'
+  source: 'manual' | 'regular' | 'debt_transfer' | 'fee_campaign'
   comment: string | null
   isCanceled: boolean
 }
@@ -278,6 +278,12 @@ export type GenerateSupplierGroupSalaryAccrualsRequest = {
   comment?: string
 }
 
+export type GenerateFeeCampaignAccrualsRequest = {
+  feeCampaignId: string
+  accountingMonth: string
+  comment?: string
+}
+
 export type RegularAccrualGenerationResultDto = {
   accountingMonth: string
   incomeTypeId: string
@@ -313,6 +319,20 @@ export type SupplierGroupSalaryAccrualGenerationResultDto = {
   totalAmount: number
   createdAccruals: SupplierAccrualDto[]
   skippedSuppliers: string[]
+}
+
+export type FeeCampaignAccrualGenerationResultDto = {
+  accountingMonth: string
+  feeCampaignId: string
+  feeCampaignName: string
+  incomeTypeId: string
+  incomeTypeName: string
+  contributionAmount: number
+  createdCount: number
+  skippedCount: number
+  totalAmount: number
+  createdAccruals: AccrualDto[]
+  skippedGarages: string[]
 }
 
 export type CreateMeterReadingRequest = {
@@ -355,6 +375,7 @@ export type FinanceClient = {
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
   generateRegularCatalogAccruals(accessToken: string, request: GenerateRegularCatalogAccrualsRequest): Promise<RegularCatalogAccrualGenerationResultDto>
   generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
+  generateFeeCampaignAccruals(accessToken: string, request: GenerateFeeCampaignAccrualsRequest): Promise<FeeCampaignAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   updateMeterReading(accessToken: string, meterReadingId: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
@@ -546,6 +567,9 @@ export const financeApi: FinanceClient = {
   },
   generateSupplierGroupSalaryAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/supplier-accruals/generate-salary', { method: 'POST', body: JSON.stringify(request) })
+  },
+  generateFeeCampaignAccruals(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals/generate-fee-campaign', { method: 'POST', body: JSON.stringify(request) })
   },
   createMeterReading(accessToken, request) {
     return requestJson(accessToken, '/api/finance/meter-readings', { method: 'POST', body: JSON.stringify(request) })

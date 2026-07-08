@@ -20,8 +20,8 @@ import { formStatesApi } from './services/formStatesApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -338,6 +338,7 @@ describe('App', () => {
     await user.click(addTariffFeeButton)
     const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
     expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
+    expect(within(feeDialog).getByLabelText('Вид поступления для сбора')).toHaveValue('income-type-1')
     expect(within(feeDialog).getByLabelText('Цель сбора')).toBeInTheDocument()
     expect(within(feeDialog).getByLabelText('Сумма взноса')).toBeInTheDocument()
     expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
@@ -347,6 +348,128 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить сбор' })).not.toBeInTheDocument())
     expect(addTariffFeeButton).toHaveFocus()
+  })
+
+  it('creates, accrues, archives and restores announced fee campaigns from tariffs page', async () => {
+    const user = userEvent.setup()
+    const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    let campaigns = [
+      createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name }),
+      createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
+    ]
+    const createdRequests: string[] = []
+    const archiveRequests: Array<{ id: string; reason: string }> = []
+    const restoredRequests: string[] = []
+    const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [targetIncomeType],
+      getFeeCampaigns: async () => campaigns,
+      createFeeCampaign: async (_token, request) => {
+        const campaign = createFeeCampaign({
+          id: 'fee-campaign-new',
+          name: request.name,
+          incomeTypeId: targetIncomeType.id,
+          incomeTypeName: targetIncomeType.name,
+          goal: request.goal ?? null,
+          contributionAmount: request.contributionAmount,
+          targetAmount: request.targetAmount,
+          startsOn: request.startsOn,
+          endsOn: request.endsOn ?? null,
+          appliesToAllGarages: request.appliesToAllGarages,
+          overdueGraceDays: request.overdueGraceDays,
+        })
+        createdRequests.push(JSON.stringify(request))
+        campaigns = [campaign, ...campaigns]
+        return campaign
+      },
+      archiveFeeCampaign: async (_token, id, reason) => {
+        archiveRequests.push({ id, reason })
+        campaigns = campaigns.map((campaign) => (campaign.id === id ? { ...campaign, isArchived: true } : campaign))
+      },
+      restoreFeeCampaign: async (_token, id) => {
+        restoredRequests.push(id)
+        const restoredCampaign = campaigns.find((campaign) => campaign.id === id) ?? createFeeCampaign({ id, isArchived: false })
+        campaigns = campaigns.map((campaign) => (campaign.id === id ? { ...restoredCampaign, isArchived: false } : campaign))
+        return { ...restoredCampaign, isArchived: false }
+      },
+    })
+    const financeClient = createFinanceClient({
+      generateFeeCampaignAccruals: async (_token, request) => {
+        generateRequests.push(request)
+        return createFeeCampaignAccrualGenerationResult({
+          accountingMonth: request.accountingMonth,
+          feeCampaignId: request.feeCampaignId,
+          feeCampaignName: 'Сбор на ворота',
+          incomeTypeId: targetIncomeType.id,
+          incomeTypeName: targetIncomeType.name,
+          contributionAmount: 500,
+          createdCount: 3,
+          skippedCount: 1,
+          totalAmount: 1500,
+          createdAccruals: [
+            createAccrual({ id: 'fee-accrual-1', amount: 500, source: 'fee_campaign' }),
+            createAccrual({ id: 'fee-accrual-2', amount: 500, source: 'fee_campaign' }),
+            createAccrual({ id: 'fee-accrual-3', amount: 500, source: 'fee_campaign' }),
+          ],
+          skippedGarages: ['12'],
+        })
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
+    expect(within(feeCampaignsSection).getByText('Сбор на ворота')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByText('Старый сбор')).toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
+    const createDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    await user.type(within(createDialog).getByLabelText('Наименование сбора'), 'Сбор на камеры')
+    await user.selectOptions(within(createDialog).getByLabelText('Вид поступления для сбора'), targetIncomeType.id)
+    await user.type(within(createDialog).getByLabelText('Цель сбора'), 'Видеонаблюдение')
+    await user.type(within(createDialog).getByLabelText('Сумма взноса'), '700')
+    await user.type(within(createDialog).getByLabelText('Сумма сбора'), '35000')
+    await user.clear(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный'))
+    await user.type(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный'), '45')
+    await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
+    await waitFor(() => expect(createdRequests).toHaveLength(1))
+    expect(JSON.parse(createdRequests[0])).toMatchObject({
+      name: 'Сбор на камеры',
+      incomeTypeId: targetIncomeType.id,
+      goal: 'Видеонаблюдение',
+      contributionAmount: 700,
+      targetAmount: 35000,
+      appliesToAllGarages: true,
+      overdueGraceDays: 45,
+    })
+    expect(within(feeCampaignsSection).getByText('Сбор на камеры')).toBeInTheDocument()
+
+    await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
+    const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
+    expect(within(generateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('2026-06')
+    await user.type(within(generateDialog).getByLabelText('Комментарий к начислению сбора'), 'Решение правления')
+    await user.click(within(generateDialog).getByRole('button', { name: 'Начислить' }))
+    await waitFor(() => expect(generateRequests).toHaveLength(1))
+    expect(generateRequests[0]).toMatchObject({
+      accountingMonth: '2026-06-01',
+      comment: 'Решение правления',
+    })
+    expect(await within(feeCampaignsSection).findByText(/Создано начислений: 3/)).toBeInTheDocument()
+
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' }))
+    const archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать сбор?' })
+    await user.type(within(archiveDialog).getByLabelText('Причина архивации сбора'), 'Сбор закрыт')
+    await user.click(within(archiveDialog).getByRole('button', { name: 'Архивировать' }))
+    await waitFor(() => expect(archiveRequests).toEqual([{ id: 'fee-campaign-active', reason: 'Сбор закрыт' }]))
+
+    const archivedCampaignRow = within(feeCampaignsSection).getByText('Старый сбор').closest('.contractors-mini-row')
+    expect(archivedCampaignRow).not.toBeNull()
+    await user.click(within(archivedCampaignRow as HTMLElement).getByRole('button', { name: 'Вернуть' }))
+    await waitFor(() => expect(restoredRequests).toContain('fee-campaign-archived'))
   })
 
   it('edits tariffs and one-time payments without local history access', async () => {
@@ -7592,6 +7715,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   let supplierContacts = [supplierContact]
   let staffDepartments = [staffDepartment]
   let staffMembers = [staffMember]
+  let feeCampaigns: FeeCampaignDto[] = []
 
   return {
     getOwners: async () => owners,
@@ -7870,6 +7994,53 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     }),
     archiveChargeServiceSetting: async () => undefined,
     restoreChargeServiceSetting: async (_token, id) => createChargeServiceSetting({ id, isArchived: false }),
+    getFeeCampaigns: async () => feeCampaigns,
+    createFeeCampaign: async (_token, request) => {
+      const income = [incomeType].find((item) => item.id === request.incomeTypeId) ?? incomeType
+      const campaign = createFeeCampaign({
+        id: `fee-campaign-${feeCampaigns.length + 1}`,
+        name: request.name,
+        incomeTypeId: income.id,
+        incomeTypeName: income.name,
+        goal: request.goal ?? null,
+        contributionAmount: request.contributionAmount,
+        targetAmount: request.targetAmount,
+        startsOn: request.startsOn,
+        endsOn: request.endsOn ?? null,
+        appliesToAllGarages: request.appliesToAllGarages,
+        overdueGraceDays: request.overdueGraceDays,
+      })
+      feeCampaigns = [campaign, ...feeCampaigns]
+      return campaign
+    },
+    updateFeeCampaign: async (_token, id, request) => {
+      const income = [incomeType].find((item) => item.id === request.incomeTypeId) ?? incomeType
+      const campaign = createFeeCampaign({
+        id,
+        name: request.name,
+        incomeTypeId: income.id,
+        incomeTypeName: income.name,
+        goal: request.goal ?? null,
+        contributionAmount: request.contributionAmount,
+        targetAmount: request.targetAmount,
+        startsOn: request.startsOn,
+        endsOn: request.endsOn ?? null,
+        appliesToAllGarages: request.appliesToAllGarages,
+        overdueGraceDays: request.overdueGraceDays,
+      })
+      feeCampaigns = feeCampaigns.map((item) => (item.id === id ? campaign : item))
+      return campaign
+    },
+    archiveFeeCampaign: async (_token, id) => {
+      feeCampaigns = feeCampaigns.map((item) => (item.id === id ? { ...item, isArchived: true } : item))
+    },
+    restoreFeeCampaign: async (_token, id) => {
+      const campaign = feeCampaigns.find((item) => item.id === id) ?? createFeeCampaign({ id, isArchived: false })
+      feeCampaigns = feeCampaigns.some((item) => item.id === id)
+        ? feeCampaigns.map((item) => (item.id === id ? { ...campaign, isArchived: false } : item))
+        : [{ ...campaign, isArchived: false }, ...feeCampaigns]
+      return { ...campaign, isArchived: false }
+    },
     getIrregularPayments: async () => [],
     createIrregularPayment: async (_token, request) => createIrregularPayment({ id: 'irregular-payment-new', name: request.name, amount: request.amount, isActive: request.isActive ?? true }),
     updateIrregularPayment: async (_token, id, request) => createIrregularPayment({ id, name: request.name, amount: request.amount, isActive: request.isActive ?? true }),
@@ -8032,6 +8203,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       totalAmount: accrual.amount,
       serviceResults: [createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount })],
     }),
+    generateFeeCampaignAccruals: async () => createFeeCampaignAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     generateSupplierGroupSalaryAccruals: async () => createSupplierGroupSalaryAccrualGenerationResult({ createdAccruals: [supplierAccrual], totalAmount: supplierAccrual.amount }),
     createMeterReading: async () => meterReading,
     updateMeterReading: async (_token, meterReadingId) => ({ ...meterReading, id: meterReadingId }),
@@ -9043,6 +9215,24 @@ function createIrregularPayment(overrides: Partial<IrregularPaymentDto> = {}): I
   }
 }
 
+function createFeeCampaign(overrides: Partial<FeeCampaignDto> = {}): FeeCampaignDto {
+  return {
+    id: 'fee-campaign',
+    name: 'Сбор на ворота',
+    incomeTypeId: 'income-type-1',
+    incomeTypeName: 'Членский взнос',
+    goal: 'Ремонт ворот',
+    contributionAmount: 500,
+    targetAmount: 33500,
+    startsOn: '2026-06-01',
+    endsOn: null,
+    appliesToAllGarages: true,
+    overdueGraceDays: 30,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
 function getTestCurrentMonthInputValue(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
@@ -9256,6 +9446,23 @@ function createRegularCatalogAccrualGenerationResult(overrides: Partial<RegularC
     totalAmount: serviceResults.reduce((total, result) => total + result.totalAmount, 0),
     serviceResults,
     skippedServices: [],
+    ...overrides,
+  }
+}
+
+function createFeeCampaignAccrualGenerationResult(overrides: Partial<FeeCampaignAccrualGenerationResultDto>): FeeCampaignAccrualGenerationResultDto {
+  return {
+    accountingMonth: '2026-06-01',
+    feeCampaignId: 'fee-campaign',
+    feeCampaignName: 'Сбор на ворота',
+    incomeTypeId: 'income-type-1',
+    incomeTypeName: 'Членский взнос',
+    contributionAmount: 500,
+    createdCount: overrides.createdAccruals?.length ?? 1,
+    skippedCount: 0,
+    totalAmount: 500,
+    createdAccruals: [createAccrual({ amount: 500, source: 'fee_campaign' })],
+    skippedGarages: [],
     ...overrides,
   }
 }

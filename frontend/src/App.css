@@ -833,6 +833,11 @@ h1 {
   grid-template-columns: minmax(190px, 1fr) minmax(110px, 150px);
 }
 
+.contractors-mini-header--fees,
+.contractors-mini-row--fees {
+  grid-template-columns: minmax(180px, 1.35fr) minmax(84px, 0.55fr) minmax(84px, 0.55fr) minmax(140px, 0.9fr) minmax(190px, auto);
+}
+
 .contractors-mini-header {
   background: #f8fafc;
   color: #344054;
@@ -840,8 +845,8 @@ h1 {
   font-weight: 750;
 }
 
-.contractors-mini-header span,
-.contractors-mini-row span {
+.contractors-mini-header > span,
+.contractors-mini-row > span {
   border-bottom: 1px solid #eaecf0;
   padding: 9px 12px;
 }
@@ -856,9 +861,30 @@ h1 {
   color: #667085;
 }
 
-.contractors-mini-row--inactive span:first-child {
+.contractors-mini-row--inactive > span:first-child {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
+}
+
+.contractors-mini-row small {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.contractors-mini-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.contractors-mini-actions .ghost-button,
+.contractors-mini-actions .icon-button {
+  min-height: 34px;
 }
 
 .contractors-action-message {
