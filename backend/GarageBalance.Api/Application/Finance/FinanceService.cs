@@ -2112,6 +2112,40 @@ public sealed class FinanceService(
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
+    public async Task<FinanceResult<MeterReadingDto>> RestoreMeterReadingAsync(Guid meterReadingId, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var reading = await dbContext.MeterReadings
+            .Include(item => item.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .SingleOrDefaultAsync(item => item.Id == meterReadingId, cancellationToken);
+        if (reading is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
+        }
+
+        if (!reading.IsCanceled)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_canceled", "Показание счетчика уже активно.");
+        }
+
+        if (await dbContext.MeterReadings.AnyAsync(item =>
+            !item.IsCanceled &&
+            item.Id != reading.Id &&
+            item.GarageId == reading.GarageId &&
+            item.MeterKind == reading.MeterKind &&
+            item.AccountingMonth == reading.AccountingMonth,
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "За этот гараж, месяц и счетчик уже есть активное показание.");
+        }
+
+        reading.IsCanceled = false;
+        reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "finance.meter_reading_restored", reading, FormatMeterReadingRestoredAuditSummary(reading));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+    }
+
     private async Task<AmountCalculationResult> CalculateRegularAccrualAmountAsync(Garage garage, Tariff tariff, DateOnly month, CancellationToken cancellationToken)
     {
         return tariff.CalculationBase switch
@@ -2331,6 +2365,11 @@ public sealed class FinanceService(
     private static string FormatMeterReadingCanceledAuditSummary(MeterReading reading, string reason)
     {
         return $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; расход {reading.Consumption.ToString("0.####", RussianCulture)}. Причина: {reason}";
+    }
+
+    private static string FormatMeterReadingRestoredAuditSummary(MeterReading reading)
+    {
+        return $"Восстановлено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; расход {reading.Consumption.ToString("0.####", RussianCulture)}.";
     }
 
     private static string FormatMeterReadingCreatedAuditSummary(MeterReading reading)

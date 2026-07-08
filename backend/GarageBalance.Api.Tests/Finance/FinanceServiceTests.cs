@@ -2218,6 +2218,54 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RestoreMeterReadingAsync_RestoresCanceledReadingAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Контроль"),
+            null,
+            CancellationToken.None);
+        await service.CancelMeterReadingAsync(created.Value!.Id, new CancelFinanceEntryRequest("Ошибочное показание"), null, CancellationToken.None);
+
+        var result = await service.RestoreMeterReadingAsync(created.Value.Id, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsCanceled);
+        Assert.Single(await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, null, null), CancellationToken.None));
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_restored");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Восстановлено показание water", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreMeterReadingAsync_RejectsDuplicateActiveReading()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+        var created = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        await service.CancelMeterReadingAsync(created.Value!.Id, new CancelFinanceEntryRequest("Ошибочное показание"), null, CancellationToken.None);
+        Assert.True((await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 16m, null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.RestoreMeterReadingAsync(created.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_reading_duplicate", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_restored");
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_WarnsWhenElectricityPreviousMonthIsMissing()
     {
         await using var database = await TestDatabase.CreateAsync();

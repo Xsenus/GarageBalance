@@ -887,6 +887,57 @@ public sealed class FinanceControllerTests
         Assert.Null(service.LastCanceledMeterReadingId);
     }
 
+    [Fact]
+    public async Task RestoreMeterReading_ReturnsNotFoundForMissingReading()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            RestoreMeterReadingResult = FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание не найдено.")
+        });
+
+        var result = await controller.RestoreMeterReading(Guid.NewGuid(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("meter_reading_not_found", problem.Title);
+    }
+
+    [Fact]
+    public async Task RestoreMeterReading_ReturnsConflictForActiveReading()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            RestoreMeterReadingResult = FinanceResult<MeterReadingDto>.Failure("meter_reading_not_canceled", "Показание уже активно.")
+        });
+
+        var result = await controller.RestoreMeterReading(Guid.NewGuid(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("meter_reading_not_canceled", problem.Title);
+    }
+
+    [Fact]
+    public async Task RestoreMeterReading_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var meterReadingId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            RestoreMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading(id: meterReadingId, isCanceled: false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreMeterReading(meterReadingId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<MeterReadingDto>(ok.Value);
+        Assert.Equal(meterReadingId, dto.Id);
+        Assert.False(dto.IsCanceled);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(meterReadingId, service.LastRestoredMeterReadingId);
+    }
+
     private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
     {
         var controller = new FinanceController(service);
@@ -1058,6 +1109,7 @@ public sealed class FinanceControllerTests
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
         public Guid? LastUpdatedMeterReadingId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
+        public Guid? LastRestoredMeterReadingId { get; private set; }
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
         public Guid? LastGarageIncomeWorksheetGarageId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
@@ -1098,6 +1150,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> UpdateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterReadingDto> RestoreMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
@@ -1315,6 +1368,13 @@ public sealed class FinanceControllerTests
             LastCanceledMeterReadingId = meterReadingId;
             LastCancelRequest = request;
             return Task.FromResult(CancelMeterReadingResult);
+        }
+
+        public Task<FinanceResult<MeterReadingDto>> RestoreMeterReadingAsync(Guid meterReadingId, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastRestoredMeterReadingId = meterReadingId;
+            return Task.FromResult(RestoreMeterReadingResult);
         }
     }
 }
