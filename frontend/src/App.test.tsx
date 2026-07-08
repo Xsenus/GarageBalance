@@ -4748,6 +4748,8 @@ describe('App', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'История баланса' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
+    const closeHistoryButton = within(dialog).getByRole('button', { name: 'Закрыть историю баланса' })
+    await waitFor(() => expect(closeHistoryButton).toHaveFocus())
     expect(within(dialog).getByText('История баланса')).toBeInTheDocument()
     expect(within(dialog).getAllByText('Начислено').length).toBeGreaterThan(0)
     expect(within(dialog).getByText(/1\s200,00/)).toBeInTheDocument()
@@ -4758,6 +4760,9 @@ describe('App', () => {
     expect(requestedGarageId).toBe('garage-1')
     expect(requestedPeriod?.monthFrom).toMatch(/^\d{4}-\d{2}$/)
     expect(requestedPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гараж 12' })).not.toBeInTheDocument())
+    expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Гаражи' })).toBeInTheDocument()
   })
 
   it('searches suppliers by name or inn from dictionaries workspace', async () => {
