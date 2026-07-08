@@ -2620,7 +2620,15 @@ describe('App', () => {
 
     const bankButton = within(prototype).getByRole('button', { name: 'Сдать кассу в банк' })
     await user.click(bankButton)
-    const bankDialog = await screen.findByRole('dialog', { name: 'Учет суммы на счете в банке' })
+    let bankDialog = await screen.findByRole('dialog', { name: 'Учет суммы на счете в банке' })
+    await waitFor(() => expect(within(bankDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
+    expect(savedFundOperationRequests).toHaveLength(0)
+    await waitFor(() => expect(bankButton).toHaveFocus())
+
+    await user.click(bankButton)
+    bankDialog = await screen.findByRole('dialog', { name: 'Учет суммы на счете в банке' })
     expect(await within(bankDialog).findByLabelText('Фонд для сдачи кассы')).toHaveValue('fund-electricity')
     expect(within(bankDialog).getByLabelText('Дата учета суммы в банке')).toHaveValue('2026-06-30')
     await user.type(within(bankDialog).getByLabelText('Сумма в банке'), '12300')
