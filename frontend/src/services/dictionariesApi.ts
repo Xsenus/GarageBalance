@@ -140,6 +140,7 @@ export type FeeCampaignDto = {
   startsOn: string
   endsOn: string | null
   appliesToAllGarages: boolean
+  participantGarageIds: string[]
   overdueGraceDays: number
   isArchived: boolean
 }
@@ -258,6 +259,7 @@ export type UpsertFeeCampaignRequest = {
   startsOn: string
   endsOn?: string | null
   appliesToAllGarages: boolean
+  participantGarageIds?: string[] | null
   overdueGraceDays: number
 }
 

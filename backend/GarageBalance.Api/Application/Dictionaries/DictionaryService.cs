@@ -2121,6 +2121,10 @@ public sealed class DictionaryService(
                 item.StartsOn,
                 item.EndsOn,
                 item.AppliesToAllGarages,
+                item.ParticipantGarages
+                    .OrderBy(participant => participant.Garage.Number)
+                    .Select(participant => participant.GarageId)
+                    .ToList(),
                 item.OverdueGraceDays,
                 item.IsArchived))
             .ToListAsync(cancellationToken);
@@ -2145,9 +2149,16 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
         }
 
+        var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
+        if (!participants.Succeeded)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(participants.ErrorCode!, participants.ErrorMessage!);
+        }
+
         var campaign = new FeeCampaign { Name = name };
         ApplyFeeCampaign(campaign, request);
         campaign.IncomeType = incomeType;
+        SyncFeeCampaignParticipants(campaign, participants.Value!);
 
         dbContext.FeeCampaigns.Add(campaign);
         AddAudit(actorUserId, "dictionary.fee_campaign_created", "fee_campaign", campaign.Id, $"Объявлен сбор {campaign.Name}.");
@@ -2164,6 +2175,8 @@ public sealed class DictionaryService(
 
         var campaign = await dbContext.FeeCampaigns
             .Include(item => item.IncomeType)
+            .Include(item => item.ParticipantGarages)
+                .ThenInclude(item => item.Garage)
             .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (campaign is null)
         {
@@ -2182,7 +2195,13 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
         }
 
-        if (FeeCampaignMatches(campaign, request))
+        var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
+        if (!participants.Succeeded)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(participants.ErrorCode!, participants.ErrorMessage!);
+        }
+
+        if (FeeCampaignMatches(campaign, request, participants.Value!))
         {
             return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
         }
@@ -2190,6 +2209,7 @@ public sealed class DictionaryService(
         var oldValues = ToFeeCampaignAuditValues(campaign);
         ApplyFeeCampaign(campaign, request);
         campaign.IncomeType = incomeType;
+        SyncFeeCampaignParticipants(campaign, participants.Value!);
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
         var newValues = ToFeeCampaignAuditValues(campaign);
 
@@ -2207,6 +2227,8 @@ public sealed class DictionaryService(
 
         var campaign = await dbContext.FeeCampaigns
             .Include(item => item.IncomeType)
+            .Include(item => item.ParticipantGarages)
+                .ThenInclude(item => item.Garage)
             .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
         if (campaign is null)
         {
@@ -2225,6 +2247,8 @@ public sealed class DictionaryService(
     {
         var campaign = await dbContext.FeeCampaigns
             .Include(item => item.IncomeType)
+            .Include(item => item.ParticipantGarages)
+                .ThenInclude(item => item.Garage)
             .SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
         if (campaign is null)
         {
@@ -2560,7 +2584,42 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_period_invalid", "Дата окончания сбора не может быть раньше даты начала.");
         }
 
+        if (!request.AppliesToAllGarages)
+        {
+            var participantIds = request.ParticipantGarageIds ?? [];
+            if (participantIds.Count == 0)
+            {
+                return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_participants_required", "Для сбора не по всем гаражам нужно выбрать хотя бы один гараж.");
+            }
+
+            if (participantIds.Any(id => id == Guid.Empty) || participantIds.Distinct().Count() != participantIds.Count)
+            {
+                return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_participants_invalid", "Список участников сбора содержит некорректные или повторяющиеся гаражи.");
+            }
+        }
+
         return null;
+    }
+
+    private async Task<DictionaryResult<IReadOnlyList<Garage>>> ResolveFeeCampaignParticipantsAsync(UpsertFeeCampaignRequest request, CancellationToken cancellationToken)
+    {
+        if (request.AppliesToAllGarages)
+        {
+            return DictionaryResult<IReadOnlyList<Garage>>.Success([]);
+        }
+
+        var participantIds = request.ParticipantGarageIds ?? [];
+        var garages = await dbContext.Garages
+            .Where(garage => participantIds.Contains(garage.Id) && !garage.IsArchived)
+            .OrderBy(garage => garage.Number)
+            .ToListAsync(cancellationToken);
+
+        if (garages.Count != participantIds.Count)
+        {
+            return DictionaryResult<IReadOnlyList<Garage>>.Failure("fee_campaign_participant_garage_not_found", "Один из выбранных гаражей не найден или архивирован.");
+        }
+
+        return DictionaryResult<IReadOnlyList<Garage>>.Success(garages);
     }
 
     private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request)
@@ -2576,8 +2635,32 @@ public sealed class DictionaryService(
         campaign.OverdueGraceDays = request.OverdueGraceDays;
     }
 
-    private static bool FeeCampaignMatches(FeeCampaign campaign, UpsertFeeCampaignRequest request)
+    private static void SyncFeeCampaignParticipants(FeeCampaign campaign, IReadOnlyList<Garage> participants)
     {
+        campaign.ParticipantGarages.Clear();
+        foreach (var garage in participants)
+        {
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage
+            {
+                FeeCampaign = campaign,
+                FeeCampaignId = campaign.Id,
+                Garage = garage,
+                GarageId = garage.Id
+            });
+        }
+    }
+
+    private static bool FeeCampaignMatches(FeeCampaign campaign, UpsertFeeCampaignRequest request, IReadOnlyList<Garage> participants)
+    {
+        var currentParticipantIds = campaign.ParticipantGarages
+            .Select(participant => participant.GarageId)
+            .Order()
+            .ToArray();
+        var nextParticipantIds = participants
+            .Select(garage => garage.Id)
+            .Order()
+            .ToArray();
+
         return StringEquals(campaign.Name, request.Name.Trim()) &&
             campaign.IncomeTypeId == request.IncomeTypeId &&
             StringEquals(campaign.Goal, NormalizeOptional(request.Goal)) &&
@@ -2586,7 +2669,8 @@ public sealed class DictionaryService(
             campaign.StartsOn == request.StartsOn &&
             campaign.EndsOn == request.EndsOn &&
             campaign.AppliesToAllGarages == request.AppliesToAllGarages &&
-            campaign.OverdueGraceDays == request.OverdueGraceDays;
+            campaign.OverdueGraceDays == request.OverdueGraceDays &&
+            currentParticipantIds.SequenceEqual(nextParticipantIds);
     }
 
     private static Dictionary<string, object?> ToFeeCampaignAuditValues(FeeCampaign campaign)
@@ -2602,6 +2686,13 @@ public sealed class DictionaryService(
             ["startsOn"] = campaign.StartsOn,
             ["endsOn"] = campaign.EndsOn,
             ["appliesToAllGarages"] = campaign.AppliesToAllGarages,
+            ["participantGarageIds"] = string.Join(", ", campaign.ParticipantGarages
+                .Select(participant => participant.GarageId)
+                .Order()),
+            ["participantGarageNumbers"] = string.Join(", ", campaign.ParticipantGarages
+                .Select(participant => participant.Garage?.Number)
+                .Where(number => !string.IsNullOrWhiteSpace(number))
+                .Order(StringComparer.Ordinal)),
             ["overdueGraceDays"] = campaign.OverdueGraceDays
         };
     }
@@ -2872,6 +2963,10 @@ public sealed class DictionaryService(
             campaign.StartsOn,
             campaign.EndsOn,
             campaign.AppliesToAllGarages,
+            campaign.ParticipantGarages
+                .OrderBy(participant => participant.Garage?.Number)
+                .Select(participant => participant.GarageId)
+                .ToArray(),
             campaign.OverdueGraceDays,
             campaign.IsArchived);
     }

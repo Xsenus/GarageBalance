@@ -1926,6 +1926,9 @@ public sealed class FinanceService(
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var campaign = await dbContext.FeeCampaigns
             .Include(item => item.IncomeType)
+            .Include(item => item.ParticipantGarages)
+                .ThenInclude(item => item.Garage)
+                    .ThenInclude(garage => garage.Owner)
             .SingleOrDefaultAsync(item => item.Id == request.FeeCampaignId && !item.IsArchived, cancellationToken);
         if (campaign is null)
         {
@@ -1953,16 +1956,17 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса по сбору должна быть больше нуля для начисления.");
         }
 
-        if (!campaign.AppliesToAllGarages)
-        {
-            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_participants_not_supported", "Для сбора пока поддержано начисление всем активным гаражам.");
-        }
-
-        var garages = await dbContext.Garages
-            .Include(garage => garage.Owner)
-            .Where(garage => !garage.IsArchived)
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
+        var garages = campaign.AppliesToAllGarages
+            ? await dbContext.Garages
+                .Include(garage => garage.Owner)
+                .Where(garage => !garage.IsArchived)
+                .OrderBy(garage => garage.Number)
+                .ToListAsync(cancellationToken)
+            : campaign.ParticipantGarages
+                .Select(participant => participant.Garage)
+                .Where(garage => !garage.IsArchived)
+                .OrderBy(garage => garage.Number)
+                .ToList();
         if (garages.Count == 0)
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");
@@ -1978,7 +1982,7 @@ public sealed class FinanceService(
                     accrual.GarageId == garage.Id &&
                     accrual.IncomeTypeId == campaign.IncomeTypeId &&
                     accrual.AccountingMonth == month &&
-                    accrual.Source == AccrualSources.Regular,
+                    accrual.Source == AccrualSources.FeeCampaign,
                 cancellationToken);
             if (duplicate)
             {
@@ -1994,7 +1998,7 @@ public sealed class FinanceService(
                 IncomeType = campaign.IncomeType,
                 AccountingMonth = month,
                 Amount = amount,
-                Source = AccrualSources.Regular,
+                Source = AccrualSources.FeeCampaign,
                 Comment = BuildFeeCampaignAccrualComment(campaign, request.Comment)
             };
             dbContext.Accruals.Add(accrual);

@@ -2045,7 +2045,7 @@ public sealed class FinanceServiceTests
         Assert.All(result.Value.CreatedAccruals, accrual =>
         {
             Assert.Equal(500m, accrual.Amount);
-            Assert.Equal("regular", accrual.Source);
+            Assert.Equal("fee_campaign", accrual.Source);
             Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
             Assert.Contains("Сбор на ворота", accrual.Comment, StringComparison.Ordinal);
             Assert.Contains("Июньский сбор", accrual.Comment, StringComparison.Ordinal);
@@ -2086,6 +2086,43 @@ public sealed class FinanceServiceTests
         Assert.False(second.Succeeded);
         Assert.Equal("fee_campaign_accruals_empty", second.ErrorCode);
         Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_UsesSelectedParticipantGarages()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
+        var selectedGarage = new Garage { Number = "22", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
+        var notSelectedGarage = new Garage { Number = "33", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор на камеры",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 700m,
+            TargetAmount = 35000m,
+            StartsOn = new DateOnly(2026, 5, 1),
+            AppliesToAllGarages = false,
+            OverdueGraceDays = 30
+        };
+        campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = selectedGarage });
+        database.Context.AddRange(secondOwner, selectedGarage, notSelectedGarage, campaign);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var accrual = Assert.Single(result.Value!.CreatedAccruals);
+        Assert.Equal(selectedGarage.Number, accrual.GarageNumber);
+        Assert.Equal(700m, accrual.Amount);
+        Assert.Equal("fee_campaign", accrual.Source);
+        Assert.DoesNotContain(database.Context.Accruals, item => item.GarageId == fixtures.Garage.Id || item.GarageId == notSelectedGarage.Id);
     }
 
     [Fact]

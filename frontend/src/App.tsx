@@ -11632,6 +11632,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
+  const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
   const [feeCampaignSavingId, setFeeCampaignSavingId] = useState<string | null>(null)
   const [feeCampaignArchiveTarget, setFeeCampaignArchiveTarget] = useState<FeeCampaignDto | null>(null)
@@ -11663,12 +11664,13 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
       setTariffsLoading(true)
       setTariffPersistenceError(null)
       try {
-        const [loadedTariffs, loadedIncomeTypes, loadedIrregularPayments, loadedChargeServices, loadedFeeCampaigns] = await Promise.all([
+        const [loadedTariffs, loadedIncomeTypes, loadedIrregularPayments, loadedChargeServices, loadedFeeCampaigns, loadedGarages] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
+          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
         if (!ignore) {
           const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices)
@@ -11677,6 +11679,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
           setBackendIncomeTypes(loadedIncomeTypes)
           setBackendChargeServices(loadedChargeServices)
           setFeeCampaigns(loadedFeeCampaigns)
+          setFeeCampaignGarageOptions(loadedGarages)
           setTariffRows(mergedRows)
           setOneTimeRows(mergedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
@@ -12436,6 +12439,24 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     .reverse()
     .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
 
+  function formatFeeCampaignParticipantSummary(campaign: FeeCampaignDto) {
+    if (campaign.appliesToAllGarages) {
+      return 'Все гаражи'
+    }
+
+    const selectedNumbers = campaign.participantGarageIds
+      .map((garageId) => feeCampaignGarageOptions.find((garage) => garage.id === garageId)?.number)
+      .filter((number): number is string => Boolean(number))
+      .sort((left, right) => left.localeCompare(right, 'ru', { numeric: true }))
+
+    if (selectedNumbers.length === 0) {
+      return `${campaign.participantGarageIds.length} выбрано`
+    }
+
+    const visibleNumbers = selectedNumbers.slice(0, 4).join(', ')
+    return selectedNumbers.length > 4 ? `${visibleNumbers} и еще ${selectedNumbers.length - 4}` : visibleNumbers
+  }
+
   return (
     <section className="contractors-page" aria-label="Тарифы и сборы">
       <div className="contractors-heading">
@@ -12645,6 +12666,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                 <span>Наименование</span>
                 <span>Взнос</span>
                 <span>План</span>
+                <span>Участники</span>
                 <span>Период</span>
                 <span>Действия</span>
               </div>
@@ -12663,6 +12685,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                   </span>
                   <span>{formatMoney(campaign.contributionAmount)}</span>
                   <span>{formatMoney(campaign.targetAmount)}</span>
+                  <span>{formatFeeCampaignParticipantSummary(campaign)}</span>
                   <span>{formatDateOnly(campaign.startsOn)}{campaign.endsOn ? ` - ${formatDateOnly(campaign.endsOn)}` : ''}</span>
                   <span className="contractors-mini-actions">
                     {campaign.isArchived ? (
@@ -12869,6 +12892,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
       ) : null}
       {modal === 'fee' ? (
         <AddFeePrototypeDialog
+          garageOptions={feeCampaignGarageOptions}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           isSaving={feeCampaignSavingId === 'new-fee-campaign'}
           onClose={() => setModal(null)}
@@ -13123,11 +13147,13 @@ function AddServicePrototypeDialog({
 }
 
 function AddFeePrototypeDialog({
+  garageOptions,
   incomeTypes,
   isSaving,
   onClose,
   onSave,
 }: {
+  garageOptions: GarageDto[]
   incomeTypes: AccountingTypeDto[]
   isSaving: boolean
   onClose: () => void
@@ -13141,11 +13167,22 @@ function AddFeePrototypeDialog({
   const [startsOn, setStartsOn] = useState(getLocalDateInputValue())
   const [endsOn, setEndsOn] = useState('')
   const [appliesToAllGarages, setAppliesToAllGarages] = useState(true)
+  const [participantGarageIds, setParticipantGarageIds] = useState<string[]>([])
   const [overdueGraceDays, setOverdueGraceDays] = useState('30')
   const [error, setError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
+
+  function toggleParticipantGarage(garageId: string, checked: boolean) {
+    setParticipantGarageIds((currentIds) => {
+      if (checked) {
+        return currentIds.includes(garageId) ? currentIds : [...currentIds, garageId]
+      }
+
+      return currentIds.filter((currentId) => currentId !== garageId)
+    })
+  }
 
   async function submitFee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -13190,6 +13227,11 @@ function AddFeePrototypeDialog({
       return
     }
 
+    if (!appliesToAllGarages && participantGarageIds.length === 0) {
+      setError('Выберите хотя бы один гараж для сбора.')
+      return
+    }
+
     setError(null)
     await onSave({
       name: trimmedName,
@@ -13200,6 +13242,7 @@ function AddFeePrototypeDialog({
       startsOn,
       endsOn: endsOn || null,
       appliesToAllGarages,
+      participantGarageIds: appliesToAllGarages ? [] : participantGarageIds,
       overdueGraceDays: parsedOverdueGraceDays,
     })
   }
@@ -13250,6 +13293,25 @@ function AddFeePrototypeDialog({
             </span>
             <span>все гаражи</span>
           </label>
+          {!appliesToAllGarages ? (
+            <fieldset className="contractors-participant-list">
+              <legend>Выбранные гаражи</legend>
+              {garageOptions.length > 0 ? garageOptions.map((garage) => (
+                <label key={garage.id} className="contractors-participant-option">
+                  <input
+                    type="checkbox"
+                    aria-label={`Гараж ${garage.number}`}
+                    checked={participantGarageIds.includes(garage.id)}
+                    onChange={(event) => toggleParticipantGarage(garage.id, event.target.checked)}
+                  />
+                  <span>
+                    <strong>Гараж {garage.number}</strong>
+                    {garage.ownerName ? <small>{garage.ownerName}</small> : null}
+                  </span>
+                </label>
+              )) : <p className="form-hint">Активные гаражи не найдены.</p>}
+            </fieldset>
+          ) : null}
           <div className="contractors-service-period-grid">
             <FormField label="Дата начала">
               <div className="contractors-inline-field">

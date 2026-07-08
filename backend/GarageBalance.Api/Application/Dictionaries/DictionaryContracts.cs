@@ -217,6 +217,7 @@ public sealed record FeeCampaignDto(
     DateOnly StartsOn,
     DateOnly? EndsOn,
     bool AppliesToAllGarages,
+    IReadOnlyList<Guid> ParticipantGarageIds,
     int OverdueGraceDays,
     bool IsArchived);
 
@@ -229,4 +230,5 @@ public sealed record UpsertFeeCampaignRequest(
     DateOnly StartsOn,
     DateOnly? EndsOn,
     bool AppliesToAllGarages,
-    [Range(0, 366)] int OverdueGraceDays);
+    [Range(0, 366)] int OverdueGraceDays,
+    IReadOnlyList<Guid>? ParticipantGarageIds = null);

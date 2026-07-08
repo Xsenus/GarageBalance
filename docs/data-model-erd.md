@@ -12,6 +12,8 @@ erDiagram
     garages ||--o{ accruals : charged
     income_types ||--o{ accruals : classifies
     income_types ||--o{ fee_campaigns : fee_kind
+    fee_campaigns ||--o{ fee_campaign_garages : selects
+    garages ||--o{ fee_campaign_garages : participates
     garages ||--o{ meter_readings : measures
 
     garages ||--o{ financial_operations : receives_income
@@ -110,6 +112,11 @@ erDiagram
         bool AppliesToAllGarages
         int OverdueGraceDays
         bool IsArchived
+    }
+
+    fee_campaign_garages {
+        uuid FeeCampaignId PK, FK
+        uuid GarageId PK, FK
     }
 
     accruals {
@@ -263,6 +270,7 @@ erDiagram
 - `income_types` и `expense_types` - виды поступлений и выплат. `Name` уникален, `Code` индексируется, системные значения seeded через migration `DefaultAccountingTypes`.
 - `tariffs` - тарифы с базой расчета `fixed`, `people`, `meter_water`, `meter_electricity`, ставкой и датой действия. Уникальность: `Name + EffectiveFrom`.
 - `fee_campaigns` - объявленные сборы: название, связанный вид поступления, цель, сумма взноса, плановая сумма сбора, период действия, правило участия всех гаражей и срок переноса долга в просроченный. Активное название уникально через filtered unique index по `Name` при `IsArchived = false`; индексы покрывают `IncomeTypeId`, `StartsOn` и `IsArchived`.
+- `fee_campaign_garages` - выбранные участники объявленного сбора, когда сбор действует не для всех гаражей. Состав участников хранится как составной ключ `FeeCampaignId + GarageId`, удаляется каскадно вместе со сбором и используется при массовом начислении вместо полного списка активных гаражей.
 
 ## Финансы
 

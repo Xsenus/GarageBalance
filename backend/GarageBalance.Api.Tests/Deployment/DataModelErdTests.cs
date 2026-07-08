@@ -26,8 +26,12 @@ public sealed class DataModelErdTests
         Assert.Contains("expense_types", document, StringComparison.Ordinal);
         Assert.Contains("tariffs", document, StringComparison.Ordinal);
         Assert.Contains("fee_campaigns", document, StringComparison.Ordinal);
+        Assert.Contains("fee_campaign_garages", document, StringComparison.Ordinal);
         Assert.Contains("income_types ||--o{ fee_campaigns", document, StringComparison.Ordinal);
+        Assert.Contains("fee_campaigns ||--o{ fee_campaign_garages", document, StringComparison.Ordinal);
+        Assert.Contains("garages ||--o{ fee_campaign_garages", document, StringComparison.Ordinal);
         Assert.Contains("IncomeTypeId", document, StringComparison.Ordinal);
+        Assert.Contains("FeeCampaignId + GarageId", document, StringComparison.Ordinal);
         Assert.Contains("ContributionAmount", document, StringComparison.Ordinal);
         Assert.Contains("TargetAmount", document, StringComparison.Ordinal);
         Assert.Contains("StartsOn", document, StringComparison.Ordinal);

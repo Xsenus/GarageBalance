@@ -353,6 +353,8 @@ describe('App', () => {
   it('creates, accrues, archives and restores announced fee campaigns from tariffs page', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    const participantGarage = createGarage({ id: 'garage-target', number: '27', ownerName: 'Сидорова Анна' })
+    const otherGarage = createGarage({ id: 'garage-other', number: '12', ownerName: 'Петров Петр' })
     let campaigns = [
       createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name }),
       createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
@@ -362,6 +364,7 @@ describe('App', () => {
     const restoredRequests: string[] = []
     const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
     const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [participantGarage, otherGarage],
       getIncomeTypes: async () => [targetIncomeType],
       getFeeCampaigns: async () => campaigns,
       createFeeCampaign: async (_token, request) => {
@@ -376,6 +379,7 @@ describe('App', () => {
           startsOn: request.startsOn,
           endsOn: request.endsOn ?? null,
           appliesToAllGarages: request.appliesToAllGarages,
+          participantGarageIds: request.participantGarageIds ?? [],
           overdueGraceDays: request.overdueGraceDays,
         })
         createdRequests.push(JSON.stringify(request))
@@ -433,6 +437,9 @@ describe('App', () => {
     await user.type(within(createDialog).getByLabelText('Цель сбора'), 'Видеонаблюдение')
     await user.type(within(createDialog).getByLabelText('Сумма взноса'), '700')
     await user.type(within(createDialog).getByLabelText('Сумма сбора'), '35000')
+    await user.click(within(createDialog).getByLabelText('Все гаражи'))
+    await user.click(await within(createDialog).findByLabelText('Гараж 27'))
+    expect(within(createDialog).getByLabelText('Гараж 12')).not.toBeChecked()
     await user.clear(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный'))
     await user.type(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный'), '45')
     await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
@@ -443,10 +450,12 @@ describe('App', () => {
       goal: 'Видеонаблюдение',
       contributionAmount: 700,
       targetAmount: 35000,
-      appliesToAllGarages: true,
+      appliesToAllGarages: false,
+      participantGarageIds: [participantGarage.id],
       overdueGraceDays: 45,
     })
     expect(within(feeCampaignsSection).getByText('Сбор на камеры')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByText('27')).toBeInTheDocument()
 
     await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
     const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
@@ -8008,6 +8017,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
         startsOn: request.startsOn,
         endsOn: request.endsOn ?? null,
         appliesToAllGarages: request.appliesToAllGarages,
+        participantGarageIds: request.participantGarageIds ?? [],
         overdueGraceDays: request.overdueGraceDays,
       })
       feeCampaigns = [campaign, ...feeCampaigns]
@@ -8026,6 +8036,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
         startsOn: request.startsOn,
         endsOn: request.endsOn ?? null,
         appliesToAllGarages: request.appliesToAllGarages,
+        participantGarageIds: request.participantGarageIds ?? [],
         overdueGraceDays: request.overdueGraceDays,
       })
       feeCampaigns = feeCampaigns.map((item) => (item.id === id ? campaign : item))
@@ -9227,6 +9238,7 @@ function createFeeCampaign(overrides: Partial<FeeCampaignDto> = {}): FeeCampaign
     startsOn: '2026-06-01',
     endsOn: null,
     appliesToAllGarages: true,
+    participantGarageIds: [],
     overdueGraceDays: 30,
     isArchived: false,
     ...overrides,

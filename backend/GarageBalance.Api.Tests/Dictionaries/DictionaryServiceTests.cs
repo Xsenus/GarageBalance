@@ -1735,6 +1735,50 @@ public sealed class DictionaryServiceTests
         Assert.Equal("fee_campaign_duplicate", duplicateRestore.ErrorCode);
     }
 
+    [Fact]
+    public async Task FeeCampaignAsync_SavesSelectedParticipantGaragesAndWritesDiff()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
+        var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
+        var garage1 = new Garage { Number = "1", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var garage2 = new Garage { Number = "2", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var archivedGarage = new Garage { Number = "99", PeopleCount = 1, FloorCount = 1, Owner = owner, IsArchived = true };
+        database.Context.AddRange(owner, garage1, garage2, archivedGarage);
+        await database.Context.SaveChangesAsync();
+
+        var invalidArchived = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Invalid participants", incomeType.Value!.Id, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, false, 30, [archivedGarage.Id]),
+            actorUserId,
+            CancellationToken.None);
+        var created = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Gate campaign", incomeType.Value.Id, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, false, 30, [garage2.Id, garage1.Id]),
+            actorUserId,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var updated = await service.UpdateFeeCampaignAsync(
+            created.Value!.Id,
+            new UpsertFeeCampaignRequest("Gate campaign", incomeType.Value.Id, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, false, 30, [garage2.Id]),
+            actorUserId,
+            CancellationToken.None);
+        var loaded = await service.GetFeeCampaignsAsync("Gate", CancellationToken.None);
+
+        Assert.False(invalidArchived.Succeeded);
+        Assert.Equal("fee_campaign_participant_garage_not_found", invalidArchived.ErrorCode);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.False(created.Value.AppliesToAllGarages);
+        Assert.Equal([garage1.Id, garage2.Id], created.Value.ParticipantGarageIds);
+        Assert.True(updated.Succeeded, updated.ErrorMessage);
+        Assert.Equal([garage2.Id], updated.Value!.ParticipantGarageIds);
+        Assert.Equal([garage2.Id], Assert.Single(loaded).ParticipantGarageIds);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_updated" && item.ActorUserId == actorUserId);
+        Assert.Contains("participantGarageIds", audit.MetadataJson, StringComparison.Ordinal);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

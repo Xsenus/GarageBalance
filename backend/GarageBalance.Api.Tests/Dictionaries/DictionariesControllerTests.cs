@@ -313,6 +313,7 @@ public sealed class DictionariesControllerTests
                 new DateOnly(2026, 5, 4),
                 new DateOnly(2026, 6, 30),
                 true,
+                [],
                 30,
                 false))
         };
@@ -361,7 +362,7 @@ public sealed class DictionariesControllerTests
         var incomeTypeId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            ArchiveFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, true))
+            ArchiveFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, [], 30, true))
         };
         var controller = CreateController(service, actorUserId);
 
@@ -381,7 +382,7 @@ public sealed class DictionariesControllerTests
         var incomeTypeId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            RestoreFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30, false))
+            RestoreFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, [], 30, false))
         };
         var controller = CreateController(service, actorUserId);
 

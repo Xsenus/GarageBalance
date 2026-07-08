@@ -835,7 +835,7 @@ h1 {
 
 .contractors-mini-header--fees,
 .contractors-mini-row--fees {
-  grid-template-columns: minmax(180px, 1.35fr) minmax(84px, 0.55fr) minmax(84px, 0.55fr) minmax(140px, 0.9fr) minmax(190px, auto);
+  grid-template-columns: minmax(180px, 1.35fr) minmax(84px, 0.55fr) minmax(84px, 0.55fr) minmax(130px, 0.75fr) minmax(140px, 0.9fr) minmax(190px, auto);
 }
 
 .contractors-mini-header {
@@ -1430,6 +1430,58 @@ h1 {
 .contractors-switch-row:hover {
   border-color: #b2ccff;
   background: #f8fbff;
+}
+
+.contractors-participant-list {
+  display: grid;
+  max-height: 220px;
+  overflow: auto;
+  gap: 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  margin: 0;
+  padding: 10px 12px 12px;
+}
+
+.contractors-participant-list legend {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 0 4px;
+}
+
+.contractors-participant-option {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-radius: 7px;
+  color: #101828;
+  cursor: pointer;
+  padding: 7px 8px;
+}
+
+.contractors-participant-option:hover {
+  background: #f8fbff;
+}
+
+.contractors-participant-option input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+}
+
+.contractors-participant-option strong,
+.contractors-participant-option small {
+  display: block;
+}
+
+.contractors-participant-option small {
+  color: #667085;
+  font-size: 12px;
+  margin-top: 2px;
 }
 
 .contractors-check-row--compact {
