@@ -3176,6 +3176,35 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Свернуть панель' })).toBeInTheDocument()
   })
 
+  it('keeps shell navigation titles current state and icon-only actions in the rendered DOM', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const mainNavigation = await screen.findByRole('navigation', { name: 'Основные разделы' })
+    const dashboardNavButton = within(mainNavigation).getByRole('button', { name: 'Главное меню' })
+    const tariffsNavButton = within(mainNavigation).getByRole('button', { name: 'Тарифы и сборы' })
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    const tariffsTile = within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i })
+
+    expect(screen.getByRole('button', { name: 'Развернуть панель' })).toHaveAttribute('title', 'Развернуть панель')
+    expect(dashboardNavButton).toHaveAttribute('aria-current', 'page')
+    expect(dashboardNavButton).toHaveAttribute('title', 'Главное меню')
+    expect(tariffsNavButton).toHaveAttribute('title', 'Тарифы и сборы')
+    expect(tariffsTile).toHaveAttribute('title', 'Тарифы и сборы')
+    expect(screen.getByRole('button', { name: 'Уведомления' })).toHaveAttribute('title', 'Уведомления')
+    expect(screen.getByRole('button', { name: 'Выйти' })).toHaveAttribute('title', 'Выйти')
+
+    await user.click(tariffsTile)
+
+    expect(await screen.findByRole('region', { name: 'Тарифы и сборы' })).toBeInTheDocument()
+    expect(tariffsNavButton).toHaveAttribute('aria-current', 'page')
+    expect(dashboardNavButton).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('button', { name: 'Назад к выбору раздела' })).toHaveAttribute('title', 'Назад к выбору раздела')
+  })
+
   it('switches workspace sections without stacking panels', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
