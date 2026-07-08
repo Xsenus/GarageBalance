@@ -4321,7 +4321,15 @@ describe('App', () => {
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
-    const ownerDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const addDictionaryRecordButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    let ownerDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await waitFor(() => expect(within(ownerDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addDictionaryRecordButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Петров Петр')).not.toBeInTheDocument()
+
+    ownerDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(ownerDialog).getByLabelText('Фамилия владельца'), 'Петров')
     await user.type(within(ownerDialog).getByLabelText('Имя владельца'), 'Петр')
     await user.type(within(ownerDialog).getByLabelText('Телефон владельца'), '+7 913')
