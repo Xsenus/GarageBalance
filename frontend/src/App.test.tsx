@@ -4337,7 +4337,15 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
-    const garageCreateDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const addGarageButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    let garageCreateDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await waitFor(() => expect(within(garageCreateDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гаражи' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addGarageButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('21')).not.toBeInTheDocument()
+
+    garageCreateDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(garageCreateDialog).getByLabelText('Номер гаража'), '21')
     await user.clear(within(garageCreateDialog).getByLabelText('Количество людей'))
     await user.type(within(garageCreateDialog).getByLabelText('Количество людей'), '2')
