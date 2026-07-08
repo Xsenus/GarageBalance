@@ -6391,9 +6391,17 @@ describe('App', () => {
     expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(within(accrualTable).getByText('Авто')).toBeInTheDocument()
-    await user.dblClick(within(accrualTable).getByLabelText(/Разбивка начисления/i))
+    const openBreakdownButton = within(accrualTable).getByLabelText(/Разбивка начисления/i)
+    await user.dblClick(openBreakdownButton)
     const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
+    const closeBreakdownButton = within(dialog).getByRole('button', { name: 'Закрыть разбивку' })
     expect(within(dialog).getByText('Начисление за месяц')).toBeInTheDocument()
+    await waitFor(() => expect(closeBreakdownButton).toHaveFocus())
+    await user.tab()
+    expect(closeBreakdownButton).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Разбивка начисления' })).not.toBeInTheDocument()
+    expect(openBreakdownButton).toHaveFocus()
   })
 
   it('uses only fixed tariffs for membership regular accruals', async () => {
