@@ -6107,8 +6107,16 @@ describe('App', () => {
     await user.click(within(operationMenu).getByRole('menuitem', { name: 'Удалить' }))
 
     const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить выплату?' })
-    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочная выплата')
-    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
+    await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены финансовой записи')).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Отменить выплату?' })).not.toBeInTheDocument()
+    expect(within(financePanel).getByText('RKO-cancel')).toBeInTheDocument()
+
+    const reopenedOperationMenu = await openFinanceContextMenuByCellText(financePanel, 'RKO-cancel')
+    await user.click(within(reopenedOperationMenu).getByRole('menuitem', { name: 'Удалить' }))
+    const reopenedCancelDialog = await screen.findByRole('dialog', { name: 'Отменить выплату?' })
+    await user.type(within(reopenedCancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочная выплата')
+    await user.click(within(reopenedCancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(financePanel).queryByText('RKO-cancel')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
     expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
