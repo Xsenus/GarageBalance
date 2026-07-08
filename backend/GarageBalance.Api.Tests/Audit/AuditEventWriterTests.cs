@@ -133,6 +133,56 @@ public sealed class AuditEventWriterTests
         Assert.Contains("Причина: Дубликат.", auditEvent.Summary, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("dictionary.owner_created", "create")]
+    [InlineData("dictionary.owner_updated", "update")]
+    [InlineData("users.password_changed", "update")]
+    [InlineData("dictionary.owner_archived", "archive")]
+    [InlineData("dictionary.owner_restored", "restore")]
+    [InlineData("finance.operation_canceled", "cancel")]
+    [InlineData("finance.operation_cancelled", "cancel")]
+    [InlineData("dictionary.owner_deleted", "delete")]
+    [InlineData("finance.regular_accruals_generated", "generate")]
+    [InlineData("auth.login_success", "login")]
+    [InlineData("import.dry_run_completed", "import")]
+    [InlineData("reports.consolidated_exported", "export")]
+    [InlineData("reports.cash.export.completed", "export")]
+    [InlineData("system.health_checked", "other")]
+    public void Add_InfersStableActionKindFromActionName(string action, string expectedActionKind)
+    {
+        using var database = TestDatabase.Create();
+        var writer = new AuditEventWriter(database.Context);
+
+        var auditEvent = writer.Add(new AuditEventWriteRequest(
+            Guid.NewGuid(),
+            action,
+            "audit_target",
+            Guid.NewGuid().ToString(),
+            Summary: "Audit action kind regression.",
+            Reason: expectedActionKind is "archive" or "cancel" or "delete" ? "Required reason." : null));
+
+        Assert.NotNull(auditEvent);
+        Assert.Equal(expectedActionKind, auditEvent.ActionKind);
+    }
+
+    [Fact]
+    public void Add_UsesExplicitActionKindInsteadOfInferringFromAction()
+    {
+        using var database = TestDatabase.Create();
+        var writer = new AuditEventWriter(database.Context);
+
+        var auditEvent = writer.Add(new AuditEventWriteRequest(
+            Guid.NewGuid(),
+            "reports.custom_action",
+            "report",
+            Guid.NewGuid().ToString(),
+            Summary: "Audit action kind override.",
+            ActionKind: "export"));
+
+        Assert.NotNull(auditEvent);
+        Assert.Equal("export", auditEvent.ActionKind);
+    }
+
     [Fact]
     public void Add_ValidatesRequiredActionAndEntityType()
     {
