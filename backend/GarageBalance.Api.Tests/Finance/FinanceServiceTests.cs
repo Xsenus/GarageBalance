@@ -2340,6 +2340,20 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetMissingMeterReadingsAsync_ReturnsEmptyForUnknownMeterKind()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), "gas", null),
+            CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
     public async Task GetGarageIncomeWorksheetAsync_BuildsRowsFromAccrualsPaymentsAndMeters()
     {
         await using var database = await TestDatabase.CreateAsync();
