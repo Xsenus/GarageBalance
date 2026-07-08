@@ -27,8 +27,22 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps tall dialogs scrollable inside the viewport', () => {
+    expect(normalizedAppCss).toContain('.modal-backdrop {\n  position: fixed;\n  inset: 0;\n  z-index: 20;\n  display: grid;\n  place-items: center;\n  overflow-y: auto;')
     expect(normalizedAppCss).toContain('.detail-dialog {\n  width: min(560px, 100%);\n  max-height: min(860px, calc(100dvh - 48px));\n  overflow-y: auto;')
+    expect(appCss).toContain('box-sizing: border-box;')
+    expect(appCss).toContain('overscroll-behavior: contain;')
+    expect(appCss).toContain('scrollbar-gutter: stable;')
+    expect(appCss).toContain('overflow-wrap: anywhere;')
     expect(normalizedAppCss).toContain('.detail-dialog-header {\n  position: sticky;')
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
+  })
+
+  it('keeps shared dialogs usable on narrow screens without action overlap', () => {
+    expect(appCss).toContain('@media (max-width: 640px)')
+    expect(normalizedAppCss).toContain('.modal-backdrop {\n    align-items: start;\n    padding: 12px;')
+    expect(normalizedAppCss).toContain('.detail-dialog {\n    width: 100%;\n    max-height: calc(100dvh - 24px);\n    padding: 14px;')
+    expect(normalizedAppCss).toContain('.detail-dialog-header {\n    top: -14px;\n    margin: -14px -14px 14px;\n    padding: 14px;')
+    expect(normalizedAppCss).toContain('.detail-dialog-actions {\n    bottom: -14px;\n    display: grid;\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.detail-dialog-actions button {\n    width: 100%;')
   })
 })
