@@ -7279,15 +7279,24 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть' })
+    await user.click(openDetailButton)
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    const detailCloseIconButton = within(detailDialog).getByRole('button', { name: 'Закрыть карточку события' })
+    await waitFor(() => expect(detailCloseIconButton).toHaveFocus())
     expect(await within(detailDialog).findByText('Карточка временно недоступна')).toHaveAttribute('role', 'alert')
 
-    await user.click(within(detailDialog).getByRole('button', { name: 'Повторить загрузку карточки' }))
+    await user.keyboard('{Tab}')
+    const retryButton = within(detailDialog).getByRole('button', { name: 'Повторить загрузку карточки' })
+    expect(retryButton).toHaveFocus()
+    await user.click(retryButton)
 
     expect(await within(detailDialog).findByText('Петров Петр')).toBeInTheDocument()
     expect(within(detailDialog).queryByText('Карточка временно недоступна')).not.toBeInTheDocument()
     expect(detailLoadCount).toBe(2)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
+    await waitFor(() => expect(openDetailButton).toHaveFocus())
   })
 
   it('paginates audit journal on the server', async () => {
