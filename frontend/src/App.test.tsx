@@ -2961,8 +2961,16 @@ describe('App', () => {
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*88\s*Смирнов Алексей/ }))
 
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalled())
-    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
-    const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
+    await user.click(fullPaymentButton)
+    let fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    await waitFor(() => expect(within(fullPaymentDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
+    await waitFor(() => expect(fullPaymentButton).toHaveFocus())
+
+    await user.click(fullPaymentButton)
+    fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('900')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Закрываем долг на начало')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
