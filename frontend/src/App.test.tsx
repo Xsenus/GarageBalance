@@ -762,6 +762,7 @@ describe('App', () => {
     })
     let savedGarageStartingBalance: number | null = null
     let archivedGarageReason: string | null = null
+    let archivedSupplierReason: string | null = null
     let deletedSupplierContactReason: string | null = null
     let archivedStaffMemberReason: string | null = null
     const dictionaryClient = createDictionaryClient({
@@ -825,6 +826,9 @@ describe('App', () => {
         groupName: 'Коммунальные услуги',
         isArchived: false,
       }),
+      archiveSupplier: async (_token, _id, reason) => {
+        archivedSupplierReason = reason
+      },
       archiveSupplierContact: async (_token, _id, reason) => {
         deletedSupplierContactReason = reason
       },
@@ -1081,10 +1085,14 @@ describe('App', () => {
     await waitFor(() => expect(within(deleteSupplierDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Удалить поставщика?' })).not.toBeInTheDocument()
+    expect(within(supplierRow as HTMLElement).queryByText('Удален')).not.toBeInTheDocument()
+    expect(archivedSupplierReason).toBeNull()
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Удалить поставщика Новый подрядчик' }))
     const reopenedDeleteSupplierDialog = await screen.findByRole('dialog', { name: 'Удалить поставщика?' })
+    expect(within(reopenedDeleteSupplierDialog).getByRole('button', { name: 'Удалить поставщика' })).toBeDisabled()
     await user.type(within(reopenedDeleteSupplierDialog).getByLabelText('Причина удаления поставщика'), 'Договор больше не действует')
     await user.click(within(reopenedDeleteSupplierDialog).getByRole('button', { name: 'Удалить поставщика' }))
+    await waitFor(() => expect(archivedSupplierReason).toBe('Договор больше не действует'))
     await waitFor(() => expect(within(supplierRow as HTMLElement).getByText('Удален')).toBeInTheDocument())
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Восстановить поставщика Новый подрядчик' }))
     const restoreSupplierDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
