@@ -618,6 +618,30 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task UpdateMeterReading_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var meterReadingId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            UpdateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading(id: meterReadingId, currentValue: 18m, consumption: 3m))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateMeterReading(
+            meterReadingId,
+            new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 18m, "Исправили после сверки"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<MeterReadingDto>(ok.Value);
+        Assert.Equal(meterReadingId, dto.Id);
+        Assert.Equal(18m, dto.CurrentValue);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(meterReadingId, service.LastUpdatedMeterReadingId);
+    }
+
+    [Fact]
     public async Task CancelMeterReading_ReturnsNotFoundForMissingReading()
     {
         var controller = CreateController(new FakeFinanceService
@@ -630,6 +654,28 @@ public sealed class FinanceControllerTests
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
         Assert.Equal("meter_reading_not_found", problem.Title);
+    }
+
+    [Fact]
+    public async Task CancelMeterReading_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var meterReadingId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            CancelMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading(id: meterReadingId, isCanceled: true))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CancelMeterReading(meterReadingId, new CancelFinanceEntryRequest("Ошибочное показание"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<MeterReadingDto>(ok.Value);
+        Assert.Equal(meterReadingId, dto.Id);
+        Assert.True(dto.IsCanceled);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(meterReadingId, service.LastCanceledMeterReadingId);
+        Assert.Equal("Ошибочное показание", service.LastCancelRequest?.Reason);
     }
 
     [Fact]
@@ -707,22 +753,22 @@ public sealed class FinanceControllerTests
             false);
     }
 
-    private static MeterReadingDto CreateMeterReading()
+    private static MeterReadingDto CreateMeterReading(Guid? id = null, decimal currentValue = 15m, decimal previousValue = 10m, decimal consumption = 5m, bool isCanceled = false)
     {
         return new MeterReadingDto(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             Guid.NewGuid(),
             "12",
             "Иванов Иван",
             "water",
             new DateOnly(2026, 6, 1),
             new DateOnly(2026, 6, 20),
-            15m,
-            10m,
-            5m,
+            currentValue,
+            previousValue,
+            consumption,
             false,
             null,
-            false);
+            isCanceled);
     }
 
     private static SupplierAccrualDto CreateSupplierAccrual()
@@ -811,6 +857,7 @@ public sealed class FinanceControllerTests
         public Guid? LastCanceledOperationId { get; private set; }
         public Guid? LastCanceledAccrualId { get; private set; }
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
+        public Guid? LastUpdatedMeterReadingId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
         public Guid? LastGarageIncomeWorksheetGarageId { get; private set; }
@@ -1049,6 +1096,7 @@ public sealed class FinanceControllerTests
         public Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(Guid meterReadingId, CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastUpdatedMeterReadingId = meterReadingId;
             return Task.FromResult(UpdateMeterReadingResult);
         }
 
