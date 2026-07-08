@@ -11635,6 +11635,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
   const [feeCampaignSavingId, setFeeCampaignSavingId] = useState<string | null>(null)
+  const [feeCampaignEditTarget, setFeeCampaignEditTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveTarget, setFeeCampaignArchiveTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveReason, setFeeCampaignArchiveReason] = useState('')
   const [feeCampaignGenerateTarget, setFeeCampaignGenerateTarget] = useState<FeeCampaignDto | null>(null)
@@ -11748,6 +11749,10 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   function closeFeeCampaignArchiveDialog() {
     setFeeCampaignArchiveTarget(null)
     setFeeCampaignArchiveReason('')
+  }
+
+  function closeFeeCampaignEditDialog() {
+    setFeeCampaignEditTarget(null)
   }
 
   function closeFeeCampaignGenerateDialog() {
@@ -12349,6 +12354,28 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     }
   }
 
+  async function updateFeeCampaign(request: UpsertFeeCampaignRequest) {
+    if (!canManageTariffs || !feeCampaignEditTarget) {
+      return
+    }
+
+    setFeeCampaignSavingId(feeCampaignEditTarget.id)
+    setTariffPersistenceError(null)
+    setFeeCampaignActionMessage(null)
+    try {
+      const savedCampaign = await dictionaryClient.updateFeeCampaign(auth.accessToken, feeCampaignEditTarget.id, request)
+      setFeeCampaigns((currentCampaigns) => currentCampaigns.map((campaign) => (
+        campaign.id === savedCampaign.id ? savedCampaign : campaign
+      )))
+      closeFeeCampaignEditDialog()
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось изменить сбор.')
+      throw caught
+    } finally {
+      setFeeCampaignSavingId(null)
+    }
+  }
+
   async function archiveFeeCampaign() {
     if (!feeCampaignArchiveTarget || !feeCampaignArchiveReason.trim()) {
       return
@@ -12703,6 +12730,9 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                           <Plus size={16} />
                           <span>Начислить</span>
                         </button>
+                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignEditTarget(campaign)}>
+                          <Pencil size={16} />
+                        </button>
                         <button className="icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignArchiveTarget(campaign)
                           setFeeCampaignArchiveReason('')
@@ -12897,6 +12927,18 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
           isSaving={feeCampaignSavingId === 'new-fee-campaign'}
           onClose={() => setModal(null)}
           onSave={createFeeCampaign}
+        />
+      ) : null}
+      {feeCampaignEditTarget ? (
+        <AddFeePrototypeDialog
+          garageOptions={feeCampaignGarageOptions}
+          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived || incomeType.id === feeCampaignEditTarget.incomeTypeId)}
+          initialCampaign={feeCampaignEditTarget}
+          isSaving={feeCampaignSavingId === feeCampaignEditTarget.id}
+          onClose={closeFeeCampaignEditDialog}
+          onSave={updateFeeCampaign}
+          submitLabel="Сохранить"
+          title="Изменить сбор"
         />
       ) : null}
     </section>
@@ -13149,26 +13191,32 @@ function AddServicePrototypeDialog({
 function AddFeePrototypeDialog({
   garageOptions,
   incomeTypes,
+  initialCampaign,
   isSaving,
   onClose,
   onSave,
+  submitLabel = 'Объявить сбор',
+  title = 'Добавить сбор',
 }: {
   garageOptions: GarageDto[]
+  initialCampaign?: FeeCampaignDto | null
   incomeTypes: AccountingTypeDto[]
   isSaving: boolean
   onClose: () => void
   onSave: (request: UpsertFeeCampaignRequest) => Promise<void>
+  submitLabel?: string
+  title?: string
 }) {
-  const [name, setName] = useState('')
-  const [incomeTypeId, setIncomeTypeId] = useState(incomeTypes[0]?.id ?? '')
-  const [goal, setGoal] = useState('')
-  const [contributionAmount, setContributionAmount] = useState('')
-  const [targetAmount, setTargetAmount] = useState('')
-  const [startsOn, setStartsOn] = useState(getLocalDateInputValue())
-  const [endsOn, setEndsOn] = useState('')
-  const [appliesToAllGarages, setAppliesToAllGarages] = useState(true)
-  const [participantGarageIds, setParticipantGarageIds] = useState<string[]>([])
-  const [overdueGraceDays, setOverdueGraceDays] = useState('30')
+  const [name, setName] = useState(initialCampaign?.name ?? '')
+  const [incomeTypeId, setIncomeTypeId] = useState(initialCampaign?.incomeTypeId ?? incomeTypes[0]?.id ?? '')
+  const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
+  const [contributionAmount, setContributionAmount] = useState(initialCampaign ? String(initialCampaign.contributionAmount) : '')
+  const [targetAmount, setTargetAmount] = useState(initialCampaign ? String(initialCampaign.targetAmount) : '')
+  const [startsOn, setStartsOn] = useState(initialCampaign?.startsOn ?? getLocalDateInputValue())
+  const [endsOn, setEndsOn] = useState(initialCampaign?.endsOn ?? '')
+  const [appliesToAllGarages, setAppliesToAllGarages] = useState(initialCampaign?.appliesToAllGarages ?? true)
+  const [participantGarageIds, setParticipantGarageIds] = useState<string[]>(initialCampaign?.participantGarageIds ?? [])
+  const [overdueGraceDays, setOverdueGraceDays] = useState(String(initialCampaign?.overdueGraceDays ?? 30))
   const [error, setError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
@@ -13251,7 +13299,7 @@ function AddFeePrototypeDialog({
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
-          <h3 id="contractor-fee-title">Добавить сбор</h3>
+          <h3 id="contractor-fee-title">{title}</h3>
           <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose}>
             <X size={18} />
           </button>
@@ -13332,7 +13380,7 @@ function AddFeePrototypeDialog({
 
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={isSaving}>
-              Объявить сбор
+              {submitLabel}
             </button>
             <button className="ghost-button" type="button" onClick={onClose}>
               Отмена

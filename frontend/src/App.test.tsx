@@ -360,6 +360,7 @@ describe('App', () => {
       createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
     ]
     const createdRequests: string[] = []
+    const updatedRequests: Array<{ id: string; request: unknown }> = []
     const archiveRequests: Array<{ id: string; reason: string }> = []
     const restoredRequests: string[] = []
     const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
@@ -384,6 +385,25 @@ describe('App', () => {
         })
         createdRequests.push(JSON.stringify(request))
         campaigns = [campaign, ...campaigns]
+        return campaign
+      },
+      updateFeeCampaign: async (_token, id, request) => {
+        const campaign = createFeeCampaign({
+          id,
+          name: request.name,
+          incomeTypeId: targetIncomeType.id,
+          incomeTypeName: targetIncomeType.name,
+          goal: request.goal ?? null,
+          contributionAmount: request.contributionAmount,
+          targetAmount: request.targetAmount,
+          startsOn: request.startsOn,
+          endsOn: request.endsOn ?? null,
+          appliesToAllGarages: request.appliesToAllGarages,
+          participantGarageIds: request.participantGarageIds ?? [],
+          overdueGraceDays: request.overdueGraceDays,
+        })
+        updatedRequests.push({ id, request })
+        campaigns = campaigns.map((item) => (item.id === id ? campaign : item))
         return campaign
       },
       archiveFeeCampaign: async (_token, id, reason) => {
@@ -456,6 +476,26 @@ describe('App', () => {
     })
     expect(within(feeCampaignsSection).getByText('Сбор на камеры')).toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('27')).toBeInTheDocument()
+
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Изменить сбор Сбор на камеры' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
+    expect(within(editDialog).getByLabelText('Наименование сбора')).toHaveValue('Сбор на камеры')
+    expect(within(editDialog).getByLabelText('Гараж 27')).toBeChecked()
+    await user.clear(within(editDialog).getByLabelText('Сумма сбора'))
+    await user.type(within(editDialog).getByLabelText('Сумма сбора'), '36000')
+    await user.click(within(editDialog).getByLabelText('Гараж 12'))
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updatedRequests).toHaveLength(1))
+    expect(updatedRequests[0]).toMatchObject({
+      id: 'fee-campaign-new',
+      request: {
+        name: 'Сбор на камеры',
+        targetAmount: 36000,
+        appliesToAllGarages: false,
+        participantGarageIds: [participantGarage.id, otherGarage.id],
+      },
+    })
+    expect(within(feeCampaignsSection).getByText('12, 27')).toBeInTheDocument()
 
     await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
     const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
