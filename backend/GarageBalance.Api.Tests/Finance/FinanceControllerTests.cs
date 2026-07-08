@@ -176,6 +176,31 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task UpdateIncome_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            UpdateIncomeResult = FinanceResult<FinancialOperationDto>.Success(CreateOperation("income", operationId, amount: 350m))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateIncome(
+            operationId,
+            new CreateIncomeOperationRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 350m, "PAY-20", "Исправили сумму"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<FinancialOperationDto>(ok.Value);
+        Assert.Equal(operationId, dto.Id);
+        Assert.Equal("income", dto.OperationKind);
+        Assert.Equal(350m, dto.Amount);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(operationId, service.LastUpdatedOperationId);
+    }
+
+    [Fact]
     public async Task CreateExpense_ReturnsConflictForDuplicateOperation()
     {
         var controller = CreateController(new FakeFinanceService
@@ -224,6 +249,31 @@ public sealed class FinanceControllerTests
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal("cash_amount_insufficient", problem.Title);
+    }
+
+    [Fact]
+    public async Task UpdateExpense_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            UpdateExpenseResult = FinanceResult<FinancialOperationDto>.Success(CreateOperation("expense", operationId, amount: 700m))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateExpense(
+            operationId,
+            new CreateExpenseOperationRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 700m, "EXP-21", "Исправили выплату"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<FinancialOperationDto>(ok.Value);
+        Assert.Equal(operationId, dto.Id);
+        Assert.Equal("expense", dto.OperationKind);
+        Assert.Equal(700m, dto.Amount);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(operationId, service.LastUpdatedOperationId);
     }
 
     [Fact]
@@ -710,14 +760,14 @@ public sealed class FinanceControllerTests
         Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
     }
 
-    private static FinancialOperationDto CreateOperation(string kind)
+    private static FinancialOperationDto CreateOperation(string kind, Guid? id = null, decimal amount = 100m)
     {
         return new FinancialOperationDto(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             kind,
             new DateOnly(2026, 6, 19),
             new DateOnly(2026, 6, 1),
-            100m,
+            amount,
             "1",
             null,
             null,
@@ -855,6 +905,7 @@ public sealed class FinanceControllerTests
     {
         public Guid? LastActorUserId { get; private set; }
         public Guid? LastCanceledOperationId { get; private set; }
+        public Guid? LastUpdatedOperationId { get; private set; }
         public Guid? LastCanceledAccrualId { get; private set; }
         public Guid? LastCanceledSupplierAccrualId { get; private set; }
         public Guid? LastUpdatedMeterReadingId { get; private set; }
@@ -992,6 +1043,7 @@ public sealed class FinanceControllerTests
         public Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastUpdatedOperationId = operationId;
             return Task.FromResult(UpdateIncomeResult);
         }
 
@@ -1011,6 +1063,7 @@ public sealed class FinanceControllerTests
         public Task<FinanceResult<FinancialOperationDto>> UpdateExpenseAsync(Guid operationId, CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastUpdatedOperationId = operationId;
             return Task.FromResult(UpdateExpenseResult);
         }
 
