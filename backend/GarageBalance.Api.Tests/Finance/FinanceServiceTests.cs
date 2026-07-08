@@ -440,6 +440,27 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task PageEndpoints_NormalizeInvalidPaging()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FinanceService(database.Context);
+
+        var operations = await service.GetOperationsPageAsync(new FinancialOperationListRequest(null, null, null, null, 999, -5), CancellationToken.None);
+        var accruals = await service.GetAccrualsPageAsync(new AccrualListRequest(null, null, null, 999, -5), CancellationToken.None);
+        var supplierAccruals = await service.GetSupplierAccrualsPageAsync(new SupplierAccrualListRequest(null, null, null, 999, -5), CancellationToken.None);
+        var meterReadings = await service.GetMeterReadingsPageAsync(new MeterReadingListRequest(null, null, null, null, 999, -5), CancellationToken.None);
+
+        Assert.Equal(0, operations.Offset);
+        Assert.Equal(500, operations.Limit);
+        Assert.Equal(0, accruals.Offset);
+        Assert.Equal(500, accruals.Limit);
+        Assert.Equal(0, supplierAccruals.Offset);
+        Assert.Equal(500, supplierAccruals.Limit);
+        Assert.Equal(0, meterReadings.Offset);
+        Assert.Equal(500, meterReadings.Limit);
+    }
+
+    [Fact]
     public async Task GetOperationsPageAsync_FiltersIncomeHistoryByGarageId()
     {
         await using var database = await TestDatabase.CreateAsync();
