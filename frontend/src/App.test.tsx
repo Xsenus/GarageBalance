@@ -511,8 +511,18 @@ describe('App', () => {
 
     await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' }))
     const archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать сбор?' })
-    await user.type(within(archiveDialog).getByLabelText('Причина архивации сбора'), 'Сбор закрыт')
-    await user.click(within(archiveDialog).getByRole('button', { name: 'Архивировать' }))
+    expect(within(archiveDialog).getByRole('button', { name: 'Архивировать' })).toBeDisabled()
+    await waitFor(() => expect(within(archiveDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Архивировать сбор?' })).not.toBeInTheDocument()
+    expect(archiveRequests).toHaveLength(0)
+    expect(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' })).toBeInTheDocument()
+
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' }))
+    const reopenedArchiveDialog = await screen.findByRole('dialog', { name: 'Архивировать сбор?' })
+    expect(within(reopenedArchiveDialog).getByRole('button', { name: 'Архивировать' })).toBeDisabled()
+    await user.type(within(reopenedArchiveDialog).getByLabelText('Причина архивации сбора'), 'Сбор закрыт')
+    await user.click(within(reopenedArchiveDialog).getByRole('button', { name: 'Архивировать' }))
     await waitFor(() => expect(archiveRequests).toEqual([{ id: 'fee-campaign-active', reason: 'Сбор закрыт' }]))
 
     const archivedCampaignRow = within(feeCampaignsSection).getByText('Старый сбор').closest('.contractors-mini-row')
