@@ -762,6 +762,7 @@ describe('App', () => {
     })
     let savedGarageStartingBalance: number | null = null
     let deletedSupplierContactReason: string | null = null
+    let archivedStaffMemberReason: string | null = null
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
@@ -817,6 +818,24 @@ describe('App', () => {
       archiveSupplierContact: async (_token, _id, reason) => {
         deletedSupplierContactReason = reason
       },
+      createStaffMember: async (_token, request) => createStaffMember({
+        id: '44444444-4444-4444-8444-444444444444',
+        fullName: request.fullName,
+        departmentId: request.departmentId,
+        departmentName: 'Охрана',
+        rate: request.rate,
+      }),
+      archiveStaffMember: async (_token, _id, reason) => {
+        archivedStaffMemberReason = reason
+      },
+      restoreStaffMember: async (_token, id) => createStaffMember({
+        id,
+        fullName: 'Смирнов Алексей',
+        departmentId: 'staff-department-2',
+        departmentName: 'Охрана',
+        rate: 30000,
+        isArchived: false,
+      }),
     })
     let requestedGarageFinancialReportId: string | null = null
     let requestedGarageFinancialReportPeriod: { monthFrom?: string; monthTo?: string } | null = null
@@ -1103,8 +1122,20 @@ describe('App', () => {
     const deleteEmployeeDialog = await screen.findByRole('dialog', { name: 'Удалить сотрудника?' })
     expect(within(deleteEmployeeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
     expect(within(deleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' })).toBeDisabled()
-    await user.type(within(deleteEmployeeDialog).getByLabelText('Причина удаления сотрудника'), 'Больше не работает')
-    await user.click(within(deleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' }))
+    await waitFor(() => expect(within(deleteEmployeeDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Удалить сотрудника?' })).not.toBeInTheDocument()
+    expect(within(updatedEmployeeRow as HTMLElement).queryByText('Удален')).not.toBeInTheDocument()
+    expect(archivedStaffMemberReason).toBeNull()
+
+    await user.pointer({ keys: '[MouseRight]', target: updatedEmployeeRow as HTMLElement })
+    const reopenedEmployeeContextMenu = await screen.findByRole('menu', { name: 'Действия сотрудника Смирнов Алексей' })
+    await user.click(within(reopenedEmployeeContextMenu).getByRole('menuitem', { name: 'Удалить' }))
+    const reopenedDeleteEmployeeDialog = await screen.findByRole('dialog', { name: 'Удалить сотрудника?' })
+    expect(within(reopenedDeleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' })).toBeDisabled()
+    await user.type(within(reopenedDeleteEmployeeDialog).getByLabelText('Причина удаления сотрудника'), 'Больше не работает')
+    await user.click(within(reopenedDeleteEmployeeDialog).getByRole('button', { name: 'Удалить сотрудника' }))
+    await waitFor(() => expect(archivedStaffMemberReason).toBe('Больше не работает'))
     await waitFor(() => expect(within(updatedEmployeeRow as HTMLElement).getByText('Удален')).toBeInTheDocument())
     await user.click(within(updatedEmployeeRow as HTMLElement).getByRole('button', { name: 'Восстановить сотрудника Смирнов Алексей' }))
     const restoreEmployeeDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
