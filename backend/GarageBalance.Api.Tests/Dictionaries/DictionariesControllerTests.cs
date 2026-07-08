@@ -50,6 +50,88 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateGarage_ReturnsCreatedAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var garageId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateGarageResult = DictionaryResult<GarageDto>.Success(new GarageDto(garageId, "12", 3, 1, ownerId, "Иванов Иван", 5300m, 11m, 22m, "Угловой", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateGarage(new UpsertGarageRequest("12", 3, 1, ownerId, 5300m, 11m, 22m, "Угловой"), CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var dto = Assert.IsType<GarageDto>(created.Value);
+        Assert.Equal(garageId, dto.Id);
+        Assert.Equal(nameof(DictionariesController.GetGarages), created.ActionName);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CreateGarage_ReturnsNotFoundForMissingOwner()
+    {
+        var actorUserId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateGarageResult = DictionaryResult<GarageDto>.Failure("owner_not_found", "Владелец гаража не найден.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateGarage(new UpsertGarageRequest("12", 3, 1, ownerId, 5300m, 11m, 22m, "Угловой"), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("owner_not_found", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateGarage_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var garageId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateGarageResult = DictionaryResult<GarageDto>.Success(new GarageDto(garageId, "12", 4, 2, ownerId, "Иванов Иван", 5300m, 12m, 23m, "Обновлен", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateGarage(garageId, new UpsertGarageRequest("12", 4, 2, ownerId, 5300m, 12m, 23m, "Обновлен"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<GarageDto>(ok.Value);
+        Assert.Equal(garageId, dto.Id);
+        Assert.Equal(4, dto.PeopleCount);
+        Assert.Equal(2, dto.FloorCount);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(garageId, service.LastGarageId);
+    }
+
+    [Fact]
+    public async Task ArchiveGarage_ReturnsNoContentAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var garageId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            ArchiveGarageResult = DictionaryResult<GarageDto>.Success(new GarageDto(garageId, "12", 3, 1, null, null, 0, null, null, null, true))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ArchiveGarage(garageId, new ArchiveDictionaryEntryRequest("Гараж больше не используется"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(garageId, service.LastGarageId);
+        Assert.Equal("Гараж больше не используется", service.LastArchiveReason);
+    }
+
+    [Fact]
     public async Task UpdateSupplier_ReturnsNotFoundForMissingSupplier()
     {
         var controller = CreateController(new FakeDictionaryService
@@ -1067,6 +1149,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
+        public Guid? LastGarageId { get; private set; }
         public Guid? LastChargeServiceSettingId { get; private set; }
         public Guid? LastIrregularPaymentId { get; private set; }
         public Guid? LastSupplierContactId { get; private set; }
@@ -1075,6 +1158,8 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> CreateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<GarageDto> UpdateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<GarageDto> ArchiveGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> RestoreGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierGroupDto> RestoreSupplierGroupResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> RestoreSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
@@ -1160,13 +1245,17 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<GarageDto>.Failure("garage_not_found", "Not found."));
+            LastActorUserId = actorUserId;
+            LastGarageId = id;
+            return Task.FromResult(UpdateGarageResult);
         }
 
         public Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastActorUserId = actorUserId;
+            LastGarageId = id;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<GarageDto>.Failure("garage_not_found", "Not found."));
+            return Task.FromResult(ArchiveGarageResult);
         }
 
         public Task<DictionaryResult<GarageDto>> RestoreGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
