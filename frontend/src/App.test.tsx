@@ -3216,7 +3216,15 @@ describe('App', () => {
 
     const transferButton = within(prototype).getByRole('button', { name: 'Перенести задолженность' })
     await user.click(transferButton)
-    const transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
+    let transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
+    await waitFor(() => expect(within(transferDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
+    expect(createDebtTransferMock).not.toHaveBeenCalled()
+    await waitFor(() => expect(transferButton).toHaveFocus())
+
+    await user.click(transferButton)
+    transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
     expect(within(transferDialog).getByLabelText('Исходный месяц переноса задолженности')).toHaveValue('2026-06')
     expect(within(transferDialog).getByLabelText('Целевой месяц переноса задолженности')).toHaveValue('2026-07')
     expect(within(transferDialog).getByLabelText('Сумма переноса задолженности')).toHaveValue('1700')
