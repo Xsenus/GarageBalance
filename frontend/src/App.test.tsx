@@ -535,7 +535,19 @@ describe('App', () => {
 
     const archivedCampaignRow = within(feeCampaignsSection).getByText('Старый сбор').closest('.contractors-mini-row')
     expect(archivedCampaignRow).not.toBeNull()
-    await user.click(within(archivedCampaignRow as HTMLElement).getByRole('button', { name: 'Вернуть' }))
+    const restoreCampaignButton = within(archivedCampaignRow as HTMLElement).getByRole('button', { name: 'Вернуть' })
+    await user.click(restoreCampaignButton)
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть сбор?' })
+    expect(within(restoreDialog).getByText('Старый сбор')).toBeInTheDocument()
+    await waitFor(() => expect(within(restoreDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Вернуть сбор?' })).not.toBeInTheDocument()
+    expect(restoredRequests).toHaveLength(0)
+    expect(restoreCampaignButton).toHaveFocus()
+
+    await user.click(restoreCampaignButton)
+    const reopenedRestoreDialog = await screen.findByRole('dialog', { name: 'Вернуть сбор?' })
+    await user.click(within(reopenedRestoreDialog).getByRole('button', { name: 'Вернуть' }))
     await waitFor(() => expect(restoredRequests).toContain('fee-campaign-archived'))
   })
 

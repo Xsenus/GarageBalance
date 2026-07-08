@@ -11639,6 +11639,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const [feeCampaignEditTarget, setFeeCampaignEditTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveTarget, setFeeCampaignArchiveTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveReason, setFeeCampaignArchiveReason] = useState('')
+  const [feeCampaignRestoreTarget, setFeeCampaignRestoreTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignGenerateTarget, setFeeCampaignGenerateTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignGenerateMonth, setFeeCampaignGenerateMonth] = useState(getCurrentMonthInputValue())
   const [feeCampaignGenerateComment, setFeeCampaignGenerateComment] = useState('')
@@ -11756,6 +11757,10 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     setFeeCampaignEditTarget(null)
   }
 
+  function closeFeeCampaignRestoreDialog() {
+    setFeeCampaignRestoreTarget(null)
+  }
+
   function closeFeeCampaignGenerateDialog() {
     setFeeCampaignGenerateTarget(null)
     setFeeCampaignGenerateMonth(getCurrentMonthInputValue())
@@ -11858,12 +11863,16 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   useRestoreFocusOnClose(Boolean(feeCampaignArchiveTarget))
   const feeCampaignArchiveDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignArchiveTarget))
   const feeCampaignArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignArchiveTarget))
+  useRestoreFocusOnClose(Boolean(feeCampaignRestoreTarget))
+  const feeCampaignRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignRestoreTarget))
+  const feeCampaignRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignRestoreTarget))
   useRestoreFocusOnClose(Boolean(feeCampaignGenerateTarget))
   const feeCampaignGenerateDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignGenerateTarget))
   const feeCampaignGenerateCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignGenerateTarget))
   useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
   useEscapeKey(Boolean(feeCampaignArchiveTarget), () => closeFeeCampaignArchiveDialog())
+  useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
   useEscapeKey(Boolean(feeCampaignGenerateTarget), () => closeFeeCampaignGenerateDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
@@ -12397,14 +12406,19 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     }
   }
 
-  async function restoreFeeCampaign(campaign: FeeCampaignDto) {
-    setFeeCampaignSavingId(campaign.id)
+  async function restoreFeeCampaign() {
+    if (!feeCampaignRestoreTarget) {
+      return
+    }
+
+    setFeeCampaignSavingId(feeCampaignRestoreTarget.id)
     setFeeCampaignActionMessage(null)
     try {
-      const restoredCampaign = await dictionaryClient.restoreFeeCampaign(auth.accessToken, campaign.id)
+      const restoredCampaign = await dictionaryClient.restoreFeeCampaign(auth.accessToken, feeCampaignRestoreTarget.id)
       setFeeCampaigns((currentCampaigns) => currentCampaigns.map((currentCampaign) => (
         currentCampaign.id === restoredCampaign.id ? restoredCampaign : currentCampaign
       )))
+      closeFeeCampaignRestoreDialog()
     } catch (caught) {
       setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось восстановить сбор.')
     } finally {
@@ -12717,7 +12731,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                   <span>{formatDateOnly(campaign.startsOn)}{campaign.endsOn ? ` - ${formatDateOnly(campaign.endsOn)}` : ''}</span>
                   <span className="contractors-mini-actions">
                     {campaign.isArchived ? (
-                      <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => void restoreFeeCampaign(campaign)}>
+                      <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignRestoreTarget(campaign)}>
                         <RotateCcw size={16} />
                         <span>Вернуть</span>
                       </button>
@@ -12875,6 +12889,31 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                 <span>Архивировать</span>
               </button>
               <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog}>Отмена</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {feeCampaignRestoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignRestoreDialog}>
+          <section ref={feeCampaignRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-restore-title" aria-describedby="fee-campaign-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление</p>
+                <h3 id="fee-campaign-restore-title">Вернуть сбор?</h3>
+                <p>{feeCampaignRestoreTarget.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления сбора" onClick={closeFeeCampaignRestoreDialog} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fee-campaign-restore-description">Сбор снова появится как активный и будет доступен для начислений. Действие будет записано в историю изменений.</p>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button className="secondary-button" type="button" onClick={restoreFeeCampaign} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>
+                <RotateCcw size={16} />
+                <span>Вернуть</span>
+              </button>
+              <button ref={feeCampaignRestoreCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignRestoreDialog} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>Отмена</button>
             </div>
           </section>
         </div>
