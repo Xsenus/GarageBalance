@@ -6295,12 +6295,20 @@ describe('App', () => {
     expect(within(supplierAccrualTable).getByText('Водоканал')).toBeInTheDocument()
     expect(within(supplierAccrualTable).getByText('Ручное')).toBeInTheDocument()
 
-    await user.dblClick(within(supplierAccrualTable).getByLabelText(/Разбивка начисления поставщику/i))
+    const openBreakdownButton = within(supplierAccrualTable).getByLabelText(/Разбивка начисления поставщику/i)
+    await user.dblClick(openBreakdownButton)
 
     const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления поставщику' })
+    const closeBreakdownButton = within(dialog).getByRole('button', { name: 'Закрыть разбивку' })
     expect(within(dialog).getByText('INV-1')).toBeInTheDocument()
     expect(within(dialog).getByText('Счет за воду')).toBeInTheDocument()
     expect(within(dialog).getByText('Ручное')).toBeInTheDocument()
+    await waitFor(() => expect(closeBreakdownButton).toHaveFocus())
+    await user.tab()
+    expect(closeBreakdownButton).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Разбивка начисления поставщику' })).not.toBeInTheDocument()
+    expect(openBreakdownButton).toHaveFocus()
   })
 
   it('generates supplier group salary accruals from payments workspace', async () => {
@@ -6314,9 +6322,16 @@ describe('App', () => {
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
-    await user.click(within(financePanel).getByRole('button', { name: 'Зарплата группы' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Зарплата группы' })
+    const salaryButton = within(financePanel).getByRole('button', { name: 'Зарплата группы' })
+    await user.click(salaryButton)
+    let dialog = await screen.findByRole('dialog', { name: 'Зарплата группы' })
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Зарплата группы' })).not.toBeInTheDocument()
+    expect(salaryButton).toHaveFocus()
 
+    await user.click(salaryButton)
+    dialog = await screen.findByRole('dialog', { name: 'Зарплата группы' })
     expect(within(dialog).getByLabelText('Группа для зарплаты')).toHaveValue('group-1')
     await user.clear(within(dialog).getByLabelText('Сумма зарплаты'))
     await user.type(within(dialog).getByLabelText('Сумма зарплаты'), '7000')
