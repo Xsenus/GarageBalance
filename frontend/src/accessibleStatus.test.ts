@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -262,6 +262,27 @@ describe('accessible dynamic messages', () => {
       expect(buttonSource).toContain('aria-selected=')
       expect(buttonSource).toContain('onClick=')
     }
+  })
+
+  it('keeps sidebar topbar and dashboard icon navigation labeled titled and focusable', () => {
+    expect(appSource).toContain('const sidebarToggleLabel = isSidebarExpanded ? \'Свернуть панель\' : \'Развернуть панель\'')
+    expect(appSource).toContain('aria-label={sidebarToggleLabel} title={sidebarToggleLabel}')
+    expect(appSource).toContain('aria-label={item.label}')
+    expect(appSource).toContain('title={item.label}')
+    expect(appSource).toContain('aria-current={isActive ? \'page\' : undefined}')
+    expect(appSource).toContain('aria-label={tile.title.replace(\'\\n\', \' \')}')
+    expect(appSource).toContain('title={tile.title.replace(\'\\n\', \' \')}')
+    expect(appSource).toContain('aria-label="Назад к выбору раздела" title="Назад к выбору раздела"')
+    expect(appSource).toContain('aria-label="Уведомления" title="Уведомления"')
+    expect(appSource).toContain('aria-label="Выйти" title="Выйти"')
+
+    expect(normalizedAppCss).toContain('.nav-item:hover,\n.nav-item:focus-visible,\n.nav-item.active')
+    expect(normalizedAppCss).toContain('.nav-item:focus-visible {\n  outline: 3px solid rgba(46, 144, 250, 0.18);')
+    expect(normalizedAppCss).toContain('.icon-button:hover:not(:disabled),\n.icon-button:focus-visible')
+    expect(normalizedAppCss).toContain('.icon-button:disabled {\n  cursor: not-allowed;')
+    expect(appCss).toContain('.topbar-back-button:hover')
+    expect(appCss).toContain('.dashboard-tile:hover:not(:disabled)')
+    expect(appCss).toContain('.dashboard-tile:focus-visible')
   })
 
   it('keeps tables scrollable focused and announced', () => {

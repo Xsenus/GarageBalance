@@ -441,6 +441,7 @@ function Workspace({
                     type="button"
                     key={tile.title}
                     aria-label={tile.title.replace('\n', ' ')}
+                    title={tile.title.replace('\n', ' ')}
                     disabled={!canOpen}
                     onClick={() => onOpenSection(tile.section)}
                   >
@@ -540,10 +541,10 @@ function Workspace({
             <strong>{auth.user.displayName}</strong>
             <span>{auth.user.roles.join(', ')}</span>
           </div>
-          <button className="icon-button" type="button" aria-label="Уведомления">
+          <button className="icon-button" type="button" aria-label="Уведомления" title="Уведомления">
             <Bell size={19} />
           </button>
-          <button className="icon-button" type="button" aria-label="Выйти" onClick={onLogout}>
+          <button className="icon-button" type="button" aria-label="Выйти" title="Выйти" onClick={onLogout}>
             <LogOut size={19} />
           </button>
         </div>

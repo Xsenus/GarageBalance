@@ -136,9 +136,15 @@
 }
 
 .nav-item:hover,
+.nav-item:focus-visible,
 .nav-item.active {
   background: #eef4ff;
   color: #1849a9;
+}
+
+.nav-item:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
 }
 
 .nav-item:disabled {
@@ -386,6 +392,30 @@
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: #ffffff;
+  color: #344054;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.icon-button:hover:not(:disabled),
+.icon-button:focus-visible {
+  border-color: #b2c7f7;
+  background: #eef4ff;
+  color: #1849a9;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.icon-button:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .hero-panel,
