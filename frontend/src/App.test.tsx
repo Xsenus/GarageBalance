@@ -4207,8 +4207,10 @@ describe('App', () => {
 
   it('shows backend error when tariff effective date moves after existing accruals', async () => {
     const user = userEvent.setup()
+    let updateTariffCalls = 0
     const dictionaryClient = createDictionaryClient({
       updateTariff: async () => {
+        updateTariffCalls += 1
         throw new Error('Дата начала тарифа не может быть позже уже созданного начисления за 06.2026.')
       },
     })
@@ -4225,11 +4227,22 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Тарифы' })
     await user.clear(within(dialog).getByLabelText('Дата начала тарифа'))
     await user.type(within(dialog).getByLabelText('Дата начала тарифа'), '2026-08-01')
-    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
-    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    const saveButton = within(dialog).getByRole('button', { name: 'Сохранить' })
+    await user.click(saveButton)
+    let confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    expect(within(confirmationDialog).getByText('Дата начала')).toBeInTheDocument()
+    await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    await waitFor(() => expect(saveButton).toHaveFocus())
+    expect(updateTariffCalls).toBe(0)
+
+    await user.click(saveButton)
+    confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
     expect(within(confirmationDialog).getByText('Дата начала')).toBeInTheDocument()
     await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
+    expect(updateTariffCalls).toBe(1)
     const alerts = await screen.findAllByRole('alert')
     expect(alerts.some((alert) => alert.textContent?.includes('Дата начала тарифа не может быть позже уже созданного начисления за 06.2026.'))).toBe(true)
     expect(screen.getByRole('dialog', { name: 'Тарифы' })).toBeInTheDocument()
