@@ -1008,6 +1008,67 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task UpdateStaffDepartment_ReturnsOkAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var departmentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateStaffDepartmentResult = DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(departmentId, "Руководство", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateStaffDepartment(departmentId, new UpsertStaffDepartmentRequest("Руководство"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<StaffDepartmentDto>(ok.Value);
+        Assert.Equal(departmentId, dto.Id);
+        Assert.Equal("Руководство", dto.Name);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(departmentId, service.LastStaffDepartmentId);
+    }
+
+    [Fact]
+    public async Task ArchiveStaffDepartment_ReturnsNoContentAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var departmentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            ArchiveStaffDepartmentResult = DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(departmentId, "Бухгалтерия", true))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ArchiveStaffDepartment(departmentId, new ArchiveDictionaryEntryRequest("Отдел больше не используется"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(departmentId, service.LastStaffDepartmentId);
+        Assert.Equal("Отдел больше не используется", service.LastArchiveReason);
+    }
+
+    [Fact]
+    public async Task RestoreStaffDepartment_ReturnsOkActiveRecordAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var departmentId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            RestoreStaffDepartmentResult = DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(departmentId, "Бухгалтерия", false))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RestoreStaffDepartment(departmentId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<StaffDepartmentDto>(ok.Value);
+        Assert.Equal(departmentId, dto.Id);
+        Assert.False(dto.IsArchived);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(departmentId, service.LastRestoreId);
+    }
+
+    [Fact]
     public async Task CreateStaffMember_ReturnsNotFoundForMissingDepartment()
     {
         var actorUserId = Guid.NewGuid();
@@ -1243,6 +1304,7 @@ public sealed class DictionariesControllerTests
         public Guid? LastChargeServiceSettingId { get; private set; }
         public Guid? LastIrregularPaymentId { get; private set; }
         public Guid? LastSupplierContactId { get; private set; }
+        public Guid? LastStaffDepartmentId { get; private set; }
         public Guid? LastStaffMemberId { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -1261,6 +1323,8 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<SupplierContactDto> ArchiveSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierContactDto> RestoreSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffDepartmentDto> CreateStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<StaffDepartmentDto> UpdateStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<StaffDepartmentDto> ArchiveStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffDepartmentDto> RestoreStaffDepartmentResult { get; init; } = DictionaryResult<StaffDepartmentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffMemberDto> CreateStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffMemberDto> UpdateStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
@@ -1479,14 +1543,16 @@ public sealed class DictionariesControllerTests
         public Task<DictionaryResult<StaffDepartmentDto>> UpdateStaffDepartmentAsync(Guid id, UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
-            return Task.FromResult(DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Not found."));
+            LastStaffDepartmentId = id;
+            return Task.FromResult(UpdateStaffDepartmentResult);
         }
 
         public Task<DictionaryResult<StaffDepartmentDto>> ArchiveStaffDepartmentAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastStaffDepartmentId = id;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Not found."));
+            return Task.FromResult(ArchiveStaffDepartmentResult);
         }
 
         public Task<DictionaryResult<StaffDepartmentDto>> RestoreStaffDepartmentAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
