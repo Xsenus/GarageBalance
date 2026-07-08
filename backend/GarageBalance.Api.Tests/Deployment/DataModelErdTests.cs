@@ -25,6 +25,12 @@ public sealed class DataModelErdTests
         Assert.Contains("income_types", document, StringComparison.Ordinal);
         Assert.Contains("expense_types", document, StringComparison.Ordinal);
         Assert.Contains("tariffs", document, StringComparison.Ordinal);
+        Assert.Contains("fee_campaigns", document, StringComparison.Ordinal);
+        Assert.Contains("ContributionAmount", document, StringComparison.Ordinal);
+        Assert.Contains("TargetAmount", document, StringComparison.Ordinal);
+        Assert.Contains("StartsOn", document, StringComparison.Ordinal);
+        Assert.Contains("OverdueGraceDays", document, StringComparison.Ordinal);
+        Assert.Contains("Name` при `IsArchived = false", document, StringComparison.Ordinal);
         Assert.Contains("Name + EffectiveFrom", document, StringComparison.Ordinal);
         Assert.Contains("GarageId + IncomeTypeId + AccountingMonth + Source", document, StringComparison.Ordinal);
         Assert.Contains("SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber", document, StringComparison.Ordinal);
