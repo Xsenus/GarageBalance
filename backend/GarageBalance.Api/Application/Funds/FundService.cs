@@ -101,6 +101,67 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         return FundResult<FundOperationDto>.Success(ToDto(operation));
     }
 
+    public async Task<FundResult<FundOperationDto>> UpdateOperationAsync(Guid operationId, UpdateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var reason = request.Reason.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return FundResult<FundOperationDto>.Failure("fund_operation_reason_required", "Укажите причину операции фонда.");
+        }
+
+        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        if (amount <= 0m)
+        {
+            return FundResult<FundOperationDto>.Failure("fund_operation_amount_invalid", "Сумма операции фонда должна быть больше нуля.");
+        }
+
+        var operation = await dbContext.FundOperations
+            .Include(item => item.Fund)
+            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        if (operation is null)
+        {
+            return FundResult<FundOperationDto>.Failure("fund_operation_not_found", "Операция фонда не найдена.");
+        }
+
+        if (operation.IsCanceled)
+        {
+            return FundResult<FundOperationDto>.Failure("fund_operation_canceled", "Нельзя изменить отмененную операцию фонда.");
+        }
+
+        var oldValues = ToOperationAuditValues(operation);
+        var oldAmount = operation.Amount;
+        var oldReason = operation.Reason;
+        if (oldAmount == amount && string.Equals(oldReason, reason, StringComparison.Ordinal))
+        {
+            return FundResult<FundOperationDto>.Success(ToDto(operation));
+        }
+
+        if (operation.OperationKind == FundOperationKinds.Deposit && amount > oldAmount)
+        {
+            var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+            var additionalAmount = amount - oldAmount;
+            if (additionalAmount > availableToDistribute)
+            {
+                return FundResult<FundOperationDto>.Failure(
+                    "fund_distribution_amount_exceeded",
+                    $"Сумма увеличения пополнения не может превышать доступную к распределению сумму {availableToDistribute:0.00} руб.");
+            }
+        }
+
+        if (!await CanUpdateWithoutNegativeBalanceAsync(operation, amount, cancellationToken))
+        {
+            return FundResult<FundOperationDto>.Failure("fund_balance_insufficient", "Операцию фонда нельзя изменить: после изменения остаток фонда станет отрицательным.");
+        }
+
+        operation.Amount = amount;
+        operation.Reason = reason;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
+        AddUpdateAudit(operation.Fund, operation, actorUserId, oldValues);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return FundResult<FundOperationDto>.Success(ToDto(operation));
+    }
+
     public async Task<FundResult<FundOperationDto>> CancelOperationAsync(Guid operationId, CancelFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var reason = request.Reason.Trim();
@@ -271,6 +332,32 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         return true;
     }
 
+    private async Task<bool> CanUpdateWithoutNegativeBalanceAsync(FundOperation updatingOperation, decimal newAmount, CancellationToken cancellationToken)
+    {
+        var operations = await GetOperationsOrderedByBusinessTimeAsync(updatingOperation.FundId, trackChanges: false, cancellationToken);
+
+        var balance = 0m;
+        foreach (var operation in operations)
+        {
+            if (operation.IsCanceled)
+            {
+                continue;
+            }
+
+            var amount = operation.Id == updatingOperation.Id ? newAmount : operation.Amount;
+            balance = operation.OperationKind == FundOperationKinds.Deposit
+                ? balance + amount
+                : balance - amount;
+
+            if (balance < 0m)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private async Task<bool> CanRestoreWithoutNegativeBalanceAsync(FundOperation restoringOperation, CancellationToken cancellationToken)
     {
         var operations = await GetOperationsOrderedByBusinessTimeAsync(restoringOperation.FundId, trackChanges: false, cancellationToken);
@@ -380,6 +467,30 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
             null);
     }
 
+    private void AddUpdateAudit(Fund fund, FundOperation operation, Guid? actorUserId, IReadOnlyDictionary<string, object?> oldValues)
+    {
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            ActorUserId: actorUserId,
+            Action: "fund.operation_updated",
+            EntityType: "fund_operation",
+            EntityId: operation.Id.ToString(),
+            Summary: $"Изменена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {operation.Amount:0.##} руб.",
+            Section: "funds",
+            ActionKind: "update",
+            EntityDisplayName: fund.Name,
+            Reason: operation.Reason,
+            OldValues: oldValues,
+            NewValues: ToOperationAuditValues(operation),
+            FieldLabels: OperationFieldLabels,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["fundId"] = fund.Id,
+                ["fundName"] = fund.Name,
+                ["operationKind"] = operation.OperationKind,
+                ["amount"] = operation.Amount
+            }));
+    }
+
     private void AddOperationStatusAudit(Fund fund, FundOperation operation, Guid? actorUserId, string action, string actionKind, string summary, string? reason)
     {
         auditEventWriter.Add(new AuditEventWriteRequest(
@@ -422,6 +533,17 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
             operation.IsCanceled);
     }
 
+    private static IReadOnlyDictionary<string, object?> ToOperationAuditValues(FundOperation operation)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["amount"] = operation.Amount,
+            ["reason"] = operation.Reason,
+            ["balanceBefore"] = operation.BalanceBefore,
+            ["balanceAfter"] = operation.BalanceAfter
+        };
+    }
+
     private static string NormalizeName(string name)
     {
         return name.Trim().ToUpperInvariant();
@@ -439,4 +561,12 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
     }
 
     private sealed record DefaultFundDefinition(string Name, int SortOrder, bool AllowOperations);
+
+    private static readonly IReadOnlyDictionary<string, string> OperationFieldLabels = new Dictionary<string, string>
+    {
+        ["amount"] = "Сумма",
+        ["reason"] = "Основание",
+        ["balanceBefore"] = "Собранная сумма до",
+        ["balanceAfter"] = "Собранная сумма после"
+    };
 }

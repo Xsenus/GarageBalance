@@ -28,5 +28,9 @@ public sealed record CreateFundOperationRequest(
     [Range(0.01, 999999999)] decimal Amount,
     [Required, MaxLength(1000)] string Reason);
 
+public sealed record UpdateFundOperationRequest(
+    [Range(0.01, 999999999)] decimal Amount,
+    [Required, MaxLength(1000)] string Reason);
+
 public sealed record CancelFundOperationRequest(
     [Required, MaxLength(1000)] string Reason);

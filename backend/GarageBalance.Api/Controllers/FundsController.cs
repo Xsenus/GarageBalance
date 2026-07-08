@@ -33,6 +33,18 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("operations/{operationId:guid}")]
+    [ProducesResponseType<FundOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FundOperationDto>> UpdateOperation(Guid operationId, UpdateFundOperationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await fundService.UpdateOperationAsync(operationId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("operations/{operationId:guid}/cancel")]
     [ProducesResponseType<FundOperationDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -70,7 +82,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return result.ErrorCode switch
         {
             "fund_not_found" or "fund_operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" or "fund_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

@@ -9,6 +9,42 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class FundsControllerTests
 {
     [Fact]
+    public async Task UpdateOperation_PassesActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operation = CreateOperation(isCanceled: false);
+        var service = new FakeFundService
+        {
+            UpdateOperationResult = FundResult<FundOperationDto>.Success(operation)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateOperation(operation.Id, new UpdateFundOperationRequest(600m, "Уточнение"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(operation, ok.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(operation.Id, service.LastUpdatedOperationId);
+        Assert.Equal(600m, service.LastUpdateRequest?.Amount);
+        Assert.Equal("Уточнение", service.LastUpdateRequest?.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateOperation_ReturnsConflictForCanceledOperation()
+    {
+        var controller = CreateController(new FakeFundService
+        {
+            UpdateOperationResult = FundResult<FundOperationDto>.Failure("fund_operation_canceled", "Нельзя изменить отмененную операцию фонда.")
+        });
+
+        var result = await controller.UpdateOperation(Guid.NewGuid(), new UpdateFundOperationRequest(600m, "Уточнение"), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("fund_operation_canceled", problem.Title);
+    }
+
+    [Fact]
     public async Task CancelOperation_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -144,9 +180,12 @@ public sealed class FundsControllerTests
     private sealed class FakeFundService : IFundService
     {
         public Guid? LastActorUserId { get; private set; }
+        public Guid? LastUpdatedOperationId { get; private set; }
         public Guid? LastCanceledOperationId { get; private set; }
         public Guid? LastRestoredOperationId { get; private set; }
+        public UpdateFundOperationRequest? LastUpdateRequest { get; private set; }
         public CancelFundOperationRequest? LastCancelRequest { get; private set; }
+        public FundResult<FundOperationDto> UpdateOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> CancelOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> RestoreOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
 
@@ -159,6 +198,14 @@ public sealed class FundsControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(FundResult<FundOperationDto>.Failure("not_configured", "Not configured."));
+        }
+
+        public Task<FundResult<FundOperationDto>> UpdateOperationAsync(Guid operationId, UpdateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastUpdatedOperationId = operationId;
+            LastUpdateRequest = request;
+            return Task.FromResult(UpdateOperationResult);
         }
 
         public Task<FundResult<FundOperationDto>> CancelOperationAsync(Guid operationId, CancelFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

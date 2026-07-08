@@ -143,6 +143,142 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task UpdateOperationAsync_UpdatesOperationRecalculatesBalancesAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var actorUserId = Guid.NewGuid();
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        var withdraw = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("withdraw", 200m, "Изъятие"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        Assert.True(withdraw.Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOperationAsync(
+            deposit.Value!.Id,
+            new UpdateFundOperationRequest(600m, "Уточненное распределение"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(600m, result.Value!.Amount);
+        Assert.Equal(0m, result.Value.BalanceBefore);
+        Assert.Equal(600m, result.Value.BalanceAfter);
+        Assert.Equal(400m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
+        var updatedWithdraw = await database.Context.FundOperations.SingleAsync(operation => operation.Id == withdraw.Value!.Id);
+        Assert.Equal(600m, updatedWithdraw.BalanceBefore);
+        Assert.Equal(400m, updatedWithdraw.BalanceAfter);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.operation_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("update", audit.ActionKind);
+        Assert.Equal("fund_operation", audit.EntityType);
+        Assert.Equal("Электроэнергия", audit.EntityDisplayName);
+        Assert.Contains("Изменена операция фонда Электроэнергия", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Contains("Сумма", metadata.RootElement.GetProperty("changedFields").GetString(), StringComparison.Ordinal);
+        Assert.Equal("3", metadata.RootElement.GetProperty("changesCount").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateOperationAsync_DoesNotWriteAuditWhenNothingChanged()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOperationAsync(
+            deposit.Value!.Id,
+            new UpdateFundOperationRequest(700m, "Распределение"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateOperationAsync_RejectsDepositIncreaseAboveAvailableDistribution()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOperationAsync(
+            deposit.Value!.Id,
+            new UpdateFundOperationRequest(1000.01m, "Сверх свободного остатка"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_distribution_amount_exceeded", result.ErrorCode);
+        Assert.Equal(700m, (await database.Context.FundOperations.SingleAsync(operation => operation.Id == deposit.Value.Id)).Amount);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateOperationAsync_RejectsAmountWhenActiveSequenceWouldBecomeNegative()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        var withdraw = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("withdraw", 650m, "Изъятие"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        Assert.True(withdraw.Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOperationAsync(
+            deposit.Value!.Id,
+            new UpdateFundOperationRequest(600m, "Уменьшили распределение"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_balance_insufficient", result.ErrorCode);
+        Assert.Equal(700m, (await database.Context.FundOperations.SingleAsync(operation => operation.Id == deposit.Value.Id)).Amount);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateOperationAsync_RejectsCanceledOperation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 1000m);
+        var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
+        Assert.True(deposit.Succeeded);
+        await service.CancelOperationAsync(deposit.Value!.Id, new CancelFundOperationRequest("Ошибка"), null, CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOperationAsync(
+            deposit.Value.Id,
+            new UpdateFundOperationRequest(600m, "Изменение после отмены"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_operation_canceled", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CancelOperationAsync_CancelsOperationRecalculatesBalanceAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
