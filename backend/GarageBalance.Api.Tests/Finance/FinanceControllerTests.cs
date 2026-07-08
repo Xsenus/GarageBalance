@@ -81,6 +81,21 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetGarageBalanceHistory_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            GarageBalanceHistoryResult = FinanceResult<GarageBalanceHistoryDto>.Failure("balance_history_period_invalid", "Дата начала истории баланса не может быть позже даты окончания.")
+        });
+
+        var result = await controller.GetGarageBalanceHistory(Guid.NewGuid(), new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("balance_history_period_invalid", problem.Title);
+    }
+
+    [Fact]
     public async Task GetGarageIncomeWorksheet_PassesGarageAndPeriodToService()
     {
         var garageId = Guid.NewGuid();
