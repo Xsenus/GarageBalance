@@ -45,7 +45,7 @@ public sealed class ImportFingerprintServiceTests
         Assert.Equal("Access", metadata.RootElement.GetProperty("sourceSystem").GetString());
         Assert.Equal("Garage", metadata.RootElement.GetProperty("importEntityType").GetString());
         Assert.Equal("42", metadata.RootElement.GetProperty("externalId").GetString());
-        Assert.Equal(importRunId.ToString(), metadata.RootElement.GetProperty("accessImportRunId").GetString());
+        Assert.Equal(AuditTextMasker.Mask(importRunId.ToString()), metadata.RootElement.GetProperty("accessImportRunId").GetString());
         Assert.Equal("garage", metadata.RootElement.GetProperty("targetEntityType").GetString());
         Assert.Equal("target-42", metadata.RootElement.GetProperty("targetEntityId").GetString());
     }

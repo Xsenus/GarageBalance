@@ -69,4 +69,29 @@ describe('change preview helpers', () => {
       after: 'Петров Петр',
     })
   })
+
+  it('builds a representative edit confirmation preview without no-op rows or sensitive values', () => {
+    const expenseTypeLabels: Record<string, string> = {
+      water: 'Водоснабжение',
+      electricity: 'Электроэнергия',
+    }
+    const changes: ChangePreview[] = []
+
+    appendChangePreview(changes, 'Комментарий', formatChangeText('  без изменений  '), formatChangeText('без изменений'))
+    appendFormattedChangePreview(changes, 'Сумма', 1500, 1750, formatChangeMoney)
+    appendFormattedChangePreview(changes, 'Дата', '2026-07-01', '2026-07-03', formatChangeDate)
+    appendFormattedChangePreview(changes, 'Вид начисления', 'water', 'electricity', (value) => expenseTypeLabels[value] ?? value)
+    appendChangePreview(changes, 'Пароль', formatSensitiveChange('old-secret'), formatSensitiveChange('new-secret'))
+    appendChangePreview(changes, 'Токен интеграции', formatSensitiveChange(''), formatSensitiveChange('fresh-secret'))
+
+    expect(changes).toEqual([
+      { field: 'Сумма', before: '1\u00a0500,00', after: '1\u00a0750,00' },
+      { field: 'Дата', before: '01.07.2026', after: '03.07.2026' },
+      { field: 'Вид начисления', before: 'Водоснабжение', after: 'Электроэнергия' },
+      { field: 'Токен интеграции', before: 'пусто', after: 'изменено' },
+    ])
+    expect(JSON.stringify(changes)).not.toContain('fresh-secret')
+    expect(JSON.stringify(changes)).not.toContain('old-secret')
+    expect(JSON.stringify(changes)).not.toContain('new-secret')
+  })
 })
