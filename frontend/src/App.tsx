@@ -13972,6 +13972,7 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   const [balanceHistoryFilters, setBalanceHistoryFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
   const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false)
   const [balanceHistoryError, setBalanceHistoryError] = useState<string | null>(null)
+  const balanceHistoryTriggerRef = useRef<HTMLElement | null>(null)
   const [ownerForm, setOwnerForm] = useState<UpsertOwnerRequest>(createEmptyOwnerForm())
   const [ownerGarageLinkForm, setOwnerGarageLinkForm] = useState<OwnerGarageLinkForm>(createEmptyOwnerGarageLinkForm())
   const [garageForm, setGarageForm] = useState(createEmptyGarageForm())
@@ -14134,6 +14135,11 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
 
   function openContextMenu(event: MouseEvent, section: DictionarySectionKey, item: DictionaryRecord) {
     event.preventDefault()
+    if (section === 'garages') {
+      balanceHistoryTriggerRef.current = event.currentTarget as HTMLElement
+    } else {
+      balanceHistoryTriggerRef.current = null
+    }
     setContextMenu({ section, item, x: event.clientX, y: event.clientY })
   }
 
@@ -14158,9 +14164,16 @@ function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSecti
   }
 
   function closeBalanceHistory() {
+    const trigger = balanceHistoryTriggerRef.current
     setBalanceHistoryGarage(null)
     setBalanceHistory(null)
     setBalanceHistoryError(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      balanceHistoryTriggerRef.current = null
+    }, 0)
   }
 
   async function loadBalanceHistory(garageId = balanceHistoryGarage?.id, filters = balanceHistoryFilters) {

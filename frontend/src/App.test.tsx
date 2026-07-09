@@ -4895,7 +4895,8 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
 
-    fireEvent.contextMenu(within(dictionaryPanel).getByText('12').closest('tr')!)
+    const garageRow = within(dictionaryPanel).getByText('12').closest('tr') as HTMLTableRowElement
+    fireEvent.contextMenu(garageRow)
     await user.click(await screen.findByRole('menuitem', { name: 'История баланса' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
@@ -4913,6 +4914,7 @@ describe('App', () => {
     expect(requestedPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гараж 12' })).not.toBeInTheDocument())
+    await waitFor(() => expect(garageRow).toHaveFocus())
     expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Гаражи' })).toBeInTheDocument()
   })
 
