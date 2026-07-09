@@ -6425,6 +6425,63 @@ describe('App', () => {
     expect(within(financePanel).queryByText('Начисление edit')).not.toBeInTheDocument()
   })
 
+  it('edits supplier accrual from payments table with confirmation', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
+    await user.type(within(financePanel).getByLabelText('Документ начисления поставщику'), 'BILL-edit')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Начисление поставщику edit')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[1])
+
+    const supplierAccrualCell = await within(financePanel).findByText('BILL-edit')
+    const supplierAccrualRow = supplierAccrualCell.closest('tr')!
+    supplierAccrualRow.focus()
+    await user.keyboard(' ')
+    const dialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
+    expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+
+    await user.clear(within(dialog).getByLabelText('Сумма начисления поставщику'))
+    await user.type(within(dialog).getByLabelText('Сумма начисления поставщику'), '820')
+    await user.clear(within(dialog).getByLabelText('Документ начисления поставщику'))
+    await user.type(within(dialog).getByLabelText('Документ начисления поставщику'), 'BILL-fixed')
+    await user.clear(within(dialog).getByLabelText('Комментарий начисления поставщику'))
+    await user.type(within(dialog).getByLabelText('Комментарий начисления поставщику'), 'Начисление поставщику после сверки')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    let supplierAccrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    const supplierAccrualChangeList = within(supplierAccrualChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
+    expect(within(supplierAccrualChangeList).getByText('Сумма')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('650,00')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('820,00')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('Документ')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('BILL-fixed')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('Комментарий')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('Начисление поставщику после сверки')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Начисление поставщику' })).toBeInTheDocument()
+    expect(within(financePanel).queryByText('BILL-fixed')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    supplierAccrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    await user.click(within(supplierAccrualChangeDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
+    expect(await within(financePanel).findByText('BILL-fixed')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Начисление поставщику после сверки')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('820,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).queryByText('BILL-edit')).not.toBeInTheDocument()
+  })
+
   it('opens new income dialog from payment context menu', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -10245,6 +10302,25 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       supplierAccruals = [accrual, ...supplierAccruals]
       return accrual
+    },
+    updateSupplierAccrual: async (_token, supplierAccrualId, request) => {
+      const accrual = supplierAccruals.find((item) => item.id === supplierAccrualId)
+      if (!accrual) {
+        throw new Error('Начисление поставщику не найдено.')
+      }
+
+      const updated = {
+        ...accrual,
+        supplierId: request.supplierId,
+        expenseTypeId: request.expenseTypeId,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        source: request.source,
+        documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
+      }
+      supplierAccruals = supplierAccruals.map((item) => (item.id === supplierAccrualId ? updated : item))
+      return updated
     },
     cancelSupplierAccrual: async (_token, supplierAccrualId, request) => {
       const accrual = supplierAccruals.find((item) => item.id === supplierAccrualId)

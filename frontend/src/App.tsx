@@ -1547,10 +1547,10 @@ function FinancePanel({
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
   const [financeEditorInitialSnapshot, setFinanceEditorInitialSnapshot] = useState('')
   const [pendingFinanceEditConfirmation, setPendingFinanceEditConfirmation] = useState<{
-    kind: 'income' | 'expense' | 'accrual'
+    kind: 'income' | 'expense' | 'accrual' | 'supplier-accrual'
     recordId: string
     objectName: string
-    request: CreateIncomeOperationRequest | CreateExpenseOperationRequest | CreateAccrualRequest
+    request: CreateIncomeOperationRequest | CreateExpenseOperationRequest | CreateAccrualRequest | CreateSupplierAccrualRequest
     changes: ChangePreview[]
   } | null>(null)
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
@@ -1964,6 +1964,41 @@ function FinancePanel({
     return changes
   }
 
+  function getSupplierAccrualEditChangePreview(record: SupplierAccrualDto, request: CreateSupplierAccrualRequest) {
+    const changes: ChangePreview[] = []
+    const formatSupplier = (supplierId: string | null | undefined, fallbackName: string | null | undefined) => {
+      if (!supplierId) {
+        return 'пусто'
+      }
+
+      if (fallbackName) {
+        return fallbackName
+      }
+
+      return suppliers.find((item) => item.id === supplierId)?.name ?? supplierId
+    }
+    const formatExpenseType = (expenseTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
+      if (!expenseTypeId) {
+        return 'пусто'
+      }
+
+      if (fallbackName) {
+        return fallbackName
+      }
+
+      return expenseTypes.find((item) => item.id === expenseTypeId)?.name ?? expenseTypeId
+    }
+
+    appendChangePreview(changes, 'Поставщик', formatSupplier(record.supplierId, record.supplierName), formatSupplier(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null))
+    appendChangePreview(changes, 'Вид начисления', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Месяц начисления', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
+    appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
+    appendChangePreview(changes, 'Источник', formatAccrualSource(record.source), formatAccrualSource(request.source))
+    appendChangePreview(changes, 'Документ', formatChangeText(record.documentNumber), formatChangeText(request.documentNumber))
+    appendChangePreview(changes, 'Комментарий', formatChangeText(record.comment), formatChangeText(request.comment))
+    return changes
+  }
+
   async function confirmPendingFinanceEdit() {
     if (!pendingFinanceEditConfirmation) {
       return
@@ -1979,10 +2014,14 @@ function FinancePanel({
         await financeClient.updateExpense(auth.accessToken, pending.recordId, pending.request as CreateExpenseOperationRequest)
         await loadFinanceWorkbench('expense', financePage.offset, financePage.limit)
         setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
-      } else {
+      } else if (pending.kind === 'accrual') {
         await financeClient.updateAccrual(auth.accessToken, pending.recordId, pending.request as CreateAccrualRequest)
         await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit)
         setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
+      } else {
+        await financeClient.updateSupplierAccrual(auth.accessToken, pending.recordId, pending.request as CreateSupplierAccrualRequest)
+        await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit)
+        setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
       }
     })
     if (saved) {
@@ -2206,12 +2245,25 @@ function FinancePanel({
     }
 
     setSupplierAccrualValidationErrors([])
-    const saved = await runSaving('supplier-accrual', async () => {
-      if (financeEditor?.mode === 'edit' && financeEditor.record && 'supplierId' in financeEditor.record && !('operationKind' in financeEditor.record)) {
-        await financeClient.updateSupplierAccrual(auth.accessToken, financeEditor.record.id, request)
-      } else {
-        await financeClient.createSupplierAccrual(auth.accessToken, request)
+    if (financeEditor?.mode === 'edit' && financeEditor.record && 'supplierId' in financeEditor.record && !('operationKind' in financeEditor.record)) {
+      const changes = getSupplierAccrualEditChangePreview(financeEditor.record, request)
+      if (changes.length === 0) {
+        closeFinanceEditor({ skipConfirmation: true })
+        return
       }
+
+      setPendingFinanceEditConfirmation({
+        kind: 'supplier-accrual',
+        recordId: financeEditor.record.id,
+        objectName: `${financeEditor.record.expenseTypeName} · ${financeEditor.record.supplierName} · ${formatChangeMoney(financeEditor.record.amount)}`,
+        request,
+        changes,
+      })
+      return
+    }
+
+    const saved = await runSaving('supplier-accrual', async () => {
+      await financeClient.createSupplierAccrual(auth.accessToken, request)
       await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit)
       setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
