@@ -5512,6 +5512,7 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('Вывоз мусора')).not.toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    const addTariffButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Название тарифа'), '   ')
     await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
@@ -5519,6 +5520,9 @@ describe('App', () => {
     expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Укажите название тарифа.')).toBeInTheDocument()
     expect(createTariffCalled).toBe(false)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Тарифы' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addTariffButton).toHaveFocus())
     return
 
     await user.type(within(dictionaryPanel).getByLabelText('Группа поставщиков'), '   ')
