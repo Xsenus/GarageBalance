@@ -5498,6 +5498,7 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('членский')).not.toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    const addExpenseTypeButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Название вида операции'), '   ')
     await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
@@ -5505,7 +5506,10 @@ describe('App', () => {
     expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Укажите название вида выплаты.')).toBeInTheDocument()
     expect(createExpenseTypeCalled).toBe(false)
-    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Виды выплат' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addExpenseTypeButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Вывоз мусора')).not.toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
