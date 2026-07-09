@@ -129,6 +129,21 @@ public sealed class ApiEndpointDocumentationTests
         Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone9TariffsAndFeesStatusSync", roadmap, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProjectWideHistoryRoadmapDocumentsMilestone9MeterReadingsStatusSync()
+    {
+        var roadmap = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        const string milestoneLine =
+            "Показания: история через общий экран, confirmations, restore/отмена, style audit.";
+
+        Assert.Contains($"- `[x]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[ ]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[~]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone9MeterReadingsStatusSync", roadmap, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
