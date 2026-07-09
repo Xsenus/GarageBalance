@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using GarageBalance.Api.Application.Integrations;
 using GarageBalance.Api.Controllers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GarageBalance.Api.Tests.Integrations;
@@ -20,7 +22,7 @@ public sealed class IntegrationsControllerTests
             ["RefreshToken"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(oneCFreshStatus: expected);
-        var controller = new IntegrationsController(service);
+        var controller = new IntegrationsController(service, new FakeReceiptPrintingService());
 
         var result = await controller.GetOneCFreshStatus(CancellationToken.None);
 
@@ -44,13 +46,95 @@ public sealed class IntegrationsControllerTests
             ["Печать квитанции", "Отмена печати", "Повторная печать"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(receiptPrintingStatus: expected);
-        var controller = new IntegrationsController(service);
+        var controller = new IntegrationsController(service, new FakeReceiptPrintingService());
 
         var result = await controller.GetReceiptPrintingStatus(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(expected, ok.Value);
         Assert.True(service.ReceiptPrintingCalled);
+    }
+
+    [Fact]
+    public async Task RegisterReceiptPrintingAction_ReturnsResultAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        var expected = new ReceiptPrintingActionDto(
+            Guid.NewGuid(),
+            operationId,
+            "print",
+            "registered",
+            "Печать зарегистрирована.",
+            "PKO-1",
+            DateTimeOffset.UtcNow);
+        var service = new FakeReceiptPrintingService
+        {
+            Result = ReceiptPrintingResult<ReceiptPrintingActionDto>.Success(expected)
+        };
+        var controller = CreateController(service, actorUserId);
+        var request = new ReceiptPrintingActionRequest("print", null);
+
+        var result = await controller.RegisterReceiptPrintingAction(operationId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(expected, ok.Value);
+        Assert.Equal(operationId, service.LastOperationId);
+        Assert.Equal(request, service.LastRequest);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task RegisterReceiptPrintingAction_RequiresRequestBody()
+    {
+        var controller = CreateController(new FakeReceiptPrintingService());
+
+        var result = await controller.RegisterReceiptPrintingAction(Guid.NewGuid(), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("receipt_print_request_required", problem.Title);
+    }
+
+    [Theory]
+    [InlineData("financial_operation_not_found", typeof(NotFoundObjectResult))]
+    [InlineData("receipt_print_income_required", typeof(ConflictObjectResult))]
+    [InlineData("receipt_print_action_invalid", typeof(BadRequestObjectResult))]
+    public async Task RegisterReceiptPrintingAction_MapsServiceErrors(string errorCode, Type resultType)
+    {
+        var service = new FakeReceiptPrintingService
+        {
+            Result = ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure(errorCode, "Ошибка печати.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.RegisterReceiptPrintingAction(Guid.NewGuid(), new ReceiptPrintingActionRequest("print", null), CancellationToken.None);
+
+        Assert.IsType(resultType, result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(((ObjectResult)objectResult).Value);
+        Assert.Equal(errorCode, problem.Title);
+    }
+
+    private static IntegrationsController CreateController(FakeReceiptPrintingService receiptPrintingService, Guid? actorUserId = null)
+    {
+        var controller = new IntegrationsController(
+            new FakeIntegrationStatusService(),
+            receiptPrintingService)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext()
+            }
+        };
+        if (actorUserId is not null)
+        {
+            controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString())],
+                "Test"));
+        }
+
+        return controller;
     }
 
     private sealed class FakeIntegrationStatusService(
@@ -71,6 +155,30 @@ public sealed class IntegrationsControllerTests
         {
             ReceiptPrintingCalled = true;
             return Task.FromResult(receiptPrintingStatus!);
+        }
+    }
+
+    private sealed class FakeReceiptPrintingService : IReceiptPrintingService
+    {
+        public Guid? LastOperationId { get; private set; }
+
+        public ReceiptPrintingActionRequest? LastRequest { get; private set; }
+
+        public Guid? LastActorUserId { get; private set; }
+
+        public ReceiptPrintingResult<ReceiptPrintingActionDto> Result { get; init; } =
+            ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("not_configured", "Not configured.");
+
+        public Task<ReceiptPrintingResult<ReceiptPrintingActionDto>> RegisterActionAsync(
+            Guid financialOperationId,
+            ReceiptPrintingActionRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastOperationId = financialOperationId;
+            LastRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(Result);
         }
     }
 }

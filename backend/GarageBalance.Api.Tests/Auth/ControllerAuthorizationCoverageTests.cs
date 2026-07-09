@@ -247,6 +247,7 @@ public sealed class ControllerAuthorizationCoverageTests
     [Theory]
     [InlineData(nameof(IntegrationsController.GetOneCFreshStatus), SystemPermissions.ImportRun)]
     [InlineData(nameof(IntegrationsController.GetReceiptPrintingStatus), SystemPermissions.PaymentsWrite)]
+    [InlineData(nameof(IntegrationsController.RegisterReceiptPrintingAction), SystemPermissions.PaymentsWrite)]
     public void IntegrationStatusActionsRequireExpectedPermissions(string actionName, string expectedPolicy)
     {
         var action = typeof(IntegrationsController).GetMethod(actionName);
