@@ -6241,6 +6241,12 @@ type FundOperationStatusDraft = {
   reason: string
 }
 
+type FundOperationEditDraft = {
+  operation: FundOperationDto
+  amount: string
+  reason: string
+}
+
 function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   return {
     id: fund.id,
@@ -6255,6 +6261,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [operationRows, setOperationRows] = useState<FundOperationDto[]>([])
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
+  const [operationEdit, setOperationEdit] = useState<FundOperationEditDraft | null>(null)
   const [statusAction, setStatusAction] = useState<FundOperationStatusDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
@@ -6263,14 +6270,18 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [savingOperation, setSavingOperation] = useState(false)
   const [savingStatusAction, setSavingStatusAction] = useState(false)
   useRestoreFocusOnClose(Boolean(operation))
+  useRestoreFocusOnClose(Boolean(operationEdit))
   useRestoreFocusOnClose(Boolean(statusAction))
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
+  const operationEditCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEdit))
+  const operationEditDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEdit))
   const statusReasonRef = useFocusOnOpen<HTMLTextAreaElement>(statusAction?.action === 'cancel')
   const statusCancelRef = useFocusOnOpen<HTMLButtonElement>(statusAction?.action === 'restore')
   const statusDialogRef = useFocusTrap<HTMLElement>(Boolean(statusAction))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
+  useEscapeKey(Boolean(operationEdit) && !savingOperation, () => closeFundOperationEdit())
   useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
   useEffect(() => {
@@ -6325,6 +6336,21 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
 
   function closeFundOperation() {
     setOperation(null)
+    setOperationError(null)
+  }
+
+  function openFundOperationEdit(fundOperation: FundOperationDto) {
+    setOperationEdit({
+      operation: fundOperation,
+      amount: String(fundOperation.amount).replace('.', ','),
+      reason: fundOperation.reason,
+    })
+    setOperationError(null)
+    setOperationMessage(null)
+  }
+
+  function closeFundOperationEdit() {
+    setOperationEdit(null)
     setOperationError(null)
   }
 
@@ -6417,7 +6443,44 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
     }
   }
 
+  async function submitFundOperationEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!operationEdit) {
+      return
+    }
+
+    const amount = parseFundOperationAmount(operationEdit.amount)
+    const reason = operationEdit.reason.trim()
+    if (amount === null) {
+      setOperationError('Укажите сумму больше нуля.')
+      return
+    }
+
+    if (!reason) {
+      setOperationError('Укажите основание изменения операции фонда.')
+      return
+    }
+
+    if (amount === operationEdit.operation.amount && reason === operationEdit.operation.reason) {
+      setOperationError('Изменений нет.')
+      return
+    }
+
+    setSavingOperation(true)
+    try {
+      const savedOperation = await fundsClient.updateOperation(auth.accessToken, operationEdit.operation.id, { amount, reason })
+      await refreshFundsPanel()
+      setOperationMessage(`Операция фонда "${savedOperation.fundName}" изменена и записана в историю изменений.`)
+      closeFundOperationEdit()
+    } catch (error: unknown) {
+      setOperationError(error instanceof Error ? error.message : 'Не удалось изменить операцию фонда.')
+    } finally {
+      setSavingOperation(false)
+    }
+  }
+
   const operationAmount = operation ? parseFundOperationAmount(operation.amount) : null
+  const operationEditAmount = operationEdit ? parseFundOperationAmount(operationEdit.amount) : null
   const operationActionLabel = operation?.kind === 'deposit' ? 'Пополнить фонд' : 'Изъять из фонда'
   const statusActionTitle = statusAction?.action === 'cancel' ? 'Отменить операцию фонда?' : 'Вернуть операцию фонда?'
   const statusActionLabel = statusAction?.operation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'
@@ -6503,15 +6566,22 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                   </span>
                 </td>
                 <td>
-                  {fundOperation.isCanceled ? (
-                    <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} data-tooltip="Вернуть" onClick={() => openFundStatusAction('restore', fundOperation)}>
-                      <RotateCcw size={16} aria-hidden="true" />
-                    </button>
-                  ) : (
-                    <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
-                      <Trash2 size={16} aria-hidden="true" />
-                    </button>
-                  )}
+                  <div className="funds-operation-actions">
+                    {fundOperation.isCanceled ? (
+                      <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} data-tooltip="Вернуть" onClick={() => openFundStatusAction('restore', fundOperation)}>
+                        <RotateCcw size={16} aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <>
+                        <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={`Изменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Изменить" onClick={() => openFundOperationEdit(fundOperation)}>
+                          <Pencil size={16} aria-hidden="true" />
+                        </button>
+                        <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             )) : !isLoading ? (
@@ -6586,6 +6656,76 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                 <button className="secondary-button" type="submit" disabled={savingOperation}>
                   <Save size={16} />
                   <span>{savingOperation ? 'Сохраняем...' : 'Подтвердить операцию'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {operationEdit ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!savingOperation) {
+            closeFundOperationEdit()
+          }
+        }}>
+          <section ref={operationEditDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-operation-edit-title" aria-describedby="fund-operation-edit-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Изменение операции</p>
+                <h3 id="fund-operation-edit-title">Изменить операцию фонда?</h3>
+                <p>{operationEdit.operation.fundName} · {operationEdit.operation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeFundOperationEdit} aria-label="Закрыть изменение операции фонда" disabled={savingOperation}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fund-operation-edit-description">Проверьте сумму и основание. Изменение пересчитает остаток фонда и попадет в историю изменений.</p>
+            <form className="dictionary-modal-form" onSubmit={submitFundOperationEdit}>
+              <FormField label="Сумма">
+                <input
+                  aria-label="Новая сумма операции фонда"
+                  inputMode="decimal"
+                  value={operationEdit.amount}
+                  onChange={(event) => {
+                    setOperationEdit({ ...operationEdit, amount: event.target.value })
+                    if (operationError) {
+                      setOperationError(null)
+                    }
+                  }}
+                  disabled={savingOperation}
+                />
+              </FormField>
+              <FormField label="Основание">
+                <textarea
+                  aria-label="Новое основание операции фонда"
+                  rows={3}
+                  maxLength={1000}
+                  value={operationEdit.reason}
+                  onChange={(event) => {
+                    setOperationEdit({ ...operationEdit, reason: event.target.value })
+                    if (operationError) {
+                      setOperationError(null)
+                    }
+                  }}
+                  disabled={savingOperation}
+                />
+              </FormField>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Было</dt>
+                  <dd>{formatMoney(operationEdit.operation.amount)} руб.</dd>
+                </div>
+                <div>
+                  <dt>Стало</dt>
+                  <dd>{operationEditAmount === null ? '—' : `${formatMoney(operationEditAmount)} руб.`}</dd>
+                </div>
+              </dl>
+              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button ref={operationEditCancelRef} className="ghost-button" type="button" onClick={closeFundOperationEdit} disabled={savingOperation}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={savingOperation}>
+                  <Save size={16} aria-hidden="true" />
+                  <span>{savingOperation ? 'Сохраняем...' : 'Сохранить изменения'}</span>
                 </button>
               </div>
             </form>

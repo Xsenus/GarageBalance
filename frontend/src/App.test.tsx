@@ -3448,6 +3448,26 @@ describe('App', () => {
     expect(fundOperationsTable).toHaveTextContent('Пополнение')
     expect(fundOperationsTable).toHaveTextContent('Активна')
 
+    const editFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Изменить операцию фонда Целевые взносы' })
+    expect(editFundOperationButton).toHaveAttribute('data-tooltip', 'Изменить')
+    await user.click(editFundOperationButton)
+    const editFundOperationDialog = await screen.findByRole('dialog', { name: 'Изменить операцию фонда?' })
+    const editCancelButton = within(editFundOperationDialog).getByRole('button', { name: 'Отмена' })
+    const editSaveButton = within(editFundOperationDialog).getByRole('button', { name: 'Сохранить изменения' })
+    expect(Boolean(editCancelButton.compareDocumentPosition(editSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await waitFor(() => expect(editCancelButton).toHaveFocus())
+    await user.click(editSaveButton)
+    expect(within(editFundOperationDialog).getByRole('alert')).toHaveTextContent('Изменений нет.')
+    const editAmountInput = within(editFundOperationDialog).getByLabelText('Новая сумма операции фонда')
+    await user.clear(editAmountInput)
+    await user.type(editAmountInput, '1750')
+    await user.clear(within(editFundOperationDialog).getByLabelText('Новое основание операции фонда'))
+    await user.type(within(editFundOperationDialog).getByLabelText('Новое основание операции фонда'), 'Уточненное распределение')
+    expect(within(editFundOperationDialog).getByText(/1[\s\u00A0]750,00 руб\./)).toBeInTheDocument()
+    await user.click(editSaveButton)
+    expect(await within(fundsPanel).findByText(/Операция фонда "Целевые взносы" изменена и записана в историю изменений\./)).toHaveAttribute('role', 'status')
+    expect(within(fundOperationsTable).getAllByText(/1[\s\u00A0]750,00 руб\./).length).toBeGreaterThanOrEqual(1)
+
     const cancelFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Отменить операцию фонда Целевые взносы' })
     expect(cancelFundOperationButton).toHaveAttribute('data-tooltip', 'Отменить')
     await user.click(cancelFundOperationButton)
@@ -9128,7 +9148,13 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
         throw new Error('Операция фонда не найдена.')
       }
 
-      const updated = { ...operation, amount: request.amount, reason: request.reason }
+      const fund = funds.find((item) => item.id === operation.fundId)
+      const balanceBefore = operation.balanceBefore
+      const balanceAfter = operation.operationKind === 'deposit' ? balanceBefore + request.amount : balanceBefore - request.amount
+      if (fund) {
+        funds = funds.map((item) => item.id === fund.id ? { ...item, balance: balanceAfter } : item)
+      }
+      const updated = { ...operation, amount: request.amount, balanceAfter, reason: request.reason }
       operations = operations.map((item) => item.id === operationId ? updated : item)
       return updated
     },
