@@ -1,5 +1,9 @@
 using GarageBalance.Api.Application.Releases;
+using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 
 namespace GarageBalance.Api.Tests.Releases;
@@ -40,6 +44,81 @@ public sealed class AppReleaseServiceTests
         Assert.Equal("new", release.ReleaseId);
         Assert.Equal("Новый релиз", release.Title);
         Assert.Equal("Второй пункт.", Assert.Single(release.Items).Text);
+    }
+
+    [Fact]
+    public async Task GetReleasesAsync_HidesDraftReleasesFromPublicList()
+    {
+        using var directory = new TempContentRoot();
+        directory.WriteReleasesJson(
+            """
+            [
+              {
+                "releaseId": "published",
+                "version": "0.2.0",
+                "publishedAt": "2026-06-23T10:00:00+07:00",
+                "title": "Опубликовано",
+                "summary": "Видно всем.",
+                "items": [{ "type": "new", "text": "Пункт." }],
+                "isPublished": true
+              },
+              {
+                "releaseId": "draft",
+                "version": "0.3.0",
+                "publishedAt": "2026-06-24T10:00:00+07:00",
+                "title": "Черновик",
+                "summary": "Видно администратору.",
+                "items": [{ "type": "new", "text": "Пункт." }],
+                "isPublished": false
+              }
+            ]
+            """);
+        var service = new AppReleaseService(directory.Environment);
+
+        var publicResult = await service.GetReleasesAsync(10, CancellationToken.None);
+        var manageResult = await service.GetManageableReleasesAsync(10, CancellationToken.None);
+
+        Assert.True(publicResult.Succeeded);
+        Assert.Equal("published", Assert.Single(publicResult.Value!).ReleaseId);
+        Assert.True(manageResult.Succeeded);
+        Assert.Equal(2, manageResult.Value!.Count);
+    }
+
+    [Fact]
+    public async Task CreateAndPublishReleaseAsync_WritesJsonAndAuditEvents()
+    {
+        using var directory = new TempContentRoot();
+        directory.WriteReleasesJson("[]");
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AppReleaseService(directory.Environment, database.Context, new AuditEventWriter(database.Context));
+        var actorUserId = Guid.Parse("6f01f4cd-2065-47f5-9c4d-a5b20cb3e35a");
+
+        var createResult = await service.CreateReleaseAsync(
+            new UpsertAppReleaseRequest(
+                "release-1",
+                "0.484.0",
+                DateTimeOffset.Parse("2026-07-09T14:00:00+07:00"),
+                "Управление новостями",
+                "Администратор может подготовить запись.",
+                [new AppReleaseItemDto("improved", "Добавлен черновик.")]),
+            actorUserId,
+            CancellationToken.None);
+        var publishResult = await service.PublishReleaseAsync("release-1", actorUserId, CancellationToken.None);
+
+        Assert.True(createResult.Succeeded);
+        Assert.False(createResult.Value!.IsPublished);
+        Assert.True(publishResult.Succeeded);
+        Assert.True(publishResult.Value!.IsPublished);
+
+        var releasesJson = File.ReadAllText(Path.Combine(directory.RootPath, "AppReleases", "releases.json"));
+        Assert.Contains("\"releaseId\": \"release-1\"", releasesJson, StringComparison.Ordinal);
+        Assert.Contains("\"isPublished\": true", releasesJson, StringComparison.Ordinal);
+
+        var auditActions = (await database.Context.AuditEvents.ToListAsync())
+            .OrderBy(auditEvent => auditEvent.CreatedAtUtc)
+            .Select(auditEvent => auditEvent.Action)
+            .ToArray();
+        Assert.Equal(["app_releases.release_created", "app_releases.release_published"], auditActions);
     }
 
     [Fact]
@@ -95,6 +174,8 @@ public sealed class AppReleaseServiceTests
 
         public IWebHostEnvironment Environment { get; }
 
+        public string RootPath => _path;
+
         public void WriteReleasesJson(string json)
         {
             var releasesDirectory = Path.Combine(_path, "AppReleases");
@@ -108,6 +189,37 @@ public sealed class AppReleaseServiceTests
             {
                 Directory.Delete(_path, recursive: true);
             }
+        }
+    }
+
+    private sealed class TestDatabase : IAsyncDisposable
+    {
+        private readonly SqliteConnection _connection;
+
+        private TestDatabase(SqliteConnection connection, GarageBalanceDbContext context)
+        {
+            _connection = connection;
+            Context = context;
+        }
+
+        public GarageBalanceDbContext Context { get; }
+
+        public static async Task<TestDatabase> CreateAsync()
+        {
+            var connection = new SqliteConnection("DataSource=:memory:");
+            await connection.OpenAsync();
+            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            var context = new GarageBalanceDbContext(options);
+            await context.Database.EnsureCreatedAsync();
+            return new TestDatabase(connection, context);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Context.DisposeAsync();
+            await _connection.DisposeAsync();
         }
     }
 

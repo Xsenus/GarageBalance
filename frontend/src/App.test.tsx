@@ -8083,6 +8083,70 @@ describe('App', () => {
     expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
   })
 
+  it('allows administrators to create draft release notes and publish them', async () => {
+    const user = userEvent.setup()
+    let storedReleases = [
+      createAppRelease({
+        releaseId: 'draft-release',
+        version: '0.484.0',
+        title: 'Черновик обновления',
+        summary: 'Пока виден только администратору.',
+        isPublished: false,
+      }),
+    ]
+    const releaseClient = createReleaseClient({
+      getReleases: async () => storedReleases.filter((release) => release.isPublished !== false),
+      getManageableReleases: async () => storedReleases,
+      createRelease: async (_token, request) => {
+        const created = createAppRelease({
+          releaseId: request.releaseId ?? 'created-release',
+          version: request.version,
+          publishedAt: request.publishedAt ?? '2026-07-09T14:00:00+07:00',
+          title: request.title,
+          summary: request.summary,
+          items: request.items,
+          isPublished: request.isPublished ?? false,
+        })
+        storedReleases = [created, ...storedReleases]
+        return created
+      },
+      publishRelease: async (_token, releaseId) => {
+        const published = storedReleases.find((release) => release.releaseId === releaseId)
+        if (!published) {
+          throw new Error('Запись не найдена.')
+        }
+
+        storedReleases = storedReleases.map((release) => release.releaseId === releaseId ? { ...release, isPublished: true } : release)
+        return { ...published, isPublished: true }
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={releaseClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    await openSection(user, 'Что нового')
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    expect(await within(releasePanel).findByText('Черновик')).toBeInTheDocument()
+
+    await user.click(within(releasePanel).getByRole('button', { name: 'Добавить запись' }))
+    const editor = within(releasePanel).getByRole('form', { name: 'Новая запись Что нового' })
+    await user.type(within(editor).getByLabelText('Версия записи Что нового'), '0.485.0')
+    await user.type(within(editor).getByLabelText('Заголовок записи Что нового'), 'Управление обновлениями')
+    await user.type(within(editor).getByLabelText('Краткое описание записи Что нового'), 'Администратор может готовить записи.')
+    await user.type(within(editor).getByLabelText('Текст пункта обновления 1'), 'Добавлена форма записи в разделе Что нового.')
+    await user.click(within(editor).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(releasePanel).findByText('Черновик добавлен.')).toBeInTheDocument()
+    expect(within(releasePanel).getByText('Управление обновлениями')).toBeInTheDocument()
+
+    await user.click(within(releasePanel).getAllByRole('button', { name: 'Опубликовать' })[0])
+
+    expect(await within(releasePanel).findByText(/Запись 0\.485\.0 опубликована\./)).toBeInTheDocument()
+    expect(within(releasePanel).getByText(/v0\.485\.0/)).toBeInTheDocument()
+  })
+
   it('shows workspace loading errors inside the related panel', async () => {
     const user = userEvent.setup()
     let failReportDictionaries = false
@@ -8179,9 +8243,34 @@ function createThrowingClient<TClient extends object>(): TClient {
 }
 
 function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseClient {
+  const releases = [createAppRelease()]
+  const getReleases = overrides.getReleases ?? (async () => releases)
+  const getManageableReleases = overrides.getManageableReleases ?? getReleases
   return {
-    getReleases: async () => [createAppRelease()],
-    ...overrides,
+    getReleases,
+    getManageableReleases,
+    createRelease: overrides.createRelease ?? (async (_token, request) => createAppRelease({
+      releaseId: request.releaseId ?? 'created-release',
+      version: request.version,
+      publishedAt: request.publishedAt ?? '2026-06-24T06:15:00+07:00',
+      title: request.title,
+      summary: request.summary,
+      items: request.items,
+      isPublished: request.isPublished ?? false,
+    })),
+    updateRelease: overrides.updateRelease ?? (async (_token, releaseId, request) => createAppRelease({
+      releaseId,
+      version: request.version,
+      publishedAt: request.publishedAt ?? '2026-06-24T06:15:00+07:00',
+      title: request.title,
+      summary: request.summary,
+      items: request.items,
+      isPublished: request.isPublished ?? false,
+    })),
+    publishRelease: overrides.publishRelease ?? (async (_token, releaseId) => createAppRelease({
+      releaseId,
+      isPublished: true,
+    })),
   }
 }
 

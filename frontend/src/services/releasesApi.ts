@@ -10,18 +10,36 @@ export type AppReleaseDto = {
   title: string
   summary: string
   items: AppReleaseItemDto[]
+  isPublished?: boolean | null
+}
+
+export type UpsertAppReleaseRequest = {
+  releaseId?: string | null
+  version: string
+  publishedAt?: string | null
+  title: string
+  summary: string
+  items: AppReleaseItemDto[]
+  isPublished?: boolean
 }
 
 export type ReleaseClient = {
   getReleases(accessToken: string, limit?: number): Promise<AppReleaseDto[]>
+  getManageableReleases(accessToken: string, limit?: number): Promise<AppReleaseDto[]>
+  createRelease(accessToken: string, request: UpsertAppReleaseRequest): Promise<AppReleaseDto>
+  updateRelease(accessToken: string, releaseId: string, request: UpsertAppReleaseRequest): Promise<AppReleaseDto>
+  publishRelease(accessToken: string, releaseId: string): Promise<AppReleaseDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
-async function requestJson<TResponse>(accessToken: string, path: string): Promise<TResponse> {
+async function requestJson<TResponse>(accessToken: string, path: string, init: RequestInit = {}): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
     headers: {
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
+      ...init.headers,
     },
   })
 
@@ -38,5 +56,27 @@ export const releasesApi: ReleaseClient = {
     const searchParams = new URLSearchParams()
     searchParams.set('limit', limit.toString())
     return requestJson(accessToken, `/api/app-releases?${searchParams}`)
+  },
+  getManageableReleases(accessToken, limit = 50) {
+    const searchParams = new URLSearchParams()
+    searchParams.set('limit', limit.toString())
+    return requestJson(accessToken, `/api/app-releases/manage?${searchParams}`)
+  },
+  createRelease(accessToken, request) {
+    return requestJson(accessToken, '/api/app-releases', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  },
+  updateRelease(accessToken, releaseId, request) {
+    return requestJson(accessToken, `/api/app-releases/${encodeURIComponent(releaseId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    })
+  },
+  publishRelease(accessToken, releaseId) {
+    return requestJson(accessToken, `/api/app-releases/${encodeURIComponent(releaseId)}/publish`, {
+      method: 'POST',
+    })
   },
 }

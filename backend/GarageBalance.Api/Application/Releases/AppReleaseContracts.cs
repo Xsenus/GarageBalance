@@ -6,6 +6,16 @@ public sealed record AppReleaseDto(
     DateTimeOffset PublishedAt,
     string Title,
     string Summary,
-    IReadOnlyList<AppReleaseItemDto> Items);
+    IReadOnlyList<AppReleaseItemDto> Items,
+    bool? IsPublished = null);
 
 public sealed record AppReleaseItemDto(string Type, string Text);
+
+public sealed record UpsertAppReleaseRequest(
+    string? ReleaseId,
+    string Version,
+    DateTimeOffset? PublishedAt,
+    string Title,
+    string Summary,
+    IReadOnlyList<AppReleaseItemDto> Items,
+    bool IsPublished = false);
