@@ -40,7 +40,7 @@ import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { integrationsApi } from './services/integrationsApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingActionKind, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import { reportsApi } from './services/reportsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -485,7 +485,7 @@ function Workspace({
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
-          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} />
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} integrationClient={integrationClient} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
         )
@@ -1245,6 +1245,34 @@ type GaragePaymentHistoryCancelState = {
   error: string | null
 }
 
+type GaragePaymentReceiptActionState = {
+  row: GaragePaymentHistoryPrototypeRow
+  action: ReceiptPrintingActionKind
+  reason: string
+  error: string | null
+}
+
+const receiptPrintingActionLabels: Record<ReceiptPrintingActionKind, { title: string; button: string; saving: string; description: string }> = {
+  print: {
+    title: 'Сформировать квитанцию?',
+    button: 'Сформировать квитанцию',
+    saving: 'Формируем...',
+    description: 'Действие будет записано в общую историю. Фактическая отправка на печатающее устройство включится после подключения адаптера.',
+  },
+  cancel: {
+    title: 'Отменить печать квитанции?',
+    button: 'Отменить печать',
+    saving: 'Отменяем...',
+    description: 'Отмена печати сохранится в общей истории изменений. Укажите причину, чтобы бухгалтер мог сверить действие позже.',
+  },
+  reprint: {
+    title: 'Повторно напечатать квитанцию?',
+    button: 'Повторная печать',
+    saving: 'Регистрируем...',
+    description: 'Повторная печать будет зафиксирована в истории изменений. Укажите причину, например потерю квитанции или исправление печати.',
+  },
+}
+
 type FullPaymentPrototypePeriodOption = {
   value: string
   label: string
@@ -1384,12 +1412,14 @@ function FinancePanel({
   financeClient,
   fundsClient,
   formStateClient,
+  integrationClient,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   fundsClient: FundsClient
   formStateClient: FormStateClient
+  integrationClient: IntegrationClient
 }) {
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
@@ -2866,6 +2896,7 @@ function FinancePanel({
         formStateClient={formStateClient}
         garages={garages}
         incomeTypes={incomeTypes}
+        integrationClient={integrationClient}
         supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}
@@ -3601,6 +3632,7 @@ function PaymentsPrototypePanel({
   formStateClient,
   garages,
   incomeTypes,
+  integrationClient,
   supplierGroups,
   suppliers,
   staffMembers,
@@ -3613,6 +3645,7 @@ function PaymentsPrototypePanel({
   formStateClient: FormStateClient
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
+  integrationClient: IntegrationClient
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
@@ -3656,7 +3689,11 @@ function PaymentsPrototypePanel({
   const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
   const historyCancelTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [receiptAction, setReceiptAction] = useState<GaragePaymentReceiptActionState | null>(null)
+  const receiptActionTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
+  const [receiptActionSaving, setReceiptActionSaving] = useState(false)
+  const [receiptActionStatus, setReceiptActionStatus] = useState<string | null>(null)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(
     () => garages
@@ -4075,6 +4112,28 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
+  function openReceiptAction(row: GaragePaymentHistoryPrototypeRow, action: ReceiptPrintingActionKind, trigger?: HTMLButtonElement | null) {
+    if (!row.operation || !canWritePayments || row.operation.isCanceled) {
+      return
+    }
+
+    receiptActionTriggerRef.current = trigger ?? null
+    setPaymentError(null)
+    setReceiptActionStatus(null)
+    setReceiptAction({ row, action, reason: '', error: null })
+  }
+
+  function closeReceiptActionDialog() {
+    const trigger = receiptActionTriggerRef.current
+    setReceiptAction(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      receiptActionTriggerRef.current = null
+    }, 0)
+  }
+
   async function saveHistoryEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!historyEdit?.row.operation || !selectedGarage) {
@@ -4144,6 +4203,33 @@ function PaymentsPrototypePanel({
     }
   }
 
+  async function confirmReceiptAction() {
+    if (!receiptAction?.row.operation) {
+      return
+    }
+
+    const reason = receiptAction.reason.trim()
+    if (receiptAction.action !== 'print' && !reason) {
+      setReceiptAction((state) => state ? { ...state, error: 'Укажите причину для отмены или повторной печати квитанции.' } : state)
+      return
+    }
+
+    setReceiptActionSaving(true)
+    setReceiptAction((state) => state ? { ...state, error: null } : state)
+    try {
+      const result = await integrationClient.registerReceiptPrintingAction(auth.accessToken, receiptAction.row.operation.id, {
+        action: receiptAction.action,
+        reason: reason || undefined,
+      })
+      closeReceiptActionDialog()
+      setReceiptActionStatus(result.statusMessage)
+    } catch (error) {
+      setReceiptAction((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось зарегистрировать действие квитанции.' } : state)
+    } finally {
+      setReceiptActionSaving(false)
+    }
+  }
+
   function selectGarage(garage: PaymentsPrototypeGarage) {
     setSelectedGarageId(garage.id)
     setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
@@ -4151,6 +4237,7 @@ function PaymentsPrototypePanel({
     setGarageWorksheetSummary(null)
     setHistoryRows([])
     setPaymentError(null)
+    setReceiptActionStatus(null)
     void loadGarageIncomeWorksheet(garage)
     void loadGaragePaymentHistory(garage)
   }
@@ -4827,6 +4914,7 @@ function PaymentsPrototypePanel({
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
+      {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
       {garageWorksheetLoadingId ? <p className="form-status" role="status">Загружаем поступления выбранного гаража...</p> : null}
 
       <div className="payments-prototype-toolbar">
@@ -4899,6 +4987,19 @@ function PaymentsPrototypePanel({
                           <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => openHistoryCancel(row, event.currentTarget)}>
                             <Trash2 size={16} aria-hidden="true" />
                           </button>
+                          {!row.operation.isCanceled ? (
+                            <>
+                              <button className="icon-button" type="button" title="Сформировать квитанцию" aria-label={`Сформировать квитанцию платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'print', event.currentTarget)}>
+                                <FileText size={16} aria-hidden="true" />
+                              </button>
+                              <button className="icon-button danger-icon-button" type="button" title="Отменить печать квитанции" aria-label={`Отменить печать квитанции платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'cancel', event.currentTarget)}>
+                                <Trash2 size={16} aria-hidden="true" />
+                              </button>
+                              <button className="icon-button" type="button" title="Повторная печать квитанции" aria-label={`Повторно напечатать квитанцию платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'reprint', event.currentTarget)}>
+                                <RotateCcw size={16} aria-hidden="true" />
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                       ) : '—'}
                     </td>
@@ -5226,6 +5327,15 @@ function PaymentsPrototypePanel({
           onConfirm={confirmHistoryCancel}
         />
       ) : null}
+      {receiptAction ? (
+        <GaragePaymentReceiptActionDialog
+          state={receiptAction}
+          saving={receiptActionSaving}
+          onChange={(patch) => setReceiptAction((value) => value ? { ...value, ...patch, error: null } : value)}
+          onClose={closeReceiptActionDialog}
+          onConfirm={confirmReceiptAction}
+        />
+      ) : null}
     </section>
   )
 }
@@ -5338,6 +5448,64 @@ function GaragePaymentHistoryCancelDialog({
             <button className="secondary-button danger-button" type="button" onClick={onConfirm} disabled={saving}>
               <Trash2 size={16} aria-hidden="true" />
               <span>{saving ? 'Отменяем...' : 'Отменить платеж'}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function GaragePaymentReceiptActionDialog({
+  state,
+  saving,
+  onChange,
+  onClose,
+  onConfirm,
+}: {
+  state: GaragePaymentReceiptActionState
+  saving: boolean
+  onChange: (patch: Partial<Omit<GaragePaymentReceiptActionState, 'row' | 'action'>>) => void
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const labels = receiptPrintingActionLabels[state.action]
+  const needsReason = state.action !== 'print'
+  useEscapeKey(!saving, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+      if (!saving) {
+        onClose()
+      }
+    }}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-payment-receipt-action-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Квитанция платежа</p>
+            <h3 id="garage-payment-receipt-action-title">{labels.title}</h3>
+            <p>{state.row.purpose} · {formatPaymentPrototypeValue(state.row.amount)}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть действие квитанции" onClick={onClose} disabled={saving}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="dictionary-modal-form payments-prototype-modal-form">
+          <p className="confirmation-text">{labels.description}</p>
+          {state.row.operation?.documentNumber ? <p className="form-hint">Документ: {state.row.operation.documentNumber}</p> : null}
+          {needsReason ? (
+            <FormField label="Причина">
+              <textarea aria-label="Причина действия с квитанцией" rows={4} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
+            </FormField>
+          ) : null}
+          {state.error ? <FormError>{state.error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className={`secondary-button${state.action === 'cancel' ? ' danger-button' : ''}`} type="button" onClick={onConfirm} disabled={saving}>
+              {state.action === 'reprint' ? <RotateCcw size={16} aria-hidden="true" /> : state.action === 'cancel' ? <Trash2 size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
+              <span>{saving ? labels.saving : labels.button}</span>
             </button>
           </div>
         </div>

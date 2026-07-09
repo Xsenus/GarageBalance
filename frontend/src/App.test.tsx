@@ -24,7 +24,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -3133,7 +3133,12 @@ describe('App', () => {
       isCanceled: true,
       comment: `Отменено: ${request.reason}`,
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage, updateIncome, cancelOperation })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const registerReceiptPrintingAction = vi.fn(async (_token: string, operationId: string, request: ReceiptPrintingActionRequest) => createReceiptPrintingAction({
+      financialOperationId: operationId,
+      action: request.action,
+      statusMessage: `Квитанция: ${request.action}`,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage, updateIncome, cancelOperation })} importClient={createImportClient()} integrationClient={createIntegrationClient({ registerReceiptPrintingAction })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3155,6 +3160,37 @@ describe('App', () => {
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200')).toBeInTheDocument()
+
+    const printReceiptButton = within(historyTable).getByRole('button', { name: 'Сформировать квитанцию платежа Серверная оплата' })
+    await user.click(printReceiptButton)
+    let receiptDialog = await screen.findByRole('dialog', { name: 'Сформировать квитанцию?' })
+    await waitFor(() => expect(within(receiptDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать квитанцию?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(printReceiptButton).toHaveFocus())
+    expect(registerReceiptPrintingAction).not.toHaveBeenCalled()
+
+    await user.click(printReceiptButton)
+    receiptDialog = await screen.findByRole('dialog', { name: 'Сформировать квитанцию?' })
+    await user.click(within(receiptDialog).getByRole('button', { name: 'Сформировать квитанцию' }))
+    await waitFor(() => expect(registerReceiptPrintingAction).toHaveBeenCalledWith('token', 'operation-garage-77', expect.objectContaining({ action: 'print' })))
+    expect(await screen.findByText('Квитанция: print')).toBeInTheDocument()
+
+    const cancelReceiptButton = within(historyTable).getByRole('button', { name: 'Отменить печать квитанции платежа Серверная оплата' })
+    await user.click(cancelReceiptButton)
+    let receiptReasonDialog = await screen.findByRole('dialog', { name: 'Отменить печать квитанции?' })
+    await user.click(within(receiptReasonDialog).getByRole('button', { name: 'Отменить печать' }))
+    expect(await within(receiptReasonDialog).findByText('Укажите причину для отмены или повторной печати квитанции.')).toBeInTheDocument()
+    await user.type(within(receiptReasonDialog).getByLabelText('Причина действия с квитанцией'), 'Ошибка печати')
+    await user.click(within(receiptReasonDialog).getByRole('button', { name: 'Отменить печать' }))
+    await waitFor(() => expect(registerReceiptPrintingAction).toHaveBeenCalledWith('token', 'operation-garage-77', { action: 'cancel', reason: 'Ошибка печати' }))
+
+    const reprintReceiptButton = within(historyTable).getByRole('button', { name: 'Повторно напечатать квитанцию платежа Серверная оплата' })
+    await user.click(reprintReceiptButton)
+    receiptReasonDialog = await screen.findByRole('dialog', { name: 'Повторно напечатать квитанцию?' })
+    await user.type(within(receiptReasonDialog).getByLabelText('Причина действия с квитанцией'), 'Повторная выдача')
+    await user.click(within(receiptReasonDialog).getByRole('button', { name: 'Повторная печать' }))
+    await waitFor(() => expect(registerReceiptPrintingAction).toHaveBeenCalledWith('token', 'operation-garage-77', { action: 'reprint', reason: 'Повторная выдача' }))
 
     const editPaymentButton = within(historyTable).getByRole('button', { name: 'Изменить платеж Серверная оплата' })
     await user.click(editPaymentButton)
@@ -9508,6 +9544,11 @@ function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): In
   return {
     getOneCFreshStatus: async () => createOneCFreshStatus(),
     getReceiptPrintingStatus: async () => createReceiptPrintingStatus(),
+    registerReceiptPrintingAction: async (_token, operationId, request) => createReceiptPrintingAction({
+      financialOperationId: operationId,
+      action: request.action,
+      statusMessage: 'Действие квитанции зарегистрировано.',
+    }),
     ...overrides,
   }
 }
@@ -10833,6 +10874,19 @@ function createReceiptPrintingStatus(overrides: Partial<ReceiptPrintingIntegrati
     configuredSettings: [],
     plannedActions: ['Печать квитанции', 'Отмена печати', 'Повторная печать'],
     lastProtectedSettingUpdatedAtUtc: null,
+    ...overrides,
+  }
+}
+
+function createReceiptPrintingAction(overrides: Partial<ReceiptPrintingActionDto> = {}): ReceiptPrintingActionDto {
+  return {
+    auditEventId: 'audit-receipt-action',
+    financialOperationId: 'operation-garage-77',
+    action: 'print',
+    status: 'pending_adapter',
+    statusMessage: 'Действие квитанции зарегистрировано.',
+    documentNumber: null,
+    registeredAtUtc: '2026-07-09T10:00:00Z',
     ...overrides,
   }
 }
