@@ -6097,6 +6097,136 @@ describe('App', () => {
     await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(3))
   })
 
+  it('restores canceled payment and accrual records from payment context menu', async () => {
+    const user = userEvent.setup()
+    let operations: FinancialOperationDto[] = [
+      createFinancialOperation({
+        id: 'income-canceled',
+        operationKind: 'income',
+        amount: 111,
+        documentNumber: 'PKO-restore',
+        isCanceled: true,
+        comment: 'Отменено: ошибочное поступление',
+      }),
+      createFinancialOperation({
+        id: 'expense-canceled',
+        operationKind: 'expense',
+        amount: 222,
+        documentNumber: 'RKO-restore',
+        supplierName: 'Водоканал',
+        expenseTypeName: 'Вода',
+        isCanceled: true,
+        comment: 'Отменено: ошибочная выплата',
+      }),
+    ]
+    let accruals: AccrualDto[] = [
+      createAccrual({
+        id: 'accrual-canceled',
+        amount: 333,
+        comment: 'Начисление к возврату',
+        isCanceled: true,
+      }),
+    ]
+    let supplierAccruals: SupplierAccrualDto[] = [
+      createSupplierAccrual({
+        id: 'supplier-accrual-canceled',
+        amount: 444,
+        documentNumber: 'SUP-restore',
+        comment: 'Начисление поставщику к возврату',
+        isCanceled: true,
+      }),
+    ]
+    const restoreOperation = vi.fn(async (_token: string, operationId: string) => {
+      const operation = operations.find((item) => item.id === operationId)
+      if (!operation) {
+        throw new Error('Финансовая операция не найдена.')
+      }
+
+      const restored = { ...operation, isCanceled: false, comment: null }
+      operations = operations.map((item) => (item.id === operationId ? restored : item))
+      return restored
+    })
+    const restoreAccrual = vi.fn(async (_token: string, accrualId: string) => {
+      const accrual = accruals.find((item) => item.id === accrualId)
+      if (!accrual) {
+        throw new Error('Начисление не найдено.')
+      }
+
+      const restored = { ...accrual, isCanceled: false, comment: null }
+      accruals = accruals.map((item) => (item.id === accrualId ? restored : item))
+      return restored
+    })
+    const restoreSupplierAccrual = vi.fn(async (_token: string, supplierAccrualId: string) => {
+      const accrual = supplierAccruals.find((item) => item.id === supplierAccrualId)
+      if (!accrual) {
+        throw new Error('Начисление поставщику не найдено.')
+      }
+
+      const restored = { ...accrual, isCanceled: false, comment: null }
+      supplierAccruals = supplierAccruals.map((item) => (item.id === supplierAccrualId ? restored : item))
+      return restored
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({
+      getOperations: async () => operations,
+      getAccruals: async () => accruals,
+      getSupplierAccruals: async () => supplierAccruals,
+      restoreOperation,
+      restoreAccrual,
+      restoreSupplierAccrual,
+    })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    async function restoreRow(options: { tabName?: RegExp; rowText: string; restoredText?: string; dialogName: string; assertRestored: () => void }) {
+      if (options.tabName) {
+        await user.click(within(financePanel).getByRole('tab', { name: options.tabName }))
+      }
+
+      expect(await within(financePanel).findByText(options.rowText)).toBeInTheDocument()
+      const menu = await openFinanceContextMenuByCellText(financePanel, options.rowText)
+      expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeDisabled()
+      expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
+      const restoreItem = within(menu).getByRole('menuitem', { name: 'Вернуть' })
+      expect(restoreItem).toBeEnabled()
+      await user.click(restoreItem)
+
+      const restoreDialog = await screen.findByRole('dialog', { name: options.dialogName })
+      await waitFor(() => expect(within(restoreDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+      await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
+      options.assertRestored()
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: options.dialogName })).not.toBeInTheDocument())
+      expect((await within(financePanel).findAllByText(options.restoredText ?? options.rowText)).length).toBeGreaterThan(0)
+    }
+
+    await restoreRow({
+      rowText: 'PKO-restore',
+      dialogName: 'Вернуть поступление?',
+      assertRestored: () => expect(restoreOperation).toHaveBeenLastCalledWith('token', 'income-canceled'),
+    })
+    await restoreRow({
+      tabName: /Расходы/,
+      rowText: 'RKO-restore',
+      dialogName: 'Вернуть выплату?',
+      assertRestored: () => expect(restoreOperation).toHaveBeenLastCalledWith('token', 'expense-canceled'),
+    })
+    await restoreRow({
+      tabName: /Начисления владельцам/,
+      rowText: 'Начисление к возврату',
+      restoredText: '333,00',
+      dialogName: 'Вернуть начисление владельцу?',
+      assertRestored: () => expect(restoreAccrual).toHaveBeenLastCalledWith('token', 'accrual-canceled'),
+    })
+    await restoreRow({
+      tabName: /Начисления поставщикам/,
+      rowText: 'SUP-restore',
+      dialogName: 'Вернуть начисление поставщику?',
+      assertRestored: () => expect(restoreSupplierAccrual).toHaveBeenLastCalledWith('token', 'supplier-accrual-canceled'),
+    })
+  })
+
   it('closes payment context menu when switching payment table tabs', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
