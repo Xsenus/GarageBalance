@@ -5334,6 +5334,14 @@ describe('App', () => {
     await waitFor(() => expect(addIncomeTypeButton).toHaveFocus())
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    const addExpenseTypeButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await waitFor(() => expect(within(typeDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Виды выплат' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addExpenseTypeButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Вывоз мусора')).not.toBeInTheDocument()
+
     typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(typeDialog).getByLabelText('Название вида операции'), 'Вывоз мусора')
     await user.type(within(typeDialog).getByLabelText('Код вида операции'), 'trash')
