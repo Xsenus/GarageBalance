@@ -20,7 +20,7 @@ import { formStatesApi } from './services/formStatesApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -5210,6 +5210,95 @@ describe('App', () => {
     })))
     expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('350,00')).toBeInTheDocument()
+  })
+
+  it('confirms supplier dictionary edits with group label and money diff', async () => {
+    const user = userEvent.setup()
+    const currentGroup = createGroup({ id: 'group-current', name: 'Коммунальные услуги' })
+    const nextGroup = createGroup({ id: 'group-next', name: 'Ремонтные работы' })
+    let supplier = createSupplier({
+      id: 'supplier-water',
+      name: 'Водоканал',
+      groupId: currentGroup.id,
+      groupName: currentGroup.name,
+      inn: '5401000000',
+      startingBalance: 1200,
+    })
+    const updateSupplier = vi.fn(async (_token: string, id: string, request: UpsertSupplierRequest) => {
+      const group = request.groupId === nextGroup.id ? nextGroup : currentGroup
+      supplier = createSupplier({
+        ...supplier,
+        id,
+        name: request.name,
+        groupId: group.id,
+        groupName: group.name,
+        inn: request.inn ?? null,
+        startingBalance: request.startingBalance,
+      })
+      return supplier
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [currentGroup, nextGroup],
+      getSuppliers: async () => [supplier],
+      updateSupplier,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    let supplierTable = await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
+    let supplierRow = within(supplierTable).getByText('Водоканал').closest('tr')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика Водоканал не найдена.')
+    }
+
+    fireEvent.doubleClick(supplierRow)
+    let supplierDialog = await screen.findByRole('dialog', { name: /Поставщики/ })
+    await user.click(within(supplierDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    expect(updateSupplier).not.toHaveBeenCalled()
+
+    supplierTable = await within(dictionaryPanel).findByRole('table', { name: /Таблица: Поставщики/ })
+    supplierRow = within(supplierTable).getByText('Водоканал').closest('tr')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика Водоканал не найдена после no-op сохранения.')
+    }
+
+    fireEvent.doubleClick(supplierRow)
+    supplierDialog = await screen.findByRole('dialog', { name: /Поставщики/ })
+    await user.selectOptions(within(supplierDialog).getByLabelText('Группа для поставщика'), nextGroup.id)
+    await user.clear(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'))
+    await user.type(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'), '2500')
+    const saveButton = within(supplierDialog).getByRole('button', { name: 'Сохранить' })
+    await user.click(saveButton)
+
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    const changeList = within(confirmationDialog).getByRole('list', { name: 'Изменяемые поля' })
+    expect(changeList).toHaveTextContent('Группа')
+    expect(changeList).toHaveTextContent('Коммунальные услуги')
+    expect(changeList).toHaveTextContent('Ремонтные работы')
+    expect(changeList).toHaveTextContent('Стартовый баланс')
+    expect(changeList).toHaveTextContent('1 200,00')
+    expect(changeList).toHaveTextContent('2 500,00')
+    expect(updateSupplier).not.toHaveBeenCalled()
+    await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    await waitFor(() => expect(saveButton).toHaveFocus())
+    expect(updateSupplier).not.toHaveBeenCalled()
+
+    await user.click(saveButton)
+    const reopenedConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    await waitFor(() => expect(updateSupplier).toHaveBeenCalledWith('token', supplier.id, expect.objectContaining({
+      groupId: nextGroup.id,
+      startingBalance: 2500,
+    })))
+    expect(await within(dictionaryPanel).findByText('Ремонтные работы')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('2 500,00')).toBeInTheDocument()
   })
 
   it('edits supplier groups and accounting operation types from dictionary dialogs', async () => {
