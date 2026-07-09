@@ -692,6 +692,27 @@ h1 {
   background: #fcfcfd;
 }
 
+.contractors-sheet-row--deleted {
+  background: #f9fafb;
+  color: #98a2b3;
+}
+
+.contractors-sheet-row--deleted:hover {
+  background: #f4f6f8;
+}
+
+.contractors-sheet-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.contractors-sheet-row-actions .ghost-button,
+.contractors-sheet-row-actions .icon-button {
+  min-height: 32px;
+}
+
 .contractors-sheet-action-row {
   background: #ffffff;
 }

@@ -1762,15 +1762,20 @@ describe('App', () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceRequest: unknown = null
+    const archivedServiceRequests: Array<{ id: string; reason: string }> = []
+    const restoredServiceIds: string[] = []
+    let serviceSettings: ChargeServiceSettingDto[] = []
     const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
     const dictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => [serviceIncomeType],
       getTariffs: async () => [serviceTariff],
-      getChargeServiceSettings: async () => [],
+      getChargeServiceSettings: async (_token, _search, _limit, includeArchived = false) => (
+        serviceSettings.filter((setting) => includeArchived || !setting.isArchived)
+      ),
       createChargeServiceSetting: async (_token, request) => {
         createdServiceRequest = request
-        return createChargeServiceSetting({
+        const savedSetting = createChargeServiceSetting({
           id: 'service-security',
           name: request.name,
           isRegular: request.isRegular,
@@ -1778,17 +1783,19 @@ describe('App', () => {
           accrualStartMonth: request.accrualStartMonth ?? null,
           paymentDueDay: request.paymentDueDay ?? null,
           paymentDueMonth: request.paymentDueMonth ?? null,
-      overdueGraceDays: request.overdueGraceDays,
-      incomeTypeId: request.incomeTypeId ?? null,
-      tariffId: request.tariffId ?? null,
-      isMetered: request.isMetered,
+          overdueGraceDays: request.overdueGraceDays,
+          incomeTypeId: request.incomeTypeId ?? null,
+          tariffId: request.tariffId ?? null,
+          isMetered: request.isMetered,
           hasTieredTariff: request.hasTieredTariff,
           unitName: request.unitName ?? null,
         })
+        serviceSettings = [savedSetting]
+        return savedSetting
       },
       updateChargeServiceSetting: async (_token, id, request) => {
         updatedServiceRequest = request
-        return createChargeServiceSetting({
+        const savedSetting = createChargeServiceSetting({
           id,
           name: request.name,
           isRegular: request.isRegular,
@@ -1796,13 +1803,30 @@ describe('App', () => {
           accrualStartMonth: request.accrualStartMonth ?? null,
           paymentDueDay: request.paymentDueDay ?? null,
           paymentDueMonth: request.paymentDueMonth ?? null,
-      overdueGraceDays: request.overdueGraceDays,
-      incomeTypeId: request.incomeTypeId ?? null,
-      tariffId: request.tariffId ?? null,
-      isMetered: request.isMetered,
+          overdueGraceDays: request.overdueGraceDays,
+          incomeTypeId: request.incomeTypeId ?? null,
+          tariffId: request.tariffId ?? null,
+          isMetered: request.isMetered,
           hasTieredTariff: request.hasTieredTariff,
           unitName: request.unitName ?? null,
         })
+        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? savedSetting : setting))
+        return savedSetting
+      },
+      archiveChargeServiceSetting: async (_token, id, reason) => {
+        archivedServiceRequests.push({ id, reason })
+        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? { ...setting, isArchived: true } : setting))
+      },
+      restoreChargeServiceSetting: async (_token, id) => {
+        restoredServiceIds.push(id)
+        const restoredSetting = serviceSettings.find((setting) => setting.id === id)
+        if (!restoredSetting) {
+          throw new Error('Услуга не найдена')
+        }
+
+        const nextSetting = { ...restoredSetting, isArchived: false }
+        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? nextSetting : setting))
+        return nextSetting
       },
     })
 
@@ -1880,6 +1904,42 @@ describe('App', () => {
       unitName: 'руб.',
     }))
     expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('6')
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Архивировать услугу Охрана' }))
+    let archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать услугу?' })
+    const archiveCancelButton = within(archiveDialog).getByRole('button', { name: 'Отмена' })
+    await waitFor(() => expect(archiveCancelButton).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Архивировать услугу?' })).not.toBeInTheDocument())
+    expect(archivedServiceRequests).toEqual([])
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Архивировать услугу Охрана' }))
+    archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать услугу?' })
+    expect(within(archiveDialog).getByRole('button', { name: 'Архивировать' })).toBeDisabled()
+    await user.type(within(archiveDialog).getByLabelText('Причина архивации услуги'), 'Услуга больше не действует')
+    await user.click(within(archiveDialog).getByRole('button', { name: 'Архивировать' }))
+
+    await waitFor(() => expect(archivedServiceRequests).toEqual([
+      { id: 'service-security', reason: 'Услуга больше не действует' },
+    ]))
+    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toBeDisabled()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' })).toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' }))
+    let restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
+    const restoreCancelButton = within(restoreDialog).getByRole('button', { name: 'Отмена' })
+    await waitFor(() => expect(restoreCancelButton).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть услугу?' })).not.toBeInTheDocument())
+    expect(restoredServiceIds).toEqual([])
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' }))
+    restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
+
+    await waitFor(() => expect(restoredServiceIds).toEqual(['service-security']))
+    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toBeEnabled()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Архивировать услугу Охрана' })).toBeInTheDocument()
   })
 
   it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {

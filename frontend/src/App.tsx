@@ -9883,6 +9883,7 @@ type ContractorTariffRow = {
   effectiveFrom?: string
   electricityFirstThreshold?: number | null
   electricitySecondThreshold?: number | null
+  isDeleted?: boolean
 }
 
 const contractorTariffRows: ContractorTariffRow[] = [
@@ -13035,6 +13036,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
       unit: setting.unitName ?? 'руб.',
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
+      isDeleted: setting.isArchived,
     },
   ]
 
@@ -13050,6 +13052,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         unit: 'мес.',
         byMeter: setting.isMetered,
         tiered: setting.hasTieredTariff,
+        isDeleted: setting.isArchived,
       },
       {
         id: `charge-service-${setting.id}-due-date`,
@@ -13061,6 +13064,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         dateMonth: getContractorTariffMonthValue(setting.paymentDueMonth),
         byMeter: setting.isMetered,
         tiered: setting.hasTieredTariff,
+        isDeleted: setting.isArchived,
       },
       {
         id: `charge-service-${setting.id}-start-date`,
@@ -13072,6 +13076,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         dateMonth: getContractorTariffMonthValue(setting.accrualStartMonth),
         byMeter: setting.isMetered,
         tiered: setting.hasTieredTariff,
+        isDeleted: setting.isArchived,
       },
       {
         id: `charge-service-${setting.id}-overdue-days`,
@@ -13083,6 +13088,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         unit: 'дн.',
         byMeter: setting.isMetered,
         tiered: setting.hasTieredTariff,
+        isDeleted: setting.isArchived,
       },
     )
   }
@@ -13094,7 +13100,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
   const rowsWithoutBackendServices = rows.filter((row) => !row.backendServiceSettingId)
   return [
     ...rowsWithoutBackendServices,
-    ...settings.filter((setting) => !setting.isArchived).flatMap((setting) => createChargeServiceRows(setting)),
+    ...settings.flatMap((setting) => createChargeServiceRows(setting)),
   ]
 }
 
@@ -13225,6 +13231,9 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const [feeCampaignGenerateMonth, setFeeCampaignGenerateMonth] = useState(getCurrentMonthInputValue())
   const [feeCampaignGenerateComment, setFeeCampaignGenerateComment] = useState('')
   const [feeCampaignActionMessage, setFeeCampaignActionMessage] = useState<string | null>(null)
+  const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
+  const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
+  const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>([])
   const [tariffDrafts, setTariffDrafts] = useState<Record<string, Partial<ContractorTariffRow>>>({})
   const [oneTimeDrafts, setOneTimeDrafts] = useState<Record<string, Partial<ContractorOneTimeRow>>>({})
@@ -13253,7 +13262,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
-          dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
@@ -13345,6 +13354,15 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
 
   function closeFeeCampaignRestoreDialog() {
     setFeeCampaignRestoreTarget(null)
+  }
+
+  function closeChargeServiceArchiveDialog() {
+    setChargeServiceArchiveTarget(null)
+    setChargeServiceArchiveReason('')
+  }
+
+  function closeChargeServiceRestoreDialog() {
+    setChargeServiceRestoreTarget(null)
   }
 
   function closeFeeCampaignGenerateDialog() {
@@ -13455,6 +13473,12 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   useRestoreFocusOnClose(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignRestoreTarget))
+  useRestoreFocusOnClose(Boolean(chargeServiceArchiveTarget))
+  const chargeServiceArchiveDialogRef = useFocusTrap<HTMLElement>(Boolean(chargeServiceArchiveTarget))
+  const chargeServiceArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(chargeServiceArchiveTarget))
+  useRestoreFocusOnClose(Boolean(chargeServiceRestoreTarget))
+  const chargeServiceRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(chargeServiceRestoreTarget))
+  const chargeServiceRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(chargeServiceRestoreTarget))
   useRestoreFocusOnClose(Boolean(feeCampaignGenerateTarget))
   const feeCampaignGenerateDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignGenerateTarget))
   const feeCampaignGenerateCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignGenerateTarget))
@@ -13463,6 +13487,8 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
   useEscapeKey(Boolean(feeCampaignArchiveTarget), () => closeFeeCampaignArchiveDialog())
   useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
+  useEscapeKey(Boolean(chargeServiceArchiveTarget), () => closeChargeServiceArchiveDialog())
+  useEscapeKey(Boolean(chargeServiceRestoreTarget), () => closeChargeServiceRestoreDialog())
   useEscapeKey(Boolean(feeCampaignGenerateTarget), () => closeFeeCampaignGenerateDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
@@ -13499,7 +13525,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   }
 
   async function persistServiceSettingRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[]) {
-    if (!canManageTariffs || !row.backendServiceSettingId) {
+    if (!canManageTariffs || row.isDeleted || !row.backendServiceSettingId) {
       return
     }
 
@@ -13992,6 +14018,54 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     }
   }
 
+  async function archiveChargeServiceSetting() {
+    if (!chargeServiceArchiveTarget || !chargeServiceArchiveReason.trim()) {
+      return
+    }
+
+    setTariffSavingRowId(`charge-service-${chargeServiceArchiveTarget.id}`)
+    setTariffPersistenceError(null)
+    try {
+      await dictionaryClient.archiveChargeServiceSetting(auth.accessToken, chargeServiceArchiveTarget.id, chargeServiceArchiveReason.trim())
+      const nextSettings = backendChargeServices.map((setting) => (
+        setting.id === chargeServiceArchiveTarget.id ? { ...setting, isArchived: true } : setting
+      ))
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings)
+      setBackendChargeServices(nextSettings)
+      setTariffRows(nextRows)
+      setTariffDrafts(createEditableDrafts(nextRows))
+      closeChargeServiceArchiveDialog()
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось архивировать услугу.')
+    } finally {
+      setTariffSavingRowId(null)
+    }
+  }
+
+  async function restoreChargeServiceSetting() {
+    if (!chargeServiceRestoreTarget) {
+      return
+    }
+
+    setTariffSavingRowId(`charge-service-${chargeServiceRestoreTarget.id}`)
+    setTariffPersistenceError(null)
+    try {
+      const restoredSetting = await dictionaryClient.restoreChargeServiceSetting(auth.accessToken, chargeServiceRestoreTarget.id)
+      const nextSettings = backendChargeServices.map((setting) => (
+        setting.id === restoredSetting.id ? restoredSetting : setting
+      ))
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings)
+      setBackendChargeServices(nextSettings)
+      setTariffRows(nextRows)
+      setTariffDrafts(createEditableDrafts(nextRows))
+      closeChargeServiceRestoreDialog()
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось восстановить услугу.')
+    } finally {
+      setTariffSavingRowId(null)
+    }
+  }
+
   async function updateFeeCampaign(request: UpsertFeeCampaignRequest) {
     if (!canManageTariffs || !feeCampaignEditTarget) {
       return
@@ -14157,16 +14231,29 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
             </div>
-            {tariffRows.map((row) => (
-              <Fragment key={row.id}>
-                <div className={row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row'} role="row">
+            {tariffRows.map((row) => {
+              const serviceSetting = row.backendServiceSettingId
+                ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
+                : null
+              const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
+              const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
+
+              return (
+                <Fragment key={row.id}>
+                <div
+                  className={[
+                    row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row',
+                    row.isDeleted ? 'contractors-sheet-row--deleted' : '',
+                  ].filter(Boolean).join(' ')}
+                  role="row"
+                >
                   <span role="cell">
                     {row.group ? <strong>{row.group}</strong> : null}
                     {row.threshold ? (
                       <input
                         aria-label={`${row.category}: ${row.title}: наименование`}
                         className="contractors-editable-input contractors-editable-input--title"
-                        disabled={!canManageTariffs || tariffSavingRowId === row.id}
+                        disabled={!canManageTariffs || isRowDisabled}
                         value={tariffDrafts[row.id]?.title ?? row.title}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], title: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'title'))}
@@ -14174,6 +14261,35 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                     ) : (
                       <span>{row.title}</span>
                     )}
+                    {row.serviceSettingKind === 'main' && serviceSetting ? (
+                      <span className="contractors-sheet-row-actions">
+                        {row.isDeleted ? (
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            aria-label={`Вернуть услугу ${serviceSetting.name}`}
+                            disabled={!canManageTariffs || isServiceSaving}
+                            onClick={() => setChargeServiceRestoreTarget(serviceSetting)}
+                          >
+                            <RotateCcw size={15} />
+                            <span>Вернуть</span>
+                          </button>
+                        ) : (
+                          <button
+                            className="icon-button danger-button"
+                            type="button"
+                            aria-label={`Архивировать услугу ${serviceSetting.name}`}
+                            disabled={!canManageTariffs || isServiceSaving}
+                            onClick={() => {
+                              setChargeServiceArchiveTarget(serviceSetting)
+                              setChargeServiceArchiveReason('')
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </span>
+                    ) : null}
                   </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.threshold ? <em>{row.threshold}</em> : null}
@@ -14184,7 +14300,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                           aria-invalid={Boolean(tariffDateErrors[row.id])}
                           aria-describedby={tariffDateErrors[row.id] ? `${row.id}-date-error` : undefined}
                           className="contractors-editable-input contractors-editable-input--day"
-                          disabled={!canManageTariffs}
+                          disabled={!canManageTariffs || isRowDisabled}
                           inputMode="numeric"
                           maxLength={2}
                           value={tariffDrafts[row.id]?.dateDay ?? ''}
@@ -14204,7 +14320,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                       <input
                         aria-label={`${row.category}: ${row.title}: значение`}
                         className="contractors-editable-input"
-                        disabled={!canManageTariffs || tariffSavingRowId === row.id}
+                        disabled={!canManageTariffs || isRowDisabled}
                         value={tariffDrafts[row.id]?.amount ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
@@ -14216,7 +14332,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                       <select
                         aria-label={`${row.category}: ${row.title}: месяц`}
                         className="contractors-editable-select contractors-editable-select--month"
-                        disabled={!canManageTariffs}
+                        disabled={!canManageTariffs || isRowDisabled}
                         value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
                         onChange={(event) => {
                           setTariffDateErrors((errors) => {
@@ -14236,7 +14352,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                       <input
                         aria-label={`${row.category}: ${row.title}: единица`}
                         className="contractors-editable-input contractors-editable-input--unit"
-                        disabled={!canManageTariffs || tariffSavingRowId === row.id}
+                        disabled={!canManageTariffs || isRowDisabled}
                         value={tariffDrafts[row.id]?.unit ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
@@ -14247,7 +14363,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                     <select
                       aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
                       className="contractors-editable-select"
-                      disabled={!canManageTariffs || tariffSavingRowId === row.id}
+                      disabled={!canManageTariffs || isRowDisabled}
                       value={row.tiered ? 'Да' : 'Нет'}
                     onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да')}
                     >
@@ -14259,7 +14375,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                     <select
                       aria-label={`${row.category}: ${row.title}: по счетчику`}
                       className="contractors-editable-select"
-                      disabled={!canManageTariffs || tariffSavingRowId === row.id}
+                      disabled={!canManageTariffs || isRowDisabled}
                       value={row.byMeter ? 'Да' : 'Нет'}
                     onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да')}
                     >
@@ -14282,7 +14398,8 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                   </div>
                 ) : null}
               </Fragment>
-            ))}
+              )
+            })}
             {tariffRows.length === 0 && !tariffsLoading ? (
               <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                 <span role="cell">Тарифы и услуги пока не настроены.</span>
@@ -14514,6 +14631,66 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={oneTimeRestoreCancelRef} className="ghost-button" type="button" onClick={closeOneTimeRestoreDialog} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmOneTimeRestore} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>
+                <RotateCcw size={16} />
+                <span>Вернуть</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {chargeServiceArchiveTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeChargeServiceArchiveDialog}>
+          <section ref={chargeServiceArchiveDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-archive-title" aria-describedby="charge-service-archive-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Архив</p>
+                <h3 id="charge-service-archive-title">Архивировать услугу?</h3>
+                <p>{chargeServiceArchiveTarget.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение архивации услуги" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="charge-service-archive-description">Услуга останется в справочнике как архивная и будет заблокирована для редактирования. Укажите причину для истории изменений.</p>
+            <label className="field-label" htmlFor="charge-service-archive-reason">Причина архивации</label>
+            <textarea
+              id="charge-service-archive-reason"
+              aria-label="Причина архивации услуги"
+              maxLength={1000}
+              value={chargeServiceArchiveReason}
+              onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
+              placeholder="Например: услуга больше не используется"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
+                <Trash2 size={16} />
+                <span>Архивировать</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {chargeServiceRestoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeChargeServiceRestoreDialog}>
+          <section ref={chargeServiceRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-restore-title" aria-describedby="charge-service-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление</p>
+                <h3 id="charge-service-restore-title">Вернуть услугу?</h3>
+                <p>{chargeServiceRestoreTarget.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления услуги" onClick={closeChargeServiceRestoreDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="charge-service-restore-description">Услуга снова станет активной и доступной для редактирования в тарифах. Действие будет записано в историю изменений.</p>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={chargeServiceRestoreCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceRestoreDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={restoreChargeServiceSetting} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>
                 <RotateCcw size={16} />
                 <span>Вернуть</span>
               </button>
