@@ -4363,7 +4363,15 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('350,00')).toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
-    const groupDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const addSupplierGroupButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    let groupDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await waitFor(() => expect(within(groupDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Группы поставщиков' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addSupplierGroupButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Связь')).not.toBeInTheDocument()
+
+    groupDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(groupDialog).getByLabelText('Группа поставщиков'), 'Связь')
     await user.click(within(groupDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dictionaryPanel).findByText('Связь')).toBeInTheDocument()
