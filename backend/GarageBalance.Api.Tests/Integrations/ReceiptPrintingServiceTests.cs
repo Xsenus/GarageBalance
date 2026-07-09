@@ -26,7 +26,7 @@ public sealed class ReceiptPrintingServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal("registered", result.Value!.Status);
+        Assert.Equal("pending_adapter", result.Value!.Status);
         Assert.Equal("print", result.Value.Action);
         Assert.Equal(operation.Id, result.Value.FinancialOperationId);
         Assert.Equal("PKO-1", result.Value.DocumentNumber);
@@ -43,6 +43,7 @@ public sealed class ReceiptPrintingServiceTests
         Assert.Equal("1", audit.RelatedGarageNumber);
         Assert.Equal("Иванов Иван", audit.RelatedCounterpartyName);
         Assert.Contains("pending_adapter", audit.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("adapterMessage", audit.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -65,6 +66,37 @@ public sealed class ReceiptPrintingServiceTests
         Assert.Equal("cancel", audit.ActionKind);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("Квитанция испорчена", metadata.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task RegisterActionAsync_WritesAdapterStatusAndSafeErrorDetails()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var operation = await SeedIncomeOperationAsync(database.Context);
+        var adapter = new FakeReceiptPrintingAdapter(new ReceiptPrintingAdapterResult(
+            "device_error",
+            "Печатающее устройство недоступно.",
+            DeviceResponseCode: "NO_CONNECTION"));
+        var service = CreateService(database.Context, adapter);
+
+        var result = await service.RegisterActionAsync(
+            operation.Id,
+            new ReceiptPrintingActionRequest("print", null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("device_error", result.Value!.Status);
+        Assert.Equal("Печатающее устройство недоступно.", result.Value.StatusMessage);
+        Assert.Equal("print", adapter.LastRequest!.Action);
+        Assert.Equal(operation.Id, adapter.LastRequest.FinancialOperationId);
+        Assert.Equal("PKO-1", adapter.LastRequest.DocumentNumber);
+        Assert.Equal(1500m, adapter.LastRequest.Amount);
+        var audit = Assert.Single(database.Context.AuditEvents);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("device_error", metadata.RootElement.GetProperty("adapterStatus").GetString());
+        Assert.Equal("NO_CONNECTION", metadata.RootElement.GetProperty("deviceResponseCode").GetString());
+        Assert.Equal("Печатающее устройство недоступно.", metadata.RootElement.GetProperty("adapterMessage").GetString());
     }
 
     [Theory]
@@ -149,9 +181,9 @@ public sealed class ReceiptPrintingServiceTests
         Assert.Equal("financial_operation_not_found", result.ErrorCode);
     }
 
-    private static ReceiptPrintingService CreateService(GarageBalanceDbContext context)
+    private static ReceiptPrintingService CreateService(GarageBalanceDbContext context, IReceiptPrintingAdapter? adapter = null)
     {
-        return new ReceiptPrintingService(context, new AuditEventWriter(context));
+        return new ReceiptPrintingService(context, new AuditEventWriter(context), adapter ?? new DisabledReceiptPrintingAdapter());
     }
 
     private static async Task<FinancialOperation> SeedIncomeOperationAsync(GarageBalanceDbContext context)
@@ -212,6 +244,17 @@ public sealed class ReceiptPrintingServiceTests
         {
             await Context.DisposeAsync();
             await connection.DisposeAsync();
+        }
+    }
+
+    private sealed class FakeReceiptPrintingAdapter(ReceiptPrintingAdapterResult result) : IReceiptPrintingAdapter
+    {
+        public ReceiptPrintingAdapterRequest? LastRequest { get; private set; }
+
+        public Task<ReceiptPrintingAdapterResult> ProcessAsync(ReceiptPrintingAdapterRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(result);
         }
     }
 }

@@ -7,13 +7,14 @@ namespace GarageBalance.Api.Application.Integrations;
 
 public sealed class ReceiptPrintingService(
     GarageBalanceDbContext dbContext,
-    IAuditEventWriter auditEventWriter) : IReceiptPrintingService
+    IAuditEventWriter auditEventWriter,
+    IReceiptPrintingAdapter receiptPrintingAdapter) : IReceiptPrintingService
 {
     private static readonly HashSet<string> SupportedActions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "print",
-        "cancel",
-        "reprint"
+        ReceiptPrintingActions.Print,
+        ReceiptPrintingActions.Cancel,
+        ReceiptPrintingActions.Reprint
     };
 
     public async Task<ReceiptPrintingResult<ReceiptPrintingActionDto>> RegisterActionAsync(
@@ -29,7 +30,7 @@ public sealed class ReceiptPrintingService(
         }
 
         var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
-        if ((action is "cancel" or "reprint") && reason is null)
+        if ((action is ReceiptPrintingActions.Cancel or ReceiptPrintingActions.Reprint) && reason is null)
         {
             return ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("receipt_print_reason_required", "Для отмены или повторной печати нужна причина.");
         }
@@ -52,22 +53,22 @@ public sealed class ReceiptPrintingService(
             return ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("receipt_print_income_required", "Квитанцию можно формировать только по поступлению владельца.");
         }
 
-        if (operation.IsCanceled && action is "print" or "reprint")
+        if (operation.IsCanceled && action is ReceiptPrintingActions.Print or ReceiptPrintingActions.Reprint)
         {
             return ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("receipt_print_operation_canceled", "Нельзя печатать квитанцию по отмененному поступлению.");
         }
 
         var auditAction = action switch
         {
-            "cancel" => "receipt.print_canceled",
-            "reprint" => "receipt.reprint_requested",
+            ReceiptPrintingActions.Cancel => "receipt.print_canceled",
+            ReceiptPrintingActions.Reprint => "receipt.reprint_requested",
             _ => "receipt.print_requested"
         };
-        var actionKind = action == "cancel" ? "cancel" : "generate";
+        var actionKind = action == ReceiptPrintingActions.Cancel ? "cancel" : "generate";
         var actionLabel = action switch
         {
-            "cancel" => "Отмена печати",
-            "reprint" => "Повторная печать",
+            ReceiptPrintingActions.Cancel => "Отмена печати",
+            ReceiptPrintingActions.Reprint => "Повторная печать",
             _ => "Печать квитанции"
         };
         var documentNumber = string.IsNullOrWhiteSpace(operation.DocumentNumber)
@@ -75,6 +76,19 @@ public sealed class ReceiptPrintingService(
             : operation.DocumentNumber.Trim();
         var garageNumber = operation.Garage?.Number;
         var ownerName = operation.Garage?.Owner?.FullName;
+        var adapterResult = await receiptPrintingAdapter.ProcessAsync(
+            new ReceiptPrintingAdapterRequest(
+                action,
+                operation.Id,
+                documentNumber,
+                operation.Amount,
+                operation.OperationDate,
+                operation.AccountingMonth,
+                garageNumber,
+                ownerName,
+                operation.IncomeType?.Name,
+                reason),
+            cancellationToken);
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             auditAction,
@@ -91,7 +105,10 @@ public sealed class ReceiptPrintingService(
                 ["operationKind"] = operation.OperationKind,
                 ["amount"] = operation.Amount,
                 ["incomeTypeName"] = operation.IncomeType?.Name,
-                ["adapterStatus"] = "pending_adapter"
+                ["adapterStatus"] = adapterResult.Status,
+                ["adapterMessage"] = adapterResult.StatusMessage,
+                ["deviceResponseCode"] = adapterResult.DeviceResponseCode,
+                ["externalReceiptId"] = adapterResult.ExternalReceiptId
             },
             RelatedGarageId: operation.GarageId?.ToString(),
             RelatedGarageNumber: garageNumber,
@@ -106,8 +123,8 @@ public sealed class ReceiptPrintingService(
             auditEvent!.Id,
             operation.Id,
             action,
-            "registered",
-            $"{actionLabel} зарегистрирована в истории. Фактическая печать будет доступна после подключения адаптера.",
+            adapterResult.Status,
+            adapterResult.StatusMessage,
             documentNumber,
             auditEvent.CreatedAtUtc));
     }
