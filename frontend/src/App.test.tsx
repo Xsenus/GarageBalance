@@ -5467,6 +5467,7 @@ describe('App', () => {
     expect(createSupplierGroupCalls).toBe(1)
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
+    const addSupplierButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Название поставщика'), '   ')
     await user.type(within(validationDialog).getByLabelText('ИНН поставщика'), 'abc')
@@ -5476,7 +5477,10 @@ describe('App', () => {
     expect(within(validationDialog).getByText('Укажите название поставщика.')).toBeInTheDocument()
     expect(within(validationDialog).getByText('ИНН поставщика должен содержать 10 или 12 цифр.')).toBeInTheDocument()
     expect(createSupplierCalled).toBe(false)
-    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Поставщики' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addSupplierButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('abc')).not.toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
