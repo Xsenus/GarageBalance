@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
+using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Releases;
 
@@ -119,6 +120,59 @@ public sealed class AppReleaseServiceTests
             .Select(auditEvent => auditEvent.Action)
             .ToArray();
         Assert.Equal(["app_releases.release_created", "app_releases.release_published"], auditActions);
+    }
+
+    [Fact]
+    public async Task UpdateReleaseAsync_WritesReadableAuditDiffAndSkipsNoOpUpdate()
+    {
+        using var directory = new TempContentRoot();
+        directory.WriteReleasesJson(
+            """
+            [
+              {
+                "releaseId": "release-1",
+                "version": "0.484.0",
+                "publishedAt": "2026-07-09T14:00:00+07:00",
+                "title": "Старый заголовок",
+                "summary": "Старое описание.",
+                "items": [{ "type": "improved", "text": "Старый пункт." }],
+                "isPublished": false
+              }
+            ]
+            """);
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new AppReleaseService(directory.Environment, database.Context, new AuditEventWriter(database.Context));
+        var actorUserId = Guid.Parse("6f01f4cd-2065-47f5-9c4d-a5b20cb3e35a");
+        var request = new UpsertAppReleaseRequest(
+            "release-1",
+            "0.484.1",
+            DateTimeOffset.Parse("2026-07-09T14:00:00+07:00"),
+            "Новый заголовок",
+            "Новое описание.",
+            [new AppReleaseItemDto("fixed", "Новый пункт.")],
+            false);
+
+        var updateResult = await service.UpdateReleaseAsync("release-1", request, actorUserId, CancellationToken.None);
+        var noOpResult = await service.UpdateReleaseAsync("release-1", request, actorUserId, CancellationToken.None);
+
+        Assert.True(updateResult.Succeeded);
+        Assert.Equal("Новый заголовок", updateResult.Value!.Title);
+        Assert.True(noOpResult.Succeeded);
+
+        var auditEvent = Assert.Single(await database.Context.AuditEvents.ToListAsync());
+        Assert.Equal("app_releases.release_updated", auditEvent.Action);
+        Assert.Equal("app_releases", auditEvent.Section);
+        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Contains("Заголовок", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.Contains("Старый заголовок", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.Contains("Новый заголовок", auditEvent.Summary, StringComparison.Ordinal);
+
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Версия", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Заголовок", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Описание", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Пункты", changedFields, StringComparison.Ordinal);
     }
 
     [Fact]

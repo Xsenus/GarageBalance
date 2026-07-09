@@ -152,6 +152,14 @@ public sealed class AppReleaseService(
                 return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
             }
 
+            var oldAuditValues = ToAuditValues(current);
+            var newAuditValues = ToAuditValues(normalized.Value!);
+            var changeSummary = FormatReleaseChangeSummary(oldAuditValues, newAuditValues);
+            if (changeSummary is null)
+            {
+                return AppReleaseResult<AppReleaseDto>.Success(current);
+            }
+
             releases[index] = normalized.Value!;
             await SaveReleasesAsync(releases, cancellationToken);
             await AddAuditAsync(
@@ -159,9 +167,9 @@ public sealed class AppReleaseService(
                 "app_releases.release_updated",
                 normalized.Value!,
                 "update",
-                $"Обновлена запись \"Что нового\" {normalized.Value!.Version}.",
-                ToAuditValues(current),
-                ToAuditValues(normalized.Value!),
+                $"Обновлена запись \"Что нового\" {normalized.Value!.Version}: {changeSummary}.",
+                oldAuditValues,
+                newAuditValues,
                 cancellationToken);
 
             return AppReleaseResult<AppReleaseDto>.Success(normalized.Value!);
@@ -191,6 +199,11 @@ public sealed class AppReleaseService(
             }
 
             var current = releases[index];
+            if (current.IsPublished is true)
+            {
+                return AppReleaseResult<AppReleaseDto>.Success(current);
+            }
+
             var published = current with
             {
                 PublishedAt = DateTimeOffset.Now,
@@ -384,6 +397,14 @@ public sealed class AppReleaseService(
             ["items"] = string.Join("; ", release.Items.Select(item => $"{item.Type}: {item.Text}")),
             ["isPublished"] = release.IsPublished is not false
         };
+    }
+
+    private static string? FormatReleaseChangeSummary(
+        IReadOnlyDictionary<string, object?> oldValues,
+        IReadOnlyDictionary<string, object?> newValues)
+    {
+        var changes = AuditChangeDiffBuilder.Build(oldValues, newValues, FieldLabels);
+        return changes.Count == 0 ? null : AuditChangeDiffBuilder.FormatSummary(changes);
     }
 
     private static string NormalizeReleaseId(string? requestedReleaseId, string version)
