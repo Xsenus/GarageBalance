@@ -10601,12 +10601,15 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
   const [employeeContextMenu, setEmployeeContextMenu] = useState<{ row: ContractorStaffRow; x: number; y: number } | null>(null)
   const [employeeDeleteTarget, setEmployeeDeleteTarget] = useState<ContractorStaffRow | null>(null)
   const [employeeDeleteReason, setEmployeeDeleteReason] = useState('')
+  const [departmentDeleteTarget, setDepartmentDeleteTarget] = useState<ContractorDepartmentRow | null>(null)
+  const [departmentDeleteReason, setDepartmentDeleteReason] = useState('')
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
   useRestoreFocusOnClose(Boolean(contractorFinancialReportTarget))
   useRestoreFocusOnClose(Boolean(supplierDeleteTarget))
   useRestoreFocusOnClose(Boolean(employeeDeleteTarget))
+  useRestoreFocusOnClose(Boolean(departmentDeleteTarget))
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
@@ -10619,6 +10622,8 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
   const supplierDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(supplierDeleteTarget))
   const employeeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(employeeDeleteTarget))
   const employeeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(employeeDeleteTarget))
+  const departmentDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(departmentDeleteTarget))
+  const departmentDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(departmentDeleteTarget))
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
   useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
   useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
@@ -10628,6 +10633,7 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
   useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
   useEscapeKey(Boolean(employeeContextMenu), () => setEmployeeContextMenu(null))
   useEscapeKey(Boolean(employeeDeleteTarget), () => closeEmployeeDeleteDialog())
+  useEscapeKey(Boolean(departmentDeleteTarget), () => closeDepartmentDeleteDialog())
 
   useEffect(() => {
     let cancelled = false
@@ -11180,6 +11186,19 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
     setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
   }
 
+  const deleteDepartment = async (department: ContractorDepartmentRow, reason = 'Отдел удален из таблицы контрагентов.') => {
+    try {
+      if (isBackendDictionaryId(department.id)) {
+        await dictionaryClient.archiveStaffDepartment(auth.accessToken, department.id, reason)
+      }
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить отдел.')
+      return
+    }
+
+    setDepartments((currentDepartments) => currentDepartments.map((item) => (item.id === department.id ? { ...item, isDeleted: true } : item)))
+  }
+
   function openEmployeeContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorStaffRow) {
     event.preventDefault()
     setEmployeeContextMenu({ row, x: event.clientX, y: event.clientY })
@@ -11208,6 +11227,25 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
 
     void deleteEmployee(employeeDeleteTarget, employeeDeleteReason.trim())
     closeEmployeeDeleteDialog()
+  }
+
+  function openDepartmentDeleteDialog(row: ContractorDepartmentRow) {
+    setDepartmentDeleteTarget(row)
+    setDepartmentDeleteReason('')
+  }
+
+  function closeDepartmentDeleteDialog() {
+    setDepartmentDeleteTarget(null)
+    setDepartmentDeleteReason('')
+  }
+
+  function confirmDepartmentDeleteFromTable() {
+    if (!departmentDeleteTarget || !departmentDeleteReason.trim()) {
+      return
+    }
+
+    void deleteDepartment(departmentDeleteTarget, departmentDeleteReason.trim())
+    closeDepartmentDeleteDialog()
   }
 
   function restoreEmployee(row: ContractorStaffRow) {
@@ -11548,7 +11586,11 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
                       <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>
                         <RotateCcw size={16} />
                       </button>
-                    ) : null}
+                    ) : (
+                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
@@ -12040,6 +12082,41 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" onClick={closeEmployeeDeleteDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmEmployeeDeleteFromTable} disabled={!employeeDeleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {departmentDeleteTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeDepartmentDeleteDialog}>
+          <section ref={departmentDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="department-table-delete-title" aria-describedby="department-table-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="department-table-delete-title">Удалить отдел?</h3>
+                <p>{departmentDeleteTarget.name || 'Отдел без названия'}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления отдела" onClick={closeDepartmentDeleteDialog}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="department-table-delete-description">Отдел будет скрыт из рабочего списка персонала, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <label className="field-label" htmlFor="department-table-delete-reason">Причина удаления</label>
+            <textarea
+              id="department-table-delete-reason"
+              aria-label="Причина удаления отдела"
+              maxLength={1000}
+              value={departmentDeleteReason}
+              onChange={(event) => setDepartmentDeleteReason(event.target.value)}
+              placeholder="Например: отдел больше не используется"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={departmentDeleteCancelRef} className="ghost-button" type="button" onClick={closeDepartmentDeleteDialog}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmDepartmentDeleteFromTable} disabled={!departmentDeleteReason.trim()}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
               </button>
