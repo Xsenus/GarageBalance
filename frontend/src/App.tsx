@@ -1547,10 +1547,10 @@ function FinancePanel({
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
   const [financeEditorInitialSnapshot, setFinanceEditorInitialSnapshot] = useState('')
   const [pendingFinanceEditConfirmation, setPendingFinanceEditConfirmation] = useState<{
-    kind: 'income'
+    kind: 'income' | 'expense'
     recordId: string
     objectName: string
-    request: CreateIncomeOperationRequest
+    request: CreateIncomeOperationRequest | CreateExpenseOperationRequest
     changes: ChangePreview[]
   } | null>(null)
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
@@ -1894,16 +1894,57 @@ function FinancePanel({
     return changes
   }
 
+  function getExpenseEditChangePreview(record: FinancialOperationDto, request: CreateExpenseOperationRequest) {
+    const changes: ChangePreview[] = []
+    const formatSupplier = (supplierId: string | null | undefined, fallbackName: string | null | undefined) => {
+      if (!supplierId) {
+        return 'пусто'
+      }
+
+      if (fallbackName) {
+        return fallbackName
+      }
+
+      return suppliers.find((item) => item.id === supplierId)?.name ?? supplierId
+    }
+    const formatExpenseType = (expenseTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
+      if (!expenseTypeId) {
+        return 'пусто'
+      }
+
+      if (fallbackName) {
+        return fallbackName
+      }
+
+      return expenseTypes.find((item) => item.id === expenseTypeId)?.name ?? expenseTypeId
+    }
+
+    appendChangePreview(changes, 'Поставщик', formatSupplier(record.supplierId, record.supplierName), formatSupplier(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null))
+    appendChangePreview(changes, 'Вид выплаты', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Дата выплаты', formatChangeDate(record.operationDate), formatChangeDate(request.operationDate))
+    appendChangePreview(changes, 'Месяц выплаты', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
+    appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
+    appendChangePreview(changes, 'Документ', formatChangeText(record.documentNumber), formatChangeText(request.documentNumber))
+    appendChangePreview(changes, 'Комментарий', formatChangeText(record.comment), formatChangeText(request.comment))
+    return changes
+  }
+
   async function confirmPendingFinanceEdit() {
     if (!pendingFinanceEditConfirmation) {
       return
     }
 
     const pending = pendingFinanceEditConfirmation
-    const saved = await runSaving('income', async () => {
-      await financeClient.updateIncome(auth.accessToken, pending.recordId, pending.request)
-      await loadFinanceWorkbench('income', financePage.offset, financePage.limit)
-      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+    const saved = await runSaving(pending.kind, async () => {
+      if (pending.kind === 'income') {
+        await financeClient.updateIncome(auth.accessToken, pending.recordId, pending.request as CreateIncomeOperationRequest)
+        await loadFinanceWorkbench('income', financePage.offset, financePage.limit)
+        setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      } else {
+        await financeClient.updateExpense(auth.accessToken, pending.recordId, pending.request as CreateExpenseOperationRequest)
+        await loadFinanceWorkbench('expense', financePage.offset, financePage.limit)
+        setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      }
     })
     if (saved) {
       setPendingFinanceEditConfirmation(null)
@@ -1986,12 +2027,25 @@ function FinancePanel({
     }
 
     setExpenseValidationErrors([])
-    const saved = await runSaving('expense', async () => {
-      if (financeEditor?.mode === 'edit' && financeEditor.record && 'operationKind' in financeEditor.record) {
-        await financeClient.updateExpense(auth.accessToken, financeEditor.record.id, request)
-      } else {
-        await financeClient.createExpense(auth.accessToken, request)
+    if (financeEditor?.mode === 'edit' && financeEditor.record && 'operationKind' in financeEditor.record) {
+      const changes = getExpenseEditChangePreview(financeEditor.record, request)
+      if (changes.length === 0) {
+        closeFinanceEditor({ skipConfirmation: true })
+        return
       }
+
+      setPendingFinanceEditConfirmation({
+        kind: 'expense',
+        recordId: financeEditor.record.id,
+        objectName: `${financeEditor.record.expenseTypeName ?? 'Выплата'} · ${financeEditor.record.supplierName ?? 'Поставщик'} · ${formatChangeMoney(financeEditor.record.amount)}`,
+        request,
+        changes,
+      })
+      return
+    }
+
+    const saved = await runSaving('expense', async () => {
+      await financeClient.createExpense(auth.accessToken, request)
       await loadFinanceWorkbench('expense', financePage.offset, financePage.limit)
       setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
@@ -3654,9 +3708,9 @@ function FinancePanel({
             </ul>
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={financeEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingFinanceEditConfirmation(null)}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={confirmPendingFinanceEdit} disabled={saving === 'income'}>
+              <button className="secondary-button" type="button" onClick={confirmPendingFinanceEdit} disabled={saving === pendingFinanceEditConfirmation.kind}>
                 <Save size={16} aria-hidden="true" />
-                <span>{saving === 'income' ? 'Сохраняем...' : 'Сохранить'}</span>
+                <span>{saving === pendingFinanceEditConfirmation.kind ? 'Сохраняем...' : 'Сохранить'}</span>
               </button>
             </div>
           </section>

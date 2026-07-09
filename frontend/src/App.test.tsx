@@ -6321,6 +6321,59 @@ describe('App', () => {
     expect(within(financePanel).queryByText('PKO-edit')).not.toBeInTheDocument()
   })
 
+  it('edits expense operation from payments table with confirmation', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
+
+    await user.clear(within(financePanel).getByLabelText('Сумма выплаты'))
+    await user.type(within(financePanel).getByLabelText('Сумма выплаты'), '700')
+    await user.type(within(financePanel).getByLabelText('Документ выплаты'), 'RKO-edit')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
+
+    const expenseCell = await within(financePanel).findByText('RKO-edit')
+    const expenseRow = expenseCell.closest('tr')!
+    expenseRow.focus()
+    await user.keyboard(' ')
+    const dialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+
+    await user.clear(within(dialog).getByLabelText('Сумма выплаты'))
+    await user.type(within(dialog).getByLabelText('Сумма выплаты'), '950')
+    await user.clear(within(dialog).getByLabelText('Документ выплаты'))
+    await user.type(within(dialog).getByLabelText('Документ выплаты'), 'RKO-fixed')
+    await user.type(within(dialog).getByLabelText('Комментарий выплаты'), 'После сверки выплаты')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    let expenseChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    const expenseChangeList = within(expenseChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
+    expect(within(expenseChangeList).getByText('Сумма')).toBeInTheDocument()
+    expect(within(expenseChangeList).getByText('700,00')).toBeInTheDocument()
+    expect(within(expenseChangeList).getByText('950,00')).toBeInTheDocument()
+    expect(within(expenseChangeList).getByText('Документ')).toBeInTheDocument()
+    expect(within(expenseChangeList).getByText('RKO-fixed')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Новая выплата' })).toBeInTheDocument()
+    expect(within(financePanel).queryByText('RKO-fixed')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expenseChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    await user.click(within(expenseChangeDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+    expect(await within(financePanel).findByText('RKO-fixed')).toBeInTheDocument()
+    expect(within(financePanel).getByText('После сверки выплаты')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('950,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).queryByText('RKO-edit')).not.toBeInTheDocument()
+  })
+
   it('opens new income dialog from payment context menu', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -10006,6 +10059,8 @@ function createStatefulFinanceClient(): FinanceClient {
       const operation = createFinancialOperation({
         id: crypto.randomUUID(),
         operationKind: 'expense',
+        supplierId: request.supplierId,
+        expenseTypeId: request.expenseTypeId,
         operationDate: request.operationDate,
         accountingMonth: request.accountingMonth,
         amount: request.amount,
