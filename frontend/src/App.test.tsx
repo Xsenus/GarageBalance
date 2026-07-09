@@ -3442,6 +3442,35 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getAllByText(/1[\s\u00A0]500,00 руб\./).length).toBeGreaterThanOrEqual(1)
     expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('98 500,00 руб.')
+
+    const fundOperationsTable = within(fundsPanel).getByRole('table', { name: 'Операции фондов' })
+    expect(fundOperationsTable).toHaveTextContent('Целевые взносы')
+    expect(fundOperationsTable).toHaveTextContent('Пополнение')
+    expect(fundOperationsTable).toHaveTextContent('Активна')
+
+    const cancelFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Отменить операцию фонда Целевые взносы' })
+    expect(cancelFundOperationButton).toHaveAttribute('data-tooltip', 'Отменить')
+    await user.click(cancelFundOperationButton)
+    const cancelFundOperationDialog = await screen.findByRole('dialog', { name: 'Отменить операцию фонда?' })
+    await waitFor(() => expect(within(cancelFundOperationDialog).getByLabelText('Причина отмены операции фонда')).toHaveFocus())
+    await user.click(within(cancelFundOperationDialog).getByRole('button', { name: 'Отменить операцию' }))
+    expect(within(cancelFundOperationDialog).getByRole('alert')).toHaveTextContent('Укажите причину отмены операции фонда.')
+    await user.type(within(cancelFundOperationDialog).getByLabelText('Причина отмены операции фонда'), 'Ошибочное распределение')
+    await user.click(within(cancelFundOperationDialog).getByRole('button', { name: 'Отменить операцию' }))
+    expect(await within(fundsPanel).findByText('Отменена')).toBeInTheDocument()
+    expect(within(fundsPanel).getByText('Операция отменена и записана в историю изменений.')).toHaveAttribute('role', 'status')
+
+    const restoreFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Вернуть операцию фонда Целевые взносы' })
+    expect(restoreFundOperationButton).toHaveAttribute('data-tooltip', 'Вернуть')
+    await user.click(restoreFundOperationButton)
+    const restoreFundOperationDialog = await screen.findByRole('dialog', { name: 'Вернуть операцию фонда?' })
+    const restoreCancelButton = within(restoreFundOperationDialog).getByRole('button', { name: 'Отмена' })
+    const restoreConfirmButton = within(restoreFundOperationDialog).getByRole('button', { name: 'Вернуть операцию' })
+    expect(Boolean(restoreCancelButton.compareDocumentPosition(restoreConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await waitFor(() => expect(restoreCancelButton).toHaveFocus())
+    await user.click(restoreConfirmButton)
+    expect(await within(fundsPanel).findByText('Операция восстановлена и записана в историю изменений.')).toHaveAttribute('role', 'status')
+    expect(within(fundOperationsTable).getByText('Активна')).toBeInTheDocument()
   })
 
   it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
@@ -9029,6 +9058,7 @@ function createFundOperation(overrides: Partial<FundOperationDto> = {}): FundOpe
     balanceAfter: 1500,
     reason: 'Распределение средств',
     createdAtUtc: '2026-06-30T10:00:00Z',
+    isCanceled: false,
     ...overrides,
   }
 }
@@ -9043,9 +9073,18 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
     createFund({ id: 'fund-target', name: 'Целевые взносы', sortOrder: 60 }),
     createFund({ id: 'fund-other', name: 'Прочее', sortOrder: 70, allowOperations: false }),
   ]
+  let operationSequence = 1
+  let operations: FundOperationDto[] = []
 
   return {
     getFunds: async () => funds,
+    getOperations: async (_token, query) => {
+      const includeCanceled = query?.includeCanceled ?? false
+      const limit = query?.limit ?? 25
+      return operations
+        .filter((operation) => includeCanceled || !operation.isCanceled)
+        .slice(0, limit)
+    },
     createOperation: async (_token: string, fundId: string, request: CreateFundOperationRequest) => {
       const fund = funds.find((item) => item.id === fundId)
       if (!fund) {
@@ -9070,7 +9109,8 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
         availableToDistribute: nextAvailableToDistribute,
         ...(item.id === fundId ? { balance: balanceAfter } : {}),
       }))
-      return createFundOperation({
+      const operation = createFundOperation({
+        id: `fund-operation-${operationSequence++}`,
         fundId,
         fundName: fund.name,
         operationKind: request.operationKind,
@@ -9079,6 +9119,38 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
         balanceAfter,
         reason: request.reason,
       })
+      operations = [operation, ...operations]
+      return operation
+    },
+    updateOperation: async (_token, operationId, request) => {
+      const operation = operations.find((item) => item.id === operationId)
+      if (!operation) {
+        throw new Error('Операция фонда не найдена.')
+      }
+
+      const updated = { ...operation, amount: request.amount, reason: request.reason }
+      operations = operations.map((item) => item.id === operationId ? updated : item)
+      return updated
+    },
+    cancelOperation: async (_token, operationId, request) => {
+      const operation = operations.find((item) => item.id === operationId)
+      if (!operation) {
+        throw new Error('Операция фонда не найдена.')
+      }
+
+      const canceled = { ...operation, isCanceled: true, reason: `${operation.reason}\nОтменено: ${request.reason}` }
+      operations = operations.map((item) => item.id === operationId ? canceled : item)
+      return canceled
+    },
+    restoreOperation: async (_token, operationId) => {
+      const operation = operations.find((item) => item.id === operationId)
+      if (!operation) {
+        throw new Error('Операция фонда не найдена.')
+      }
+
+      const restored = { ...operation, isCanceled: false }
+      operations = operations.map((item) => item.id === operationId ? restored : item)
+      return restored
     },
     ...overrides,
   }

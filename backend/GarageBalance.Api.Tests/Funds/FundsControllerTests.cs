@@ -9,6 +9,24 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class FundsControllerTests
 {
     [Fact]
+    public async Task GetOperations_PassesBoundedQueryToService()
+    {
+        var operation = CreateOperation(isCanceled: true);
+        var service = new FakeFundService
+        {
+            Operations = [operation]
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetOperations(limit: 12, includeCanceled: true, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(service.Operations, ok.Value);
+        Assert.Equal(12, service.LastOperationsLimit);
+        Assert.True(service.LastOperationsIncludeCanceled);
+    }
+
+    [Fact]
     public async Task UpdateOperation_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -183,8 +201,11 @@ public sealed class FundsControllerTests
         public Guid? LastUpdatedOperationId { get; private set; }
         public Guid? LastCanceledOperationId { get; private set; }
         public Guid? LastRestoredOperationId { get; private set; }
+        public int? LastOperationsLimit { get; private set; }
+        public bool? LastOperationsIncludeCanceled { get; private set; }
         public UpdateFundOperationRequest? LastUpdateRequest { get; private set; }
         public CancelFundOperationRequest? LastCancelRequest { get; private set; }
+        public IReadOnlyList<FundOperationDto> Operations { get; init; } = [];
         public FundResult<FundOperationDto> UpdateOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> CancelOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> RestoreOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
@@ -192,6 +213,13 @@ public sealed class FundsControllerTests
         public Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlyList<FundDto>>([]);
+        }
+
+        public Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
+        {
+            LastOperationsLimit = limit;
+            LastOperationsIncludeCanceled = includeCanceled;
+            return Task.FromResult(Operations);
         }
 
         public Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

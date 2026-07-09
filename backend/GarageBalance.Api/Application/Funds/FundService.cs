@@ -33,6 +33,35 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         return funds.Select(fund => ToDto(fund, availableToDistribute)).ToList();
     }
 
+    public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
+    {
+        var boundedLimit = Math.Clamp(limit, 1, 100);
+        var query = dbContext.FundOperations
+            .AsNoTracking()
+            .Include(operation => operation.Fund)
+            .Where(operation => includeCanceled || !operation.IsCanceled);
+
+        List<FundOperation> operations;
+        if (IsSqliteProvider())
+        {
+            operations = (await query.ToListAsync(cancellationToken))
+                .OrderByDescending(operation => operation.CreatedAtUtc)
+                .ThenByDescending(operation => operation.Id)
+                .Take(boundedLimit)
+                .ToList();
+        }
+        else
+        {
+            operations = await query
+                .OrderByDescending(operation => operation.CreatedAtUtc)
+                .ThenByDescending(operation => operation.Id)
+                .Take(boundedLimit)
+                .ToListAsync(cancellationToken);
+        }
+
+        return operations.Select(ToDto).ToList();
+    }
+
     public async Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var fund = await dbContext.Funds.SingleOrDefaultAsync(item => item.Id == fundId, cancellationToken);

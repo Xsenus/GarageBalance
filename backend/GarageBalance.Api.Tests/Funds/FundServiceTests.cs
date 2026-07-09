@@ -143,6 +143,30 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task GetOperationsAsync_ReturnsRecentOperationsAndCanIncludeCanceled()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 2000m);
+        var first = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Первичное распределение"), null, CancellationToken.None);
+        var second = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("withdraw", 100m, "Возврат"), null, CancellationToken.None);
+        var third = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 300m, "Дополнительное распределение"), null, CancellationToken.None);
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        Assert.True(third.Succeeded);
+        Assert.True((await service.CancelOperationAsync(second.Value!.Id, new CancelFundOperationRequest("Ошибочное изъятие"), null, CancellationToken.None)).Succeeded);
+
+        var activeOperations = await service.GetOperationsAsync(limit: 2, includeCanceled: false, CancellationToken.None);
+        var allOperations = await service.GetOperationsAsync(limit: 10, includeCanceled: true, CancellationToken.None);
+
+        Assert.Equal([third.Value!.Id, first.Value!.Id], activeOperations.Select(operation => operation.Id));
+        Assert.Equal(3, allOperations.Count);
+        Assert.Contains(allOperations, operation => operation.Id == second.Value.Id && operation.IsCanceled);
+        Assert.All(allOperations, operation => Assert.Equal("Электроэнергия", operation.FundName));
+    }
+
+    [Fact]
     public async Task UpdateOperationAsync_UpdatesOperationRecalculatesBalancesAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -34,7 +34,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import { financeApi } from './services/financeApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
-import type { FundDto, FundsClient } from './services/fundsApi'
+import type { FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import { formStatesApi } from './services/formStatesApi'
 import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
@@ -6235,6 +6235,12 @@ type FundOperationDraft = {
   reason: string
 }
 
+type FundOperationStatusDraft = {
+  action: 'cancel' | 'restore'
+  operation: FundOperationDto
+  reason: string
+}
+
 function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   return {
     id: fund.id,
@@ -6246,18 +6252,26 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
 
 function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
+  const [operationRows, setOperationRows] = useState<FundOperationDto[]>([])
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
+  const [statusAction, setStatusAction] = useState<FundOperationStatusDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [savingOperation, setSavingOperation] = useState(false)
+  const [savingStatusAction, setSavingStatusAction] = useState(false)
   useRestoreFocusOnClose(Boolean(operation))
+  useRestoreFocusOnClose(Boolean(statusAction))
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
+  const statusReasonRef = useFocusOnOpen<HTMLTextAreaElement>(statusAction?.action === 'cancel')
+  const statusCancelRef = useFocusOnOpen<HTMLButtonElement>(statusAction?.action === 'restore')
+  const statusDialogRef = useFocusTrap<HTMLElement>(Boolean(statusAction))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
+  useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
   useEffect(() => {
     let cancelled = false
@@ -6266,9 +6280,13 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
       setIsLoading(true)
       setLoadError(null)
       try {
-        const funds = await fundsClient.getFunds(auth.accessToken)
+        const [funds, operations] = await Promise.all([
+          fundsClient.getFunds(auth.accessToken),
+          fundsClient.getOperations(auth.accessToken, { limit: 20, includeCanceled: true }),
+        ])
         if (!cancelled) {
           setRows(funds.map(mapFundDtoToPrototypeRow))
+          setOperationRows(operations)
           setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
         }
       } catch (error: unknown) {
@@ -6289,6 +6307,16 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
     }
   }, [auth.accessToken, fundsClient])
 
+  async function refreshFundsPanel() {
+    const [funds, operations] = await Promise.all([
+      fundsClient.getFunds(auth.accessToken),
+      fundsClient.getOperations(auth.accessToken, { limit: 20, includeCanceled: true }),
+    ])
+    setRows(funds.map(mapFundDtoToPrototypeRow))
+    setOperationRows(operations)
+    setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
+  }
+
   function openFundOperation(kind: FundOperationKind, fund: FundPrototypeRow) {
     setOperation({ kind, fundId: fund.id, fundName: fund.name, amount: '', reason: '' })
     setOperationError(null)
@@ -6298,6 +6326,17 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   function closeFundOperation() {
     setOperation(null)
     setOperationError(null)
+  }
+
+  function closeFundStatusAction() {
+    setStatusAction(null)
+    setOperationError(null)
+  }
+
+  function openFundStatusAction(action: 'cancel' | 'restore', fundOperation: FundOperationDto) {
+    setStatusAction({ action, operation: fundOperation, reason: '' })
+    setOperationError(null)
+    setOperationMessage(null)
   }
 
   function parseFundOperationAmount(value: string) {
@@ -6340,19 +6379,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
         amount,
         reason,
       })
-      setRows((currentRows) => currentRows.map((row) => (
-        row.id === savedOperation.fundId ? { ...row, amount: savedOperation.balanceAfter } : row
-      )))
-      setAvailableToDistribute((current) => {
-        if (current === null) {
-          return current
-        }
-
-        const nextAmount = operation.kind === 'deposit'
-          ? current - savedOperation.amount
-          : current + savedOperation.amount
-        return Math.max(0, nextAmount)
-      })
+      await refreshFundsPanel()
       setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${savedOperation.fundName}" сохранено и записано в историю изменений.`)
       closeFundOperation()
     } catch (error: unknown) {
@@ -6362,8 +6389,38 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
     }
   }
 
+  async function submitFundStatusAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!statusAction) {
+      return
+    }
+
+    if (statusAction.action === 'cancel' && !statusAction.reason.trim()) {
+      setOperationError('Укажите причину отмены операции фонда.')
+      return
+    }
+
+    setSavingStatusAction(true)
+    try {
+      if (statusAction.action === 'cancel') {
+        await fundsClient.cancelOperation(auth.accessToken, statusAction.operation.id, { reason: statusAction.reason.trim() })
+      } else {
+        await fundsClient.restoreOperation(auth.accessToken, statusAction.operation.id)
+      }
+      await refreshFundsPanel()
+      setOperationMessage(`${statusAction.action === 'cancel' ? 'Операция отменена' : 'Операция восстановлена'} и записана в историю изменений.`)
+      closeFundStatusAction()
+    } catch (error: unknown) {
+      setOperationError(error instanceof Error ? error.message : 'Не удалось изменить статус операции фонда.')
+    } finally {
+      setSavingStatusAction(false)
+    }
+  }
+
   const operationAmount = operation ? parseFundOperationAmount(operation.amount) : null
   const operationActionLabel = operation?.kind === 'deposit' ? 'Пополнить фонд' : 'Изъять из фонда'
+  const statusActionTitle = statusAction?.action === 'cancel' ? 'Отменить операцию фонда?' : 'Вернуть операцию фонда?'
+  const statusActionLabel = statusAction?.operation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'
 
   return (
     <section className="funds-page" aria-label="Управление фондами">
@@ -6418,6 +6475,53 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
       </div>
 
       {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
+
+      <div className="funds-sheet funds-operations-sheet">
+        <table className="funds-table funds-operations-table" aria-label="Операции фондов">
+          <thead>
+            <tr>
+              <th scope="col">Дата</th>
+              <th scope="col">Фонд</th>
+              <th scope="col">Операция</th>
+              <th scope="col">Сумма</th>
+              <th scope="col">Остаток</th>
+              <th scope="col">Статус</th>
+              <th scope="col">Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            {operationRows.length > 0 ? operationRows.map((fundOperation) => (
+              <tr key={fundOperation.id}>
+                <td>{formatDateTime(fundOperation.createdAtUtc)}</td>
+                <td>{fundOperation.fundName}</td>
+                <td>{fundOperation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'}</td>
+                <td>{formatMoney(fundOperation.amount)} руб.</td>
+                <td>{formatMoney(fundOperation.balanceAfter)} руб.</td>
+                <td>
+                  <span className={fundOperation.isCanceled ? 'dictionary-status-pill dictionary-status-pill-archived' : 'dictionary-status-pill dictionary-status-pill-active'}>
+                    {fundOperation.isCanceled ? 'Отменена' : 'Активна'}
+                  </span>
+                </td>
+                <td>
+                  {fundOperation.isCanceled ? (
+                    <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} data-tooltip="Вернуть" onClick={() => openFundStatusAction('restore', fundOperation)}>
+                      <RotateCcw size={16} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
+                      <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )) : !isLoading ? (
+              <tr>
+                <td colSpan={7}>Операций фондов пока нет.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
 
       {operation ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeFundOperation}>
@@ -6482,6 +6586,60 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                 <button className="secondary-button" type="submit" disabled={savingOperation}>
                   <Save size={16} />
                   <span>{savingOperation ? 'Сохраняем...' : 'Подтвердить операцию'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {statusAction ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!savingStatusAction) {
+            closeFundStatusAction()
+          }
+        }}>
+          <section ref={statusDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-status-title" aria-describedby="fund-status-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">{statusAction.action === 'cancel' ? 'Отмена операции' : 'Восстановление операции'}</p>
+                <h3 id="fund-status-title">{statusActionTitle}</h3>
+                <p>{statusAction.operation.fundName} · {statusActionLabel} · {formatMoney(statusAction.operation.amount)} руб.</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeFundStatusAction} aria-label="Закрыть подтверждение операции фонда" disabled={savingStatusAction}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fund-status-description">
+              {statusAction.action === 'cancel'
+                ? 'Укажите причину отмены. Операция будет скрыта из активных расчетов, а действие попадет в историю изменений.'
+                : 'Операция снова попадет в активные расчеты фонда, а действие будет записано в историю изменений.'}
+            </p>
+            <form className="dictionary-modal-form" onSubmit={submitFundStatusAction}>
+              {statusAction.action === 'cancel' ? (
+                <FormField label="Причина отмены">
+                  <textarea
+                    ref={statusReasonRef}
+                    aria-label="Причина отмены операции фонда"
+                    rows={3}
+                    maxLength={1000}
+                    value={statusAction.reason}
+                    onChange={(event) => {
+                      setStatusAction({ ...statusAction, reason: event.target.value })
+                      if (operationError) {
+                        setOperationError(null)
+                      }
+                    }}
+                    placeholder="Например: ошибочное распределение средств"
+                    disabled={savingStatusAction}
+                  />
+                </FormField>
+              ) : null}
+              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button ref={statusCancelRef} className="ghost-button" type="button" onClick={closeFundStatusAction} disabled={savingStatusAction}>Отмена</button>
+                <button className={statusAction.action === 'cancel' ? 'secondary-button danger-button' : 'secondary-button'} type="submit" disabled={savingStatusAction}>
+                  {statusAction.action === 'cancel' ? <Trash2 size={16} aria-hidden="true" /> : <RotateCcw size={16} aria-hidden="true" />}
+                  <span>{savingStatusAction ? 'Сохраняем...' : statusAction.action === 'cancel' ? 'Отменить операцию' : 'Вернуть операцию'}</span>
                 </button>
               </div>
             </form>
