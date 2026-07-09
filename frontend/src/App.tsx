@@ -14176,11 +14176,11 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: 
               </div>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingReadingChange}>
                 <Save size={16} />
                 <span>Сохранить</span>
               </button>
-              <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
             </div>
           </section>
         </div>
