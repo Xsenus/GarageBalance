@@ -79,6 +79,26 @@ public sealed class ApiEndpointDocumentationTests
         Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone7ConfirmationStatusSync", roadmap, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProjectWideHistoryRoadmapDocumentsMilestone9SettingsStatusSync()
+    {
+        var roadmap = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        const string settingsCoverageLine =
+            "Настройки: все системные настройки, интеграционные настройки, protected/secret поля с маскированием.";
+        const string milestoneLine =
+            "Настройки: история, confirmations, style audit.";
+
+        Assert.Contains($"- `[x]` {settingsCoverageLine}", roadmap, StringComparison.Ordinal);
+        Assert.Contains($"- `[x]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[ ]` {settingsCoverageLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[~]` {settingsCoverageLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[ ]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[~]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone9SettingsStatusSync", roadmap, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
