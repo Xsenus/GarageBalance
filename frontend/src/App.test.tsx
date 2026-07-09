@@ -20,7 +20,7 @@ import { formStatesApi } from './services/formStatesApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -1489,6 +1489,98 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов', hidden: true })).not.toBeInTheDocument()
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 180000)
+
+  it('confirms contractor staff edits with department and rate diff', async () => {
+    const user = userEvent.setup()
+    const currentDepartment = createStaffDepartment({ id: '11111111-1111-4111-8111-111111111111', name: 'Бухгалтерия' })
+    const nextDepartment = createStaffDepartment({ id: '22222222-2222-4222-8222-222222222222', name: 'Охрана' })
+    let staffMember = createStaffMember({
+      id: '33333333-3333-4333-8333-333333333333',
+      fullName: 'Петрова Ольга',
+      departmentId: currentDepartment.id,
+      departmentName: currentDepartment.name,
+      rate: 40000,
+    })
+    const updateStaffMember = vi.fn(async (_token: string, id: string, request: UpsertStaffMemberRequest) => {
+      const department = request.departmentId === nextDepartment.id ? nextDepartment : currentDepartment
+      staffMember = createStaffMember({
+        ...staffMember,
+        id,
+        fullName: request.fullName,
+        departmentId: department.id,
+        departmentName: department.name,
+        rate: request.rate,
+      })
+      return staffMember
+    })
+    const dictionaryClient = createDictionaryClient({
+      getStaffDepartments: async () => [currentDepartment, nextDepartment],
+      getStaffMembers: async () => [staffMember],
+      updateStaffMember,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    const staffTable = await within(contractorsPanel).findByRole('table', { name: 'Персонал' })
+    let staffRow = within(staffTable).getByText('Петрова Ольга').closest('[role="row"]')
+    if (!staffRow) {
+      throw new Error('Строка сотрудника Петрова Ольга не найдена.')
+    }
+
+    let editButton = within(staffRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Петрова Ольга' })
+    await user.click(editButton)
+    let staffDialog = await screen.findByRole('dialog', { name: 'Петрова Ольга' })
+    await user.click(within(staffDialog).getByRole('button', { name: /Сохранить/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения сотрудника' })).not.toBeInTheDocument())
+    expect(updateStaffMember).not.toHaveBeenCalled()
+    await waitFor(() => expect(editButton).toHaveFocus())
+
+    staffRow = within(staffTable).getByText('Петрова Ольга').closest('[role="row"]')
+    if (!staffRow) {
+      throw new Error('Строка сотрудника Петрова Ольга не найдена после no-op сохранения.')
+    }
+
+    editButton = within(staffRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Петрова Ольга' })
+    await user.click(editButton)
+    staffDialog = await screen.findByRole('dialog', { name: 'Петрова Ольга' })
+    await user.selectOptions(within(staffDialog).getByLabelText('Отдел сотрудника'), nextDepartment.name)
+    await user.clear(within(staffDialog).getByLabelText('Ставка сотрудника'))
+    await user.type(within(staffDialog).getByLabelText('Ставка сотрудника'), '45000')
+    const saveButton = within(staffDialog).getByRole('button', { name: /Сохранить/i })
+    await user.click(saveButton)
+
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения сотрудника' })
+    expect(within(confirmationDialog).getByText('Петрова Ольга')).toBeInTheDocument()
+    expect(confirmationDialog).toHaveTextContent('Отдел')
+    expect(confirmationDialog).toHaveTextContent('Бухгалтерия -> Охрана')
+    expect(confirmationDialog).toHaveTextContent('Ставка')
+    expect(confirmationDialog).toHaveTextContent(/40\s*000\s*->\s*45000/)
+    expect(updateStaffMember).not.toHaveBeenCalled()
+    await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения сотрудника' })).not.toBeInTheDocument())
+    await waitFor(() => expect(saveButton).toHaveFocus())
+    expect(updateStaffMember).not.toHaveBeenCalled()
+
+    await user.click(saveButton)
+    const reopenedConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения сотрудника' })
+    await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateStaffMember).toHaveBeenCalledWith('token', staffMember.id, expect.objectContaining({
+      departmentId: nextDepartment.id,
+      rate: 45000,
+    })))
+    const updatedStaffRow = within(staffTable).getByText('Петрова Ольга').closest('[role="row"]')
+    if (!updatedStaffRow) {
+      throw new Error('Строка сотрудника Петрова Ольга не найдена после подтверждения.')
+    }
+    expect(updatedStaffRow).toHaveTextContent('Охрана')
+    expect(updatedStaffRow).toHaveTextContent(/45\s*000/)
+  })
 
   it('opens financial reports for suppliers and staff from contractors tables', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
