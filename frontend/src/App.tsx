@@ -1547,10 +1547,10 @@ function FinancePanel({
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
   const [financeEditorInitialSnapshot, setFinanceEditorInitialSnapshot] = useState('')
   const [pendingFinanceEditConfirmation, setPendingFinanceEditConfirmation] = useState<{
-    kind: 'income' | 'expense'
+    kind: 'income' | 'expense' | 'accrual'
     recordId: string
     objectName: string
-    request: CreateIncomeOperationRequest | CreateExpenseOperationRequest
+    request: CreateIncomeOperationRequest | CreateExpenseOperationRequest | CreateAccrualRequest
     changes: ChangePreview[]
   } | null>(null)
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
@@ -1929,6 +1929,41 @@ function FinancePanel({
     return changes
   }
 
+  function getAccrualEditChangePreview(record: AccrualDto, request: CreateAccrualRequest) {
+    const changes: ChangePreview[] = []
+    const formatAccrualGarage = (garageId: string | null | undefined, fallbackGarageNumber: string | null | undefined) => {
+      if (!garageId) {
+        return 'пусто'
+      }
+
+      if (fallbackGarageNumber) {
+        return formatFinanceGarageLabel(fallbackGarageNumber)
+      }
+
+      const garage = incomeGarageOptions.find((item) => item.id === garageId)
+      return garage ? formatFinanceGarageLabel(garage.number) : formatFinanceGarageLabel(garageId)
+    }
+    const formatAccrualIncomeType = (incomeTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
+      if (!incomeTypeId) {
+        return 'пусто'
+      }
+
+      if (fallbackName) {
+        return fallbackName
+      }
+
+      return incomeTypes.find((item) => item.id === incomeTypeId)?.name ?? incomeTypeId
+    }
+
+    appendChangePreview(changes, 'Гараж', formatAccrualGarage(record.garageId, record.garageNumber), formatAccrualGarage(request.garageId, request.garageId === record.garageId ? record.garageNumber : null))
+    appendChangePreview(changes, 'Вид начисления', formatAccrualIncomeType(record.incomeTypeId, record.incomeTypeName), formatAccrualIncomeType(request.incomeTypeId, request.incomeTypeId === record.incomeTypeId ? record.incomeTypeName : null))
+    appendChangePreview(changes, 'Месяц начисления', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
+    appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
+    appendChangePreview(changes, 'Источник', formatAccrualSource(record.source), formatAccrualSource(request.source))
+    appendChangePreview(changes, 'Комментарий', formatChangeText(record.comment), formatChangeText(request.comment))
+    return changes
+  }
+
   async function confirmPendingFinanceEdit() {
     if (!pendingFinanceEditConfirmation) {
       return
@@ -1940,10 +1975,14 @@ function FinancePanel({
         await financeClient.updateIncome(auth.accessToken, pending.recordId, pending.request as CreateIncomeOperationRequest)
         await loadFinanceWorkbench('income', financePage.offset, financePage.limit)
         setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
-      } else {
+      } else if (pending.kind === 'expense') {
         await financeClient.updateExpense(auth.accessToken, pending.recordId, pending.request as CreateExpenseOperationRequest)
         await loadFinanceWorkbench('expense', financePage.offset, financePage.limit)
         setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      } else {
+        await financeClient.updateAccrual(auth.accessToken, pending.recordId, pending.request as CreateAccrualRequest)
+        await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit)
+        setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
       }
     })
     if (saved) {
@@ -2077,12 +2116,25 @@ function FinancePanel({
     }
 
     setAccrualValidationErrors([])
-    const saved = await runSaving('accrual', async () => {
-      if (financeEditor?.mode === 'edit' && financeEditor.record && 'incomeTypeId' in financeEditor.record && !('operationKind' in financeEditor.record)) {
-        await financeClient.updateAccrual(auth.accessToken, financeEditor.record.id, request)
-      } else {
-        await financeClient.createAccrual(auth.accessToken, request)
+    if (financeEditor?.mode === 'edit' && financeEditor.record && 'incomeTypeId' in financeEditor.record && !('operationKind' in financeEditor.record)) {
+      const changes = getAccrualEditChangePreview(financeEditor.record, request)
+      if (changes.length === 0) {
+        closeFinanceEditor({ skipConfirmation: true })
+        return
       }
+
+      setPendingFinanceEditConfirmation({
+        kind: 'accrual',
+        recordId: financeEditor.record.id,
+        objectName: `${financeEditor.record.incomeTypeName} · ${formatFinanceGarageLabel(financeEditor.record.garageNumber)} · ${formatChangeMoney(financeEditor.record.amount)}`,
+        request,
+        changes,
+      })
+      return
+    }
+
+    const saved = await runSaving('accrual', async () => {
+      await financeClient.createAccrual(auth.accessToken, request)
       await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit)
       setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
     })

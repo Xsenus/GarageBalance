@@ -6374,6 +6374,57 @@ describe('App', () => {
     expect(within(financePanel).queryByText('RKO-edit')).not.toBeInTheDocument()
   })
 
+  it('edits owner accrual from payments table with confirmation', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '1100')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Начисление edit')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
+
+    const accrualCell = await within(financePanel).findByText('Начисление edit')
+    const accrualRow = accrualCell.closest('tr')!
+    accrualRow.focus()
+    await user.keyboard(' ')
+    const dialog = await screen.findByRole('dialog', { name: 'Ручное начисление' })
+    expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+
+    await user.clear(within(dialog).getByLabelText('Сумма начисления'))
+    await user.type(within(dialog).getByLabelText('Сумма начисления'), '1350')
+    await user.clear(within(dialog).getByLabelText('Комментарий начисления'))
+    await user.type(within(dialog).getByLabelText('Комментарий начисления'), 'Начисление после сверки')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    let accrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    const accrualChangeList = within(accrualChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
+    expect(within(accrualChangeList).getByText('Сумма')).toBeInTheDocument()
+    expect(within(accrualChangeList).getByText('1 100,00')).toBeInTheDocument()
+    expect(within(accrualChangeList).getByText('1 350,00')).toBeInTheDocument()
+    expect(within(accrualChangeList).getByText('Комментарий')).toBeInTheDocument()
+    expect(within(accrualChangeList).getByText('Начисление после сверки')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Ручное начисление' })).toBeInTheDocument()
+    expect(within(financePanel).queryByText('Начисление после сверки')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    accrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    await user.click(within(accrualChangeDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ручное начисление' })).not.toBeInTheDocument())
+    expect(await within(financePanel).findByText('Начисление после сверки')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('1 350,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).queryByText('Начисление edit')).not.toBeInTheDocument()
+  })
+
   it('opens new income dialog from payment context menu', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -10148,6 +10199,24 @@ function createStatefulFinanceClient(): FinanceClient {
       })
       accruals = [accrual, ...accruals]
       return accrual
+    },
+    updateAccrual: async (_token, accrualId, request) => {
+      const accrual = accruals.find((item) => item.id === accrualId)
+      if (!accrual) {
+        throw new Error('Начисление не найдено.')
+      }
+
+      const updated = {
+        ...accrual,
+        garageId: request.garageId,
+        incomeTypeId: request.incomeTypeId,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        source: request.source,
+        comment: request.comment ?? null,
+      }
+      accruals = accruals.map((item) => (item.id === accrualId ? updated : item))
+      return updated
     },
     cancelAccrual: async (_token, accrualId, request) => {
       const accrual = accruals.find((item) => item.id === accrualId)
