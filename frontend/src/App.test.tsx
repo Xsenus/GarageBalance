@@ -3290,8 +3290,9 @@ describe('App', () => {
     await user.click(withdrawElectricityButton)
     const withdrawDialog = await screen.findByRole('dialog', { name: 'Изъять из фонда' })
     expect(within(withdrawDialog).getByText('Электроэнергия')).toBeInTheDocument()
-    await user.click(within(withdrawDialog).getByRole('button', { name: 'Отмена' }))
-    expect(withdrawElectricityButton).toHaveFocus()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изъять из фонда' })).not.toBeInTheDocument())
+    await waitFor(() => expect(withdrawElectricityButton).toHaveFocus())
 
     const depositTargetButton = within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Целевые взносы' })
     expect(depositTargetButton).toHaveAttribute('data-tooltip', 'Пополнить')
