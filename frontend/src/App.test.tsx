@@ -20,7 +20,7 @@ import { formStatesApi } from './services/formStatesApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -5125,6 +5125,92 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
   }, 30_000)
+
+  it('confirms garage dictionary edits with owner label and money diff', async () => {
+    const user = userEvent.setup()
+    const currentOwner = createOwner({ id: 'owner-current', lastName: 'Иванов', firstName: 'Иван' })
+    const nextOwner = createOwner({ id: 'owner-next', lastName: 'Петров', firstName: 'Петр' })
+    let garage = createGarage({
+      id: 'garage-12',
+      number: '12',
+      ownerId: currentOwner.id,
+      ownerName: currentOwner.fullName,
+      startingBalance: 100,
+    })
+    const updateGarage = vi.fn(async (_token: string, id: string, request: UpsertGarageRequest) => {
+      const owner = request.ownerId === nextOwner.id ? nextOwner : currentOwner
+      garage = createGarage({
+        ...garage,
+        id,
+        ownerId: owner.id,
+        ownerName: owner.fullName,
+        startingBalance: request.startingBalance,
+      })
+      return garage
+    })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [currentOwner, nextOwner],
+      getGarages: async () => [garage],
+      updateGarage,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    let garageTable = await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    let garageRow = within(garageTable).getByText('12').closest('tr')
+    if (!garageRow) {
+      throw new Error('Строка гаража 12 не найдена.')
+    }
+
+    fireEvent.doubleClick(garageRow)
+    let garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
+    await user.click(within(garageDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    expect(updateGarage).not.toHaveBeenCalled()
+
+    garageTable = await within(dictionaryPanel).findByRole('table', { name: /Таблица: Гаражи/ })
+    garageRow = within(garageTable).getByText('12').closest('tr')
+    if (!garageRow) {
+      throw new Error('Строка гаража 12 не найдена после no-op сохранения.')
+    }
+
+    fireEvent.doubleClick(garageRow)
+    garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
+    await user.selectOptions(within(garageDialog).getByLabelText('Владелец гаража'), nextOwner.id)
+    await user.clear(within(garageDialog).getByLabelText('Стартовый баланс гаража'))
+    await user.type(within(garageDialog).getByLabelText('Стартовый баланс гаража'), '350')
+    const saveButton = within(garageDialog).getByRole('button', { name: 'Сохранить' })
+    await user.click(saveButton)
+
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    const changeList = within(confirmationDialog).getByRole('list', { name: 'Изменяемые поля' })
+    expect(changeList).toHaveTextContent('Владелец')
+    expect(changeList).toHaveTextContent('Иванов Иван')
+    expect(changeList).toHaveTextContent('Петров Петр')
+    expect(changeList).toHaveTextContent('Стартовый баланс')
+    expect(changeList).toHaveTextContent('100,00')
+    expect(changeList).toHaveTextContent('350,00')
+    expect(updateGarage).not.toHaveBeenCalled()
+    await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    await waitFor(() => expect(saveButton).toHaveFocus())
+    expect(updateGarage).not.toHaveBeenCalled()
+
+    await user.click(saveButton)
+    const reopenedConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    await waitFor(() => expect(updateGarage).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({
+      ownerId: nextOwner.id,
+      startingBalance: 350,
+    })))
+    expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('350,00')).toBeInTheDocument()
+  })
 
   it('edits supplier groups and accounting operation types from dictionary dialogs', async () => {
     const user = userEvent.setup()
