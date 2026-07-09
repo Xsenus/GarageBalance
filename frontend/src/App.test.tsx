@@ -1044,7 +1044,14 @@ describe('App', () => {
 
     const addContractorServiceButton = within(contractorsPanel).getByRole('button', { name: 'Добавить услугу' })
     await user.click(addContractorServiceButton)
-    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    let serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги контрагента'), 'Черновая услуга')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
+
+    await user.click(addContractorServiceButton)
+    serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги контрагента'), 'Уборка территории')
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
