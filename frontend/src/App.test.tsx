@@ -5349,7 +5349,15 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Вывоз мусора')).toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
-    const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const addTariffButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    let tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await waitFor(() => expect(within(tariffDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Тарифы' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addTariffButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Мусор')).not.toBeInTheDocument()
+
+    tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Мусор')
     await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'people')
     await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
