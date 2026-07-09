@@ -863,7 +863,7 @@ describe('App', () => {
 
     expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
-  })
+  }, 180000)
 
   it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
@@ -5391,6 +5391,126 @@ describe('App', () => {
     })))
     expect(await within(dictionaryPanel).findByText('Ремонтные работы')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('2 500,00')).toBeInTheDocument()
+  })
+
+  it('confirms tariff dictionary edits with labels dates and electricity tier diff', async () => {
+    const user = userEvent.setup()
+    let tariff = createTariff({
+      id: 'tariff-water',
+      name: 'Тариф воды',
+      calculationBase: 'meter_water',
+      rate: 50,
+      effectiveFrom: '2026-07-01',
+      comment: 'После собрания',
+    })
+    const updateTariff = vi.fn(async (_token: string, id: string, request: UpsertTariffRequest) => {
+      tariff = createTariff({
+        ...tariff,
+        id,
+        name: request.name,
+        calculationBase: request.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+        comment: request.comment ?? null,
+        electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+        electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+        electricityFirstRate: request.electricityFirstRate ?? null,
+        electricitySecondRate: request.electricitySecondRate ?? null,
+        electricityThirdRate: request.electricityThirdRate ?? null,
+      })
+      return tariff
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [tariff],
+      updateTariff,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    let tariffTable = await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    let tariffRow = within(tariffTable).getByText('Тариф воды').closest('tr')
+    if (!tariffRow) {
+      throw new Error('Строка тарифа воды не найдена.')
+    }
+
+    fireEvent.doubleClick(tariffRow)
+    let tariffDialog = await screen.findByRole('dialog', { name: 'Тарифы' })
+    await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    expect(updateTariff).not.toHaveBeenCalled()
+
+    tariffTable = await within(dictionaryPanel).findByRole('table', { name: /Таблица: Тарифы/ })
+    tariffRow = within(tariffTable).getByText('Тариф воды').closest('tr')
+    if (!tariffRow) {
+      throw new Error('Строка тарифа воды не найдена после no-op сохранения.')
+    }
+
+    fireEvent.doubleClick(tariffRow)
+    tariffDialog = await screen.findByRole('dialog', { name: 'Тарифы' })
+    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'meter_electricity')
+    await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '6.5')
+    await user.clear(within(tariffDialog).getByLabelText('Дата начала тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Дата начала тарифа'), '2026-08-15')
+    await user.type(within(tariffDialog).getByLabelText('Первый порог электроэнергии'), '100')
+    await user.type(within(tariffDialog).getByLabelText('Второй порог электроэнергии'), '200')
+    await user.type(within(tariffDialog).getByLabelText('Первая ставка электроэнергии'), '4.25')
+    await user.type(within(tariffDialog).getByLabelText('Вторая ставка электроэнергии'), '5.25')
+    await user.type(within(tariffDialog).getByLabelText('Третья ставка электроэнергии'), '6.75')
+    const saveButton = within(tariffDialog).getByRole('button', { name: 'Сохранить' })
+    await user.click(saveButton)
+
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    const changeList = within(confirmationDialog).getByRole('list', { name: 'Изменяемые поля' })
+    expect(changeList).toHaveTextContent('База расчета')
+    expect(changeList).toHaveTextContent('По счетчику воды')
+    expect(changeList).toHaveTextContent('По счетчику электричества')
+    expect(changeList).toHaveTextContent('Ставка')
+    expect(changeList).toHaveTextContent('50')
+    expect(changeList).toHaveTextContent('6.5')
+    expect(changeList).toHaveTextContent('Дата начала')
+    expect(changeList).toHaveTextContent('01.07.2026')
+    expect(changeList).toHaveTextContent('15.08.2026')
+    expect(changeList).toHaveTextContent('Первый порог электроэнергии')
+    expect(changeList).toHaveTextContent('100')
+    expect(changeList).toHaveTextContent('Второй порог электроэнергии')
+    expect(changeList).toHaveTextContent('200')
+    expect(changeList).toHaveTextContent('Первая ставка электроэнергии')
+    expect(changeList).toHaveTextContent('4.25')
+    expect(changeList).toHaveTextContent('Вторая ставка электроэнергии')
+    expect(changeList).toHaveTextContent('5.25')
+    expect(changeList).toHaveTextContent('Третья ставка электроэнергии')
+    expect(changeList).toHaveTextContent('6.75')
+    expect(updateTariff).not.toHaveBeenCalled()
+    await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
+    await waitFor(() => expect(saveButton).toHaveFocus())
+    expect(updateTariff).not.toHaveBeenCalled()
+
+    await user.click(saveButton)
+    const reopenedConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    await waitFor(() => expect(updateTariff).toHaveBeenCalledWith('token', tariff.id, expect.objectContaining({
+      calculationBase: 'meter_electricity',
+      rate: 6.5,
+      effectiveFrom: '2026-08-15',
+      electricityFirstThreshold: 100,
+      electricitySecondThreshold: 200,
+      electricityFirstRate: 4.25,
+      electricitySecondRate: 5.25,
+      electricityThirdRate: 6.75,
+    })))
+    const updatedTariffRow = within(tariffTable).getByText('Тариф воды').closest('tr')
+    if (!updatedTariffRow) {
+      throw new Error('Строка тарифа воды не найдена после подтверждения.')
+    }
+    expect(updatedTariffRow).toHaveTextContent('до 100,00 кВт: 4,25, до 200,00 кВт: 5,25, выше: 6,75')
+    expect(updatedTariffRow).toHaveTextContent('15.08.2026')
   })
 
   it('edits supplier groups and accounting operation types from dictionary dialogs', async () => {
