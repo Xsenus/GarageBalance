@@ -1085,7 +1085,10 @@ describe('App', () => {
     expect(within(garageChangeDialog).getByText('Гараж 1')).toBeInTheDocument()
     expect(within(garageChangeDialog).getByText('Владелец')).toBeInTheDocument()
     expect(within(garageChangeDialog).getByText('Иванов Иван -> Новый владелец')).toBeInTheDocument()
-    await waitFor(() => expect(within(garageChangeDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    const garageChangeCancelButton = within(garageChangeDialog).getByRole('button', { name: 'Отмена' })
+    const garageChangeSaveButton = within(garageChangeDialog).getByRole('button', { name: 'Сохранить' })
+    expect(Boolean(garageChangeCancelButton.compareDocumentPosition(garageChangeSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await waitFor(() => expect(garageChangeCancelButton).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения гаража' })).not.toBeInTheDocument()
     expect(garageSaveButton).toHaveFocus()
@@ -1279,7 +1282,10 @@ describe('App', () => {
     expect(within(supplierChangeDialog).getByText('Контакты')).toBeInTheDocument()
     expect(within(supplierChangeDialog).getByText(/22-33/)).toBeInTheDocument()
     expect(within(supplierChangeDialog).getByText(/22-44/)).toBeInTheDocument()
-    await user.click(within(supplierChangeDialog).getByRole('button', { name: 'Сохранить' }))
+    const supplierChangeCancelButton = within(supplierChangeDialog).getByRole('button', { name: 'Отмена' })
+    const supplierChangeSaveButton = within(supplierChangeDialog).getByRole('button', { name: 'Сохранить' })
+    expect(Boolean(supplierChangeCancelButton.compareDocumentPosition(supplierChangeSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await user.click(supplierChangeSaveButton)
 
     supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
@@ -1433,7 +1439,10 @@ describe('App', () => {
     expect(within(employeeChangeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
     expect(within(employeeChangeDialog).getByText('Ставка')).toBeInTheDocument()
     expect(within(employeeChangeDialog).getByText(/25\s*000\s*->\s*30000/)).toBeInTheDocument()
-    await user.click(within(employeeChangeDialog).getByRole('button', { name: 'Сохранить' }))
+    const employeeChangeCancelButton = within(employeeChangeDialog).getByRole('button', { name: 'Отмена' })
+    const employeeChangeSaveButton = within(employeeChangeDialog).getByRole('button', { name: 'Сохранить' })
+    expect(Boolean(employeeChangeCancelButton.compareDocumentPosition(employeeChangeSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await user.click(employeeChangeSaveButton)
 
     const updatedEmployeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
     await user.pointer({ keys: '[MouseRight]', target: updatedEmployeeRow as HTMLElement })

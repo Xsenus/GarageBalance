@@ -12270,11 +12270,11 @@ function PrototypeChangeConfirmationDialog({
           ))}
         </dl>
         <div className="detail-dialog-actions contractors-dialog-actions">
+          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
           <button className="secondary-button" type="button" onClick={onConfirm}>
             <Save size={16} />
             <span>Сохранить</span>
           </button>
-          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
         </div>
       </section>
     </div>
