@@ -13209,6 +13209,46 @@ function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amo
   return 'Значение'
 }
 
+function formatFeeCampaignParticipantsChange(appliesToAllGarages: boolean, participantGarageIds: string[], garageOptions: GarageDto[]) {
+  if (appliesToAllGarages) {
+    return 'Все гаражи'
+  }
+
+  const garageNumbers = participantGarageIds
+    .map((garageId) => garageOptions.find((garage) => garage.id === garageId)?.number)
+    .filter((number): number is string => Boolean(number))
+    .sort((left, right) => left.localeCompare(right, 'ru', { numeric: true }))
+
+  return garageNumbers.length > 0 ? garageNumbers.join(', ') : 'пусто'
+}
+
+function getFeeCampaignChangePreview(
+  campaign: FeeCampaignDto,
+  request: UpsertFeeCampaignRequest,
+  incomeTypes: AccountingTypeDto[],
+  garageOptions: GarageDto[],
+) {
+  const changes: ChangePreview[] = []
+  const formatIncomeType = (incomeTypeId: string) => incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.name ?? incomeTypeId
+
+  appendChangePreview(changes, 'Наименование', formatChangeText(campaign.name), formatChangeText(request.name))
+  appendChangePreview(changes, 'Вид поступления', formatIncomeType(campaign.incomeTypeId), formatIncomeType(request.incomeTypeId))
+  appendChangePreview(changes, 'Цель', formatChangeText(campaign.goal), formatChangeText(request.goal))
+  appendChangePreview(changes, 'Сумма взноса', formatChangeMoney(campaign.contributionAmount), formatChangeMoney(request.contributionAmount))
+  appendChangePreview(changes, 'Сумма сбора', formatChangeMoney(campaign.targetAmount), formatChangeMoney(request.targetAmount))
+  appendChangePreview(changes, 'Дата начала', formatChangeDate(campaign.startsOn), formatChangeDate(request.startsOn))
+  appendChangePreview(changes, 'Дата окончания', formatChangeDate(campaign.endsOn), formatChangeDate(request.endsOn))
+  appendChangePreview(
+    changes,
+    'Участники',
+    formatFeeCampaignParticipantsChange(campaign.appliesToAllGarages, campaign.participantGarageIds, garageOptions),
+    formatFeeCampaignParticipantsChange(request.appliesToAllGarages, request.participantGarageIds ?? [], garageOptions),
+  )
+  appendChangePreview(changes, 'Перенос долга в просроченный', `${formatChangeNumber(campaign.overdueGraceDays)} дн.`, `${formatChangeNumber(request.overdueGraceDays)} дн.`)
+
+  return changes
+}
+
 type TariffsPrototypeSavedState = {
   tariffRows: ContractorTariffRow[]
   oneTimeRows: ContractorOneTimeRow[]
@@ -15176,9 +15216,14 @@ function AddFeePrototypeDialog({
   const [participantGarageIds, setParticipantGarageIds] = useState<string[]>(initialCampaign?.participantGarageIds ?? [])
   const [overdueGraceDays, setOverdueGraceDays] = useState(String(initialCampaign?.overdueGraceDays ?? 30))
   const [error, setError] = useState<string | null>(null)
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ request: UpsertFeeCampaignRequest; changes: ChangePreview[] } | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
+  useRestoreFocusOnClose(Boolean(pendingConfirmation))
+  const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingConfirmation))
+  const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingConfirmation))
+  useEscapeKey(!pendingConfirmation, onClose)
+  useEscapeKey(Boolean(pendingConfirmation), () => setPendingConfirmation(null))
 
   function toggleParticipantGarage(garageId: string, checked: boolean) {
     setParticipantGarageIds((currentIds) => {
@@ -15238,8 +15283,7 @@ function AddFeePrototypeDialog({
       return
     }
 
-    setError(null)
-    await onSave({
+    const request: UpsertFeeCampaignRequest = {
       name: trimmedName,
       incomeTypeId,
       goal: goal.trim() || null,
@@ -15250,24 +15294,49 @@ function AddFeePrototypeDialog({
       appliesToAllGarages,
       participantGarageIds: appliesToAllGarages ? [] : participantGarageIds,
       overdueGraceDays: parsedOverdueGraceDays,
-    })
+    }
+
+    setError(null)
+
+    if (initialCampaign) {
+      const changes = getFeeCampaignChangePreview(initialCampaign, request, incomeTypes, garageOptions)
+      if (changes.length === 0) {
+        onClose()
+        return
+      }
+
+      setPendingConfirmation({ request, changes })
+      return
+    }
+
+    await onSave(request)
+  }
+
+  async function confirmFeeChanges() {
+    if (!pendingConfirmation) {
+      return
+    }
+
+    await onSave(pendingConfirmation.request)
+    setPendingConfirmation(null)
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <h3 id="contractor-fee-title">{title}</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
+    <>
+      <div className="modal-backdrop" role="presentation" onMouseDown={pendingConfirmation ? undefined : onClose}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-dialog-header">
+            <h3 id="contractor-fee-title">{title}</h3>
+            <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose} disabled={Boolean(pendingConfirmation)}>
+              <X size={18} />
+            </button>
+          </div>
 
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={submitFee}>
-          {error ? <FormError>{error}</FormError> : null}
-          <FormField label="Наименование сбора">
-            <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
-          </FormField>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={submitFee}>
+            {error ? <FormError>{error}</FormError> : null}
+            <FormField label="Наименование сбора">
+              <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
+            </FormField>
           <FormField label="Вид поступления">
             <select aria-label="Вид поступления для сбора" value={incomeTypeId} onChange={(event) => setIncomeTypeId(event.target.value)}>
               {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
@@ -15336,17 +15405,55 @@ function AddFeePrototypeDialog({
             </div>
           </FormField>
 
-          <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={isSaving}>
-              {submitLabel}
-            </button>
-            <button className="ghost-button" type="button" onClick={onClose}>
-              Отмена
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>
+            <div className="detail-dialog-actions">
+              <button className="secondary-button" type="submit" disabled={isSaving || Boolean(pendingConfirmation)}>
+                {submitLabel}
+              </button>
+              <button className="ghost-button" type="button" onClick={onClose} disabled={Boolean(pendingConfirmation)}>
+                Отмена
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      {pendingConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingConfirmation(null)}>
+          <section ref={confirmationDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-edit-confirmation-title" aria-describedby="fee-campaign-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Изменение</p>
+                <h3 id="fee-campaign-edit-confirmation-title">Подтвердите изменения сбора</h3>
+                <p>{initialCampaign?.name ?? pendingConfirmation.request.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменений сбора" onClick={() => setPendingConfirmation(null)} disabled={isSaving}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fee-campaign-edit-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля сбора">
+              {pendingConfirmation.changes.map((change) => (
+                <li key={`${change.field}-${change.before}-${change.after}`}>
+                  <span className="dictionary-change-field">{change.field}</span>
+                  <span className="dictionary-change-values">
+                    <span className="dictionary-change-value">{change.before}</span>
+                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingConfirmation(null)} disabled={isSaving}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmFeeChanges()} disabled={isSaving}>
+                <Save size={16} />
+                <span>{isSaving ? 'Сохраняем...' : 'Сохранить изменения'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   )
 }
 

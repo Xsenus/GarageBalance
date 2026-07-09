@@ -1,3 +1,4 @@
+using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Infrastructure.Data;
@@ -40,12 +41,13 @@ public sealed class ImportFingerprintServiceTests
         Assert.Equal("Access/Garage", auditEvent.EntityDisplayName);
         Assert.Equal(importRunId.ToString(), auditEvent.RelatedDocumentId);
         Assert.Equal("42", auditEvent.RelatedDocumentNumber);
-        Assert.Contains("\"sourceSystem\":\"Access\"", auditEvent.MetadataJson, StringComparison.Ordinal);
-        Assert.Contains("\"importEntityType\":\"Garage\"", auditEvent.MetadataJson, StringComparison.Ordinal);
-        Assert.Contains("\"externalId\":\"42\"", auditEvent.MetadataJson, StringComparison.Ordinal);
-        Assert.Contains("\"accessImportRunId\":\"" + importRunId, auditEvent.MetadataJson, StringComparison.Ordinal);
-        Assert.Contains("\"targetEntityType\":\"garage\"", auditEvent.MetadataJson, StringComparison.Ordinal);
-        Assert.Contains("\"targetEntityId\":\"target-42\"", auditEvent.MetadataJson, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("Access", metadata.RootElement.GetProperty("sourceSystem").GetString());
+        Assert.Equal("Garage", metadata.RootElement.GetProperty("importEntityType").GetString());
+        Assert.Equal("42", metadata.RootElement.GetProperty("externalId").GetString());
+        Assert.Equal(importRunId.ToString(), metadata.RootElement.GetProperty("accessImportRunId").GetString());
+        Assert.Equal("garage", metadata.RootElement.GetProperty("targetEntityType").GetString());
+        Assert.Equal("target-42", metadata.RootElement.GetProperty("targetEntityId").GetString());
     }
 
     [Fact]
