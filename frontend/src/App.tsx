@@ -13311,11 +13311,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
             </div>
             <p className="confirmation-text" id="fee-campaign-restore-description">Сбор снова появится как активный и будет доступен для начислений. Действие будет записано в историю изменений.</p>
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={feeCampaignRestoreCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignRestoreDialog} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>Отмена</button>
               <button className="secondary-button" type="button" onClick={restoreFeeCampaign} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>
                 <RotateCcw size={16} />
                 <span>Вернуть</span>
               </button>
-              <button ref={feeCampaignRestoreCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignRestoreDialog} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>Отмена</button>
             </div>
           </section>
         </div>
@@ -13342,11 +13342,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               <textarea aria-label="Комментарий к начислению сбора" value={feeCampaignGenerateComment} onChange={(event) => setFeeCampaignGenerateComment(event.target.value)} placeholder="Например: начисление по решению правления" />
             </FormField>
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={feeCampaignGenerateCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignGenerateDialog}>Отмена</button>
               <button className="secondary-button" type="button" onClick={generateFeeCampaignAccruals} disabled={!feeCampaignGenerateMonth || feeCampaignSavingId === feeCampaignGenerateTarget.id}>
                 <Save size={16} />
                 <span>Начислить</span>
               </button>
-              <button ref={feeCampaignGenerateCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignGenerateDialog}>Отмена</button>
             </div>
           </section>
         </div>
