@@ -8272,6 +8272,19 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
     }
   }
 
+  function renderReportExportButton(extension: 'xlsx' | 'pdf', exportKey: string, onClick: () => void) {
+    const label = extension === 'xlsx' ? 'Скачать XLSX' : 'Скачать PDF'
+    const loadingLabel = extension === 'xlsx' ? 'Готовим XLSX...' : 'Готовим PDF...'
+    const Icon = extension === 'xlsx' ? FileSpreadsheet : FileText
+
+    return (
+      <button className="secondary-button report-export-button" type="button" aria-label={label} title={label} data-tooltip={label} disabled={reportExporting !== null} onClick={onClick}>
+        <Icon size={16} aria-hidden="true" />
+        <span>{reportExporting === exportKey ? loadingLabel : label}</span>
+      </button>
+    )
+  }
+
   function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
     const filter = monthlyFilters[key]
     return (
@@ -8509,12 +8522,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
-            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('cashPayments', 'xlsx')}>
-              {reportExporting === 'cashPayments-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
-            </button>
-            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('cashPayments', 'pdf')}>
-              {reportExporting === 'cashPayments-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
-            </button>
+            {renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}
+            {renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}
           </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
@@ -8537,12 +8546,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
-            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('bankDeposits', 'xlsx')}>
-              {reportExporting === 'bankDeposits-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
-            </button>
-            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadCashOrBankReport('bankDeposits', 'pdf')}>
-              {reportExporting === 'bankDeposits-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
-            </button>
+            {renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}
+            {renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}
           </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
@@ -8597,12 +8602,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
             </label>
           </div>
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сборам">
-            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFeeReport('xlsx')}>
-              {reportExporting === 'fees-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
-            </button>
-            <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFeeReport('pdf')}>
-              {reportExporting === 'fees-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
-            </button>
+            {renderReportExportButton('xlsx', 'fees-xlsx', () => void downloadFeeReport('xlsx'))}
+            {renderReportExportButton('pdf', 'fees-pdf', () => void downloadFeeReport('pdf'))}
           </div>
           <div className="report-workbook-split">
             {renderReportTable(
@@ -8667,12 +8668,8 @@ function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthRespo
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
         {renderDateFilter('funds', { from: 'С', to: 'По' })}
         <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по изменению фондов">
-          <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFundChangeReport('xlsx')}>
-            {reportExporting === 'funds-xlsx' ? 'Готовим XLSX...' : 'Скачать XLSX'}
-          </button>
-          <button className="secondary-button" type="button" disabled={reportExporting !== null} onClick={() => void downloadFundChangeReport('pdf')}>
-            {reportExporting === 'funds-pdf' ? 'Готовим PDF...' : 'Скачать PDF'}
-          </button>
+          {renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}
+          {renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}
         </div>
         {fundChangeReportLoading ? <p className="prototype-status" role="status">Загружаем изменения фондов...</p> : null}
         {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
