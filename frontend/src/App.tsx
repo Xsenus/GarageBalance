@@ -13234,6 +13234,8 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
   const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
+  const [thresholdDeleteTarget, setThresholdDeleteTarget] = useState<ContractorTariffRow | null>(null)
+  const [thresholdDeleteReason, setThresholdDeleteReason] = useState('')
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>([])
   const [tariffDrafts, setTariffDrafts] = useState<Record<string, Partial<ContractorTariffRow>>>({})
   const [oneTimeDrafts, setOneTimeDrafts] = useState<Record<string, Partial<ContractorOneTimeRow>>>({})
@@ -13365,6 +13367,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     setChargeServiceRestoreTarget(null)
   }
 
+  function closeThresholdDeleteDialog() {
+    setThresholdDeleteTarget(null)
+    setThresholdDeleteReason('')
+  }
+
   function closeFeeCampaignGenerateDialog() {
     setFeeCampaignGenerateTarget(null)
     setFeeCampaignGenerateMonth(getCurrentMonthInputValue())
@@ -13479,6 +13486,9 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   useRestoreFocusOnClose(Boolean(chargeServiceRestoreTarget))
   const chargeServiceRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(chargeServiceRestoreTarget))
   const chargeServiceRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(chargeServiceRestoreTarget))
+  useRestoreFocusOnClose(Boolean(thresholdDeleteTarget))
+  const thresholdDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(thresholdDeleteTarget))
+  const thresholdDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(thresholdDeleteTarget))
   useRestoreFocusOnClose(Boolean(feeCampaignGenerateTarget))
   const feeCampaignGenerateDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignGenerateTarget))
   const feeCampaignGenerateCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignGenerateTarget))
@@ -13489,6 +13499,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
   useEscapeKey(Boolean(chargeServiceArchiveTarget), () => closeChargeServiceArchiveDialog())
   useEscapeKey(Boolean(chargeServiceRestoreTarget), () => closeChargeServiceRestoreDialog())
+  useEscapeKey(Boolean(thresholdDeleteTarget), () => closeThresholdDeleteDialog())
   useEscapeKey(Boolean(feeCampaignGenerateTarget), () => closeFeeCampaignGenerateDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
@@ -14128,6 +14139,21 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     }
   }
 
+  function confirmThresholdDelete() {
+    if (!thresholdDeleteTarget || !thresholdDeleteReason.trim()) {
+      return
+    }
+
+    const nextRows = tariffRows.filter((row) => row.id !== thresholdDeleteTarget.id)
+    setTariffRows(nextRows)
+    setTariffDrafts((drafts) => {
+      const nextDrafts = { ...drafts }
+      delete nextDrafts[thresholdDeleteTarget.id]
+      return nextDrafts
+    })
+    closeThresholdDeleteDialog()
+  }
+
   async function generateFeeCampaignAccruals() {
     if (!feeCampaignGenerateTarget) {
       return
@@ -14237,6 +14263,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                 : null
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
               const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
+              const isCustomThreshold = Boolean(row.threshold && row.id.startsWith('electricity-tier-custom-'))
 
               return (
                 <Fragment key={row.id}>
@@ -14288,6 +14315,22 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                             <Trash2 size={16} />
                           </button>
                         )}
+                      </span>
+                    ) : null}
+                    {isCustomThreshold ? (
+                      <span className="contractors-sheet-row-actions">
+                        <button
+                          className="icon-button danger-button"
+                          type="button"
+                          aria-label={`Удалить порог ${row.title}`}
+                          disabled={!canManageTariffs || isRowDisabled}
+                          onClick={() => {
+                            setThresholdDeleteTarget(row)
+                            setThresholdDeleteReason('')
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </span>
                     ) : null}
                   </span>
@@ -14573,6 +14616,41 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               <button className="secondary-button" type="button" onClick={confirmPendingChange} disabled={oneTimeSavingRowId === pendingChange.rowId || tariffSavingRowId === pendingChange.rowId}>
                 <Save size={16} />
                 <span>Сохранить</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {thresholdDeleteTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeThresholdDeleteDialog}>
+          <section ref={thresholdDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="threshold-delete-title" aria-describedby="threshold-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление</p>
+                <h3 id="threshold-delete-title">Удалить порог тарификации?</h3>
+                <p>{thresholdDeleteTarget.title}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления порога" onClick={closeThresholdDeleteDialog}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="threshold-delete-description">Порог будет удален из текущей настройки тарифов. Укажите причину, чтобы действие было понятным при проверке изменений.</p>
+            <label className="field-label" htmlFor="threshold-delete-reason">Причина удаления</label>
+            <textarea
+              id="threshold-delete-reason"
+              aria-label="Причина удаления порога"
+              maxLength={1000}
+              value={thresholdDeleteReason}
+              onChange={(event) => setThresholdDeleteReason(event.target.value)}
+              placeholder="Например: лишний порог добавлен ошибочно"
+              required
+            />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={thresholdDeleteCancelRef} className="ghost-button" type="button" onClick={closeThresholdDeleteDialog}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={confirmThresholdDelete} disabled={!thresholdDeleteReason.trim()}>
+                <Trash2 size={16} />
+                <span>Удалить</span>
               </button>
             </div>
           </section>
