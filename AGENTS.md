@@ -66,6 +66,8 @@ When the user asks to create or prepare a roadmap, make it a full execution road
 
 Always update `История выполнения` when you complete, verify, defer, or unblock meaningful work. Each entry must explain what was done, why it was done, how it was checked, and what remains.
 
+When reporting roadmap status to the user, include a percentage summary: how many checkable items are completed, in progress, not started, blocked, waiting for decisions, and waiting for acceptance. Calculate the percentage from the active roadmap checklist, excluding the `История выполнения` log entries so historical records do not inflate progress.
+
 Do not mark a roadmap item as `[x]` until the related code, tests, encoding checks, database checks, and documentation updates required by that item are complete.
 
 ## Release Notes: "Что нового"
