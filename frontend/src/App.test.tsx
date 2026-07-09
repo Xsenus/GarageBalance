@@ -4051,6 +4051,37 @@ describe('App', () => {
     expect(within(passwordPanel).getByLabelText('Новый пароль')).toHaveValue('NewStrongPass123')
   })
 
+  it('cancels password change confirmation without changing password', async () => {
+    const user = userEvent.setup()
+    let changeCalled = false
+    const authClient = createAuthClient({
+      changeOwnPassword: async () => {
+        changeCalled = true
+        throw new Error('Смена пароля не должна вызываться после отмены подтверждения.')
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
+
+    await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'NewStrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'NewStrongPass123')
+    const submitButton = within(passwordPanel).getByRole('button', { name: 'Изменить пароль' })
+    await user.click(submitButton)
+
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить смену пароля?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Отмена' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить смену пароля?' })).not.toBeInTheDocument())
+    expect(changeCalled).toBe(false)
+    expect(submitButton).toHaveFocus()
+    expect(within(passwordPanel).getByLabelText('Новый пароль')).toHaveValue('NewStrongPass123')
+  })
+
   it('does not call password API when repeated password differs', async () => {
     const user = userEvent.setup()
     let changeCalled = false
