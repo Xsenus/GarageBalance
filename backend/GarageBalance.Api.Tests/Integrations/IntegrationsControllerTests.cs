@@ -22,7 +22,7 @@ public sealed class IntegrationsControllerTests
             ["RefreshToken"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(oneCFreshStatus: expected);
-        var controller = new IntegrationsController(service, new FakeReceiptPrintingService());
+        var controller = new IntegrationsController(service, new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
 
         var result = await controller.GetOneCFreshStatus(CancellationToken.None);
 
@@ -46,7 +46,7 @@ public sealed class IntegrationsControllerTests
             ["Печать квитанции", "Отмена печати", "Повторная печать"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(receiptPrintingStatus: expected);
-        var controller = new IntegrationsController(service, new FakeReceiptPrintingService());
+        var controller = new IntegrationsController(service, new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
 
         var result = await controller.GetReceiptPrintingStatus(CancellationToken.None);
 
@@ -85,6 +85,48 @@ public sealed class IntegrationsControllerTests
     }
 
     [Fact]
+    public async Task StartOneCFreshSync_ReturnsResultAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var expected = new OneCFreshSyncDto(
+            Guid.NewGuid(),
+            "OneCFresh",
+            "pending_adapter",
+            "Синхронизация ожидает адаптер.",
+            DateTimeOffset.UtcNow);
+        var service = new FakeOneCFreshSyncService
+        {
+            Result = OneCFreshSyncResult<OneCFreshSyncDto>.Success(expected)
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), actorUserId, service);
+        var request = new OneCFreshSyncRequest("Проверочный запуск");
+
+        var result = await controller.StartOneCFreshSync(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(expected, ok.Value);
+        Assert.Equal(request, service.LastRequest);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task StartOneCFreshSync_MapsNotConfiguredToConflict()
+    {
+        var service = new FakeOneCFreshSyncService
+        {
+            Result = OneCFreshSyncResult<OneCFreshSyncDto>.Failure("one_c_fresh_not_configured", "Нет токена.")
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), oneCFreshSyncService: service);
+
+        var result = await controller.StartOneCFreshSync(null, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("one_c_fresh_not_configured", problem.Title);
+        Assert.NotNull(service.LastRequest);
+    }
+
+    [Fact]
     public async Task RegisterReceiptPrintingAction_RequiresRequestBody()
     {
         var controller = CreateController(new FakeReceiptPrintingService());
@@ -116,10 +158,14 @@ public sealed class IntegrationsControllerTests
         Assert.Equal(errorCode, problem.Title);
     }
 
-    private static IntegrationsController CreateController(FakeReceiptPrintingService receiptPrintingService, Guid? actorUserId = null)
+    private static IntegrationsController CreateController(
+        FakeReceiptPrintingService receiptPrintingService,
+        Guid? actorUserId = null,
+        FakeOneCFreshSyncService? oneCFreshSyncService = null)
     {
         var controller = new IntegrationsController(
             new FakeIntegrationStatusService(),
+            oneCFreshSyncService ?? new FakeOneCFreshSyncService(),
             receiptPrintingService)
         {
             ControllerContext = new ControllerContext
@@ -135,6 +181,26 @@ public sealed class IntegrationsControllerTests
         }
 
         return controller;
+    }
+
+    private sealed class FakeOneCFreshSyncService : IOneCFreshSyncService
+    {
+        public OneCFreshSyncRequest? LastRequest { get; private set; }
+
+        public Guid? LastActorUserId { get; private set; }
+
+        public OneCFreshSyncResult<OneCFreshSyncDto> Result { get; init; } =
+            OneCFreshSyncResult<OneCFreshSyncDto>.Failure("not_configured", "Not configured.");
+
+        public Task<OneCFreshSyncResult<OneCFreshSyncDto>> StartSyncAsync(
+            OneCFreshSyncRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(Result);
+        }
     }
 
     private sealed class FakeIntegrationStatusService(

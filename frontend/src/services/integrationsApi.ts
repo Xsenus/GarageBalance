@@ -10,6 +10,18 @@ export type OneCFreshIntegrationStatusDto = {
   lastProtectedSettingUpdatedAtUtc: string | null
 }
 
+export type OneCFreshSyncRequest = {
+  comment?: string | null
+}
+
+export type OneCFreshSyncDto = {
+  auditEventId: string
+  provider: string
+  status: string
+  statusMessage: string
+  requestedAtUtc: string
+}
+
 export type ReceiptPrintingIntegrationStatusDto = {
   provider: string
   displayName: string
@@ -42,6 +54,7 @@ export type ReceiptPrintingActionDto = {
 
 export type IntegrationClient = {
   getOneCFreshStatus(accessToken: string): Promise<OneCFreshIntegrationStatusDto>
+  startOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncDto>
   getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
   registerReceiptPrintingAction(accessToken: string, operationId: string, request: ReceiptPrintingActionRequest): Promise<ReceiptPrintingActionDto>
 }
@@ -49,6 +62,12 @@ export type IntegrationClient = {
 export const integrationsApi: IntegrationClient = {
   getOneCFreshStatus(accessToken) {
     return requestJson<OneCFreshIntegrationStatusDto>(accessToken, '/api/integrations/one-c-fresh/status')
+  },
+  startOneCFreshSync(accessToken, request) {
+    return requestJson<OneCFreshSyncDto>(accessToken, '/api/integrations/one-c-fresh/sync-runs', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
   },
   getReceiptPrintingStatus(accessToken) {
     return requestJson<ReceiptPrintingIntegrationStatusDto>(accessToken, '/api/integrations/receipt-printing/status')

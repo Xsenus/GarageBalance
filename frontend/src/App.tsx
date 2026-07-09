@@ -569,6 +569,10 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
   const [oneCFreshStatus, setOneCFreshStatus] = useState<OneCFreshIntegrationStatusDto | null>(null)
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const [oneCFreshSyncConfirmation, setOneCFreshSyncConfirmation] = useState<{ comment: string; error: string | null } | null>(null)
+  const [oneCFreshSyncSaving, setOneCFreshSyncSaving] = useState(false)
+  const [oneCFreshSyncMessage, setOneCFreshSyncMessage] = useState<string | null>(null)
+  const oneCFreshSyncTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [receiptPrintingStatus, setReceiptPrintingStatus] = useState<ReceiptPrintingIntegrationStatusDto | null>(null)
   const [receiptPrintingLoading, setReceiptPrintingLoading] = useState(false)
   const [receiptPrintingError, setReceiptPrintingError] = useState<string | null>(null)
@@ -577,7 +581,10 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
+  const oneCFreshSyncCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneCFreshSyncConfirmation))
+  const oneCFreshSyncDialogRef = useFocusTrap<HTMLElement>(Boolean(oneCFreshSyncConfirmation))
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
+  useEscapeKey(Boolean(oneCFreshSyncConfirmation) && !oneCFreshSyncSaving, () => closeOneCFreshSyncConfirmation())
 
   useEffect(() => {
     if (!canViewIntegrationStatus) {
@@ -696,6 +703,44 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
     }
   }
 
+  function openOneCFreshSyncConfirmation(trigger: HTMLButtonElement) {
+    oneCFreshSyncTriggerRef.current = trigger
+    setIntegrationError(null)
+    setOneCFreshSyncMessage(null)
+    setOneCFreshSyncConfirmation({ comment: '', error: null })
+  }
+
+  function closeOneCFreshSyncConfirmation() {
+    const trigger = oneCFreshSyncTriggerRef.current
+    setOneCFreshSyncConfirmation(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      oneCFreshSyncTriggerRef.current = null
+    }, 0)
+  }
+
+  async function confirmOneCFreshSync() {
+    if (!oneCFreshSyncConfirmation) {
+      return
+    }
+
+    setOneCFreshSyncSaving(true)
+    setOneCFreshSyncConfirmation((state) => state ? { ...state, error: null } : state)
+    try {
+      const result = await integrationClient.startOneCFreshSync(auth.accessToken, {
+        comment: oneCFreshSyncConfirmation.comment.trim() || undefined,
+      })
+      closeOneCFreshSyncConfirmation()
+      setOneCFreshSyncMessage(result.statusMessage)
+    } catch (caught) {
+      setOneCFreshSyncConfirmation((state) => state ? { ...state, error: caught instanceof Error ? caught.message : 'Не удалось запустить синхронизацию 1C Fresh.' } : state)
+    } finally {
+      setOneCFreshSyncSaving(false)
+    }
+  }
+
   return (
     <>
       <section className="password-panel" aria-label="Безопасность аккаунта">
@@ -761,6 +806,13 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
           {oneCFreshStatus ? (
             <p className="empty-state" role="status" aria-live="polite">{oneCFreshStatus.statusMessage}</p>
           ) : null}
+          {oneCFreshSyncMessage ? <div className="form-success" role="status" aria-live="polite">{oneCFreshSyncMessage}</div> : null}
+          {oneCFreshStatus ? (
+            <button className="secondary-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget)} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
+              <RefreshCw size={16} aria-hidden="true" />
+              <span>{oneCFreshSyncSaving ? 'Запускаем...' : 'Запустить синхронизацию'}</span>
+            </button>
+          ) : null}
         </section>
       ) : null}
       {canViewReceiptPrintingStatus ? (
@@ -818,6 +870,37 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
               <button className="secondary-button" type="button" onClick={() => void confirmPasswordChange()} disabled={saving}>
                 <ShieldCheck size={16} />
                 <span>{saving ? 'Сохраняем...' : 'Подтвердить смену пароля'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {oneCFreshSyncConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!oneCFreshSyncSaving) {
+            closeOneCFreshSyncConfirmation()
+          }
+        }}>
+          <section ref={oneCFreshSyncDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="one-c-fresh-sync-confirmation-title" aria-describedby="one-c-fresh-sync-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="dialog-heading">
+              <div>
+                <p className="eyebrow">Интеграции</p>
+                <h3 id="one-c-fresh-sync-confirmation-title">Запустить синхронизацию 1C Fresh?</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить запуск синхронизации 1C Fresh" onClick={closeOneCFreshSyncConfirmation} disabled={oneCFreshSyncSaving}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="one-c-fresh-sync-confirmation-description">Запуск будет записан в историю изменений. До подключения адаптера система зарегистрирует запрос и не будет передавать данные во внешнюю 1C Fresh.</p>
+            <FormField label="Комментарий">
+              <textarea aria-label="Комментарий к запуску синхронизации 1C Fresh" rows={4} value={oneCFreshSyncConfirmation.comment} onChange={(event) => setOneCFreshSyncConfirmation((state) => state ? { ...state, comment: event.target.value, error: null } : state)} disabled={oneCFreshSyncSaving} />
+            </FormField>
+            {oneCFreshSyncConfirmation.error ? <FormError>{oneCFreshSyncConfirmation.error}</FormError> : null}
+            <div className="dialog-actions">
+              <button ref={oneCFreshSyncCancelRef} className="ghost-button" type="button" onClick={closeOneCFreshSyncConfirmation} disabled={oneCFreshSyncSaving}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmOneCFreshSync()} disabled={oneCFreshSyncSaving}>
+                <RefreshCw size={16} />
+                <span>{oneCFreshSyncSaving ? 'Запускаем...' : 'Запустить'}</span>
               </button>
             </div>
           </section>

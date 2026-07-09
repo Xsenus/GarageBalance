@@ -24,7 +24,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -3881,6 +3881,43 @@ describe('App', () => {
     expect(within(integrationPanel).getByText('Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh.')).toHaveAttribute('role', 'status')
     expect(integrationPanel).not.toHaveTextContent('one-c-refresh-token')
     expect(tokenSeen).toBe('token')
+  })
+
+  it('starts 1C Fresh synchronization from settings with confirmation', async () => {
+    const user = userEvent.setup()
+    const startOneCFreshSync = vi.fn(async (_accessToken: string, request: OneCFreshSyncRequest) => createOneCFreshSync({
+      statusMessage: `Запуск 1C зарегистрирован: ${request.comment ?? ''}`,
+    }))
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => createOneCFreshStatus({
+        isConfigured: true,
+        status: 'prepared',
+        configuredSettings: ['RefreshToken'],
+      }),
+      startOneCFreshSync,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const syncButton = await within(integrationPanel).findByRole('button', { name: 'Запустить синхронизацию' })
+    await user.click(syncButton)
+    let syncDialog = await screen.findByRole('dialog', { name: 'Запустить синхронизацию 1C Fresh?' })
+    await waitFor(() => expect(within(syncDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запустить синхронизацию 1C Fresh?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(syncButton).toHaveFocus())
+    expect(startOneCFreshSync).not.toHaveBeenCalled()
+
+    await user.click(syncButton)
+    syncDialog = await screen.findByRole('dialog', { name: 'Запустить синхронизацию 1C Fresh?' })
+    await user.type(within(syncDialog).getByLabelText('Комментарий к запуску синхронизации 1C Fresh'), 'Проверка расписания')
+    await user.click(within(syncDialog).getByRole('button', { name: 'Запустить' }))
+    await waitFor(() => expect(startOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Проверка расписания' }))
+    expect(await within(integrationPanel).findByText('Запуск 1C зарегистрирован: Проверка расписания')).toHaveAttribute('role', 'status')
   })
 
   it('does not request 1C Fresh status without import permission', async () => {
@@ -9543,6 +9580,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
 function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): IntegrationClient {
   return {
     getOneCFreshStatus: async () => createOneCFreshStatus(),
+    startOneCFreshSync: async () => createOneCFreshSync(),
     getReceiptPrintingStatus: async () => createReceiptPrintingStatus(),
     registerReceiptPrintingAction: async (_token, operationId, request) => createReceiptPrintingAction({
       financialOperationId: operationId,
@@ -10858,6 +10896,17 @@ function createOneCFreshStatus(overrides: Partial<OneCFreshIntegrationStatusDto>
     requiredSettings: ['RefreshToken'],
     configuredSettings: [],
     lastProtectedSettingUpdatedAtUtc: null,
+    ...overrides,
+  }
+}
+
+function createOneCFreshSync(overrides: Partial<OneCFreshSyncDto> = {}): OneCFreshSyncDto {
+  return {
+    auditEventId: 'audit-one-c-fresh-sync',
+    provider: 'OneCFresh',
+    status: 'pending_adapter',
+    statusMessage: 'Запуск синхронизации зарегистрирован в истории.',
+    requestedAtUtc: '2026-07-10T00:00:00Z',
     ...overrides,
   }
 }

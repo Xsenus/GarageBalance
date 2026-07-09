@@ -10,6 +10,7 @@ namespace GarageBalance.Api.Controllers;
 [Route("api/integrations")]
 public sealed class IntegrationsController(
     IIntegrationStatusService integrationStatusService,
+    IOneCFreshSyncService oneCFreshSyncService,
     IReceiptPrintingService receiptPrintingService) : ControllerBase
 {
     [HttpGet("one-c-fresh/status")]
@@ -18,6 +19,19 @@ public sealed class IntegrationsController(
     public async Task<ActionResult<OneCFreshIntegrationStatusDto>> GetOneCFreshStatus(CancellationToken cancellationToken)
     {
         return Ok(await integrationStatusService.GetOneCFreshStatusAsync(cancellationToken));
+    }
+
+    [HttpPost("one-c-fresh/sync-runs")]
+    [Authorize(Policy = SystemPermissions.ImportRun)]
+    [ProducesResponseType<OneCFreshSyncDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<OneCFreshSyncDto>> StartOneCFreshSync(
+        [FromBody] OneCFreshSyncRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await oneCFreshSyncService.StartSyncAsync(request ?? new OneCFreshSyncRequest(null), GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToOneCFreshSyncError(result);
     }
 
     [HttpGet("receipt-printing/status")]
@@ -59,6 +73,15 @@ public sealed class IntegrationsController(
         {
             "financial_operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
             "receipt_print_income_required" or "receipt_print_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
+        };
+    }
+
+    private ActionResult<T> ToOneCFreshSyncError<T>(OneCFreshSyncResult<T> result)
+    {
+        return result.ErrorCode switch
+        {
+            "one_c_fresh_not_configured" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }
