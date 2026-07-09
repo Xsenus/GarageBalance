@@ -6335,6 +6335,10 @@ describe('App', () => {
     expect(await within(financePanel).findByText('+700,00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 операций')).toBeInTheDocument()
     expect(within(financePanel).queryByRole('button', { name: /Отменить операцию/i })).not.toBeInTheDocument()
+    const operationRow = within(financePanel).getByText('PKO-cancel').closest('tr')
+    if (!operationRow) {
+      throw new Error('Payment row was not rendered for focus restoration check.')
+    }
     const operationMenu = await openFinanceContextMenuByCellText(financePanel, 'PKO-cancel')
     await user.click(within(operationMenu).getByRole('menuitem', { name: 'Удалить' }))
 
@@ -6342,6 +6346,7 @@ describe('App', () => {
     await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены финансовой записи')).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Отменить поступление?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(operationRow).toHaveFocus())
     expect(within(financePanel).getByText('+700,00')).toBeInTheDocument()
 
     const reopenedOperationMenu = await openFinanceContextMenuByCellText(financePanel, 'PKO-cancel')

@@ -976,6 +976,8 @@ function FinancePanel({
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
+  const financeContextMenuTriggerRef = useRef<HTMLElement | null>(null)
+  const cancelFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
@@ -992,6 +994,17 @@ function FinancePanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const closeCancelFinanceDialog = useCallback(() => {
+    const trigger = cancelFinanceTriggerRef.current
+    setCancelFinanceTarget(null)
+    setCancelFinanceReasonError(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      cancelFinanceTriggerRef.current = null
+    }, 0)
+  }, [])
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
   useRestoreFocusOnClose(Boolean(financeContextMenu))
@@ -1509,17 +1522,13 @@ function FinancePanel({
     }
   }
 
-  function closeCancelFinanceDialog() {
-    setCancelFinanceTarget(null)
-    setCancelFinanceReasonError(null)
-  }
-
-  function openCancelFinanceDialog(section: FinanceSectionKey, record: FinanceRecord) {
+  function openCancelFinanceDialog(section: FinanceSectionKey, record: FinanceRecord, trigger?: HTMLElement | null) {
     if (!canWritePayments) {
       setError('Для отмены платежей, начислений и показаний нужно право payments.write.')
       return
     }
 
+    cancelFinanceTriggerRef.current = trigger ?? null
     setError(null)
     setCancelFinanceReasonError(null)
     setCancelFinanceTarget({ section, record, reason: '' })
@@ -1747,6 +1756,7 @@ function FinancePanel({
   function openFinanceContextMenu(event: MouseEvent<HTMLElement>, section: FinanceSectionKey, record?: FinanceRecord) {
     event.preventDefault()
     event.stopPropagation()
+    financeContextMenuTriggerRef.current = record ? event.currentTarget : null
     setFinanceContextMenu({ section, record, x: event.clientX, y: event.clientY })
   }
 
@@ -1766,8 +1776,10 @@ function FinancePanel({
   }
 
   function deleteFinanceRecord(section: FinanceSectionKey, record: FinanceRecord) {
+    const trigger = financeContextMenuTriggerRef.current
     setFinanceContextMenu(null)
-    openCancelFinanceDialog(section, record)
+    financeContextMenuTriggerRef.current = null
+    openCancelFinanceDialog(section, record, trigger)
   }
 
   function handleFinanceRowKeyDown(event: KeyboardEvent<HTMLElement>, section: FinanceSectionKey, record: FinanceRecord) {
@@ -1777,6 +1789,7 @@ function FinancePanel({
     } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       event.preventDefault()
       const rect = event.currentTarget.getBoundingClientRect()
+      financeContextMenuTriggerRef.current = event.currentTarget
       setFinanceContextMenu({
         section,
         record,
@@ -1793,6 +1806,7 @@ function FinancePanel({
 
     event.preventDefault()
     const rect = event.currentTarget.getBoundingClientRect()
+    financeContextMenuTriggerRef.current = null
     setFinanceContextMenu({
       section: activeFinanceSection,
       x: rect.left,
