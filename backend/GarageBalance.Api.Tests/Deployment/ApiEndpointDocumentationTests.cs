@@ -51,6 +51,34 @@ public sealed class ApiEndpointDocumentationTests
         Assert.Contains("ProjectWideHistoryRoadmapDocumentsInventoryStatusSync", roadmap, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProjectWideHistoryRoadmapDocumentsMilestone7ConfirmationStatusSync()
+    {
+        var roadmap = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        string[] completedConfirmationLines =
+        [
+            "Для каждого edit dialog хранить исходный snapshot.",
+            "При нажатии `Сохранить`, если есть изменения, показывать confirmation dialog `Подтвердите изменения`.",
+            "Dialog должен показывать список измененных полей в формате `Поле: было -> стало`.",
+            "Для денежных значений использовать формат денег.",
+            "Для дат использовать пользовательский формат.",
+            "Для select/enum показывать человекочитаемые названия, а не id.",
+            "Для sensitive fields показывать `изменено`, не раскрывая старое/новое значение.",
+            "Если изменений нет, закрывать форму или считать сохранение успешным без confirmation."
+        ];
+
+        foreach (var line in completedConfirmationLines)
+        {
+            Assert.Contains($"- `[x]` {line}", roadmap, StringComparison.Ordinal);
+            Assert.DoesNotContain($"- `[ ]` {line}", roadmap, StringComparison.Ordinal);
+            Assert.DoesNotContain($"- `[~]` {line}", roadmap, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone7ConfirmationStatusSync", roadmap, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
