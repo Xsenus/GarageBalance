@@ -19,7 +19,7 @@ export type FinanceEditorSavingScope =
   | 'supplier-accrual'
   | 'meter-reading'
 
-export type FinanceContextMenuAction = 'add' | 'edit' | 'delete'
+export type FinanceContextMenuAction = 'add' | 'edit' | 'delete' | 'restore'
 export type FinanceFallbackLabelKey = 'missingValue' | 'noData' | 'noComment' | 'meterGapWarning'
 export type FinanceToolbarLabelKey =
   | 'sectionTabs'
@@ -148,6 +148,7 @@ const financeContextMenuLabels: Record<FinanceContextMenuAction, string> = {
   add: 'Добавить',
   edit: 'Изменить',
   delete: 'Удалить',
+  restore: 'Вернуть',
 }
 
 const financeTableHeaders: Record<FinanceSectionKey, string[]> = {

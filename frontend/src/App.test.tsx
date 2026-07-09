@@ -6040,6 +6040,63 @@ describe('App', () => {
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
   })
 
+  it('restores canceled meter reading from payment context menu', async () => {
+    const user = userEvent.setup()
+    const canceledReading = createMeterReading({
+      id: 'meter-reading-canceled',
+      garageNumber: '12',
+      meterKind: 'electricity',
+      accountingMonth: '2026-06-01',
+      readingDate: '2026-06-20',
+      previousValue: 100,
+      currentValue: 128,
+      consumption: 28,
+      isCanceled: true,
+      comment: 'Отменено: ошибочное показание',
+    })
+    const activeReading = { ...canceledReading, isCanceled: false, comment: null }
+    let pageItems: MeterReadingDto[] = [canceledReading]
+    const getMeterReadingsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getMeterReadingsPage']>[1]) => ({
+      items: pageItems,
+      totalCount: pageItems.length,
+      offset: params?.offset ?? 0,
+      limit: params?.limit ?? 25,
+    }))
+    const restoreMeterReading = vi.fn(async (_token: string, meterReadingId: string) => {
+      pageItems = [activeReading]
+      return { ...activeReading, id: meterReadingId }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getMeterReadingsPage, restoreMeterReading })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledWith('token', expect.objectContaining({ limit: 25, offset: 0 })))
+    const menu = await openFinanceContextMenuByCellText(financePanel, '28')
+    expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
+    const restoreItem = within(menu).getByRole('menuitem', { name: 'Вернуть' })
+    expect(restoreItem).toBeEnabled()
+    await user.click(restoreItem)
+
+    let restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть показание счетчика?' })
+    await waitFor(() => expect(within(restoreDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть показание счетчика?' })).not.toBeInTheDocument())
+    expect(restoreMeterReading).not.toHaveBeenCalled()
+
+    const reopenedMenu = await openFinanceContextMenuByCellText(financePanel, '28')
+    await user.click(within(reopenedMenu).getByRole('menuitem', { name: 'Вернуть' }))
+    restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть показание счетчика?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(restoreMeterReading).toHaveBeenCalledWith('token', 'meter-reading-canceled'))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть показание счетчика?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(3))
+  })
+
   it('closes payment context menu when switching payment table tabs', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -8941,6 +8998,10 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       const target = operation.id === operationId ? operation : createFinancialOperation({ id: operationId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
+    restoreOperation: async (_token, operationId) => {
+      const target = operation.id === operationId ? operation : createFinancialOperation({ id: operationId })
+      return { ...target, isCanceled: false }
+    },
     createAccrual: async () => accrual,
     createDebtTransfer: async (_token, request) => createAccrual({
       id: 'debt-transfer-accrual',
@@ -8957,11 +9018,19 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       const target = accrual.id === accrualId ? accrual : createAccrual({ id: accrualId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
+    restoreAccrual: async (_token, accrualId) => {
+      const target = accrual.id === accrualId ? accrual : createAccrual({ id: accrualId })
+      return { ...target, isCanceled: false }
+    },
     createSupplierAccrual: async () => supplierAccrual,
     updateSupplierAccrual: async (_token, supplierAccrualId) => ({ ...supplierAccrual, id: supplierAccrualId }),
     cancelSupplierAccrual: async (_token, supplierAccrualId, request) => {
       const target = supplierAccrual.id === supplierAccrualId ? supplierAccrual : createSupplierAccrual({ id: supplierAccrualId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
+    restoreSupplierAccrual: async (_token, supplierAccrualId) => {
+      const target = supplierAccrual.id === supplierAccrualId ? supplierAccrual : createSupplierAccrual({ id: supplierAccrualId })
+      return { ...target, isCanceled: false }
     },
     generateRegularAccruals: async () => createRegularAccrualGenerationResult({ createdAccruals: [accrual], totalAmount: accrual.amount }),
     generateRegularCatalogAccruals: async () => createRegularCatalogAccrualGenerationResult({
@@ -8976,6 +9045,10 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     cancelMeterReading: async (_token, meterReadingId, request) => {
       const target = meterReading.id === meterReadingId ? meterReading : createMeterReading({ id: meterReadingId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
+    restoreMeterReading: async (_token, meterReadingId) => {
+      const target = meterReading.id === meterReadingId ? meterReading : createMeterReading({ id: meterReadingId })
+      return { ...target, isCanceled: false }
     },
     ...overrides,
   }
@@ -9235,6 +9308,11 @@ function createStatefulFinanceClient(): FinanceClient {
       operations = operations.filter((item) => item.id !== operationId)
       return { ...operation, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
+    restoreOperation: async (_token, operationId) => {
+      const operation = createFinancialOperation({ id: operationId, isCanceled: false })
+      operations = [operation, ...operations.filter((item) => item.id !== operationId)]
+      return operation
+    },
     updateIncome: async (_token, operationId, request) => {
       const operation = operations.find((item) => item.id === operationId && item.operationKind === 'income')
       if (!operation) {
@@ -9297,6 +9375,11 @@ function createStatefulFinanceClient(): FinanceClient {
       accruals = accruals.filter((item) => item.id !== accrualId)
       return { ...accrual, isCanceled: true, comment: `Отменено: ${request.reason}` }
     },
+    restoreAccrual: async (_token, accrualId) => {
+      const accrual = createAccrual({ id: accrualId, isCanceled: false })
+      accruals = [accrual, ...accruals.filter((item) => item.id !== accrualId)]
+      return accrual
+    },
     createSupplierAccrual: async (_token, request) => {
       const accrual = createSupplierAccrual({
         id: crypto.randomUUID(),
@@ -9319,6 +9402,11 @@ function createStatefulFinanceClient(): FinanceClient {
 
       supplierAccruals = supplierAccruals.filter((item) => item.id !== supplierAccrualId)
       return { ...accrual, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
+    restoreSupplierAccrual: async (_token, supplierAccrualId) => {
+      const accrual = createSupplierAccrual({ id: supplierAccrualId, isCanceled: false })
+      supplierAccruals = [accrual, ...supplierAccruals.filter((item) => item.id !== supplierAccrualId)]
+      return accrual
     },
     generateRegularAccruals: async (_token, request) => {
       const accrual = createAccrual({
@@ -9387,6 +9475,11 @@ function createStatefulFinanceClient(): FinanceClient {
 
       meterReadings = meterReadings.filter((item) => item.id !== meterReadingId)
       return { ...reading, isCanceled: true, comment: `Отменено: ${request.reason}` }
+    },
+    restoreMeterReading: async (_token, meterReadingId) => {
+      const reading = createMeterReading({ id: meterReadingId, isCanceled: false })
+      meterReadings = [reading, ...meterReadings.filter((item) => item.id !== meterReadingId)]
+      return reading
     },
   })
 }

@@ -1007,6 +1007,10 @@ type CancelFinanceTarget = {
   record: FinanceRecord
   reason: string
 }
+type RestoreFinanceTarget = {
+  section: FinanceSectionKey
+  record: FinanceRecord
+}
 type PaymentsPrototypeDialogKey = 'bank'
 
 type PaymentPrototypeRow = {
@@ -1265,10 +1269,12 @@ function FinancePanel({
   const financeContextMenuTriggerRef = useRef<HTMLElement | null>(null)
   const financeEditorTriggerRef = useRef<HTMLElement | null>(null)
   const cancelFinanceTriggerRef = useRef<HTMLElement | null>(null)
+  const restoreFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
   const [cancelFinanceTarget, setCancelFinanceTarget] = useState<CancelFinanceTarget | null>(null)
+  const [restoreFinanceTarget, setRestoreFinanceTarget] = useState<RestoreFinanceTarget | null>(null)
   const [cancelFinanceReasonError, setCancelFinanceReasonError] = useState<string | null>(null)
   const [incomeValidationErrors, setIncomeValidationErrors] = useState<string[]>([])
   const [expenseValidationErrors, setExpenseValidationErrors] = useState<string[]>([])
@@ -1292,11 +1298,22 @@ function FinancePanel({
       cancelFinanceTriggerRef.current = null
     }, 0)
   }, [])
+  const closeRestoreFinanceDialog = useCallback(() => {
+    const trigger = restoreFinanceTriggerRef.current
+    setRestoreFinanceTarget(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      restoreFinanceTriggerRef.current = null
+    }, 0)
+  }, [])
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
   useRestoreFocusOnClose(Boolean(financeContextMenu))
   useRestoreFocusOnClose(Boolean(financeEditorCloseConfirmation))
   useRestoreFocusOnClose(Boolean(cancelFinanceTarget))
+  useRestoreFocusOnClose(Boolean(restoreFinanceTarget))
   const accrualBreakdownCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(accrualBreakdown))
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
@@ -1305,6 +1322,8 @@ function FinancePanel({
   const financeEditorCloseConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditorCloseConfirmation))
   const cancelFinanceReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(cancelFinanceTarget))
   const cancelFinanceDialogRef = useFocusTrap<HTMLElement>(Boolean(cancelFinanceTarget))
+  const restoreFinanceCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreFinanceTarget))
+  const restoreFinanceDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreFinanceTarget))
   const financeContextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeContextMenu))
 
   function getFinanceEditorFormSnapshot(section: FinanceEditorKey) {
@@ -1379,6 +1398,7 @@ function FinancePanel({
   useEscapeKey(Boolean(financeEditor) && !financeEditorCloseConfirmation, () => closeFinanceEditor())
   useEscapeKey(Boolean(financeEditorCloseConfirmation), () => setFinanceEditorCloseConfirmation(false))
   useEscapeKey(Boolean(cancelFinanceTarget) && !saving?.startsWith('cancel'), () => closeCancelFinanceDialog())
+  useEscapeKey(Boolean(restoreFinanceTarget) && !saving?.startsWith('restore-finance'), () => closeRestoreFinanceDialog())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
   useEscapeKey(Boolean(paymentsPrototypeDialog), () => closePaymentsPrototypeDialog())
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
@@ -1841,6 +1861,19 @@ function FinancePanel({
     return `cancel-meter-reading-${target.record.id}`
   }
 
+  function getRestoreFinanceSavingScope(target: RestoreFinanceTarget) {
+    if (target.section === 'income' || target.section === 'expense') {
+      return `restore-finance-operation-${target.record.id}`
+    }
+    if (target.section === 'accruals') {
+      return `restore-finance-accrual-${target.record.id}`
+    }
+    if (target.section === 'supplierAccruals') {
+      return `restore-finance-supplier-accrual-${target.record.id}`
+    }
+    return `restore-finance-meter-reading-${target.record.id}`
+  }
+
   function getCancelFinanceTitle(target: CancelFinanceTarget) {
     if (target.section === 'income') {
       return 'Отменить поступление?'
@@ -1857,7 +1890,23 @@ function FinancePanel({
     return 'Отменить показание счетчика?'
   }
 
-  function getCancelFinanceObjectLabel(target: CancelFinanceTarget) {
+  function getRestoreFinanceTitle(target: RestoreFinanceTarget) {
+    if (target.section === 'income') {
+      return 'Вернуть поступление?'
+    }
+    if (target.section === 'expense') {
+      return 'Вернуть выплату?'
+    }
+    if (target.section === 'accruals') {
+      return 'Вернуть начисление владельцу?'
+    }
+    if (target.section === 'supplierAccruals') {
+      return 'Вернуть начисление поставщику?'
+    }
+    return 'Вернуть показание счетчика?'
+  }
+
+  function getCancelFinanceObjectLabel(target: { record: FinanceRecord }) {
     const record = target.record
     if ('operationKind' in record) {
       const name = record.operationKind === 'income' ? record.incomeTypeName : record.expenseTypeName
@@ -1871,6 +1920,34 @@ function FinancePanel({
       return `${record.expenseTypeName} · ${record.supplierName} · ${formatMoney(record.amount)}`
     }
     return `${record.incomeTypeName} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMoney(record.amount)}`
+  }
+
+  async function confirmRestoreFinanceRecord() {
+    if (!restoreFinanceTarget) {
+      return
+    }
+
+    const target = restoreFinanceTarget
+    const saved = await runSaving(getRestoreFinanceSavingScope(target), async () => {
+      if (target.section === 'income' || target.section === 'expense') {
+        const operation = target.record as FinancialOperationDto
+        await financeClient.restoreOperation(auth.accessToken, operation.id)
+        await loadFinanceWorkbench(operation.operationKind === 'income' ? 'income' : 'expense', financePage.offset, financePage.limit)
+      } else if (target.section === 'accruals') {
+        await financeClient.restoreAccrual(auth.accessToken, target.record.id)
+        await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit)
+      } else if (target.section === 'supplierAccruals') {
+        await financeClient.restoreSupplierAccrual(auth.accessToken, target.record.id)
+        await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit)
+      } else {
+        await financeClient.restoreMeterReading(auth.accessToken, target.record.id)
+        await loadFinanceWorkbench('meterReadings', financePage.offset, financePage.limit)
+      }
+    })
+
+    if (saved) {
+      closeRestoreFinanceDialog()
+    }
   }
 
   async function confirmCancelFinanceRecord() {
@@ -2076,6 +2153,20 @@ function FinancePanel({
     setFinanceContextMenu(null)
     financeContextMenuTriggerRef.current = null
     openCancelFinanceDialog(section, record, trigger)
+  }
+
+  function restoreFinanceRecord(section: FinanceSectionKey, record: FinanceRecord) {
+    if (!canWritePayments) {
+      setFinanceContextMenu(null)
+      setError('Для восстановления платежей, начислений и показаний нужно право payments.write.')
+      return
+    }
+
+    restoreFinanceTriggerRef.current = financeContextMenuTriggerRef.current
+    setFinanceContextMenu(null)
+    financeContextMenuTriggerRef.current = null
+    setError(null)
+    setRestoreFinanceTarget({ section, record })
   }
 
   function handleFinanceRowKeyDown(event: KeyboardEvent<HTMLElement>, section: FinanceSectionKey, record: FinanceRecord) {
@@ -3053,11 +3144,14 @@ function FinancePanel({
           <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
             <span>{getFinanceContextMenuLabel('add')}</span>
           </button>
-          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record, financeContextMenuTriggerRef.current) : undefined}>
+          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record || financeContextMenu.record.isCanceled} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record, financeContextMenuTriggerRef.current) : undefined}>
             <span>{getFinanceContextMenuLabel('edit')}</span>
           </button>
-          <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
+          <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record || financeContextMenu.record.isCanceled} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
             <span>{getFinanceContextMenuLabel('delete')}</span>
+          </button>
+          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record?.isCanceled} onClick={() => financeContextMenu.record ? restoreFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
+            <span>{getFinanceContextMenuLabel('restore')}</span>
           </button>
         </div>
       ) : null}
@@ -3100,6 +3194,36 @@ function FinancePanel({
               <button className="secondary-button danger-button" type="button" onClick={() => void confirmCancelFinanceRecord()} disabled={saving === getCancelFinanceSavingScope(cancelFinanceTarget)}>
                 <Trash2 size={16} aria-hidden="true" />
                 <span>{saving === getCancelFinanceSavingScope(cancelFinanceTarget) ? 'Отменяем...' : 'Отменить запись'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {restoreFinanceTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (saving !== getRestoreFinanceSavingScope(restoreFinanceTarget)) {
+            closeRestoreFinanceDialog()
+          }
+        }}>
+          <section ref={restoreFinanceDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-restore-title" aria-describedby="finance-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление записи</p>
+                <h3 id="finance-restore-title">{getRestoreFinanceTitle(restoreFinanceTarget)}</h3>
+                <p>{getCancelFinanceObjectLabel(restoreFinanceTarget)}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления" onClick={closeRestoreFinanceDialog} disabled={saving === getRestoreFinanceSavingScope(restoreFinanceTarget)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="finance-restore-description">Запись снова появится в рабочих таблицах, расчетах и отчетах. Действие будет записано в общую историю изменений.</p>
+            <div className="detail-dialog-actions">
+              <button ref={restoreFinanceCancelRef} className="ghost-button" type="button" onClick={closeRestoreFinanceDialog} disabled={saving === getRestoreFinanceSavingScope(restoreFinanceTarget)}>
+                Отмена
+              </button>
+              <button className="secondary-button" type="button" onClick={() => void confirmRestoreFinanceRecord()} disabled={saving === getRestoreFinanceSavingScope(restoreFinanceTarget)}>
+                <RotateCcw size={16} aria-hidden="true" />
+                <span>{saving === getRestoreFinanceSavingScope(restoreFinanceTarget) ? 'Возвращаем...' : 'Вернуть запись'}</span>
               </button>
             </div>
           </section>

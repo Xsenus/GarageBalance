@@ -365,13 +365,16 @@ export type FinanceClient = {
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
   updateExpense(accessToken: string, operationId: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
+  restoreOperation(accessToken: string, operationId: string): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
   createDebtTransfer(accessToken: string, request: CreateDebtTransferRequest): Promise<AccrualDto>
   updateAccrual(accessToken: string, accrualId: string, request: CreateAccrualRequest): Promise<AccrualDto>
   cancelAccrual(accessToken: string, accrualId: string, request: CancelFinanceEntryRequest): Promise<AccrualDto>
+  restoreAccrual(accessToken: string, accrualId: string): Promise<AccrualDto>
   createSupplierAccrual(accessToken: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
   updateSupplierAccrual(accessToken: string, supplierAccrualId: string, request: CreateSupplierAccrualRequest): Promise<SupplierAccrualDto>
   cancelSupplierAccrual(accessToken: string, supplierAccrualId: string, request: CancelFinanceEntryRequest): Promise<SupplierAccrualDto>
+  restoreSupplierAccrual(accessToken: string, supplierAccrualId: string): Promise<SupplierAccrualDto>
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
   generateRegularCatalogAccruals(accessToken: string, request: GenerateRegularCatalogAccrualsRequest): Promise<RegularCatalogAccrualGenerationResultDto>
   generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
@@ -379,6 +382,7 @@ export type FinanceClient = {
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   updateMeterReading(accessToken: string, meterReadingId: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
+  restoreMeterReading(accessToken: string, meterReadingId: string): Promise<MeterReadingDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -538,6 +542,9 @@ export const financeApi: FinanceClient = {
   cancelOperation(accessToken, operationId, request) {
     return requestJson(accessToken, `/api/finance/operations/${operationId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
   },
+  restoreOperation(accessToken, operationId) {
+    return requestJson(accessToken, `/api/finance/operations/${operationId}/restore`, { method: 'POST' })
+  },
   createAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })
   },
@@ -550,6 +557,9 @@ export const financeApi: FinanceClient = {
   cancelAccrual(accessToken, accrualId, request) {
     return requestJson(accessToken, `/api/finance/accruals/${accrualId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
   },
+  restoreAccrual(accessToken, accrualId) {
+    return requestJson(accessToken, `/api/finance/accruals/${accrualId}/restore`, { method: 'POST' })
+  },
   createSupplierAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/supplier-accruals', { method: 'POST', body: JSON.stringify(request) })
   },
@@ -558,6 +568,9 @@ export const financeApi: FinanceClient = {
   },
   cancelSupplierAccrual(accessToken, supplierAccrualId, request) {
     return requestJson(accessToken, `/api/finance/supplier-accruals/${supplierAccrualId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
+  },
+  restoreSupplierAccrual(accessToken, supplierAccrualId) {
+    return requestJson(accessToken, `/api/finance/supplier-accruals/${supplierAccrualId}/restore`, { method: 'POST' })
   },
   generateRegularAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals/generate-regular', { method: 'POST', body: JSON.stringify(request) })
@@ -579,5 +592,8 @@ export const financeApi: FinanceClient = {
   },
   cancelMeterReading(accessToken, meterReadingId, request) {
     return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
+  },
+  restoreMeterReading(accessToken, meterReadingId) {
+    return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}/restore`, { method: 'POST' })
   },
 }
