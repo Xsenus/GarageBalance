@@ -331,7 +331,8 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     expect(within(serviceDialog).queryByLabelText('Цена за единицу 1')).not.toBeInTheDocument()
     expect(within(serviceDialog).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
-    await user.click(within(serviceDialog).getByRole('button', { name: 'Отмена' }))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
     await waitFor(() => expect(addTariffServiceButton).toHaveFocus())
 
     const addTariffFeeButton = within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0]
