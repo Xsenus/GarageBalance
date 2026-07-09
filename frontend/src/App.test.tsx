@@ -346,9 +346,11 @@ describe('App', () => {
     expect(within(feeDialog).getByLabelText('Сумма сбора')).toBeInTheDocument()
     expect(within(feeDialog).getByRole('button', { name: 'Сегодня' })).toBeInTheDocument()
     expect(within(feeDialog).getByLabelText('Перенос долга по сбору в просроченный')).toBeInTheDocument()
+    await user.type(within(feeDialog).getByLabelText('Наименование сбора'), 'Черновой сбор')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить сбор' })).not.toBeInTheDocument())
-    expect(addTariffFeeButton).toHaveFocus()
+    await waitFor(() => expect(addTariffFeeButton).toHaveFocus())
+    expect(within(tariffsPanel).queryByText('Черновой сбор')).not.toBeInTheDocument()
   })
 
   it('creates, accrues, archives and restores announced fee campaigns from tariffs page', async () => {
