@@ -24,6 +24,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -156,7 +157,7 @@ describe('App', () => {
       },
     })
 
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /Тарифы\s+и\s+сборы/i }).length).toBeGreaterThan(0)
@@ -3701,7 +3702,7 @@ describe('App', () => {
         }
       },
     })
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3739,7 +3740,7 @@ describe('App', () => {
         throw new Error('Смена пароля не должна вызываться без подтверждения.')
       },
     })
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3770,7 +3771,7 @@ describe('App', () => {
         throw new Error('Смена пароля не должна вызываться при несовпадающем повторе.')
       },
     })
-    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3813,6 +3814,62 @@ describe('App', () => {
     expect(within(passwordPanel).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
     expect(within(passwordPanel).getByRole('alert')).toBeInTheDocument()
     expect(changeCalled).toBe(false)
+  })
+
+  it('shows safe 1C Fresh integration status in settings', async () => {
+    const user = userEvent.setup()
+    let tokenSeen: string | null = null
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async (accessToken) => {
+        tokenSeen = accessToken
+        return createOneCFreshStatus({
+          isConfigured: true,
+          status: 'prepared',
+          statusMessage: 'Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh.',
+          configuredSettings: ['RefreshToken'],
+          lastProtectedSettingUpdatedAtUtc: '2026-06-30T02:30:00Z',
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const statusStrip = within(integrationPanel).getByLabelText('Статус интеграции 1C Fresh')
+    expect(within(statusStrip).getByText('Подготовлено')).toBeInTheDocument()
+    expect(within(statusStrip).getByText('Ожидает адаптер')).toBeInTheDocument()
+    expect(within(statusStrip).getByText('1 / 1')).toBeInTheDocument()
+    expect(within(integrationPanel).getByText('Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh.')).toHaveAttribute('role', 'status')
+    expect(integrationPanel).not.toHaveTextContent('one-c-refresh-token')
+    expect(tokenSeen).toBe('token')
+  })
+
+  it('does not request 1C Fresh status without import permission', async () => {
+    const user = userEvent.setup()
+    const authWithoutImport = createAuthResponse({
+      user: {
+        permissions: ['users.manage'],
+      },
+    })
+    let integrationCalled = false
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => {
+        integrationCalled = true
+        return createOneCFreshStatus()
+      },
+    })
+    render(<App authClient={createAuthClient({ login: async () => authWithoutImport })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    expect(await screen.findByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Интеграция 1C Fresh' })).not.toBeInTheDocument()
+    expect(integrationCalled).toBe(false)
   })
 
   it('adds managed user from protected workspace', async () => {
@@ -9389,6 +9446,13 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
   }
 }
 
+function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): IntegrationClient {
+  return {
+    getOneCFreshStatus: async () => createOneCFreshStatus(),
+    ...overrides,
+  }
+}
+
 function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient {
   return {
     getConsolidatedReport: async (_token, params) => {
@@ -10679,6 +10743,21 @@ function createAccessImportRunLogEntry(overrides: Partial<AccessImportRunLogEntr
     level: 'info',
     stepCode: 'file_received',
     message: 'Файл получен для dry-run проверки.',
+    ...overrides,
+  }
+}
+
+function createOneCFreshStatus(overrides: Partial<OneCFreshIntegrationStatusDto> = {}): OneCFreshIntegrationStatusDto {
+  return {
+    provider: 'OneCFresh',
+    displayName: '1C Fresh',
+    isConfigured: false,
+    canSynchronize: false,
+    status: 'not_configured',
+    statusMessage: 'Для будущей синхронизации нужно сохранить защищенную настройку OneCFresh:RefreshToken.',
+    requiredSettings: ['RefreshToken'],
+    configuredSettings: [],
+    lastProtectedSettingUpdatedAtUtc: null,
     ...overrides,
   }
 }

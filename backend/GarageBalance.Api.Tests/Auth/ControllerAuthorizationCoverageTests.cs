@@ -225,6 +225,7 @@ public sealed class ControllerAuthorizationCoverageTests
     [Theory]
     [InlineData(typeof(UsersController), SystemPermissions.UsersManage)]
     [InlineData(typeof(ImportController), SystemPermissions.ImportRun)]
+    [InlineData(typeof(IntegrationsController), SystemPermissions.ImportRun)]
     [InlineData(typeof(AuditController), SystemPermissions.AuditRead)]
     public void WorkspaceSectionControllersRequireExpectedPermissions(Type controllerType, string expectedPolicy)
     {

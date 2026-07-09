@@ -39,6 +39,8 @@ import { formStatesApi } from './services/formStatesApi'
 import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import { integrationsApi } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto } from './services/integrationsApi'
 import { reportsApi } from './services/reportsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -93,6 +95,7 @@ type AppProps = {
   fundsClient?: FundsClient
   formStateClient?: FormStateClient
   importClient?: ImportClient
+  integrationClient?: IntegrationClient
   reportClient?: ReportClient
   releaseClient?: ReleaseClient
   userClient?: UserManagementClient
@@ -224,7 +227,7 @@ function saveStoredSidebarExpanded(key: string, expanded: boolean) {
   }
 }
 
-function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, formStateClient = formStatesApi, importClient = importApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, formStateClient = formStatesApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [isSidebarExpanded, setSidebarExpanded] = useState(() => loadStoredSidebarExpanded(sidebarExpandedStorageKey))
@@ -323,7 +326,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -397,6 +400,7 @@ function Workspace({
   fundsClient,
   formStateClient,
   importClient,
+  integrationClient,
   reportClient,
   releaseClient,
   userClient,
@@ -413,6 +417,7 @@ function Workspace({
   fundsClient: FundsClient
   formStateClient: FormStateClient
   importClient: ImportClient
+  integrationClient: IntegrationClient
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
@@ -522,7 +527,7 @@ function Workspace({
       case 'releases':
         return <ReleasePanel auth={auth} releaseClient={releaseClient} />
       case 'settings':
-        return <PasswordPanel auth={auth} authClient={authClient} onUserChanged={onUserChanged} />
+        return <PasswordPanel auth={auth} authClient={authClient} integrationClient={integrationClient} onUserChanged={onUserChanged} />
       default:
         return null
     }
@@ -554,17 +559,59 @@ function Workspace({
   )
 }
 
-function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; onUserChanged: (user: CurrentUserDto) => void }) {
+function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; onUserChanged: (user: CurrentUserDto) => void }) {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [pendingPasswordChange, setPendingPasswordChange] = useState<{ currentPassword: string; newPassword: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [oneCFreshStatus, setOneCFreshStatus] = useState<OneCFreshIntegrationStatusDto | null>(null)
+  const [integrationLoading, setIntegrationLoading] = useState(false)
+  const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const canViewIntegrationStatus = hasPermission(auth, permissions.importRun)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
+
+  useEffect(() => {
+    if (!canViewIntegrationStatus) {
+      return
+    }
+
+    let ignore = false
+    async function loadOneCFreshStatus() {
+      await Promise.resolve()
+      if (ignore) {
+        return
+      }
+
+      setIntegrationLoading(true)
+      setIntegrationError(null)
+      try {
+        const status = await integrationClient.getOneCFreshStatus(auth.accessToken)
+        if (!ignore) {
+          setOneCFreshStatus(status)
+        }
+      } catch (caught: unknown) {
+        if (!ignore) {
+          setOneCFreshStatus(null)
+          setIntegrationError(caught instanceof Error ? caught.message : 'Не удалось загрузить статус 1C Fresh.')
+        }
+      } finally {
+        if (!ignore) {
+          setIntegrationLoading(false)
+        }
+      }
+    }
+
+    void loadOneCFreshStatus()
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, canViewIntegrationStatus, integrationClient])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -640,6 +687,40 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
           </button>
         </form>
       </section>
+      {canViewIntegrationStatus ? (
+        <section className="password-panel" aria-label="Интеграция 1C Fresh">
+          <div>
+            <p className="eyebrow">Интеграции</p>
+            <h2>1C Fresh</h2>
+            <p>Статус подготовки будущей синхронизации показывается без раскрытия токенов и других защищенных настроек.</p>
+          </div>
+          {integrationError ? <FormError>{integrationError}</FormError> : null}
+          {integrationLoading ? <p className="empty-state" role="status" aria-live="polite">Загрузка статуса 1C Fresh...</p> : null}
+          {oneCFreshStatus ? (
+            <div className="summary-strip" aria-label="Статус интеграции 1C Fresh">
+              <div>
+                <span>Состояние</span>
+                <strong className={oneCFreshStatus.isConfigured ? 'status-active' : 'status-disabled'}>{oneCFreshStatus.isConfigured ? 'Подготовлено' : 'Не настроено'}</strong>
+              </div>
+              <div>
+                <span>Синхронизация</span>
+                <strong className={oneCFreshStatus.canSynchronize ? 'status-active' : 'warning-text'}>{oneCFreshStatus.canSynchronize ? 'Доступна' : 'Ожидает адаптер'}</strong>
+              </div>
+              <div>
+                <span>Защищенные настройки</span>
+                <strong>{oneCFreshStatus.configuredSettings.length} / {oneCFreshStatus.requiredSettings.length}</strong>
+              </div>
+          <div>
+            <span>Обновлено</span>
+            <strong>{oneCFreshStatus.lastProtectedSettingUpdatedAtUtc ? formatDateTime(oneCFreshStatus.lastProtectedSettingUpdatedAtUtc) : 'нет данных'}</strong>
+          </div>
+        </div>
+          ) : null}
+          {oneCFreshStatus ? (
+            <p className="empty-state" role="status" aria-live="polite">{oneCFreshStatus.statusMessage}</p>
+          ) : null}
+        </section>
+      ) : null}
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
           <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
