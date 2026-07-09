@@ -25,6 +25,12 @@ public sealed class UserGuideTests
         Assert.Contains("Отчеты", document, StringComparison.Ordinal);
         Assert.Contains("История изменений", document, StringComparison.Ordinal);
         Assert.Contains("Что нового", document, StringComparison.Ordinal);
+        Assert.Contains("Показывать архивные", document, StringComparison.Ordinal);
+        Assert.Contains("Вернуть", document, StringComparison.Ordinal);
+        Assert.Contains("было -> стало", document, StringComparison.Ordinal);
+        Assert.Contains("Только восстановления", document, StringComparison.Ordinal);
+        Assert.Contains("связанный гараж", document, StringComparison.Ordinal);
+        Assert.Contains("причину или комментарий", document, StringComparison.Ordinal);
         Assert.Contains("Скачать отчет JSON", document, StringComparison.Ordinal);
         Assert.Contains("Скачать сводный XLSX", document, StringComparison.Ordinal);
         Assert.Contains("Скачать поступления XLSX/PDF", document, StringComparison.Ordinal);
