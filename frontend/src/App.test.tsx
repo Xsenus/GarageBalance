@@ -575,6 +575,8 @@ describe('App', () => {
 
   it('edits tariffs and one-time payments without local history access', async () => {
     const user = userEvent.setup()
+    const irregularPaymentListRequests: Array<{ includeArchived?: boolean }> = []
+    const restoredIrregularPaymentIds: string[] = []
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 1250 })
     const electricityTariff = createTariff({
       id: 'tariff-electricity',
@@ -604,11 +606,16 @@ describe('App', () => {
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [waterTariff, electricityTariff],
       getChargeServiceSettings: async () => [membershipSetting],
-      getIrregularPayments: async () => [
+      getIrregularPayments: async (_token, _search, _limit, includeArchived) => {
+        irregularPaymentListRequests.push({ includeArchived })
+        return [
         createIrregularPayment({ id: 'irregular-entry-fee', name: 'Вступительный взнос', isUsed: true }),
         createIrregularPayment({ id: 'irregular-fine-that', name: 'Штраф за то' }),
         createIrregularPayment({ id: 'irregular-fine-this', name: 'Штраф за это' }),
-      ],
+        createIrregularPayment({ id: 'irregular-archived', name: 'Архивный штраф', amount: 250, isArchived: true }),
+        createIrregularPayment({ id: 'irregular-conflict', name: 'Архивный дубль', amount: 300, isArchived: true }),
+      ]
+      },
       createTariff: async (_token, request) => createTariff({
         id: 'tariff-water-created',
         name: request.name,
@@ -639,6 +646,14 @@ describe('App', () => {
         isActive: request.isActive ?? true,
         isUsed: request.name === 'Вступительный взнос',
       }),
+      restoreIrregularPayment: async (_token, id) => {
+        restoredIrregularPaymentIds.push(id)
+        if (id === 'irregular-conflict') {
+          throw new DictionaryApiError('irregular_payment_duplicate', 'Активный нерегулярный платеж с таким наименованием уже существует.', 409)
+        }
+
+        return createIrregularPayment({ id, name: 'Архивный штраф', amount: 250, isArchived: false })
+      },
     })
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -730,11 +745,39 @@ describe('App', () => {
     expect(entryFeeInput).toHaveValue('5500')
 
     const oneTimeTable = within(tariffsPanel).getByRole('region', { name: 'Нерегулярные платежи' })
+    expect(irregularPaymentListRequests[0]?.includeArchived).toBe(true)
     expect(within(oneTimeTable).queryByText('Статус')).not.toBeInTheDocument()
     expect(within(oneTimeTable).queryByText('Действие')).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('group', { name: 'Действия по тарифам и сборам' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getAllByRole('button', { name: 'Добавить услугу' })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })).toHaveLength(1)
+
+    const archivedPaymentRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Архивный штраф')
+    const restoreArchivedButton = within(archivedPaymentRow).getByRole('button', { name: 'Вернуть' })
+    await user.click(restoreArchivedButton)
+    const restoreArchivedDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
+    expect(within(restoreArchivedDialog).getByText('Архивный штраф')).toBeInTheDocument()
+    const restoreArchivedCancelButton = within(restoreArchivedDialog).getByRole('button', { name: 'Отмена' })
+    const restoreArchivedConfirmButton = within(restoreArchivedDialog).getByRole('button', { name: 'Вернуть' })
+    expect(Boolean(restoreArchivedCancelButton.compareDocumentPosition(restoreArchivedConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await waitFor(() => expect(restoreArchivedCancelButton).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
+    expect(restoredIrregularPaymentIds).toHaveLength(0)
+    expect(restoreArchivedButton).toHaveFocus()
+    await user.click(restoreArchivedButton)
+    const reopenedRestoreArchivedDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
+    await user.click(within(reopenedRestoreArchivedDialog).getByRole('button', { name: 'Вернуть' }))
+    await waitFor(() => expect(restoredIrregularPaymentIds).toEqual(['irregular-archived']))
+    expect(within(archivedPaymentRow).getByLabelText('Сумма: Архивный штраф')).toBeEnabled()
+
+    const conflictPaymentRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Архивный дубль')
+    await user.click(within(conflictPaymentRow).getByRole('button', { name: 'Вернуть' }))
+    const conflictRestoreDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
+    await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Вернуть' }))
+    expect(await within(oneTimeTable).findByRole('alert')).toHaveTextContent('Восстановление недоступно')
+    await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Отмена' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
 
     const usedPaymentRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Вступительный взнос')
     fireEvent.contextMenu(usedPaymentRow)
@@ -786,7 +829,7 @@ describe('App', () => {
     expect(within(reopenedDeleteFineDialog).getByRole('button', { name: 'Удалить' })).toBeDisabled()
     await user.type(within(reopenedDeleteFineDialog).getByLabelText('Причина удаления нерегулярного платежа'), 'Больше не используется')
     await user.click(within(reopenedDeleteFineDialog).getByRole('button', { name: 'Удалить' }))
-    await waitFor(() => expect(within(oneTimeTable).queryByText('Штраф за это')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(fineThisRow).getByRole('button', { name: 'Вернуть' })).toBeEnabled())
 
     expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()

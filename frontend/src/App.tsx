@@ -13000,7 +13000,7 @@ function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], p
       isUsed: payment.isUsed,
     }))
 
-  return [...mergedRows, ...extraRows].filter((row) => !row.isDeleted)
+  return [...mergedRows, ...extraRows]
 }
 
 type TariffPrototypePendingChange =
@@ -13107,6 +13107,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
+  const [oneTimeRestoreTarget, setOneTimeRestoreTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeContextMenu, setOneTimeContextMenu] = useState<{ row: ContractorOneTimeRow; x: number; y: number } | null>(null)
   const [oneTimeActionMessage, setOneTimeActionMessage] = useState<string | null>(null)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
@@ -13121,7 +13122,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
         const [loadedTariffs, loadedIncomeTypes, loadedIrregularPayments, loadedChargeServices, loadedFeeCampaigns, loadedGarages] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
@@ -13197,6 +13198,10 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
     setOneTimeDeleteReason('')
+  }
+
+  function closeOneTimeRestoreDialog() {
+    setOneTimeRestoreTarget(null)
   }
 
   function closeFeeCampaignArchiveDialog() {
@@ -13311,6 +13316,9 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   useRestoreFocusOnClose(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeDeleteTarget))
   const oneTimeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeDeleteTarget))
+  useRestoreFocusOnClose(Boolean(oneTimeRestoreTarget))
+  const oneTimeRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(oneTimeRestoreTarget))
+  const oneTimeRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneTimeRestoreTarget))
   useRestoreFocusOnClose(Boolean(feeCampaignArchiveTarget))
   const feeCampaignArchiveDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignArchiveTarget))
   const feeCampaignArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignArchiveTarget))
@@ -13322,6 +13330,7 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
   const feeCampaignGenerateCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignGenerateTarget))
   useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
+  useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
   useEscapeKey(Boolean(feeCampaignArchiveTarget), () => closeFeeCampaignArchiveDialog())
   useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
   useEscapeKey(Boolean(feeCampaignGenerateTarget), () => closeFeeCampaignGenerateDialog())
@@ -13760,12 +13769,50 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
     setOneTimeActionMessage(null)
     try {
       await dictionaryClient.archiveIrregularPayment(auth.accessToken, oneTimeDeleteTarget.backendPaymentId, oneTimeDeleteReason.trim())
-      setOneTimeRows((currentRows) => currentRows.filter((currentRow) => currentRow.id !== oneTimeDeleteTarget.id))
+      setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
+        currentRow.id === oneTimeDeleteTarget.id ? { ...currentRow, isDeleted: true } : currentRow
+      )))
       closeOneTimeDeleteDialog()
     } catch (caught) {
       const message = caught instanceof DictionaryApiError && caught.code === 'irregular_payment_used'
         ? 'Удаление недоступно: нерегулярный платеж уже используется в платежах или начислениях.'
         : caught instanceof Error ? caught.message : 'Не удалось удалить нерегулярный платеж.'
+      setOneTimeActionMessage(message)
+    } finally {
+      setOneTimeSavingRowId(null)
+    }
+  }
+
+  const confirmOneTimeRestore = async () => {
+    if (!oneTimeRestoreTarget?.backendPaymentId) {
+      closeOneTimeRestoreDialog()
+      return
+    }
+
+    setOneTimeSavingRowId(oneTimeRestoreTarget.id)
+    setOneTimeActionMessage(null)
+    try {
+      const restoredPayment = await dictionaryClient.restoreIrregularPayment(auth.accessToken, oneTimeRestoreTarget.backendPaymentId)
+      const nextRows = oneTimeRows.map((currentRow) => (
+        currentRow.id === oneTimeRestoreTarget.id
+          ? {
+            ...currentRow,
+            backendPaymentId: restoredPayment.id,
+            amount: formatPrototypeAmount(restoredPayment.amount),
+            isActive: restoredPayment.isActive,
+            isDeleted: restoredPayment.isArchived,
+            isUsed: restoredPayment.isUsed,
+          }
+          : currentRow
+      ))
+      setOneTimeRows(nextRows)
+      setOneTimeDrafts(createEditableDrafts(nextRows))
+      setOneTimeActionMessage(`Нерегулярный платеж "${restoredPayment.name}" возвращен.`)
+      closeOneTimeRestoreDialog()
+    } catch (caught) {
+      const message = caught instanceof DictionaryApiError && caught.code === 'irregular_payment_duplicate'
+        ? 'Восстановление недоступно: активный нерегулярный платеж с таким наименованием уже существует.'
+        : caught instanceof Error ? caught.message : 'Не удалось восстановить нерегулярный платеж.'
       setOneTimeActionMessage(message)
     } finally {
       setOneTimeSavingRowId(null)
@@ -14138,14 +14185,24 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
                 >
                   <span>{row.name}</span>
                   <span>
-                    <input
-                      aria-label={`Сумма: ${row.name}`}
-                      className="contractors-editable-input"
-                      disabled={!canManageTariffs || row.isDeleted || !row.isActive || oneTimeSavingRowId === row.id}
-                      value={oneTimeDrafts[row.id]?.amount ?? ''}
-                      onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
-                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
-                    />
+                    {row.isDeleted ? (
+                      <span className="contractors-mini-actions">
+                        <span>{row.amount}</span>
+                        <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeSavingRowId === row.id} onClick={() => setOneTimeRestoreTarget(row)}>
+                          <RotateCcw size={16} />
+                          <span>Вернуть</span>
+                        </button>
+                      </span>
+                    ) : (
+                      <input
+                        aria-label={`Сумма: ${row.name}`}
+                        className="contractors-editable-input"
+                        disabled={!canManageTariffs || !row.isActive || oneTimeSavingRowId === row.id}
+                        value={oneTimeDrafts[row.id]?.amount ?? ''}
+                        onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
+                      />
+                    )}
                   </span>
                 </div>
               ))}
@@ -14304,6 +14361,31 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim() || oneTimeSavingRowId === oneTimeDeleteTarget.id}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {oneTimeRestoreTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeOneTimeRestoreDialog}>
+          <section ref={oneTimeRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="one-time-restore-title" aria-describedby="one-time-restore-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Восстановление</p>
+                <h3 id="one-time-restore-title">Вернуть нерегулярный платеж?</h3>
+                <p>{oneTimeRestoreTarget.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления нерегулярного платежа" onClick={closeOneTimeRestoreDialog} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="one-time-restore-description">Платеж снова появится в рабочих списках. Действие будет записано в историю изменений.</p>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={oneTimeRestoreCancelRef} className="ghost-button" type="button" onClick={closeOneTimeRestoreDialog} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmOneTimeRestore} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>
+                <RotateCcw size={16} />
+                <span>Вернуть</span>
               </button>
             </div>
           </section>
