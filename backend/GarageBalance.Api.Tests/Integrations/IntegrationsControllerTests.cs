@@ -19,24 +19,58 @@ public sealed class IntegrationsControllerTests
             ["RefreshToken"],
             ["RefreshToken"],
             DateTimeOffset.UtcNow);
-        var service = new FakeIntegrationStatusService(expected);
+        var service = new FakeIntegrationStatusService(oneCFreshStatus: expected);
         var controller = new IntegrationsController(service);
 
         var result = await controller.GetOneCFreshStatus(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(expected, ok.Value);
-        Assert.True(service.Called);
+        Assert.True(service.OneCFreshCalled);
     }
 
-    private sealed class FakeIntegrationStatusService(OneCFreshIntegrationStatusDto status) : IIntegrationStatusService
+    [Fact]
+    public async Task GetReceiptPrintingStatus_ReturnsStatusFromService()
     {
-        public bool Called { get; private set; }
+        var expected = new ReceiptPrintingIntegrationStatusDto(
+            "ReceiptPrinting",
+            "Печать чеков и квитанций",
+            IsConfigured: true,
+            CanPrint: false,
+            "prepared",
+            "Настройки сохранены.",
+            ["DeviceConnection", "ReceiptTemplate"],
+            ["DeviceConnection", "ReceiptTemplate"],
+            ["Печать квитанции", "Отмена печати", "Повторная печать"],
+            DateTimeOffset.UtcNow);
+        var service = new FakeIntegrationStatusService(receiptPrintingStatus: expected);
+        var controller = new IntegrationsController(service);
+
+        var result = await controller.GetReceiptPrintingStatus(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(expected, ok.Value);
+        Assert.True(service.ReceiptPrintingCalled);
+    }
+
+    private sealed class FakeIntegrationStatusService(
+        OneCFreshIntegrationStatusDto? oneCFreshStatus = null,
+        ReceiptPrintingIntegrationStatusDto? receiptPrintingStatus = null) : IIntegrationStatusService
+    {
+        public bool OneCFreshCalled { get; private set; }
+
+        public bool ReceiptPrintingCalled { get; private set; }
 
         public Task<OneCFreshIntegrationStatusDto> GetOneCFreshStatusAsync(CancellationToken cancellationToken)
         {
-            Called = true;
-            return Task.FromResult(status);
+            OneCFreshCalled = true;
+            return Task.FromResult(oneCFreshStatus!);
+        }
+
+        public Task<ReceiptPrintingIntegrationStatusDto> GetReceiptPrintingStatusAsync(CancellationToken cancellationToken)
+        {
+            ReceiptPrintingCalled = true;
+            return Task.FromResult(receiptPrintingStatus!);
         }
     }
 }

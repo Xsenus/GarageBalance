@@ -40,7 +40,7 @@ import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { integrationsApi } from './services/integrationsApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import { reportsApi } from './services/reportsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -569,7 +569,11 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
   const [oneCFreshStatus, setOneCFreshStatus] = useState<OneCFreshIntegrationStatusDto | null>(null)
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const [receiptPrintingStatus, setReceiptPrintingStatus] = useState<ReceiptPrintingIntegrationStatusDto | null>(null)
+  const [receiptPrintingLoading, setReceiptPrintingLoading] = useState(false)
+  const [receiptPrintingError, setReceiptPrintingError] = useState<string | null>(null)
   const canViewIntegrationStatus = hasPermission(auth, permissions.importRun)
+  const canViewReceiptPrintingStatus = hasPermission(auth, permissions.paymentsWrite)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
@@ -612,6 +616,44 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
       ignore = true
     }
   }, [auth.accessToken, canViewIntegrationStatus, integrationClient])
+
+  useEffect(() => {
+    if (!canViewReceiptPrintingStatus) {
+      return
+    }
+
+    let ignore = false
+    async function loadReceiptPrintingStatus() {
+      await Promise.resolve()
+      if (ignore) {
+        return
+      }
+
+      setReceiptPrintingLoading(true)
+      setReceiptPrintingError(null)
+      try {
+        const status = await integrationClient.getReceiptPrintingStatus(auth.accessToken)
+        if (!ignore) {
+          setReceiptPrintingStatus(status)
+        }
+      } catch (caught: unknown) {
+        if (!ignore) {
+          setReceiptPrintingStatus(null)
+          setReceiptPrintingError(caught instanceof Error ? caught.message : 'Не удалось загрузить статус печати чеков и квитанций.')
+        }
+      } finally {
+        if (!ignore) {
+          setReceiptPrintingLoading(false)
+        }
+      }
+    }
+
+    void loadReceiptPrintingStatus()
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, canViewReceiptPrintingStatus, integrationClient])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -718,6 +760,43 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
           ) : null}
           {oneCFreshStatus ? (
             <p className="empty-state" role="status" aria-live="polite">{oneCFreshStatus.statusMessage}</p>
+          ) : null}
+        </section>
+      ) : null}
+      {canViewReceiptPrintingStatus ? (
+        <section className="password-panel" aria-label="Печать чеков и квитанций">
+          <div>
+            <p className="eyebrow">Интеграции</p>
+            <h2>Чеки и квитанции</h2>
+            <p>Статус подготовки печати показывается без раскрытия параметров фискального оборудования и шаблонов.</p>
+          </div>
+          {receiptPrintingError ? <FormError>{receiptPrintingError}</FormError> : null}
+          {receiptPrintingLoading ? <p className="empty-state" role="status" aria-live="polite">Загрузка статуса печати...</p> : null}
+          {receiptPrintingStatus ? (
+            <div className="summary-strip" aria-label="Статус печати чеков и квитанций">
+              <div>
+                <span>Состояние</span>
+                <strong className={receiptPrintingStatus.isConfigured ? 'status-active' : 'status-disabled'}>{receiptPrintingStatus.isConfigured ? 'Подготовлено' : 'Не настроено'}</strong>
+              </div>
+              <div>
+                <span>Печать</span>
+                <strong className={receiptPrintingStatus.canPrint ? 'status-active' : 'warning-text'}>{receiptPrintingStatus.canPrint ? 'Доступна' : 'Ожидает адаптер'}</strong>
+              </div>
+              <div>
+                <span>Защищенные настройки</span>
+                <strong>{receiptPrintingStatus.configuredSettings.length} / {receiptPrintingStatus.requiredSettings.length}</strong>
+              </div>
+              <div>
+                <span>Обновлено</span>
+                <strong>{receiptPrintingStatus.lastProtectedSettingUpdatedAtUtc ? formatDateTime(receiptPrintingStatus.lastProtectedSettingUpdatedAtUtc) : 'нет данных'}</strong>
+              </div>
+            </div>
+          ) : null}
+          {receiptPrintingStatus ? (
+            <>
+              <p className="empty-state" role="status" aria-live="polite">{receiptPrintingStatus.statusMessage}</p>
+              <p className="form-hint">Будущие действия: {receiptPrintingStatus.plannedActions.join(', ')}.</p>
+            </>
           ) : null}
         </section>
       ) : null}

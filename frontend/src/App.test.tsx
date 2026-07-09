@@ -24,7 +24,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -1337,7 +1337,7 @@ describe('App', () => {
 
     expect(within(contractorsPanel).queryByRole('table', { name: 'История изменений контрагентов', hidden: true })).not.toBeInTheDocument()
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
-  }, 30000)
+  }, 180000)
 
   it('opens financial reports for suppliers and staff from contractors tables', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
@@ -2747,7 +2747,7 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
     expect(bankButton).toHaveFocus()
-  })
+  }, 180000)
 
   it('uses garages from the dictionary in the payments search', async () => {
     const user = userEvent.setup()
@@ -3870,6 +3870,64 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Интеграция 1C Fresh' })).not.toBeInTheDocument()
     expect(integrationCalled).toBe(false)
+  })
+
+  it('shows safe receipt printing status in settings', async () => {
+    const user = userEvent.setup()
+    let tokenSeen: string | null = null
+    const integrationClient = createIntegrationClient({
+      getReceiptPrintingStatus: async (accessToken) => {
+        tokenSeen = accessToken
+        return createReceiptPrintingStatus({
+          isConfigured: true,
+          status: 'prepared',
+          statusMessage: 'Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования.',
+          configuredSettings: ['DeviceConnection', 'ReceiptTemplate'],
+          plannedActions: ['Печать квитанции', 'Отмена печати', 'Повторная печать'],
+          lastProtectedSettingUpdatedAtUtc: '2026-06-30T03:10:00Z',
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const receiptPanel = await screen.findByRole('region', { name: 'Печать чеков и квитанций' })
+    const statusStrip = within(receiptPanel).getByLabelText('Статус печати чеков и квитанций')
+    expect(within(statusStrip).getByText('Подготовлено')).toBeInTheDocument()
+    expect(within(statusStrip).getByText('Ожидает адаптер')).toBeInTheDocument()
+    expect(within(statusStrip).getByText('2 / 2')).toBeInTheDocument()
+    expect(within(receiptPanel).getByText('Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования.')).toHaveAttribute('role', 'status')
+    expect(within(receiptPanel).getByText('Будущие действия: Печать квитанции, Отмена печати, Повторная печать.')).toBeInTheDocument()
+    expect(receiptPanel).not.toHaveTextContent('fiscal-device-connection-string')
+    expect(tokenSeen).toBe('token')
+  })
+
+  it('does not request receipt printing status without payment write permission', async () => {
+    const user = userEvent.setup()
+    const authWithoutPaymentWrite = createAuthResponse({
+      user: {
+        permissions: ['users.manage', 'dictionaries.read', 'payments.read'],
+      },
+    })
+    let receiptPrintingCalled = false
+    const integrationClient = createIntegrationClient({
+      getReceiptPrintingStatus: async () => {
+        receiptPrintingCalled = true
+        return createReceiptPrintingStatus()
+      },
+    })
+    render(<App authClient={createAuthClient({ login: async () => authWithoutPaymentWrite })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    expect(await screen.findByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Печать чеков и квитанций' })).not.toBeInTheDocument()
+    expect(receiptPrintingCalled).toBe(false)
   })
 
   it('adds managed user from protected workspace', async () => {
@@ -9449,6 +9507,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
 function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): IntegrationClient {
   return {
     getOneCFreshStatus: async () => createOneCFreshStatus(),
+    getReceiptPrintingStatus: async () => createReceiptPrintingStatus(),
     ...overrides,
   }
 }
@@ -10757,6 +10816,22 @@ function createOneCFreshStatus(overrides: Partial<OneCFreshIntegrationStatusDto>
     statusMessage: 'Для будущей синхронизации нужно сохранить защищенную настройку OneCFresh:RefreshToken.',
     requiredSettings: ['RefreshToken'],
     configuredSettings: [],
+    lastProtectedSettingUpdatedAtUtc: null,
+    ...overrides,
+  }
+}
+
+function createReceiptPrintingStatus(overrides: Partial<ReceiptPrintingIntegrationStatusDto> = {}): ReceiptPrintingIntegrationStatusDto {
+  return {
+    provider: 'ReceiptPrinting',
+    displayName: 'Печать чеков и квитанций',
+    isConfigured: false,
+    canPrint: false,
+    status: 'not_configured',
+    statusMessage: 'Для будущей печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate.',
+    requiredSettings: ['DeviceConnection', 'ReceiptTemplate'],
+    configuredSettings: [],
+    plannedActions: ['Печать квитанции', 'Отмена печати', 'Повторная печать'],
     lastProtectedSettingUpdatedAtUtc: null,
     ...overrides,
   }

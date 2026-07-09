@@ -10,13 +10,30 @@ export type OneCFreshIntegrationStatusDto = {
   lastProtectedSettingUpdatedAtUtc: string | null
 }
 
+export type ReceiptPrintingIntegrationStatusDto = {
+  provider: string
+  displayName: string
+  isConfigured: boolean
+  canPrint: boolean
+  status: string
+  statusMessage: string
+  requiredSettings: string[]
+  configuredSettings: string[]
+  plannedActions: string[]
+  lastProtectedSettingUpdatedAtUtc: string | null
+}
+
 export type IntegrationClient = {
   getOneCFreshStatus(accessToken: string): Promise<OneCFreshIntegrationStatusDto>
+  getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
 }
 
 export const integrationsApi: IntegrationClient = {
   getOneCFreshStatus(accessToken) {
     return requestJson<OneCFreshIntegrationStatusDto>(accessToken, '/api/integrations/one-c-fresh/status')
+  },
+  getReceiptPrintingStatus(accessToken) {
+    return requestJson<ReceiptPrintingIntegrationStatusDto>(accessToken, '/api/integrations/receipt-printing/status')
   },
 }
 

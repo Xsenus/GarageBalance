@@ -52,6 +52,59 @@ public sealed class IntegrationStatusServiceTests
         Assert.DoesNotContain(plaintextSecret, status.StatusMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GetReceiptPrintingStatusAsync_ReturnsNotConfiguredWithoutProtectedSettings()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateStatusService(database.Context);
+
+        var status = await service.GetReceiptPrintingStatusAsync(CancellationToken.None);
+
+        Assert.Equal("ReceiptPrinting", status.Provider);
+        Assert.Equal("Печать чеков и квитанций", status.DisplayName);
+        Assert.False(status.IsConfigured);
+        Assert.False(status.CanPrint);
+        Assert.Equal("not_configured", status.Status);
+        Assert.Contains("ReceiptPrinting:DeviceConnection", status.StatusMessage, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrinting:ReceiptTemplate", status.StatusMessage, StringComparison.Ordinal);
+        Assert.Contains("DeviceConnection", status.RequiredSettings);
+        Assert.Contains("ReceiptTemplate", status.RequiredSettings);
+        Assert.Contains("Повторная печать", status.PlannedActions);
+        Assert.Empty(status.ConfiguredSettings);
+        Assert.Null(status.LastProtectedSettingUpdatedAtUtc);
+    }
+
+    [Fact]
+    public async Task GetReceiptPrintingStatusAsync_ReturnsPreparedStateWithoutProtectedValues()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var secretService = CreateSecretService(database.Context);
+        const string deviceConnectionValue = "fiscal-device-connection-string";
+        const string templateValue = "private-receipt-template";
+        await secretService.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "DeviceConnection", deviceConnectionValue),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        await secretService.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "ReceiptTemplate", templateValue),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var service = new IntegrationStatusService(secretService);
+
+        var status = await service.GetReceiptPrintingStatusAsync(CancellationToken.None);
+
+        Assert.True(status.IsConfigured);
+        Assert.False(status.CanPrint);
+        Assert.Equal("prepared", status.Status);
+        Assert.Contains("DeviceConnection", status.ConfiguredSettings);
+        Assert.Contains("ReceiptTemplate", status.ConfiguredSettings);
+        Assert.NotNull(status.LastProtectedSettingUpdatedAtUtc);
+        Assert.DoesNotContain(deviceConnectionValue, status.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(templateValue, status.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(deviceConnectionValue, status.StatusMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(templateValue, status.StatusMessage, StringComparison.Ordinal);
+    }
+
     private static IntegrationStatusService CreateStatusService(GarageBalanceDbContext context)
     {
         return new IntegrationStatusService(CreateSecretService(context));

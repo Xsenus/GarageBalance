@@ -225,7 +225,6 @@ public sealed class ControllerAuthorizationCoverageTests
     [Theory]
     [InlineData(typeof(UsersController), SystemPermissions.UsersManage)]
     [InlineData(typeof(ImportController), SystemPermissions.ImportRun)]
-    [InlineData(typeof(IntegrationsController), SystemPermissions.ImportRun)]
     [InlineData(typeof(AuditController), SystemPermissions.AuditRead)]
     public void WorkspaceSectionControllersRequireExpectedPermissions(Type controllerType, string expectedPolicy)
     {
@@ -243,6 +242,20 @@ public sealed class ControllerAuthorizationCoverageTests
             .ToList();
 
         Assert.Empty(anonymousActions);
+    }
+
+    [Theory]
+    [InlineData(nameof(IntegrationsController.GetOneCFreshStatus), SystemPermissions.ImportRun)]
+    [InlineData(nameof(IntegrationsController.GetReceiptPrintingStatus), SystemPermissions.PaymentsWrite)]
+    public void IntegrationStatusActionsRequireExpectedPermissions(string actionName, string expectedPolicy)
+    {
+        var action = typeof(IntegrationsController).GetMethod(actionName);
+        Assert.NotNull(action);
+
+        var policy = action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == expectedPolicy);
+
+        Assert.NotNull(policy);
     }
 
     [Fact]
