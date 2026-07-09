@@ -3059,6 +3059,7 @@ function PaymentsPrototypePanel({
   const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
   const staffPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyEdit, setHistoryEdit] = useState<GaragePaymentHistoryEditState | null>(null)
+  const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
@@ -3429,11 +3430,12 @@ function PaymentsPrototypePanel({
     }
   }
 
-  function openHistoryEdit(row: GaragePaymentHistoryPrototypeRow) {
+  function openHistoryEdit(row: GaragePaymentHistoryPrototypeRow, trigger?: HTMLButtonElement | null) {
     if (!row.operation || !canWritePayments) {
       return
     }
 
+    historyEditTriggerRef.current = trigger ?? null
     setPaymentError(null)
     setHistoryEdit({
       row,
@@ -3444,6 +3446,17 @@ function PaymentsPrototypePanel({
       comment: row.operation.comment ?? '',
       error: null,
     })
+  }
+
+  function closeHistoryEditDialog() {
+    const trigger = historyEditTriggerRef.current
+    setHistoryEdit(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      historyEditTriggerRef.current = null
+    }, 0)
   }
 
   function openHistoryCancel(row: GaragePaymentHistoryPrototypeRow) {
@@ -3485,7 +3498,7 @@ function PaymentsPrototypePanel({
         documentNumber: historyEdit.documentNumber.trim() || undefined,
         comment: historyEdit.comment.trim() || undefined,
       })
-      setHistoryEdit(null)
+      closeHistoryEditDialog()
       await Promise.all([
         loadGaragePaymentHistory(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
@@ -4273,7 +4286,7 @@ function PaymentsPrototypePanel({
                     <td>
                       {row.operation && canWritePayments ? (
                         <div className="table-action-row">
-                          <button className="icon-button" type="button" title="Изменить платеж" aria-label={`Изменить платеж ${row.purpose}`} onClick={() => openHistoryEdit(row)}>
+                          <button className="icon-button" type="button" title="Изменить платеж" aria-label={`Изменить платеж ${row.purpose}`} onClick={(event) => openHistoryEdit(row, event.currentTarget)}>
                             <Pencil size={16} aria-hidden="true" />
                           </button>
                           <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={() => openHistoryCancel(row)}>
@@ -4593,7 +4606,7 @@ function PaymentsPrototypePanel({
           state={historyEdit}
           saving={historyActionSaving}
           onChange={(patch) => setHistoryEdit((value) => value ? { ...value, ...patch, error: null } : value)}
-          onClose={() => setHistoryEdit(null)}
+          onClose={closeHistoryEditDialog}
           onSubmit={saveHistoryEdit}
         />
       ) : null}
