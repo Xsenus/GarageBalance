@@ -21,10 +21,11 @@ public sealed class UserManagementService(
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
-        return await dbContext.Roles.AsNoTracking()
+        var roles = await dbContext.Roles.AsNoTracking()
             .OrderBy(role => role.Name)
-            .Select(role => new ManagedRoleDto(role.Code, role.Name, role.Permissions))
             .ToListAsync(cancellationToken);
+
+        return roles.Select(ToDto).ToList();
     }
 
     public async Task<IReadOnlyList<ManagedUserDto>> GetUsersAsync(string? search, CancellationToken cancellationToken, int? limit = null)
@@ -313,6 +314,65 @@ public sealed class UserManagementService(
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
     }
 
+    public async Task<UserManagementResult<ManagedRoleDto>> UpdateRolePermissionsAsync(string roleCode, UpdateRolePermissionsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        await EnsureSystemRolesAsync(cancellationToken);
+
+        var normalizedRoleCode = roleCode.Trim();
+        var role = await dbContext.Roles.SingleOrDefaultAsync(item => item.Code == normalizedRoleCode, cancellationToken);
+        if (role is null)
+        {
+            return UserManagementResult<ManagedRoleDto>.Failure("role_not_found", "Роль не найдена.");
+        }
+
+        var permissionsResult = NormalizePermissions(request.Permissions);
+        if (!permissionsResult.Succeeded)
+        {
+            return UserManagementResult<ManagedRoleDto>.Failure(permissionsResult.ErrorCode!, permissionsResult.ErrorMessage!);
+        }
+
+        var newPermissions = permissionsResult.Value!;
+        if (string.Equals(role.Code, SystemRoles.Administrator, StringComparison.Ordinal) &&
+            !newPermissions.Contains(SystemPermissions.UsersManage, StringComparer.Ordinal))
+        {
+            return UserManagementResult<ManagedRoleDto>.Failure("administrator_users_manage_required", "Роль администратора должна сохранять право управления пользователями.");
+        }
+
+        var oldPermissions = FormatPermissions(role.Permissions);
+        var newPermissionsText = FormatPermissions(newPermissions);
+        if (string.Equals(oldPermissions, newPermissionsText, StringComparison.Ordinal))
+        {
+            return UserManagementResult<ManagedRoleDto>.Success(ToDto(role));
+        }
+
+        role.Permissions = newPermissions.ToList();
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "users.role_permissions_updated",
+            "app_role",
+            role.Code,
+            Summary: $"Изменены права роли {role.Name}.",
+            ActionKind: "update",
+            EntityDisplayName: role.Name,
+            OldValues: new Dictionary<string, object?>
+            {
+                ["permissions"] = oldPermissions
+            },
+            NewValues: new Dictionary<string, object?>
+            {
+                ["permissions"] = newPermissionsText
+            },
+            FieldLabels: RoleAuditFieldLabels,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["roleCode"] = role.Code,
+                ["permissions"] = newPermissionsText
+            }));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return UserManagementResult<ManagedRoleDto>.Success(ToDto(role));
+    }
+
     private static (string Code, string Message)? ValidateDeactivationReason(string? reason, out string normalizedReason)
     {
         normalizedReason = reason?.Trim() ?? string.Empty;
@@ -389,7 +449,6 @@ public sealed class UserManagementService(
         }
 
         role.Name = name;
-        role.Permissions = permissions.ToList();
     }
 
     private static readonly IReadOnlyDictionary<string, string> UserAuditFieldLabels = new Dictionary<string, string>
@@ -400,9 +459,42 @@ public sealed class UserManagementService(
         ["credentialsChanged"] = "Смена учетных данных"
     };
 
+    private static readonly IReadOnlyDictionary<string, string> RoleAuditFieldLabels = new Dictionary<string, string>
+    {
+        ["permissions"] = "Права"
+    };
+
+    private static UserManagementResult<IReadOnlyList<string>> NormalizePermissions(IReadOnlyList<string> permissions)
+    {
+        var knownPermissions = SystemPermissions.All.ToHashSet(StringComparer.Ordinal);
+        var normalizedPermissions = permissions
+            .Select(permission => permission.Trim())
+            .Where(permission => permission.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        if (normalizedPermissions.Length == 0)
+        {
+            return UserManagementResult<IReadOnlyList<string>>.Failure("permissions_required", "Нужно выбрать хотя бы одно право.");
+        }
+
+        if (normalizedPermissions.Any(permission => !knownPermissions.Contains(permission)))
+        {
+            return UserManagementResult<IReadOnlyList<string>>.Failure("permission_not_found", "Одно или несколько прав не поддерживаются системой.");
+        }
+
+        return UserManagementResult<IReadOnlyList<string>>.Success(normalizedPermissions);
+    }
+
     private static string FormatRoleCodes(IEnumerable<AppRole> roles)
     {
         return string.Join(", ", roles.Select(role => role.Code).Order(StringComparer.Ordinal));
+    }
+
+    private static string FormatPermissions(IEnumerable<string> permissions)
+    {
+        return string.Join(", ", permissions.Order(StringComparer.Ordinal));
     }
 
     private static string NormalizeEmail(string email)
@@ -437,5 +529,13 @@ public sealed class UserManagementService(
             user.LastLoginAtUtc,
             roles.Select(role => role.Code).ToArray(),
             permissions);
+    }
+
+    private static ManagedRoleDto ToDto(AppRole role)
+    {
+        return new ManagedRoleDto(
+            role.Code,
+            role.Name,
+            role.Permissions.Order(StringComparer.Ordinal).ToArray());
     }
 }

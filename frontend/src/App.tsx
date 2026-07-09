@@ -9684,6 +9684,8 @@ function ReportWorkbookSheet({ children, title }: { children: ReactNode; title: 
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
 type UserSaveConfirmationState = { user: ManagedUserDto; changes: UserEditChange[]; request: UpdateManagedUserRequest }
+type RolePermissionEditorState = { role: ManagedRoleDto; permissions: string[] }
+type RolePermissionConfirmationState = { role: ManagedRoleDto; changes: ChangePreview[]; permissions: string[] }
 
 function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
@@ -9700,6 +9702,9 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
   const [saveConfirmation, setSaveConfirmation] = useState<UserSaveConfirmationState | null>(null)
+  const [roleEditor, setRoleEditor] = useState<RolePermissionEditorState | null>(null)
+  const [roleConfirmation, setRoleConfirmation] = useState<RolePermissionConfirmationState | null>(null)
+  const [rolePermissionError, setRolePermissionError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedUserDto | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ManagedUserDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
@@ -9711,6 +9716,12 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   useRestoreFocusOnClose(Boolean(saveConfirmation))
   const saveConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(saveConfirmation))
   const saveConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(saveConfirmation))
+  useRestoreFocusOnClose(Boolean(roleEditor))
+  const roleEditorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(roleEditor))
+  const roleEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(roleEditor) && !roleConfirmation)
+  useRestoreFocusOnClose(Boolean(roleConfirmation))
+  const roleConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(roleConfirmation))
+  const roleConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(roleConfirmation))
   useRestoreFocusOnClose(Boolean(deleteTarget))
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deleteTarget))
   const deleteDialogRef = useFocusTrap<HTMLElement>(Boolean(deleteTarget))
@@ -9721,6 +9732,8 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
   useEscapeKey(Boolean(editor) && !saveConfirmation, () => closeEditor())
   useEscapeKey(Boolean(saveConfirmation), () => setSaveConfirmation(null))
+  useEscapeKey(Boolean(roleEditor) && !roleConfirmation, () => closeRoleEditor())
+  useEscapeKey(Boolean(roleConfirmation), () => setRoleConfirmation(null))
   useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
 
@@ -9938,6 +9951,83 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
     }
   }
 
+  function openRoleEditor(role: ManagedRoleDto) {
+    setRolePermissionError(null)
+    setRoleEditor({ role, permissions: [...role.permissions] })
+  }
+
+  function closeRoleEditor() {
+    setRoleEditor(null)
+    setRoleConfirmation(null)
+    setRolePermissionError(null)
+  }
+
+  function toggleRolePermission(permission: string, checked: boolean) {
+    setRolePermissionError(null)
+    setRoleEditor((current) => {
+      if (!current) {
+        return current
+      }
+
+      const permissionsSet = new Set(current.permissions)
+      if (checked) {
+        permissionsSet.add(permission)
+      } else {
+        permissionsSet.delete(permission)
+      }
+
+      return { ...current, permissions: [...permissionsSet].sort() }
+    })
+  }
+
+  function saveRolePermissions(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!roleEditor) {
+      return
+    }
+
+    if (roleEditor.permissions.length === 0) {
+      setRolePermissionError('Выберите хотя бы одно право для роли.')
+      return
+    }
+
+    const before = formatRolePermissionLabels(roleEditor.role.permissions)
+    const after = formatRolePermissionLabels(roleEditor.permissions)
+    if (before === after) {
+      closeRoleEditor()
+      return
+    }
+
+    setRoleConfirmation({
+      role: roleEditor.role,
+      permissions: roleEditor.permissions,
+      changes: [{ field: 'Права', before, after }],
+    })
+  }
+
+  async function confirmRolePermissions() {
+    if (!roleConfirmation) {
+      return
+    }
+
+    setSaving('role')
+    setError(null)
+    try {
+      const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleConfirmation.role.code, { permissions: roleConfirmation.permissions })
+      setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
+      setRoleConfirmation(null)
+      setRoleEditor(null)
+      showToast('Права роли изменены.')
+      await refreshUsers()
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось сохранить права роли.'
+      setError(message)
+      showToast(message, 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   function openDeleteDialog(user: ManagedUserDto) {
     setDeleteReason('')
     setDeleteReasonError(null)
@@ -10044,7 +10134,7 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
         </div>
       </div>
 
-      <RolePermissionMatrix roles={roles} />
+      <RolePermissionMatrix roles={roles} onEditRole={openRoleEditor} />
 
       {contextMenu ? (
         <div className="context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
@@ -10180,6 +10270,88 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
         </div>
       ) : null}
 
+      {roleEditor ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeRoleEditor}>
+          <section ref={roleEditorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="role-permissions-title" aria-describedby="role-permissions-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Роль</p>
+                <h3 id="role-permissions-title">Изменить права роли</h3>
+                <p id="role-permissions-description">{roleEditor.role.name}</p>
+              </div>
+              <button ref={roleEditorCloseRef} className="icon-button" type="button" onClick={closeRoleEditor} aria-label="Закрыть изменение прав роли" disabled={saving === 'role'}>
+                <X size={18} />
+              </button>
+            </div>
+            <form className="dictionary-modal-form" onSubmit={saveRolePermissions}>
+              <div className="role-permission-editor" role="group" aria-label={`Права роли ${roleEditor.role.name}`}>
+                {rolePermissionGroups.map((group) => {
+                  const administratorUsersManage = roleEditor.role.code === 'administrator' && group.permission === permissions.usersManage
+                  return (
+                    <label className="contractors-check-row" key={group.permission}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${roleEditor.role.name}: ${group.label}`}
+                        checked={roleEditor.permissions.includes(group.permission)}
+                        disabled={saving === 'role' || administratorUsersManage}
+                        onChange={(event) => toggleRolePermission(group.permission, event.target.checked)}
+                      />
+                      <span>{group.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {rolePermissionError ? <p className="form-error" role="alert">{rolePermissionError}</p> : null}
+              <p className="form-hint">Права применяются к пользователям с этой ролью после обновления их сессии. Изменение будет записано в историю.</p>
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" onClick={closeRoleEditor} disabled={saving === 'role'}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={saving === 'role'}>
+                  <Save size={16} />
+                  <span>Сохранить</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {roleConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRoleConfirmation(null)}>
+          <section ref={roleConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="role-permissions-confirmation-title" aria-describedby="role-permissions-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Права</p>
+                <h3 id="role-permissions-confirmation-title">Подтвердите изменение прав роли</h3>
+                <p>{roleConfirmation.role.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменения прав роли" onClick={() => setRoleConfirmation(null)} disabled={saving === 'role'}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="role-permissions-confirmation-description">Проверьте набор доступов. После подтверждения изменение будет записано в историю изменений.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля роли">
+              {roleConfirmation.changes.map((change) => (
+                <li key={`${change.field}-${change.before}-${change.after}`}>
+                  <span className="dictionary-change-field">{change.field}</span>
+                  <span className="dictionary-change-values">
+                    <span className="dictionary-change-value">{change.before}</span>
+                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="detail-dialog-actions">
+              <button ref={roleConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setRoleConfirmation(null)} disabled={saving === 'role'}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmRolePermissions()} disabled={saving === 'role'}>
+                <ShieldCheck size={16} />
+                <span>{saving === 'role' ? 'Сохраняем...' : 'Сохранить права'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {deleteTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => closeDeleteDialog()}>
           <section ref={deleteDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-delete-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -10251,7 +10423,23 @@ function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userCli
   )
 }
 
-function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
+function getRolePermissionLabel(permission: string) {
+  return rolePermissionGroups.find((group) => group.permission === permission)?.label ?? permission
+}
+
+function formatRolePermissionLabels(permissionsList: readonly string[]) {
+  const knownLabels = rolePermissionGroups
+    .filter((group) => permissionsList.includes(group.permission))
+    .map((group) => group.label)
+  const customLabels = permissionsList
+    .filter((permission) => !rolePermissionGroups.some((group) => group.permission === permission))
+    .sort()
+    .map(getRolePermissionLabel)
+  const labels = [...knownLabels, ...customLabels]
+  return labels.length > 0 ? labels.join(', ') : 'Нет прав'
+}
+
+function RolePermissionMatrix({ roles, onEditRole }: { roles: ManagedRoleDto[]; onEditRole(role: ManagedRoleDto): void }) {
   return (
     <section className="role-matrix" aria-label="Матрица ролей">
       <div className="section-heading compact-heading">
@@ -10268,6 +10456,7 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
           {rolePermissionGroups.map((group) => (
             <span role="columnheader" key={group.permission}>{group.label}</span>
           ))}
+          <span role="columnheader">Действия</span>
         </div>
         {roles.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Роли пока не загружены</p> : null}
         {roles.map((role) => (
@@ -10284,6 +10473,11 @@ function RolePermissionMatrix({ roles }: { roles: ManagedRoleDto[] }) {
                 </span>
               )
             })}
+            <span role="cell">
+              <button className="icon-button" type="button" aria-label={`Изменить права роли ${role.name}`} title={`Изменить права роли ${role.name}`} onClick={() => onEditRole(role)}>
+                <ShieldCheck size={16} />
+              </button>
+            </span>
           </div>
         ))}
       </div>

@@ -3894,8 +3894,8 @@ h1 {
 
 .role-matrix-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.2fr) repeat(8, minmax(96px, 1fr));
-  min-width: 940px;
+  grid-template-columns: minmax(170px, 1.2fr) repeat(8, minmax(96px, 1fr)) minmax(72px, 0.5fr);
+  min-width: 1020px;
   gap: 8px;
   align-items: center;
   border-top: 1px solid #e4e7ec;
@@ -4561,6 +4561,12 @@ button.operation-row:focus-visible {
 .operation-row small {
   margin-top: 3px;
   color: #667085;
+}
+
+.role-permission-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
 }
 
 .money-income,

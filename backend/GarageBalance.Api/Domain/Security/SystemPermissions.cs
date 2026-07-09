@@ -50,4 +50,18 @@ public static class SystemPermissions
         DictionariesRead,
         ReportsRead
     ];
+
+    public static readonly string[] All =
+    [
+        UsersManage,
+        DictionariesRead,
+        DictionariesWrite,
+        TariffsManage,
+        PaymentsRead,
+        PaymentsWrite,
+        ReportsRead,
+        ImportRun,
+        AppReleasesManage,
+        AuditRead
+    ];
 }

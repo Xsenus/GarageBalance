@@ -262,6 +262,63 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
+  it('edits role permissions from matrix with no-op and confirmation', async () => {
+    const user = userEvent.setup()
+    let roles = createRoles()
+    const updateRolePermissions = vi.fn(async (_token: string, roleCode: string, request: { permissions: string[] }) => {
+      const role = roles.find((item) => item.code === roleCode)
+      if (!role) {
+        throw new Error('Роль не найдена.')
+      }
+
+      const updatedRole = { ...role, permissions: request.permissions }
+      roles = roles.map((item) => (item.code === roleCode ? updatedRole : item))
+      return updatedRole
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({
+      getRoles: async () => roles,
+      updateRolePermissions,
+    })} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
+    expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
+
+    await user.click(within(roleMatrix).getByRole('button', { name: 'Изменить права роли Оператор' }))
+    let roleDialog = await screen.findByRole('dialog', { name: 'Изменить права роли' })
+    await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменение прав роли' })).not.toBeInTheDocument())
+    expect(updateRolePermissions).not.toHaveBeenCalled()
+
+    await user.click(within(roleMatrix).getByRole('button', { name: 'Изменить права роли Оператор' }))
+    roleDialog = await screen.findByRole('dialog', { name: 'Изменить права роли' })
+    await user.click(within(roleDialog).getByLabelText('Оператор: Отчеты'))
+    await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
+
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменение прав роли' })
+    const changeList = within(confirmationDialog).getByRole('list', { name: 'Изменяемые поля роли' })
+    expect(changeList).toHaveTextContent('Права')
+    expect(changeList).toHaveTextContent('Платежи')
+    expect(changeList).toHaveTextContent('Отчеты')
+    expect(updateRolePermissions).not.toHaveBeenCalled()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменение прав роли' })).not.toBeInTheDocument())
+    expect(updateRolePermissions).not.toHaveBeenCalled()
+
+    await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
+    const reopenedConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменение прав роли' })
+    await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить права' }))
+
+    await waitFor(() => expect(updateRolePermissions).toHaveBeenCalledWith('token', 'operator', expect.objectContaining({
+      permissions: expect.arrayContaining(['reports.read']),
+    })))
+    await waitFor(() => expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - разрешено' })).toHaveTextContent('Да'))
+  })
+
   it('shows icon back button in every dashboard section', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -9723,6 +9780,10 @@ function createUserClient(overrides: Partial<UserManagementClient> = {}): UserMa
     createUser: async () => admin,
     updateUser: async () => admin,
     restoreUser: async () => admin,
+    updateRolePermissions: async (_token, roleCode, request) => ({
+      ...(roles.find((role) => role.code === roleCode) ?? roles[0]),
+      permissions: request.permissions,
+    }),
     ...overrides,
   }
 }
@@ -9782,6 +9843,18 @@ function createStatefulUserClient(): UserManagementClient {
       })
       users = users.map((item) => (item.id === userId ? restoredUser : item))
       return restoredUser
+    },
+    updateRolePermissions: async (_token, roleCode, request) => {
+      const role = roles.find((item) => item.code === roleCode) ?? roles[0]
+      const updatedRole = { ...role, permissions: request.permissions }
+      const roleIndex = roles.findIndex((item) => item.code === roleCode)
+      if (roleIndex >= 0) {
+        roles[roleIndex] = updatedRole
+      }
+      users = users.map((item) => item.roles.includes(roleCode)
+        ? createManagedUser({ ...item, permissions: request.permissions })
+        : item)
+      return updatedRole
     },
   }
 }

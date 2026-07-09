@@ -38,6 +38,10 @@ export type UpdateManagedUserRequest = {
   deactivationReason?: string | null
 }
 
+export type UpdateRolePermissionsRequest = {
+  permissions: string[]
+}
+
 export type UserManagementClient = {
   getRoles(accessToken: string): Promise<ManagedRoleDto[]>
   getUsers(accessToken: string, search?: string, limit?: number): Promise<ManagedUserDto[]>
@@ -45,6 +49,7 @@ export type UserManagementClient = {
   createUser(accessToken: string, request: CreateManagedUserRequest): Promise<ManagedUserDto>
   updateUser(accessToken: string, userId: string, request: UpdateManagedUserRequest): Promise<ManagedUserDto>
   restoreUser(accessToken: string, userId: string): Promise<ManagedUserDto>
+  updateRolePermissions(accessToken: string, roleCode: string, request: UpdateRolePermissionsRequest): Promise<ManagedRoleDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -98,5 +103,8 @@ export const usersApi: UserManagementClient = {
   },
   restoreUser(accessToken, userId) {
     return requestJson(accessToken, `/api/users/${userId}/restore`, { method: 'POST' })
+  },
+  updateRolePermissions(accessToken, roleCode, request) {
+    return requestJson(accessToken, `/api/users/roles/${encodeURIComponent(roleCode)}/permissions`, { method: 'PUT', body: JSON.stringify(request) })
   },
 }

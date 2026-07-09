@@ -27,6 +27,93 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task UpdateRolePermissionsAsync_UpdatesPermissionsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        await service.GetRolesAsync(CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateRolePermissionsAsync(
+            SystemRoles.Operator,
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead, SystemPermissions.ReportsRead]),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(SystemRoles.Operator, result.Value!.Code);
+        Assert.Equal([SystemPermissions.DictionariesRead, SystemPermissions.ReportsRead], result.Value.Permissions);
+        var role = database.Context.Roles.Single(item => item.Code == SystemRoles.Operator);
+        Assert.Equal([SystemPermissions.DictionariesRead, SystemPermissions.ReportsRead], role.Permissions.Order(StringComparer.Ordinal));
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.role_permissions_updated");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("users", auditEvent.Section);
+        Assert.Equal("update", auditEvent.ActionKind);
+        Assert.Equal("app_role", auditEvent.EntityType);
+        Assert.Equal(SystemRoles.Operator, auditEvent.EntityId);
+        Assert.Equal("Оператор", auditEvent.EntityDisplayName);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal(SystemRoles.Operator, metadata.RootElement.GetProperty("roleCode").GetString());
+        Assert.Equal("dictionaries.read, reports.read", metadata.RootElement.GetProperty("permissions").GetString());
+        Assert.Equal("Права", metadata.RootElement.GetProperty("fieldName").GetString());
+        Assert.Equal("dictionaries.read, payments.read, payments.write", metadata.RootElement.GetProperty("oldValue").GetString());
+        Assert.Equal("dictionaries.read, reports.read", metadata.RootElement.GetProperty("newValue").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateRolePermissionsAsync_DoesNotWriteAuditWhenPermissionsAreUnchanged()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.GetRolesAsync(CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateRolePermissionsAsync(
+            SystemRoles.Operator,
+            new UpdateRolePermissionsRequest([SystemPermissions.PaymentsWrite, SystemPermissions.DictionariesRead, SystemPermissions.PaymentsRead]),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateRolePermissionsAsync_RejectsUnknownPermission()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.UpdateRolePermissionsAsync(
+            SystemRoles.Operator,
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead, "unknown.permission"]),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("permission_not_found", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task UpdateRolePermissionsAsync_RejectsAdministratorWithoutUsersManage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.UpdateRolePermissionsAsync(
+            SystemRoles.Administrator,
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead]),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("administrator_users_manage_required", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateUserAsync_CreatesUserWithRolesAndAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

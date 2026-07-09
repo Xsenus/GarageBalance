@@ -33,3 +33,6 @@ public sealed record UpdateManagedUserRequest(
     bool IsActive,
     [MinLength(8), MaxLength(200)] string? NewPassword,
     [MaxLength(1000)] string? DeactivationReason = null);
+
+public sealed record UpdateRolePermissionsRequest(
+    [Required] IReadOnlyList<string> Permissions);

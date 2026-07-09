@@ -138,6 +138,47 @@ public sealed class UsersControllerTests
     }
 
     [Fact]
+    public async Task UpdateRolePermissions_ReturnsUpdatedRoleAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var role = new ManagedRoleDto(SystemRoles.Operator, "Оператор", [SystemPermissions.DictionariesRead]);
+        var service = new FakeUserManagementService
+        {
+            UpdateRolePermissionsResult = UserManagementResult<ManagedRoleDto>.Success(role)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateRolePermissions(
+            SystemRoles.Operator,
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead]),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(role, ok.Value);
+        Assert.Equal(SystemRoles.Operator, service.LastRoleCode);
+        Assert.Equal([SystemPermissions.DictionariesRead], service.LastRolePermissionsRequest?.Permissions);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateRolePermissions_ReturnsNotFoundForMissingRole()
+    {
+        var controller = CreateController(new FakeUserManagementService
+        {
+            UpdateRolePermissionsResult = UserManagementResult<ManagedRoleDto>.Failure("role_not_found", "Role not found.")
+        });
+
+        var result = await controller.UpdateRolePermissions(
+            "missing",
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead]),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("role_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateUser_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -176,12 +217,15 @@ public sealed class UsersControllerTests
     {
         public Guid? LastActorUserId { get; private set; }
         public Guid? LastRestoreUserId { get; private set; }
+        public string? LastRoleCode { get; private set; }
         public (string? Search, int? Limit) LastUserListRequest { get; private set; }
         public (string? Search, int Offset, int Limit) LastUserPageRequest { get; private set; }
         public UpdateManagedUserRequest? LastUpdateRequest { get; private set; }
+        public UpdateRolePermissionsRequest? LastRolePermissionsRequest { get; private set; }
         public UserManagementResult<ManagedUserDto> CreateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
         public UserManagementResult<ManagedUserDto> UpdateResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
         public UserManagementResult<ManagedUserDto> RestoreResult { get; init; } = UserManagementResult<ManagedUserDto>.Failure("not_configured", "Not configured.");
+        public UserManagementResult<ManagedRoleDto> UpdateRolePermissionsResult { get; init; } = UserManagementResult<ManagedRoleDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
         {
@@ -218,6 +262,14 @@ public sealed class UsersControllerTests
             LastActorUserId = actorUserId;
             LastRestoreUserId = userId;
             return Task.FromResult(RestoreResult);
+        }
+
+        public Task<UserManagementResult<ManagedRoleDto>> UpdateRolePermissionsAsync(string roleCode, UpdateRolePermissionsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastRoleCode = roleCode;
+            LastRolePermissionsRequest = request;
+            return Task.FromResult(UpdateRolePermissionsResult);
         }
     }
 }

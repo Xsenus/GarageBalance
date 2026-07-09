@@ -18,6 +18,16 @@ public sealed class UsersController(IUserManagementService userManagementService
         return Ok(await userManagementService.GetRolesAsync(cancellationToken));
     }
 
+    [HttpPut("roles/{code}/permissions")]
+    [ProducesResponseType<ManagedRoleDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ManagedRoleDto>> UpdateRolePermissions(string code, UpdateRolePermissionsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await userManagementService.UpdateRolePermissionsAsync(code, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<ManagedUserDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ManagedUserDto>>> GetUsers([FromQuery] string? search, [FromQuery] int? limit, CancellationToken cancellationToken)
@@ -76,6 +86,7 @@ public sealed class UsersController(IUserManagementService userManagementService
         return result.ErrorCode switch
         {
             "user_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
+            "role_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
             "user_email_duplicate" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };

@@ -13,4 +13,6 @@ public interface IUserManagementService
     Task<UserManagementResult<ManagedUserDto>> UpdateUserAsync(Guid userId, UpdateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<UserManagementResult<ManagedUserDto>> RestoreUserAsync(Guid userId, Guid? actorUserId, CancellationToken cancellationToken);
+
+    Task<UserManagementResult<ManagedRoleDto>> UpdateRolePermissionsAsync(string roleCode, UpdateRolePermissionsRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 }
