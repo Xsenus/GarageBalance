@@ -1058,7 +1058,15 @@ describe('App', () => {
 
     const addSupplierButton = within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' })
     await user.click(addSupplierButton)
-    const supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    let supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    await user.type(within(supplierDialog).getByLabelText('Наименование поставщика'), 'Черновой подрядчик')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый поставщик' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addSupplierButton).toHaveFocus())
+    expect(within(contractorsPanel).queryByText('Черновой подрядчик')).not.toBeInTheDocument()
+
+    await user.click(addSupplierButton)
+    supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
     await user.type(within(supplierDialog).getByLabelText('Наименование поставщика'), 'Новый подрядчик')
     await user.selectOptions(within(supplierDialog).getByLabelText('Услуга поставщика'), 'Уборка территории')
     await user.click(within(supplierDialog).getByRole('button', { name: 'Добавить контакт' }))
