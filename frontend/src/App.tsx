@@ -10868,11 +10868,11 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={garageDeleteCancelRef} className="ghost-button" type="button" onClick={closeGarageDeleteDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmGarageDeleteFromTable} disabled={!garageDeleteReason.trim()}>
                 <Trash2 size={16} />
-                <span>Удалить гараж</span>
+                <span>Удалить</span>
               </button>
-              <button ref={garageDeleteCancelRef} className="ghost-button" type="button" onClick={closeGarageDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>
@@ -10903,11 +10903,11 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" onClick={closeSupplierDeleteDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmSupplierDeleteFromTable} disabled={!supplierDeleteReason.trim()}>
                 <Trash2 size={16} />
-                <span>Удалить поставщика</span>
+                <span>Удалить</span>
               </button>
-              <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" onClick={closeSupplierDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>
@@ -10938,11 +10938,11 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" onClick={closeEmployeeDeleteDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmEmployeeDeleteFromTable} disabled={!employeeDeleteReason.trim()}>
                 <Trash2 size={16} />
-                <span>Удалить сотрудника</span>
+                <span>Удалить</span>
               </button>
-              <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" onClick={closeEmployeeDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>
