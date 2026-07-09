@@ -3061,6 +3061,7 @@ function PaymentsPrototypePanel({
   const [historyEdit, setHistoryEdit] = useState<GaragePaymentHistoryEditState | null>(null)
   const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
+  const historyCancelTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
   const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(
@@ -3459,13 +3460,25 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openHistoryCancel(row: GaragePaymentHistoryPrototypeRow) {
+  function openHistoryCancel(row: GaragePaymentHistoryPrototypeRow, trigger?: HTMLButtonElement | null) {
     if (!row.operation || !canWritePayments) {
       return
     }
 
+    historyCancelTriggerRef.current = trigger ?? null
     setPaymentError(null)
     setHistoryCancel({ row, reason: '', error: null })
+  }
+
+  function closeHistoryCancelDialog() {
+    const trigger = historyCancelTriggerRef.current
+    setHistoryCancel(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      historyCancelTriggerRef.current = null
+    }, 0)
   }
 
   async function saveHistoryEdit(event: FormEvent<HTMLFormElement>) {
@@ -3525,7 +3538,7 @@ function PaymentsPrototypePanel({
     setHistoryCancel((state) => state ? { ...state, error: null } : state)
     try {
       await financeClient.cancelOperation(auth.accessToken, historyCancel.row.operation.id, { reason })
-      setHistoryCancel(null)
+      closeHistoryCancelDialog()
       await Promise.all([
         loadGaragePaymentHistory(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
@@ -4289,7 +4302,7 @@ function PaymentsPrototypePanel({
                           <button className="icon-button" type="button" title="Изменить платеж" aria-label={`Изменить платеж ${row.purpose}`} onClick={(event) => openHistoryEdit(row, event.currentTarget)}>
                             <Pencil size={16} aria-hidden="true" />
                           </button>
-                          <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={() => openHistoryCancel(row)}>
+                          <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => openHistoryCancel(row, event.currentTarget)}>
                             <Trash2 size={16} aria-hidden="true" />
                           </button>
                         </div>
@@ -4615,7 +4628,7 @@ function PaymentsPrototypePanel({
           state={historyCancel}
           saving={historyActionSaving}
           onChange={(patch) => setHistoryCancel((value) => value ? { ...value, ...patch, error: null } : value)}
-          onClose={() => setHistoryCancel(null)}
+          onClose={closeHistoryCancelDialog}
           onConfirm={confirmHistoryCancel}
         />
       ) : null}

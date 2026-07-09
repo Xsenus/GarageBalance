@@ -3144,7 +3144,16 @@ describe('App', () => {
       comment: 'Исправление суммы',
     })))
 
-    await user.click(within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' }))
+    const cancelPaymentButton = within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' })
+    await user.click(cancelPaymentButton)
+    const firstCancelDialog = await screen.findByRole('dialog', { name: 'Отменить платеж?' })
+    expect(within(firstCancelDialog).getByLabelText('Причина отмены платежа')).toHaveValue('')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить платеж?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(cancelPaymentButton).toHaveFocus())
+    expect(cancelOperation).not.toHaveBeenCalled()
+
+    await user.click(cancelPaymentButton)
     const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить платеж?' })
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
     expect(await within(cancelDialog).findByText('Укажите причину отмены платежа.')).toBeInTheDocument()
