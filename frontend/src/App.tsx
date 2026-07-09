@@ -6247,6 +6247,11 @@ type FundOperationEditDraft = {
   reason: string
 }
 
+type FundOperationReverseDraft = {
+  operation: FundOperationDto
+  reason: string
+}
+
 function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   return {
     id: fund.id,
@@ -6262,6 +6267,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationEdit, setOperationEdit] = useState<FundOperationEditDraft | null>(null)
+  const [operationReverse, setOperationReverse] = useState<FundOperationReverseDraft | null>(null)
   const [statusAction, setStatusAction] = useState<FundOperationStatusDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
@@ -6271,17 +6277,21 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [savingStatusAction, setSavingStatusAction] = useState(false)
   useRestoreFocusOnClose(Boolean(operation))
   useRestoreFocusOnClose(Boolean(operationEdit))
+  useRestoreFocusOnClose(Boolean(operationReverse))
   useRestoreFocusOnClose(Boolean(statusAction))
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
   const operationEditCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEdit))
   const operationEditDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEdit))
+  const operationReverseReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(operationReverse))
+  const operationReverseDialogRef = useFocusTrap<HTMLElement>(Boolean(operationReverse))
   const statusReasonRef = useFocusOnOpen<HTMLTextAreaElement>(statusAction?.action === 'cancel')
   const statusCancelRef = useFocusOnOpen<HTMLButtonElement>(statusAction?.action === 'restore')
   const statusDialogRef = useFocusTrap<HTMLElement>(Boolean(statusAction))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
   useEscapeKey(Boolean(operationEdit) && !savingOperation, () => closeFundOperationEdit())
+  useEscapeKey(Boolean(operationReverse) && !savingOperation, () => closeFundOperationReverse())
   useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
   useEffect(() => {
@@ -6354,6 +6364,17 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
     setOperationError(null)
   }
 
+  function openFundOperationReverse(fundOperation: FundOperationDto) {
+    setOperationReverse({ operation: fundOperation, reason: '' })
+    setOperationError(null)
+    setOperationMessage(null)
+  }
+
+  function closeFundOperationReverse() {
+    setOperationReverse(null)
+    setOperationError(null)
+  }
+
   function closeFundStatusAction() {
     setStatusAction(null)
     setOperationError(null)
@@ -6373,6 +6394,10 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
 
     const amount = Number(normalized)
     return Number.isFinite(amount) && amount > 0 ? amount : null
+  }
+
+  function getReverseFundOperationKind(kind: FundOperationKind): FundOperationKind {
+    return kind === 'deposit' ? 'withdraw' : 'deposit'
   }
 
   async function submitFundOperation(event: FormEvent<HTMLFormElement>) {
@@ -6479,11 +6504,43 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
     }
   }
 
+  async function submitFundOperationReverse(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!operationReverse) {
+      return
+    }
+
+    const reason = operationReverse.reason.trim()
+    if (!reason) {
+      setOperationError('Укажите причину обратной операции фонда.')
+      return
+    }
+
+    const reverseKind = getReverseFundOperationKind(operationReverse.operation.operationKind)
+    setSavingOperation(true)
+    try {
+      const savedOperation = await fundsClient.createOperation(auth.accessToken, operationReverse.operation.fundId, {
+        operationKind: reverseKind,
+        amount: operationReverse.operation.amount,
+        reason,
+      })
+      await refreshFundsPanel()
+      setOperationMessage(`Обратная операция фонда "${savedOperation.fundName}" создана и записана в историю изменений.`)
+      closeFundOperationReverse()
+    } catch (error: unknown) {
+      setOperationError(error instanceof Error ? error.message : 'Не удалось создать обратную операцию фонда.')
+    } finally {
+      setSavingOperation(false)
+    }
+  }
+
   const operationAmount = operation ? parseFundOperationAmount(operation.amount) : null
   const operationEditAmount = operationEdit ? parseFundOperationAmount(operationEdit.amount) : null
   const operationActionLabel = operation?.kind === 'deposit' ? 'Пополнить фонд' : 'Изъять из фонда'
   const statusActionTitle = statusAction?.action === 'cancel' ? 'Отменить операцию фонда?' : 'Вернуть операцию фонда?'
   const statusActionLabel = statusAction?.operation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'
+  const operationReverseKind = operationReverse ? getReverseFundOperationKind(operationReverse.operation.operationKind) : null
+  const operationReverseLabel = operationReverseKind === 'deposit' ? 'Пополнение' : 'Изъятие'
 
   return (
     <section className="funds-page" aria-label="Управление фондами">
@@ -6575,6 +6632,9 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                       <>
                         <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={`Изменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Изменить" onClick={() => openFundOperationEdit(fundOperation)}>
                           <Pencil size={16} aria-hidden="true" />
+                        </button>
+                        <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={`Создать обратную операцию фонда ${fundOperation.fundName}`} data-tooltip="Обратная" onClick={() => openFundOperationReverse(fundOperation)}>
+                          <RefreshCw size={16} aria-hidden="true" />
                         </button>
                         <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
                           <Trash2 size={16} aria-hidden="true" />
@@ -6726,6 +6786,64 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                 <button className="secondary-button" type="submit" disabled={savingOperation}>
                   <Save size={16} aria-hidden="true" />
                   <span>{savingOperation ? 'Сохраняем...' : 'Сохранить изменения'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {operationReverse ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!savingOperation) {
+            closeFundOperationReverse()
+          }
+        }}>
+          <section ref={operationReverseDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-operation-reverse-title" aria-describedby="fund-operation-reverse-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Обратная операция</p>
+                <h3 id="fund-operation-reverse-title">Создать обратную операцию фонда?</h3>
+                <p>{operationReverse.operation.fundName} · {operationReverse.operation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'} {'->'} {operationReverseLabel}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeFundOperationReverse} aria-label="Закрыть обратную операцию фонда" disabled={savingOperation}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fund-operation-reverse-description">Исходная операция останется в истории, а система создаст новую противоположную операцию на ту же сумму и запишет причину в историю изменений.</p>
+            <form className="dictionary-modal-form" onSubmit={submitFundOperationReverse}>
+              <FormField label="Причина">
+                <textarea
+                  ref={operationReverseReasonRef}
+                  aria-label="Причина обратной операции фонда"
+                  rows={3}
+                  maxLength={1000}
+                  value={operationReverse.reason}
+                  onChange={(event) => {
+                    setOperationReverse({ ...operationReverse, reason: event.target.value })
+                    if (operationError) {
+                      setOperationError(null)
+                    }
+                  }}
+                  placeholder="Например: сторнирование ошибочной операции"
+                  disabled={savingOperation}
+                />
+              </FormField>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Будет создано</dt>
+                  <dd>{operationReverseLabel}</dd>
+                </div>
+                <div>
+                  <dt>Сумма</dt>
+                  <dd>{formatMoney(operationReverse.operation.amount)} руб.</dd>
+                </div>
+              </dl>
+              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" onClick={closeFundOperationReverse} disabled={savingOperation}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={savingOperation}>
+                  <RefreshCw size={16} aria-hidden="true" />
+                  <span>{savingOperation ? 'Сохраняем...' : 'Создать обратную операцию'}</span>
                 </button>
               </div>
             </form>

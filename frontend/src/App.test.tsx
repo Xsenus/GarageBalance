@@ -3491,6 +3491,21 @@ describe('App', () => {
     await user.click(restoreConfirmButton)
     expect(await within(fundsPanel).findByText('Операция восстановлена и записана в историю изменений.')).toHaveAttribute('role', 'status')
     expect(within(fundOperationsTable).getByText('Активна')).toBeInTheDocument()
+
+    const reverseFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Создать обратную операцию фонда Целевые взносы' })
+    expect(reverseFundOperationButton).toHaveAttribute('data-tooltip', 'Обратная')
+    await user.click(reverseFundOperationButton)
+    const reverseFundOperationDialog = await screen.findByRole('dialog', { name: 'Создать обратную операцию фонда?' })
+    const reverseCancelButton = within(reverseFundOperationDialog).getByRole('button', { name: 'Отмена' })
+    const reverseConfirmButton = within(reverseFundOperationDialog).getByRole('button', { name: 'Создать обратную операцию' })
+    expect(Boolean(reverseCancelButton.compareDocumentPosition(reverseConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    await waitFor(() => expect(within(reverseFundOperationDialog).getByLabelText('Причина обратной операции фонда')).toHaveFocus())
+    await user.click(reverseConfirmButton)
+    expect(within(reverseFundOperationDialog).getByRole('alert')).toHaveTextContent('Укажите причину обратной операции фонда.')
+    await user.type(within(reverseFundOperationDialog).getByLabelText('Причина обратной операции фонда'), 'Сторнирование распределения')
+    await user.click(reverseConfirmButton)
+    expect(await within(fundsPanel).findByText(/Обратная операция фонда "Целевые взносы" создана и записана в историю изменений\./)).toHaveAttribute('role', 'status')
+    expect(within(fundOperationsTable).getByText('Изъятие')).toBeInTheDocument()
   })
 
   it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
