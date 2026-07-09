@@ -6254,7 +6254,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [loadError, setLoadError] = useState<string | null>(null)
   const [savingOperation, setSavingOperation] = useState(false)
   useRestoreFocusOnClose(Boolean(operation))
-  const operationConfirmRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
+  const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
@@ -6478,11 +6478,11 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
               </dl>
               {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
               <div className="detail-dialog-actions">
-                <button ref={operationConfirmRef} className="secondary-button" type="submit" disabled={savingOperation}>
+                <button ref={operationCancelRef} className="ghost-button" type="button" onClick={closeFundOperation} disabled={savingOperation}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={savingOperation}>
                   <Save size={16} />
                   <span>{savingOperation ? 'Сохраняем...' : 'Подтвердить операцию'}</span>
                 </button>
-                <button className="ghost-button" type="button" onClick={closeFundOperation} disabled={savingOperation}>Отмена</button>
               </div>
             </form>
           </section>
