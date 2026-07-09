@@ -6921,8 +6921,14 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
+  const [quarantineResolveTarget, setQuarantineResolveTarget] = useState<AccessImportQuarantineItemDto | null>(null)
+  const [quarantineResolveComment, setQuarantineResolveComment] = useState('')
+  const [quarantineResolveError, setQuarantineResolveError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
+  useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
+  const quarantineResolveCommentRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(quarantineResolveTarget))
+  const quarantineResolveDialogRef = useFocusTrap<HTMLElement>(Boolean(quarantineResolveTarget))
   const visibleRunLogEntries = runLogEntries.slice(0, 10)
   const visibleRuns = runs.slice(0, 8)
   const visibleQuarantineItems = quarantineItems.slice(0, 8)
@@ -6932,6 +6938,8 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
     { key: 'history', label: 'История', meta: `${runs.length} запусков` },
     { key: 'quarantine', label: 'Карантин', meta: `${quarantineItems.length} открыто` },
   ]
+
+  useEscapeKey(Boolean(quarantineResolveTarget) && resolvingQuarantineId === null, () => closeQuarantineResolveDialog())
 
   useEffect(() => {
     let ignore = false
@@ -7042,19 +7050,49 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
     }
   }
 
-  async function resolveQuarantineItem(item: AccessImportQuarantineItemDto) {
+  function openQuarantineResolveDialog(item: AccessImportQuarantineItemDto) {
+    setQuarantineResolveTarget(item)
+    setQuarantineResolveComment('')
+    setQuarantineResolveError(null)
+    setError(null)
+    setExportMessage(null)
+  }
+
+  function closeQuarantineResolveDialog() {
+    setQuarantineResolveTarget(null)
+    setQuarantineResolveComment('')
+    setQuarantineResolveError(null)
+  }
+
+  async function resolveQuarantineItem(item: AccessImportQuarantineItemDto, resolutionComment: string) {
     setResolvingQuarantineId(item.id)
     setError(null)
     setExportMessage(null)
     try {
-      await importClient.resolveQuarantineItem(auth.accessToken, item.id, 'Разобрано из панели импорта.')
+      await importClient.resolveQuarantineItem(auth.accessToken, item.id, resolutionComment)
       setQuarantineItems((items) => items.filter((candidate) => candidate.id !== item.id))
       setExportMessage('Строка карантина закрыта.')
+      closeQuarantineResolveDialog()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось закрыть строку карантина импорта.')
     } finally {
       setResolvingQuarantineId(null)
     }
+  }
+
+  async function submitQuarantineResolve(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!quarantineResolveTarget) {
+      return
+    }
+
+    const comment = quarantineResolveComment.trim()
+    if (!comment) {
+      setQuarantineResolveError('Укажите комментарий к закрытию строки карантина.')
+      return
+    }
+
+    await resolveQuarantineItem(quarantineResolveTarget, comment)
   }
 
   return (
@@ -7231,7 +7269,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <small>{item.reasonMessage}</small>
               </span>
               <span role="cell">
-                <button className="secondary-button" type="button" disabled={resolvingQuarantineId === item.id} onClick={() => void resolveQuarantineItem(item)}>
+                <button className="secondary-button" type="button" title={`Закрыть строку карантина ${item.entityType}${item.externalId ? ` #${item.externalId}` : ''}`} data-tooltip="Закрыть" disabled={resolvingQuarantineId === item.id} onClick={() => openQuarantineResolveDialog(item)}>
                   <Save size={16} />
                   <span>Закрыть</span>
                 </button>
@@ -7242,6 +7280,66 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
         </div>
         ) : null}
       </div>
+      {quarantineResolveTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (resolvingQuarantineId === null) {
+            closeQuarantineResolveDialog()
+          }
+        }}>
+          <section ref={quarantineResolveDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="import-quarantine-resolve-title" aria-describedby="import-quarantine-resolve-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Карантин импорта</p>
+                <h3 id="import-quarantine-resolve-title">Закрыть строку карантина?</h3>
+                <p>{quarantineResolveTarget.entityType}{quarantineResolveTarget.externalId ? ` #${quarantineResolveTarget.externalId}` : ''} · {quarantineResolveTarget.reasonCode}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeQuarantineResolveDialog} aria-label="Закрыть подтверждение карантина" disabled={resolvingQuarantineId !== null}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="import-quarantine-resolve-description">Строка исчезнет из списка открытого карантина, а комментарий будет записан в историю импорта. Убедитесь, что причина разобрана и перенос можно продолжать безопасно.</p>
+            <form className="dictionary-modal-form" onSubmit={submitQuarantineResolve}>
+              <FormField label="Комментарий">
+                <textarea
+                  ref={quarantineResolveCommentRef}
+                  aria-label="Комментарий к закрытию строки карантина"
+                  aria-invalid={Boolean(quarantineResolveError)}
+                  aria-describedby={quarantineResolveError ? 'import-quarantine-resolve-error' : undefined}
+                  rows={3}
+                  maxLength={1000}
+                  value={quarantineResolveComment}
+                  onChange={(event) => {
+                    setQuarantineResolveComment(event.target.value)
+                    if (quarantineResolveError && event.target.value.trim()) {
+                      setQuarantineResolveError(null)
+                    }
+                  }}
+                  placeholder="Например: владелец найден и сопоставлен вручную"
+                  disabled={resolvingQuarantineId !== null}
+                />
+              </FormField>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Строка</dt>
+                  <dd>{quarantineResolveTarget.sourceSystem} · {quarantineResolveTarget.rowHash.slice(0, 12)}</dd>
+                </div>
+                <div>
+                  <dt>Причина</dt>
+                  <dd>{quarantineResolveTarget.reasonMessage}</dd>
+                </div>
+              </dl>
+              {quarantineResolveError ? <p className="form-error" id="import-quarantine-resolve-error" role="alert">{quarantineResolveError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" onClick={closeQuarantineResolveDialog} disabled={resolvingQuarantineId !== null}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={resolvingQuarantineId !== null}>
+                  <Save size={16} aria-hidden="true" />
+                  <span>{resolvingQuarantineId === quarantineResolveTarget.id ? 'Закрываем...' : 'Закрыть строку'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }

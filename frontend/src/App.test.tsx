@@ -7252,9 +7252,11 @@ describe('App', () => {
   it('shows and resolves Access import quarantine rows', async () => {
     const user = userEvent.setup()
     let quarantineItems = [createAccessImportQuarantineItem()]
+    let lastResolutionComment: string | undefined
     const importClient = createImportClient({
       getOpenQuarantineItems: async () => quarantineItems,
       resolveQuarantineItem: async (_token, itemId, resolutionComment) => {
+        lastResolutionComment = resolutionComment
         quarantineItems = quarantineItems.filter((item) => item.id !== itemId)
         return createAccessImportQuarantineItem({
           id: itemId,
@@ -7276,8 +7278,15 @@ describe('App', () => {
     expect(within(quarantineTable).getByText('missing-owner')).toBeInTheDocument()
 
     await user.click(within(quarantineTable).getByRole('button', { name: 'Закрыть' }))
+    const resolveDialog = await screen.findByRole('dialog', { name: 'Закрыть строку карантина?' })
+    await waitFor(() => expect(within(resolveDialog).getByLabelText('Комментарий к закрытию строки карантина')).toHaveFocus())
+    await user.click(within(resolveDialog).getByRole('button', { name: 'Закрыть строку' }))
+    expect(within(resolveDialog).getByRole('alert')).toHaveTextContent('Укажите комментарий к закрытию строки карантина.')
+    await user.type(within(resolveDialog).getByLabelText('Комментарий к закрытию строки карантина'), 'Владелец найден и сопоставлен вручную')
+    await user.click(within(resolveDialog).getByRole('button', { name: 'Закрыть строку' }))
 
     expect(await within(importPanel).findByText('Строка карантина закрыта.')).toHaveAttribute('role', 'status')
+    expect(lastResolutionComment).toBe('Владелец найден и сопоставлен вручную')
     expect(within(quarantineTable).queryByText('Garage #42')).not.toBeInTheDocument()
     const emptyQuarantineState = within(quarantineTable).getByText('Открытых строк карантина нет')
     expect(emptyQuarantineState).toHaveAttribute('role', 'status')
