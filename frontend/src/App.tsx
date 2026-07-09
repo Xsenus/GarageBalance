@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import {
   ArrowLeft,
@@ -13894,6 +13894,85 @@ type MeterReadingPrototypePendingChange = {
   nextValue: string
 }
 
+type MeterReadingMonth = typeof meterReadingMonths[number]
+
+type MeterReadingsTableProps = {
+  appliedYear: string
+  draftReadings: Record<string, string>
+  garages: GarageDto[]
+  loading: boolean
+  meterType: MeterReadingTypeId
+  onCommitReading: (garage: GarageDto, month: MeterReadingMonth) => void
+  onDraftReadingChange: (cellKey: string, value: string) => void
+  savedReadings: Record<string, string>
+  savingReadingKey: string | null
+  selectedMeterType: typeof meterReadingTypes[number]
+  yearIsValid: boolean
+}
+
+const MeterReadingsTable = memo(function MeterReadingsTable({
+  appliedYear,
+  draftReadings,
+  garages,
+  loading,
+  meterType,
+  onCommitReading,
+  onDraftReadingChange,
+  savedReadings,
+  savingReadingKey,
+  selectedMeterType,
+  yearIsValid,
+}: MeterReadingsTableProps) {
+  return (
+    <div className="meter-readings-table-shell">
+      <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${appliedYear} год`}>
+        <div className="meter-readings-title-row" role="row">
+          <span role="columnheader">Гараж</span>
+          <span role="columnheader">Показания</span>
+        </div>
+        <div className="meter-readings-month-row" role="row">
+          <span role="columnheader">Гараж</span>
+          {meterReadingMonths.map((month) => (
+            <span role="columnheader" key={month.key}>
+              <strong>{month.label}</strong>
+              <small>{selectedMeterType.unit}</small>
+            </span>
+          ))}
+        </div>
+        {loading ? (
+          <div className="meter-readings-empty-row" role="row">
+            <span role="cell">Загрузка гаражей и показаний...</span>
+          </div>
+        ) : garages.length > 0 ? garages.map((garage) => (
+          <div className="meter-readings-data-row" role="row" key={garage.id}>
+            <span role="rowheader">Гараж {garage.number}</span>
+            {meterReadingMonths.map((month) => {
+              const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
+              return (
+                <span role="cell" key={cellKey}>
+                  <input
+                    aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
+                    disabled={!yearIsValid || savingReadingKey === cellKey}
+                    inputMode="decimal"
+                    value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
+                    onBlur={() => onCommitReading(garage, month)}
+                    onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
+                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => onCommitReading(garage, month))}
+                  />
+                </span>
+              )
+            })}
+          </div>
+        )) : (
+          <div className="meter-readings-empty-row" role="row">
+            <span role="cell">В справочнике пока нет гаражей</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
 function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
   const [yearDraft, setYearDraft] = useState('2026')
   const [appliedYear, setAppliedYear] = useState('2026')
@@ -13996,7 +14075,7 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: 
     }
   }, [appliedYear, auth.accessToken, dictionaryClient, financeClient, meterType])
 
-  async function saveReadingValue(cellKey: string, readingId: string | undefined, nextValue: string) {
+  const saveReadingValue = useCallback(async (cellKey: string, readingId: string | undefined, nextValue: string) => {
     const [, , garageId, monthKey] = cellKey.split(':')
     const parsedValue = parseMeterReadingInputValue(nextValue)
     if (parsedValue === null) {
@@ -14029,9 +14108,13 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: 
     } finally {
       setSavingReadingKey(null)
     }
-  }
+  }, [appliedYear, auth.accessToken, financeClient, meterType])
 
-  const commitReading = (garage: GarageDto, month: typeof meterReadingMonths[number]) => {
+  const changeDraftReading = useCallback((cellKey: string, value: string) => {
+    setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: value }))
+  }, [])
+
+  const commitReading = useCallback((garage: GarageDto, month: MeterReadingMonth) => {
     if (!yearIsValid) {
       return
     }
@@ -14063,7 +14146,7 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: 
       previousValue,
       nextValue,
     })
-  }
+  }, [appliedYear, draftReadings, meterType, savedReadingIds, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
@@ -14098,52 +14181,19 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: 
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
       {error ? <div className="form-error" role="alert">{error}</div> : null}
 
-      <div className="meter-readings-table-shell">
-        <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${appliedYear} год`}>
-            <div className="meter-readings-title-row" role="row">
-              <span role="columnheader">Гараж</span>
-              <span role="columnheader">Показания</span>
-            </div>
-            <div className="meter-readings-month-row" role="row">
-              <span role="columnheader">Гараж</span>
-              {meterReadingMonths.map((month) => (
-                <span role="columnheader" key={month.key}>
-                  <strong>{month.label}</strong>
-                  <small>{selectedMeterType.unit}</small>
-                </span>
-              ))}
-            </div>
-            {loading ? (
-              <div className="meter-readings-empty-row" role="row">
-                <span role="cell">Загрузка гаражей и показаний...</span>
-              </div>
-            ) : garages.length > 0 ? garages.map((garage) => (
-              <div className="meter-readings-data-row" role="row" key={garage.id}>
-                <span role="rowheader">Гараж {garage.number}</span>
-                {meterReadingMonths.map((month) => {
-                  const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
-                  return (
-                    <span role="cell" key={cellKey}>
-                      <input
-                        aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
-                        disabled={!yearIsValid || savingReadingKey === cellKey}
-                        inputMode="decimal"
-                        value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
-                        onBlur={() => commitReading(garage, month)}
-                        onChange={(event) => setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: event.target.value }))}
-                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitReading(garage, month))}
-                      />
-                    </span>
-                  )
-                })}
-              </div>
-            )) : (
-              <div className="meter-readings-empty-row" role="row">
-                <span role="cell">В справочнике пока нет гаражей</span>
-              </div>
-            )}
-        </div>
-      </div>
+      <MeterReadingsTable
+        appliedYear={appliedYear}
+        draftReadings={draftReadings}
+        garages={garages}
+        loading={loading}
+        meterType={meterType}
+        onCommitReading={commitReading}
+        onDraftReadingChange={changeDraftReading}
+        savedReadings={savedReadings}
+        savingReadingKey={savingReadingKey}
+        selectedMeterType={selectedMeterType}
+        yearIsValid={yearIsValid}
+      />
 
       {pendingReadingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>

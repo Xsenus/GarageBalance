@@ -2022,6 +2022,7 @@ describe('App', () => {
     let createdMeterReadingRequest: CreateMeterReadingRequest | null = null
     let updatedMeterReadingRequest: CreateMeterReadingRequest | null = null
     let updatedMeterReadingId: string | null = null
+    const meterReadingPageRequests: Array<Parameters<FinanceClient['getMeterReadingsPage']>[1]> = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [
         createGarage({ id: 'garage-27', number: '27' }),
@@ -2029,7 +2030,10 @@ describe('App', () => {
       ],
     })
     const financeClient = createFinanceClient({
-      getMeterReadingsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 6000 }),
+      getMeterReadingsPage: async (_token, params) => {
+        meterReadingPageRequests.push(params)
+        return { items: [], totalCount: 0, offset: 0, limit: 6000 }
+      },
       createMeterReading: async (_token, request) => {
         createdMeterReadingRequest = request
         return createMeterReading({
@@ -2078,6 +2082,8 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
     expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварькВт/i })).toBeInTheDocument()
     expect(await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')).toBeInTheDocument()
+    await waitFor(() => expect(meterReadingPageRequests).toHaveLength(1))
+    expect(meterReadingPageRequests[0]).toMatchObject({ monthFrom: '2026-01', monthTo: '2026-12', meterKind: 'electricity' })
     expect(within(readingsPanel).getByLabelText('Гараж 27, Декабрь, показание')).toBeInTheDocument()
     expect(within(readingsPanel).queryByLabelText('Гараж 35, Декабрь, показание')).not.toBeInTheDocument()
 
@@ -2087,6 +2093,7 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('alert')).toHaveTextContent('Введите год четырьмя цифрами от 1900 до 9999.')
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
     expect(within(readingsPanel).queryByRole('table', { name: 'Показания счетчиков за 1899 год' })).not.toBeInTheDocument()
+    expect(meterReadingPageRequests).toHaveLength(1)
 
     await user.clear(yearInput)
     await user.type(yearInput, '2026')
