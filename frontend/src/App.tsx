@@ -6926,6 +6926,9 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [quarantineResolveError, setQuarantineResolveError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
+  const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
+  const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
   useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
   const quarantineResolveCommentRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(quarantineResolveTarget))
   const quarantineResolveDialogRef = useFocusTrap<HTMLElement>(Boolean(quarantineResolveTarget))
@@ -7114,22 +7117,22 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
           <div className="file-picker">
             <span className="form-field-label">Файл Access</span>
             <input id={fileInputId} aria-label="Файл Access" type="file" accept=".accdb,.mdb" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} />
-            <label className="file-picker-button" htmlFor={fileInputId}>
+            <label className="file-picker-button" htmlFor={fileInputId} title={filePickerActionLabel} data-tooltip={filePickerActionLabel}>
               <FileText size={16} aria-hidden="true" />
               <span>Выбрать .accdb или .mdb</span>
             </label>
             <span className="file-picker-name" role="status" aria-live="polite">{selectedFile ? selectedFile.name : 'Файл не выбран'}</span>
           </div>
-          <button className="secondary-button" type="submit" disabled={saving || !selectedFile}>
-            <DatabaseZap size={16} />
+          <button className="secondary-button" type="submit" aria-label={dryRunActionLabel} title={dryRunActionLabel} data-tooltip={dryRunActionLabel} disabled={saving || !selectedFile}>
+            <DatabaseZap size={16} aria-hidden="true" />
             <span>Проверить файл</span>
           </button>
         </form>
 
         <div className="dictionary-form">
           <h3>Отчет проверки</h3>
-          <button className="secondary-button" type="button" disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
-            <FileText size={16} />
+          <button className="secondary-button" type="button" aria-label={reportDownloadActionLabel} title={reportDownloadActionLabel} data-tooltip={reportDownloadActionLabel} disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
+            <FileText size={16} aria-hidden="true" />
             <span>Скачать отчет JSON</span>
           </button>
           {currentRun ? (
@@ -7293,7 +7296,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <h3 id="import-quarantine-resolve-title">Закрыть строку карантина?</h3>
                 <p>{quarantineResolveTarget.entityType}{quarantineResolveTarget.externalId ? ` #${quarantineResolveTarget.externalId}` : ''} · {quarantineResolveTarget.reasonCode}</p>
               </div>
-              <button className="icon-button" type="button" onClick={closeQuarantineResolveDialog} aria-label="Закрыть подтверждение карантина" disabled={resolvingQuarantineId !== null}>
+              <button className="icon-button" type="button" onClick={closeQuarantineResolveDialog} aria-label="Закрыть подтверждение карантина" title="Закрыть подтверждение карантина" data-tooltip="Закрыть" disabled={resolvingQuarantineId !== null}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>

@@ -50,7 +50,7 @@
 | Управление фондами-прототип | Fund table, deposit/withdraw dialogs | Confirmation UI есть, backend/audit для фондов остается открытым |
 | Финансы/backend экран | Forms, month/date controls, tables, cancel confirmations | Текущие create/update/cancel workflows покрыты тестами |
 | Отчеты | Tabs, filters, date/month controls, export buttons, tables | Есть workflow tests и export tests; style audit остается частично открытым |
-| Импорт Access | File input, dry-run button, quarantine table, export actions | Есть state tests; rollback confirmation остается открытым |
+| Импорт Access | File input, dry-run button, quarantine table, export actions | File picker, dry-run, JSON export, quarantine resolve и close confirmation actions имеют иконки/подсказки и workflow tests; rollback confirmation остается открытым, потому что фактический rollback еще не реализован |
 | История изменений | Filters, pagination, export buttons, detail dialog | Общий экран есть; отдельный доступ к истории внутри рабочих разделов не нужен |
 | "Что нового" | Read-only release list | Admin UI управления release notes еще не реализован |
 
