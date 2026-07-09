@@ -13251,11 +13251,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim() || oneTimeSavingRowId === oneTimeDeleteTarget.id}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
               </button>
-              <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog}>Отмена</button>
             </div>
           </section>
         </div>
@@ -13286,11 +13286,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={archiveFeeCampaign} disabled={!feeCampaignArchiveReason.trim() || feeCampaignSavingId === feeCampaignArchiveTarget.id}>
                 <Trash2 size={16} />
                 <span>Архивировать</span>
               </button>
-              <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog}>Отмена</button>
             </div>
           </section>
         </div>
