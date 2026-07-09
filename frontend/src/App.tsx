@@ -11205,7 +11205,7 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
   const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
   const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(saveChanges.length === 0, onClose)
+  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
   useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
 
   function saveAndClose() {
@@ -11313,7 +11313,7 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
               <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmGarageDelete} disabled={!deleteReason.trim()}>
                 <Trash2 size={16} />
-                <span>Удалить гараж</span>
+                <span>Удалить</span>
               </button>
             </div>
           </section>
