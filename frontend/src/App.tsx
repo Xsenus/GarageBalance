@@ -7011,6 +7011,13 @@ type FundOperationEditDraft = {
   reason: string
 }
 
+type FundOperationEditConfirmation = {
+  operation: FundOperationDto
+  amount: number
+  reason: string
+  changes: ChangePreview[]
+}
+
 type FundOperationReverseDraft = {
   operation: FundOperationDto
   reason: string
@@ -7031,6 +7038,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationEdit, setOperationEdit] = useState<FundOperationEditDraft | null>(null)
+  const [operationEditConfirmation, setOperationEditConfirmation] = useState<FundOperationEditConfirmation | null>(null)
   const [operationReverse, setOperationReverse] = useState<FundOperationReverseDraft | null>(null)
   const [statusAction, setStatusAction] = useState<FundOperationStatusDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
@@ -7041,12 +7049,15 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const [savingStatusAction, setSavingStatusAction] = useState(false)
   useRestoreFocusOnClose(Boolean(operation))
   useRestoreFocusOnClose(Boolean(operationEdit))
+  useRestoreFocusOnClose(Boolean(operationEditConfirmation))
   useRestoreFocusOnClose(Boolean(operationReverse))
   useRestoreFocusOnClose(Boolean(statusAction))
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
-  const operationEditCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEdit))
-  const operationEditDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEdit))
+  const operationEditCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEdit) && !operationEditConfirmation)
+  const operationEditDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEdit) && !operationEditConfirmation)
+  const operationEditConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEditConfirmation))
+  const operationEditConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEditConfirmation))
   const operationReverseReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(operationReverse))
   const operationReverseDialogRef = useFocusTrap<HTMLElement>(Boolean(operationReverse))
   const statusReasonRef = useFocusOnOpen<HTMLTextAreaElement>(statusAction?.action === 'cancel')
@@ -7054,7 +7065,8 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
   const statusDialogRef = useFocusTrap<HTMLElement>(Boolean(statusAction))
 
   useEscapeKey(Boolean(operation), () => closeFundOperation())
-  useEscapeKey(Boolean(operationEdit) && !savingOperation, () => closeFundOperationEdit())
+  useEscapeKey(Boolean(operationEdit) && !operationEditConfirmation && !savingOperation, () => closeFundOperationEdit())
+  useEscapeKey(Boolean(operationEditConfirmation) && !savingOperation, () => setOperationEditConfirmation(null))
   useEscapeKey(Boolean(operationReverse) && !savingOperation, () => closeFundOperationReverse())
   useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
@@ -7125,7 +7137,15 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
 
   function closeFundOperationEdit() {
     setOperationEdit(null)
+    setOperationEditConfirmation(null)
     setOperationError(null)
+  }
+
+  function getFundOperationEditChanges(operation: FundOperationDto, amount: number, reason: string) {
+    const changes: ChangePreview[] = []
+    appendChangePreview(changes, 'Сумма', formatChangeMoney(operation.amount), formatChangeMoney(amount))
+    appendChangePreview(changes, 'Основание', formatChangeText(operation.reason), formatChangeText(reason))
+    return changes
   }
 
   function openFundOperationReverse(fundOperation: FundOperationDto) {
@@ -7250,16 +7270,29 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
       return
     }
 
-    if (amount === operationEdit.operation.amount && reason === operationEdit.operation.reason) {
-      setOperationError('Изменений нет.')
+    const changes = getFundOperationEditChanges(operationEdit.operation, amount, reason)
+    if (changes.length === 0) {
+      closeFundOperationEdit()
+      return
+    }
+
+    setOperationEditConfirmation({ operation: operationEdit.operation, amount, reason, changes })
+  }
+
+  async function confirmFundOperationEdit() {
+    if (!operationEditConfirmation) {
       return
     }
 
     setSavingOperation(true)
     try {
-      const savedOperation = await fundsClient.updateOperation(auth.accessToken, operationEdit.operation.id, { amount, reason })
+      const savedOperation = await fundsClient.updateOperation(auth.accessToken, operationEditConfirmation.operation.id, {
+        amount: operationEditConfirmation.amount,
+        reason: operationEditConfirmation.reason,
+      })
       await refreshFundsPanel()
       setOperationMessage(`Операция фонда "${savedOperation.fundName}" изменена и записана в историю изменений.`)
+      setOperationEditConfirmation(null)
       closeFundOperationEdit()
     } catch (error: unknown) {
       setOperationError(error instanceof Error ? error.message : 'Не удалось изменить операцию фонда.')
@@ -7488,7 +7521,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
       ) : null}
       {operationEdit ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
-          if (!savingOperation) {
+          if (!savingOperation && !operationEditConfirmation) {
             closeFundOperationEdit()
           }
         }}>
@@ -7553,6 +7586,47 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {operationEditConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!savingOperation) {
+            setOperationEditConfirmation(null)
+          }
+        }}>
+          <section ref={operationEditConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-operation-edit-confirmation-title" aria-describedby="fund-operation-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Проверка изменения</p>
+                <h3 id="fund-operation-edit-confirmation-title">Подтвердить изменение операции фонда?</h3>
+                <p>{operationEditConfirmation.operation.fundName} · {operationEditConfirmation.operation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setOperationEditConfirmation(null)} aria-label="Закрыть подтверждение операции фонда" disabled={savingOperation}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fund-operation-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend пересчитает остаток фонда и запишет корректировку в историю изменений.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля операции фонда">
+              {operationEditConfirmation.changes.map((change) => (
+                <li key={change.field}>
+                  <span className="dictionary-change-field">{change.field}</span>
+                  <span className="dictionary-change-values">
+                    <span className="dictionary-change-value">{change.before}</span>
+                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={operationEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setOperationEditConfirmation(null)} disabled={savingOperation}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmFundOperationEdit} disabled={savingOperation}>
+                <Save size={16} aria-hidden="true" />
+                <span>{savingOperation ? 'Сохраняем...' : 'Сохранить'}</span>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
