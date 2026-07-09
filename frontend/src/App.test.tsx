@@ -4513,6 +4513,13 @@ describe('App', () => {
       await user.type(within(dialog).getByLabelText('Группа поставщиков'), 'Коммунальные услуги')
     })
     let editDialog = await openRowEditor(/Таблица: Группы поставщиков/, 'Коммунальные услуги')
+    await waitFor(() => expect(within(editDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(updatedSupplierGroups).toEqual([])
+    expect(await within(dictionaryPanel).findByText('Коммунальные услуги')).toBeInTheDocument()
+
+    editDialog = await openRowEditor(/Таблица: Группы поставщиков/, 'Коммунальные услуги')
     await user.clear(within(editDialog).getByLabelText('Группа поставщиков'))
     await user.type(within(editDialog).getByLabelText('Группа поставщиков'), 'Коммунальные подрядчики')
     await saveEditorChange()
