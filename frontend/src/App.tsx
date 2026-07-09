@@ -559,7 +559,12 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [pendingPasswordChange, setPendingPasswordChange] = useState<{ currentPassword: string; newPassword: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  useRestoreFocusOnClose(Boolean(pendingPasswordChange))
+  const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
+  const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
+  useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -573,54 +578,92 @@ function PasswordPanel({ auth, authClient, onUserChanged }: { auth: AuthResponse
     }
 
     setValidationErrors([])
+    setPendingPasswordChange({
+      currentPassword: form.currentPassword,
+      newPassword: form.newPassword,
+    })
+  }
+
+  async function confirmPasswordChange() {
+    if (!pendingPasswordChange) {
+      return
+    }
+
     setSaving(true)
     try {
       const user = await authClient.changeOwnPassword(auth.accessToken, {
-        currentPassword: form.currentPassword,
-        newPassword: form.newPassword,
+        currentPassword: pendingPasswordChange.currentPassword,
+        newPassword: pendingPasswordChange.newPassword,
       })
       onUserChanged(user)
+      setPendingPasswordChange(null)
       setForm({ currentPassword: '', newPassword: '', repeatPassword: '' })
       setMessage('Пароль изменен. Используйте новый пароль при следующем входе.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось изменить пароль.')
+      setPendingPasswordChange(null)
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <section className="password-panel" aria-label="Безопасность аккаунта">
-      <div>
-        <p className="eyebrow">Безопасность</p>
-        <h2>Смена пароля</h2>
-        <p>Пользователь может обновить свой пароль без участия администратора. Текущий пароль нужен для подтверждения действия.</p>
-      </div>
-      <form className="dictionary-form" onSubmit={handleSubmit}>
-        <label>
-          Текущий пароль
-          <input aria-label="Текущий пароль" type="password" value={form.currentPassword} onChange={(event) => setForm({ ...form, currentPassword: event.target.value })} minLength={8} required />
-        </label>
-        <div className="inline-fields">
-          <label>
-            Новый пароль
-            <input aria-label="Новый пароль" aria-describedby="own-password-policy-hint" type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} minLength={8} required />
-          </label>
-          <label>
-            Повтор нового пароля
-            <input aria-label="Повтор нового пароля" aria-describedby="own-password-policy-hint" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
-          </label>
+    <>
+      <section className="password-panel" aria-label="Безопасность аккаунта">
+        <div>
+          <p className="eyebrow">Безопасность</p>
+          <h2>Смена пароля</h2>
+          <p>Пользователь может обновить свой пароль без участия администратора. Текущий пароль нужен для подтверждения действия.</p>
         </div>
-        <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
-        <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
-        {error ? <FormError>{error}</FormError> : null}
-        {message ? <div className="form-success" role="status" aria-live="polite">{message}</div> : null}
-        <button className="secondary-button" type="submit" disabled={saving}>
-          <ShieldCheck size={16} />
-          <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
-        </button>
-      </form>
-    </section>
+        <form className="dictionary-form" onSubmit={handleSubmit}>
+          <label>
+            Текущий пароль
+            <input aria-label="Текущий пароль" type="password" value={form.currentPassword} onChange={(event) => setForm({ ...form, currentPassword: event.target.value })} minLength={8} required />
+          </label>
+          <div className="inline-fields">
+            <label>
+              Новый пароль
+              <input aria-label="Новый пароль" aria-describedby="own-password-policy-hint" type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} minLength={8} required />
+            </label>
+            <label>
+              Повтор нового пароля
+              <input aria-label="Повтор нового пароля" aria-describedby="own-password-policy-hint" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
+            </label>
+          </div>
+          <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+          <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
+          {error ? <FormError>{error}</FormError> : null}
+          {message ? <div className="form-success" role="status" aria-live="polite">{message}</div> : null}
+          <button className="secondary-button" type="submit" disabled={saving || Boolean(pendingPasswordChange)}>
+            <ShieldCheck size={16} />
+            <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
+          </button>
+        </form>
+      </section>
+      {pendingPasswordChange ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
+          <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="dialog-heading">
+              <div>
+                <p className="eyebrow">Настройки</p>
+                <h3 id="password-change-confirmation-title">Подтвердить смену пароля?</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Отменить подтверждение смены пароля" onClick={() => setPendingPasswordChange(null)} disabled={saving}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="password-change-confirmation-description">После подтверждения пароль будет изменен, а действие появится в истории изменений как смена учетных данных без раскрытия самого пароля.</p>
+            <div className="dialog-actions">
+              <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingPasswordChange(null)} disabled={saving}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmPasswordChange()} disabled={saving}>
+                <ShieldCheck size={16} />
+                <span>{saving ? 'Сохраняем...' : 'Подтвердить смену пароля'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   )
 }
 
