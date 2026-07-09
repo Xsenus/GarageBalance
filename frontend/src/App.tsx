@@ -977,6 +977,7 @@ function FinancePanel({
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
   const financeContextMenuTriggerRef = useRef<HTMLElement | null>(null)
+  const financeEditorTriggerRef = useRef<HTMLElement | null>(null)
   const cancelFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -1058,7 +1059,14 @@ function FinancePanel({
 
     setFinanceEditorCloseConfirmation(false)
     setFinanceEditorInitialSnapshot('')
+    const trigger = financeEditorTriggerRef.current
     setFinanceEditor(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      financeEditorTriggerRef.current = null
+    }, 0)
   }
 
   function confirmCloseFinanceEditor() {
@@ -1627,13 +1635,14 @@ function FinancePanel({
     }
   }
 
-  function openFinanceEditor(section: FinanceEditorKey, record?: FinanceRecord) {
+  function openFinanceEditor(section: FinanceEditorKey, record?: FinanceRecord, trigger?: HTMLElement | null) {
     if (!canWritePayments) {
       setFinanceContextMenu(null)
       setError('Для записи платежей нужно право payments.write.')
       return
     }
 
+    financeEditorTriggerRef.current = trigger ?? null
     setError(null)
     setRegularStatus(null)
     setSalaryStatus(null)
@@ -1765,9 +1774,10 @@ function FinancePanel({
     setActiveFinanceSection(section)
   }
 
-  function editFinanceRecord(section: FinanceSectionKey, record: FinanceRecord) {
+  function editFinanceRecord(section: FinanceSectionKey, record: FinanceRecord, trigger?: HTMLElement | null) {
     setFinanceContextMenu(null)
-    openFinanceEditor(section, record)
+    financeContextMenuTriggerRef.current = null
+    openFinanceEditor(section, record, trigger)
   }
 
   function addFinanceRecord(section: FinanceSectionKey) {
@@ -1785,7 +1795,7 @@ function FinancePanel({
   function handleFinanceRowKeyDown(event: KeyboardEvent<HTMLElement>, section: FinanceSectionKey, record: FinanceRecord) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      editFinanceRecord(section, record)
+      editFinanceRecord(section, record, event.currentTarget)
     } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       event.preventDefault()
       const rect = event.currentTarget.getBoundingClientRect()
@@ -1866,7 +1876,7 @@ function FinancePanel({
           {renderFinanceTableHead('income')}
           <tbody>
             {filteredIncomeOperations.map((operation) => (
-              <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'income', operation)} onClick={() => editFinanceRecord('income', operation)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'income', operation)}>
+              <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'income', operation)} onClick={(event) => editFinanceRecord('income', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'income', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
                 <td>{formatFinanceGarageLabel(operation.garageNumber)}</td>
@@ -1889,7 +1899,7 @@ function FinancePanel({
           {renderFinanceTableHead('expense')}
           <tbody>
             {filteredExpenseOperations.map((operation) => (
-              <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={() => editFinanceRecord('expense', operation)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
+              <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={(event) => editFinanceRecord('expense', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
                 <td>{getFinanceOptionalText(operation.supplierName)}</td>
@@ -1911,7 +1921,7 @@ function FinancePanel({
           {renderFinanceTableHead('accruals')}
           <tbody>
             {filteredAccruals.map((accrual) => (
-              <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={() => editFinanceRecord('accruals', accrual)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
+              <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={(event) => editFinanceRecord('accruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
                 <td>{formatMonth(accrual.accountingMonth)}</td>
                 <td>{formatFinanceGarageLabel(accrual.garageNumber)}</td>
                 <td>{getFinanceOptionalText(accrual.ownerName)}</td>
@@ -1932,7 +1942,7 @@ function FinancePanel({
           {renderFinanceTableHead('supplierAccruals')}
           <tbody>
             {filteredSupplierAccruals.map((accrual) => (
-              <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'supplierAccruals', accrual)} onClick={() => editFinanceRecord('supplierAccruals', accrual)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'supplierAccruals', accrual)}>
+              <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'supplierAccruals', accrual)} onClick={(event) => editFinanceRecord('supplierAccruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'supplierAccruals', accrual)}>
                 <td>{formatMonth(accrual.accountingMonth)}</td>
                 <td>{accrual.supplierName}</td>
                 <td>{accrual.expenseTypeName}</td>
@@ -1958,7 +1968,7 @@ function FinancePanel({
           {renderFinanceTableHead('meterReadings')}
           <tbody>
             {filteredMeterReadings.map((reading) => (
-              <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={() => editFinanceRecord('meterReadings', reading)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
+              <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={(event) => editFinanceRecord('meterReadings', reading, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
                 <td>{formatMonth(reading.accountingMonth)}</td>
                 <td>{formatDateOnly(reading.readingDate)}</td>
                 <td>{formatFinanceGarageLabel(reading.garageNumber)}</td>
@@ -2757,7 +2767,7 @@ function FinancePanel({
           <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
             <span>{getFinanceContextMenuLabel('add')}</span>
           </button>
-          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
+          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record, financeContextMenuTriggerRef.current) : undefined}>
             <span>{getFinanceContextMenuLabel('edit')}</span>
           </button>
           <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>

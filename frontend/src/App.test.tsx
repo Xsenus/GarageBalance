@@ -6093,6 +6093,12 @@ describe('App', () => {
       const tab = within(financePanel).getByRole('tab', { name: item.tab })
       await user.click(tab)
       await waitFor(() => expect(tab).toHaveAttribute('aria-selected', 'true'))
+      const editedRow = within(financePanel).getAllByText(item.rowText)
+        .map((node) => node.closest('tr'))
+        .find((node): node is HTMLTableRowElement => node !== null)
+      if (!editedRow) {
+        throw new Error(`Payment row "${item.rowText}" was not rendered for focus restoration check.`)
+      }
       const menu = await openFinanceContextMenuByCellText(financePanel, item.rowText)
       expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeEnabled()
       await user.click(within(menu).getByRole('menuitem', { name: 'Изменить' }))
@@ -6101,6 +6107,7 @@ describe('App', () => {
       expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
       await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
       await waitFor(() => expect(screen.queryByRole('dialog', { name: item.dialog })).not.toBeInTheDocument())
+      await waitFor(() => expect(editedRow).toHaveFocus())
     }
   })
 
