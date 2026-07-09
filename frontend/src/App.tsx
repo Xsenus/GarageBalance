@@ -13216,11 +13216,11 @@ function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, f
               </div>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingChange} disabled={oneTimeSavingRowId === pendingChange.rowId || tariffSavingRowId === pendingChange.rowId}>
                 <Save size={16} />
                 <span>Сохранить</span>
               </button>
-              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange}>Отмена</button>
             </div>
           </section>
         </div>
