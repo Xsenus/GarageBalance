@@ -4377,7 +4377,15 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Связь')).toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
-    const supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const addSupplierButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    let supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await waitFor(() => expect(within(supplierDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Поставщики' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addSupplierButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Сибирь Онлайн')).not.toBeInTheDocument()
+
+    supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(supplierDialog).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
     await user.selectOptions(within(supplierDialog).getByLabelText('Группа для поставщика'), within(supplierDialog).getByRole('option', { name: 'Связь' }))
     await user.type(within(supplierDialog).getByLabelText('ИНН поставщика'), '5401000000')
