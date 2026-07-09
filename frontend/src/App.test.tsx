@@ -864,6 +864,11 @@ describe('App', () => {
     let archivedStaffMemberReason: string | null = null
     const restoredSupplierIds: string[] = []
     const restoredStaffMemberIds: string[] = []
+    const restoredStaffDepartmentIds: string[] = []
+    let staffDepartments = [
+      createStaffDepartment({ id: '55555555-5555-4555-8555-555555555555', name: 'Архивный отдел', isArchived: true }),
+      createStaffDepartment({ id: 'staff-department-1', name: 'Бухгалтерия' }),
+    ]
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
@@ -933,6 +938,23 @@ describe('App', () => {
       },
       archiveSupplierContact: async (_token, _id, reason) => {
         deletedSupplierContactReason = reason
+      },
+      getStaffDepartments: async () => staffDepartments,
+      createStaffDepartment: async (_token, request) => {
+        const department = createStaffDepartment({
+          id: 'staff-department-2',
+          name: request.name,
+          isArchived: false,
+        })
+        staffDepartments = [department, ...staffDepartments]
+        return department
+      },
+      restoreStaffDepartment: async (_token, id) => {
+        restoredStaffDepartmentIds.push(id)
+        const department = staffDepartments.find((item) => item.id === id) ?? createStaffDepartment({ id, name: 'Архивный отдел' })
+        const restoredDepartment = { ...department, isArchived: false }
+        staffDepartments = staffDepartments.map((item) => (item.id === id ? restoredDepartment : item))
+        return restoredDepartment
       },
       createStaffMember: async (_token, request) => createStaffMember({
         id: '44444444-4444-4444-8444-444444444444',
@@ -1279,7 +1301,28 @@ describe('App', () => {
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    const departmentsTable = within(contractorsPanel).getByRole('table', { name: 'Отделы персонала' })
     expect(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).toBeInTheDocument()
+    const archivedDepartmentRow = within(departmentsTable).getByText('Архивный отдел').closest('[role="row"]')!
+    expect(within(archivedDepartmentRow as HTMLElement).getByText('Удален')).toBeInTheDocument()
+    const restoreDepartmentButton = within(archivedDepartmentRow as HTMLElement).getByRole('button', { name: 'Восстановить отдел Архивный отдел' })
+    await user.click(restoreDepartmentButton)
+    const restoreDepartmentDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
+    expect(within(restoreDepartmentDialog).getByText('Отдел Архивный отдел')).toBeInTheDocument()
+    await waitFor(() => expect(within(restoreDepartmentDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Вернуть запись?' })).not.toBeInTheDocument()
+    expect(restoredStaffDepartmentIds).toHaveLength(0)
+    expect(within(archivedDepartmentRow as HTMLElement).getByText('Удален')).toBeInTheDocument()
+    expect(restoreDepartmentButton).toHaveFocus()
+
+    await user.click(restoreDepartmentButton)
+    const reopenedRestoreDepartmentDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
+    await user.click(within(reopenedRestoreDepartmentDialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(restoredStaffDepartmentIds).toEqual(['55555555-5555-4555-8555-555555555555']))
+    await waitFor(() => expect(within(archivedDepartmentRow as HTMLElement).queryByText('Удален')).not.toBeInTheDocument())
+    expect(within(archivedDepartmentRow as HTMLElement).getByText('Активен')).toBeInTheDocument()
+
     const addDepartmentButton = within(contractorsPanel).getByRole('button', { name: 'Добавить отдел' })
     await user.click(addDepartmentButton)
     let departmentDialog = await screen.findByRole('dialog', { name: 'Новый отдел' })
@@ -2009,7 +2052,8 @@ describe('App', () => {
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
     await waitFor(() => expect(within(contractorsPanel).getByText('Backend Staff')).toBeInTheDocument())
-    expect(within(contractorsPanel).getByText('Backend Department')).toBeInTheDocument()
+    const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
+    expect(within(staffTable).getByText('Backend Department')).toBeInTheDocument()
     expect(within(contractorsPanel).queryByText('Stale Staff')).not.toBeInTheDocument()
   })
 

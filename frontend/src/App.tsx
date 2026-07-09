@@ -10004,6 +10004,7 @@ type ContractorFinancialReport = {
 type ContractorDepartmentRow = {
   id: string
   name: string
+  isDeleted?: boolean
 }
 
 type ContractorModal =
@@ -10017,6 +10018,7 @@ type ContractorRestoreTarget =
   | { type: 'garage'; item: ContractorGarageRow }
   | { type: 'supplier'; item: ContractorSupplierRow }
   | { type: 'employee'; item: ContractorStaffRow }
+  | { type: 'department'; item: ContractorDepartmentRow }
 
 const contractorSectionLabels: Record<ContractorSection, string> = {
   garages: 'Гаражи',
@@ -10382,6 +10384,7 @@ function createStaffDepartmentRowFromDto(department: StaffDepartmentDto): Contra
   return {
     id: department.id,
     name: department.name,
+    isDeleted: department.isArchived,
   }
 }
 
@@ -10541,6 +10544,10 @@ function getContractorRestoreTitle(target: ContractorRestoreTarget) {
 
   if (target.type === 'supplier') {
     return target.item.name || 'Поставщик без названия'
+  }
+
+  if (target.type === 'department') {
+    return `Отдел ${target.item.name || 'без названия'}`
   }
 
   return target.item.fullName || 'Сотрудник без имени'
@@ -11208,6 +11215,10 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
     setRestoreTarget({ type: 'employee', item: row })
   }
 
+  function restoreDepartment(row: ContractorDepartmentRow) {
+    setRestoreTarget({ type: 'department', item: row })
+  }
+
   function openEmployeeFinancialReport(row: ContractorStaffRow) {
     openContractorFinancialReport({ type: 'employee', row })
   }
@@ -11234,6 +11245,13 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
           setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? nextSupplier : item)))
         } else {
           setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
+        }
+      } else if (restoreTarget.type === 'department') {
+        if (isBackendDictionaryId(restoreTarget.item.id)) {
+          const restoredDepartment = await dictionaryClient.restoreStaffDepartment(auth.accessToken, restoreTarget.item.id)
+          setDepartments((currentDepartments) => currentDepartments.map((item) => (item.id === restoreTarget.item.id ? createStaffDepartmentRowFromDto(restoredDepartment) : item)))
+        } else {
+          setDepartments((currentDepartments) => currentDepartments.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
         }
       } else if (isBackendDictionaryId(restoreTarget.item.id)) {
         const restoredEmployee = await dictionaryClient.restoreStaffMember(auth.accessToken, restoreTarget.item.id)
@@ -11510,56 +11528,89 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
       ) : null}
 
       {activeSection === 'staff' ? (
-        <section className="contractors-directory-card" aria-label="Персонал">
-          <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
-            <div className="contractors-directory-row contractors-directory-row--header" role="row">
-              {contractorStaffColumnDefinitions.map((column) => (
-                <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
-                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('staff', column.key, column.label)}
-                  {column.key !== 'actions' ? (
-                    <button
-                      className="icon-button contractors-column-resizer"
-                      type="button"
-                      aria-label={`Изменить ширину столбца ${column.label}`}
-                      onMouseDown={(event) => resizeStaffColumn(column.key, event)}
-                    />
-                  ) : null}
-                </span>
-              ))}
+        <>
+          <section className="contractors-directory-card" aria-label="Отделы персонала">
+            <div className="contractors-directory-card-header">
+              <h2>Отделы</h2>
             </div>
-            {visibleStaff.map((row) => (
-              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
-                <span role="cell">{row.fullName}</span>
-                <span role="cell">{row.department}</span>
-                <span role="cell">{row.isDeleted ? 'Удален' : row.rate}</span>
-                <span role="cell" className="contractors-row-actions">
-                  {row.isDeleted ? (
-                    <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
-                      <RotateCcw size={16} />
-                    </button>
-                  ) : (
-                    <>
-                      <button className="icon-button" type="button" aria-label={`Изменить сотрудника ${row.fullName}`} title="Изменить" onClick={() => openEmployeeEditor(row)}>
-                        <Pencil size={16} />
-                      </button>
-                      <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет сотрудника ${row.fullName}`} title="Финансовый отчет" onClick={() => openEmployeeFinancialReport(row)}>
-                        <FileText size={16} />
-                      </button>
-                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title="Удалить" onClick={() => openEmployeeDeleteDialog(row)}>
-                        <Trash2 size={16} />
-                      </button>
-                    </>
-                  )}
-                </span>
+            <div className="contractors-directory-table contractors-directory-table--departments" role="table" aria-label="Отделы персонала">
+              <div className="contractors-directory-row contractors-directory-row--header" role="row">
+                <span className="contractors-directory-header-cell" role="columnheader">Отдел</span>
+                <span className="contractors-directory-header-cell" role="columnheader">Статус</span>
+                <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
               </div>
-            ))}
-            {visibleStaff.length === 0 ? (
-              <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
+              {departments.map((department) => (
+                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id}>
+                  <span role="cell">{department.name}</span>
+                  <span role="cell" className="contractors-directory-cell--center">{department.isDeleted ? 'Удален' : 'Активен'}</span>
+                  <span role="cell" className="contractors-row-actions">
+                    {department.isDeleted ? (
+                      <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+              {departments.length === 0 ? (
+                <div className="contractors-directory-row contractors-directory-row--empty" role="row">
+                  <span className="contractors-directory-empty-cell" role="cell">Отделы пока не настроены.</span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="contractors-directory-card" aria-label="Персонал">
+            <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
+              <div className="contractors-directory-row contractors-directory-row--header" role="row">
+                {contractorStaffColumnDefinitions.map((column) => (
+                  <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                    {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('staff', column.key, column.label)}
+                    {column.key !== 'actions' ? (
+                      <button
+                        className="icon-button contractors-column-resizer"
+                        type="button"
+                        aria-label={`Изменить ширину столбца ${column.label}`}
+                        onMouseDown={(event) => resizeStaffColumn(column.key, event)}
+                      />
+                    ) : null}
+                  </span>
+                ))}
               </div>
-            ) : null}
-          </div>
-        </section>
+              {visibleStaff.map((row) => (
+                <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
+                  <span role="cell">{row.fullName}</span>
+                  <span role="cell">{row.department}</span>
+                  <span role="cell">{row.isDeleted ? 'Удален' : row.rate}</span>
+                  <span role="cell" className="contractors-row-actions">
+                    {row.isDeleted ? (
+                      <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : (
+                      <>
+                        <button className="icon-button" type="button" aria-label={`Изменить сотрудника ${row.fullName}`} title="Изменить" onClick={() => openEmployeeEditor(row)}>
+                          <Pencil size={16} />
+                        </button>
+                        <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет сотрудника ${row.fullName}`} title="Финансовый отчет" onClick={() => openEmployeeFinancialReport(row)}>
+                          <FileText size={16} />
+                        </button>
+                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title="Удалить" onClick={() => openEmployeeDeleteDialog(row)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {visibleStaff.length === 0 ? (
+                <div className="contractors-directory-row contractors-directory-row--empty" role="row">
+                  <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </>
       ) : null}
 
       {garageContextMenu ? (
@@ -12639,7 +12690,9 @@ function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => 
 }
 
 function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialReport, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onOpenFinancialReport: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
-  const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(departments[0]?.name ?? ''))
+  const activeDepartments = departments.filter((department) => !department.isDeleted)
+  const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(activeDepartments[0]?.name ?? departments[0]?.name ?? ''))
+  const selectableDepartments = departments.filter((department) => !department.isDeleted || department.name === form.department)
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
@@ -12678,7 +12731,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
-            <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{departments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
+            <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{selectableDepartments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
             <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
