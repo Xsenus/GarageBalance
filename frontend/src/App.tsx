@@ -1546,6 +1546,13 @@ function FinancePanel({
   const [financeSearchInput, setFinanceSearchInput] = useState('')
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
   const [financeEditorInitialSnapshot, setFinanceEditorInitialSnapshot] = useState('')
+  const [pendingFinanceEditConfirmation, setPendingFinanceEditConfirmation] = useState<{
+    kind: 'income'
+    recordId: string
+    objectName: string
+    request: CreateIncomeOperationRequest
+    changes: ChangePreview[]
+  } | null>(null)
   const [financePage, setFinancePage] = useState<FinancePagedResult<FinanceRecord>>({ items: [], totalCount: 0, offset: 0, limit: 25 })
   const [financeSectionCounts, setFinanceSectionCounts] = useState<Record<FinanceSectionKey, number>>({ income: 0, expense: 0, accruals: 0, supplierAccruals: 0, meterReadings: 0 })
   const [financeContextMenu, setFinanceContextMenu] = useState<{ section: FinanceSectionKey; record?: FinanceRecord; x: number; y: number } | null>(null)
@@ -1594,6 +1601,7 @@ function FinancePanel({
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
   useRestoreFocusOnClose(Boolean(financeContextMenu))
+  useRestoreFocusOnClose(Boolean(pendingFinanceEditConfirmation))
   useRestoreFocusOnClose(Boolean(financeEditorCloseConfirmation))
   useRestoreFocusOnClose(Boolean(cancelFinanceTarget))
   useRestoreFocusOnClose(Boolean(restoreFinanceTarget))
@@ -1601,6 +1609,8 @@ function FinancePanel({
   const accrualBreakdownDialogRef = useFocusTrap<HTMLElement>(Boolean(accrualBreakdown))
   const financeEditorCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditor))
   const financeEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditor))
+  const financeEditConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingFinanceEditConfirmation))
+  const financeEditConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingFinanceEditConfirmation))
   const financeEditorCloseConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(financeEditorCloseConfirmation))
   const financeEditorCloseConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(financeEditorCloseConfirmation))
   const cancelFinanceReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(cancelFinanceTarget))
@@ -1646,6 +1656,7 @@ function FinancePanel({
     }
 
     setFinanceEditorCloseConfirmation(false)
+    setPendingFinanceEditConfirmation(null)
     setFinanceEditorInitialSnapshot('')
     const trigger = financeEditorTriggerRef.current
     setFinanceEditor(null)
@@ -1678,7 +1689,8 @@ function FinancePanel({
   }
 
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
-  useEscapeKey(Boolean(financeEditor) && !financeEditorCloseConfirmation, () => closeFinanceEditor())
+  useEscapeKey(Boolean(financeEditor) && !financeEditorCloseConfirmation && !pendingFinanceEditConfirmation, () => closeFinanceEditor())
+  useEscapeKey(Boolean(pendingFinanceEditConfirmation), () => setPendingFinanceEditConfirmation(null))
   useEscapeKey(Boolean(financeEditorCloseConfirmation), () => setFinanceEditorCloseConfirmation(false))
   useEscapeKey(Boolean(cancelFinanceTarget) && !saving?.startsWith('cancel'), () => closeCancelFinanceDialog())
   useEscapeKey(Boolean(restoreFinanceTarget) && !saving?.startsWith('restore-finance'), () => closeRestoreFinanceDialog())
@@ -1846,6 +1858,59 @@ function FinancePanel({
     })
   }
 
+  function getIncomeEditChangePreview(record: FinancialOperationDto, request: CreateIncomeOperationRequest) {
+    const changes: ChangePreview[] = []
+    const formatIncomeGarage = (garageId: string | null | undefined, fallbackGarageNumber: string | null | undefined) => {
+      if (!garageId) {
+        return 'пусто'
+      }
+
+      if (fallbackGarageNumber) {
+        return formatFinanceGarageLabel(fallbackGarageNumber)
+      }
+
+      const garage = incomeGarageOptions.find((item) => item.id === garageId)
+      return garage ? formatFinanceGarageLabel(garage.number) : formatFinanceGarageLabel(garageId)
+    }
+    const formatIncomeType = (incomeTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
+      if (!incomeTypeId) {
+        return 'пусто'
+      }
+
+      if (fallbackName) {
+        return fallbackName
+      }
+
+      return incomeTypes.find((item) => item.id === incomeTypeId)?.name ?? fallbackName ?? incomeTypeId
+    }
+
+    appendChangePreview(changes, 'Гараж', formatIncomeGarage(record.garageId, record.garageNumber), formatIncomeGarage(request.garageId, request.garageId === record.garageId ? record.garageNumber : null))
+    appendChangePreview(changes, 'Вид поступления', formatIncomeType(record.incomeTypeId, record.incomeTypeName), formatIncomeType(request.incomeTypeId, request.incomeTypeId === record.incomeTypeId ? record.incomeTypeName : null))
+    appendChangePreview(changes, 'Дата поступления', formatChangeDate(record.operationDate), formatChangeDate(request.operationDate))
+    appendChangePreview(changes, 'Месяц поступления', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
+    appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
+    appendChangePreview(changes, 'Документ', formatChangeText(record.documentNumber), formatChangeText(request.documentNumber))
+    appendChangePreview(changes, 'Комментарий', formatChangeText(record.comment), formatChangeText(request.comment))
+    return changes
+  }
+
+  async function confirmPendingFinanceEdit() {
+    if (!pendingFinanceEditConfirmation) {
+      return
+    }
+
+    const pending = pendingFinanceEditConfirmation
+    const saved = await runSaving('income', async () => {
+      await financeClient.updateIncome(auth.accessToken, pending.recordId, pending.request)
+      await loadFinanceWorkbench('income', financePage.offset, financePage.limit)
+      setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+    })
+    if (saved) {
+      setPendingFinanceEditConfirmation(null)
+      closeFinanceEditor({ skipConfirmation: true })
+    }
+  }
+
   async function saveIncome(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canWritePayments) {
@@ -1870,12 +1935,25 @@ function FinancePanel({
     }
 
     setIncomeValidationErrors([])
-    const saved = await runSaving('income', async () => {
-      if (financeEditor?.mode === 'edit' && financeEditor.record && 'operationKind' in financeEditor.record) {
-        await financeClient.updateIncome(auth.accessToken, financeEditor.record.id, request)
-      } else {
-        await financeClient.createIncome(auth.accessToken, request)
+    if (financeEditor?.mode === 'edit' && financeEditor.record && 'operationKind' in financeEditor.record) {
+      const changes = getIncomeEditChangePreview(financeEditor.record, request)
+      if (changes.length === 0) {
+        closeFinanceEditor({ skipConfirmation: true })
+        return
       }
+
+      setPendingFinanceEditConfirmation({
+        kind: 'income',
+        recordId: financeEditor.record.id,
+        objectName: `${financeEditor.record.incomeTypeName ?? 'Поступление'} · ${formatFinanceGarageLabel(financeEditor.record.garageNumber)} · ${formatChangeMoney(financeEditor.record.amount)}`,
+        request,
+        changes,
+      })
+      return
+    }
+
+    const saved = await runSaving('income', async () => {
+      await financeClient.createIncome(auth.accessToken, request)
       await loadFinanceWorkbench('income', financePage.offset, financePage.limit)
       setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
     })
@@ -3540,11 +3618,47 @@ function FinancePanel({
                 <button className="ghost-button" type="button" onClick={() => closeFinanceEditor()}>
                   {getFinanceEditorUiLabel('cancel')}
                 </button>
-                <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === getFinanceEditorSavingScope(financeEditor.section)}>
+                <button className="secondary-button" type="submit" disabled={!canWritePayments || Boolean(pendingFinanceEditConfirmation) || saving === getFinanceEditorSavingScope(financeEditor.section)}>
                   <span>{financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('save') : getFinanceEditorSubmitLabel(financeEditor.section)}</span>
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {pendingFinanceEditConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingFinanceEditConfirmation(null)}>
+          <section ref={financeEditConfirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-edit-confirmation-title" aria-describedby="finance-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Проверка изменения</p>
+                <h3 id="finance-edit-confirmation-title">Подтвердить изменение платежа?</h3>
+                <p>{pendingFinanceEditConfirmation.objectName}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение платежа" onClick={() => setPendingFinanceEditConfirmation(null)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="finance-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend запишет корректировку в историю платежей.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля платежа">
+              {pendingFinanceEditConfirmation.changes.map((change) => (
+                <li key={change.field}>
+                  <span className="dictionary-change-field">{change.field}</span>
+                  <span className="dictionary-change-values">
+                    <span className="dictionary-change-value">{change.before}</span>
+                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={financeEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingFinanceEditConfirmation(null)}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmPendingFinanceEdit} disabled={saving === 'income'}>
+                <Save size={16} aria-hidden="true" />
+                <span>{saving === 'income' ? 'Сохраняем...' : 'Сохранить'}</span>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
@@ -4227,8 +4341,7 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  async function saveHistoryEdit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function saveHistoryEdit() {
     if (!historyEdit?.row.operation || !selectedGarage) {
       return
     }
@@ -5444,15 +5557,53 @@ function GaragePaymentHistoryEditDialog({
   saving: boolean
   onChange: (patch: Partial<Omit<GaragePaymentHistoryEditState, 'row'>>) => void
   onClose: () => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onSubmit: () => void
 }) {
-  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const [pendingChanges, setPendingChanges] = useState<ChangePreview[] | null>(null)
+  const dialogRef = useFocusTrap<HTMLElement>(!pendingChanges)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  useEscapeKey(!saving, onClose)
+  const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingChanges))
+  const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingChanges))
+  useEscapeKey(!saving && !pendingChanges, onClose)
+  useEscapeKey(Boolean(pendingChanges), () => setPendingChanges(null))
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const operation = state.row.operation
+    if (!operation) {
+      onChange({ error: 'Платеж нельзя изменить: операция не найдена.' })
+      return
+    }
+
+    const amount = Number(state.amount.trim().replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      onChange({ error: 'Укажите сумму платежа больше нуля.' })
+      return
+    }
+
+    const changes: ChangePreview[] = []
+    appendChangePreview(changes, 'Сумма', formatChangeMoney(operation.amount), formatChangeMoney(amount))
+    appendChangePreview(changes, 'Дата поступления', formatChangeDate(operation.operationDate), formatChangeDate(state.operationDate))
+    appendChangePreview(changes, 'Месяц поступления', formatMonth(operation.accountingMonth), formatMonth(`${state.accountingMonth}-01`))
+    appendChangePreview(changes, 'Документ', formatChangeText(operation.documentNumber), formatChangeText(state.documentNumber))
+    appendChangePreview(changes, 'Комментарий', formatChangeText(operation.comment), formatChangeText(state.comment))
+    if (changes.length === 0) {
+      onClose()
+      return
+    }
+
+    onChange({ error: null })
+    setPendingChanges(changes)
+  }
+
+  function confirmSubmit() {
+    setPendingChanges(null)
+    onSubmit()
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={() => {
-      if (!saving) {
+      if (!saving && !pendingChanges) {
         onClose()
       }
     }}>
@@ -5467,7 +5618,7 @@ function GaragePaymentHistoryEditDialog({
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={onSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Сумма">
             <input aria-label="Сумма изменяемого платежа" inputMode="decimal" value={state.amount} onChange={(event) => onChange({ amount: event.target.value })} disabled={saving} />
           </FormField>
@@ -5493,6 +5644,40 @@ function GaragePaymentHistoryEditDialog({
           </div>
         </form>
       </section>
+      {pendingChanges ? (
+        <section ref={confirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-payment-edit-confirmation-title" aria-describedby="garage-payment-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-dialog-header">
+            <div>
+              <p className="eyebrow">Проверка изменения</p>
+              <h3 id="garage-payment-edit-confirmation-title">Подтвердить изменение платежа?</h3>
+              <p>{state.row.purpose}</p>
+            </div>
+            <button className="icon-button" type="button" aria-label="Закрыть подтверждение платежа" onClick={() => setPendingChanges(null)} disabled={saving}>
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+          <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend запишет корректировку в историю платежей.</p>
+          <ul className="dictionary-change-list" aria-label="Изменяемые поля платежа">
+            {pendingChanges.map((change) => (
+              <li key={change.field}>
+                <span className="dictionary-change-field">{change.field}</span>
+                <span className="dictionary-change-values">
+                  <span className="dictionary-change-value">{change.before}</span>
+                  <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                  <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="detail-dialog-actions contractors-dialog-actions">
+            <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingChanges(null)} disabled={saving}>Отмена</button>
+            <button className="secondary-button" type="button" onClick={confirmSubmit} disabled={saving}>
+              <Save size={16} aria-hidden="true" />
+              <span>{saving ? 'Сохраняем...' : 'Сохранить'}</span>
+            </button>
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }
