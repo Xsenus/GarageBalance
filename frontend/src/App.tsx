@@ -54,7 +54,7 @@ import type { FinanceEditorKey, FinanceSectionKey } from './shared/financeWorkbe
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from './shared/financeWorkbench'
 import { buildAuditExportFileName, buildImportReportFileName, buildReportFileName, buildSnapshotReportFileName, downloadBlob } from './shared/fileExports'
 import type { ChangePreview } from './shared/changePreview'
-import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from './shared/changePreview'
+import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText, formatSensitiveChange } from './shared/changePreview'
 import { FormError, FormValidationSummary } from './shared/formFeedback'
 import {
   formatAccrualSource,
@@ -865,6 +865,16 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
               </button>
             </div>
             <p className="confirmation-text" id="password-change-confirmation-description">После подтверждения пароль будет изменен, а действие появится в истории изменений как смена учетных данных без раскрытия самого пароля.</p>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля настройки">
+              <li>
+                <span className="dictionary-change-field">Пароль</span>
+                <span className="dictionary-change-values">
+                  <span className="dictionary-change-value">Без изменения</span>
+                  <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                  <span className="dictionary-change-value dictionary-change-value-after">{formatSensitiveChange(pendingPasswordChange.newPassword)}</span>
+                </span>
+              </li>
+            </ul>
             <div className="dialog-actions">
               <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingPasswordChange(null)} disabled={saving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmPasswordChange()} disabled={saving}>

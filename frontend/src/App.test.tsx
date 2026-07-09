@@ -3965,6 +3965,11 @@ describe('App', () => {
     expect(passwordRequest).toBeNull()
     const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить смену пароля?' })
     expect(within(confirmation).getByText('После подтверждения пароль будет изменен, а действие появится в истории изменений как смена учетных данных без раскрытия самого пароля.')).toBeInTheDocument()
+    const confirmationChanges = within(confirmation).getByRole('list', { name: 'Изменяемые поля настройки' })
+    expect(within(confirmationChanges).getByText('Пароль')).toBeInTheDocument()
+    expect(within(confirmationChanges).getByText('Без изменения')).toBeInTheDocument()
+    expect(within(confirmationChanges).getByText('изменено')).toBeInTheDocument()
+    expect(confirmation).not.toHaveTextContent('NewStrongPass123')
     expect(within(confirmation).getByRole('button', { name: 'Отмена' })).toHaveFocus()
     await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить смену пароля' }))
 
