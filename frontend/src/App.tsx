@@ -15842,22 +15842,16 @@ function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: 
               </button>
             </div>
             <p className="confirmation-text" id="meter-reading-change-description">Проверьте новое показание счетчика. После сохранения backend запишет изменение в историю по гаражу, месяцу и типу счетчика.</p>
-            <div className="tariff-change-summary" aria-label="Изменяемое поле показания">
-              <div className="tariff-change-field-row">
-                <span>Поле</span>
-                <strong>Показание</strong>
-              </div>
-              <div className="tariff-change-values-row">
-                <div>
-                  <span>Было</span>
-                  <strong>{formatPrototypeChangeValue(pendingReadingChange.previousValue)}</strong>
-                </div>
-                <div>
-                  <span>Стало</span>
-                  <strong>{formatPrototypeChangeValue(pendingReadingChange.nextValue)}</strong>
-                </div>
-              </div>
-            </div>
+            <ul className="dictionary-change-list" aria-label="Изменяемые поля показания">
+              <li>
+                <span className="dictionary-change-field">Показание</span>
+                <span className="dictionary-change-values">
+                  <span className="dictionary-change-value">{formatPrototypeChangeValue(pendingReadingChange.previousValue)}</span>
+                  <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
+                  <span className="dictionary-change-value dictionary-change-value-after">{formatPrototypeChangeValue(pendingReadingChange.nextValue)}</span>
+                </span>
+              </li>
+            </ul>
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingReadingChange}>
