@@ -4720,6 +4720,7 @@ describe('App', () => {
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
+    const addOwnerButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     let validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Фамилия владельца'), '   ')
     await user.type(within(validationDialog).getByLabelText('Имя владельца'), 'Петр')
@@ -4730,9 +4731,12 @@ describe('App', () => {
     expect(within(validationDialog).getByText('Укажите фамилию владельца.')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Проверьте телефон владельца.')).toBeInTheDocument()
     expect(createOwnerCalled).toBe(false)
-    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addOwnerButton).toHaveFocus())
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    const addGarageButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Номер гаража'), '   ')
     await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
@@ -4740,6 +4744,9 @@ describe('App', () => {
     expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Укажите номер гаража.')).toBeInTheDocument()
     expect(createGarageCalled).toBe(false)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гаражи' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addGarageButton).toHaveFocus())
     return
 
     await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), '   ')
