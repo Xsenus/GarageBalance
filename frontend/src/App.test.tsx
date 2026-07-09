@@ -5448,6 +5448,7 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    const addSupplierGroupButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     let validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Группа поставщиков'), '   ')
     await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
@@ -5455,7 +5456,10 @@ describe('App', () => {
     expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Укажите группу поставщиков.')).toBeInTheDocument()
     expect(createSupplierGroupCalls).toBe(0)
-    await user.click(within(validationDialog).getByRole('button', { name: 'Отмена' }))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Группы поставщиков' })).not.toBeInTheDocument())
+    await waitFor(() => expect(addSupplierGroupButton).toHaveFocus())
+    expect(within(dictionaryPanel).queryByText('Связь')).not.toBeInTheDocument()
 
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Группа поставщиков'), 'Связь')
