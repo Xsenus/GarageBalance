@@ -1,0 +1,380 @@
+{
+  "metadata": {
+    "name": "Stage 8 demo acceptance data",
+    "purpose": "Reproducible fictional data set for the first-stage UI demonstration and acceptance smoke checks.",
+    "period": {
+      "from": "2026-07-01",
+      "to": "2026-07-31"
+    },
+    "privacy": "All people, addresses, phones, documents and payment references are fictional and must not be replaced with real cooperative data in Git."
+  },
+  "roles": [
+    {
+      "key": "administrator",
+      "displayName": "Администратор",
+      "demoFocus": "Права, пользователи, справочники, платежи, отчеты, импорт, история и Что нового"
+    },
+    {
+      "key": "accountant",
+      "displayName": "Бухгалтер",
+      "demoFocus": "Справочники, платежи, тарифы, отчеты и печать/экспорт без управления правами"
+    },
+    {
+      "key": "reports_viewer",
+      "displayName": "Наблюдатель отчетов",
+      "demoFocus": "Отчеты и состояния без прав в платежах/импорте"
+    }
+  ],
+  "owners": [
+    {
+      "id": "owner-demo-ivanov",
+      "fullName": "Иванов Алексей Петрович",
+      "phone": "+7 900 000-10-01",
+      "address": "Демо-город, ул. Учебная, 1"
+    },
+    {
+      "id": "owner-demo-smirnova",
+      "fullName": "Смирнова Ольга Сергеевна",
+      "phone": "+7 900 000-10-02",
+      "address": "Демо-город, ул. Учебная, 2"
+    },
+    {
+      "id": "owner-demo-kim",
+      "fullName": "Ким Андрей Викторович",
+      "phone": "+7 900 000-10-03",
+      "address": "Демо-город, ул. Учебная, 3"
+    }
+  ],
+  "garages": [
+    {
+      "id": "garage-demo-12",
+      "number": "12",
+      "ownerId": "owner-demo-ivanov",
+      "peopleCount": 2,
+      "floorCount": 1,
+      "startingBalance": 1500.00,
+      "initialWater": 118.4,
+      "initialElectricity": 2410.0,
+      "meters": ["water", "electricity"],
+      "scenario": "debt"
+    },
+    {
+      "id": "garage-demo-27",
+      "number": "27",
+      "ownerId": "owner-demo-smirnova",
+      "peopleCount": 1,
+      "floorCount": 1,
+      "startingBalance": -800.00,
+      "initialWater": 42.0,
+      "initialElectricity": 978.5,
+      "meters": ["electricity"],
+      "scenario": "overpayment"
+    },
+    {
+      "id": "garage-demo-41",
+      "number": "41",
+      "ownerId": "owner-demo-kim",
+      "peopleCount": 3,
+      "floorCount": 2,
+      "startingBalance": 0.00,
+      "initialWater": 0.0,
+      "initialElectricity": 0.0,
+      "meters": [],
+      "scenario": "new member without meters"
+    }
+  ],
+  "supplierGroups": [
+    {
+      "id": "supplier-group-demo-utilities",
+      "name": "Коммунальные услуги"
+    },
+    {
+      "id": "supplier-group-demo-maintenance",
+      "name": "Обслуживание территории"
+    }
+  ],
+  "suppliers": [
+    {
+      "id": "supplier-demo-energy",
+      "groupId": "supplier-group-demo-utilities",
+      "name": "Демо Энергосбыт",
+      "service": "Электроэнергия",
+      "startingDebt": 12000.00
+    },
+    {
+      "id": "supplier-demo-water",
+      "groupId": "supplier-group-demo-utilities",
+      "name": "Демо Водоканал",
+      "service": "Вода",
+      "startingDebt": 3500.00
+    },
+    {
+      "id": "supplier-demo-cleaning",
+      "groupId": "supplier-group-demo-maintenance",
+      "name": "Демо Чистый двор",
+      "service": "Вывоз мусора",
+      "startingDebt": 0.00
+    }
+  ],
+  "incomeTypes": [
+    {
+      "id": "income-demo-membership",
+      "name": "Членский взнос",
+      "systemCode": "membership"
+    },
+    {
+      "id": "income-demo-water",
+      "name": "Вода",
+      "systemCode": "water"
+    },
+    {
+      "id": "income-demo-electricity",
+      "name": "Электроэнергия",
+      "systemCode": "electricity"
+    },
+    {
+      "id": "income-demo-target",
+      "name": "Целевой сбор",
+      "systemCode": "target"
+    }
+  ],
+  "expenseTypes": [
+    {
+      "id": "expense-demo-electricity",
+      "name": "Оплата электроэнергии",
+      "systemCode": "electricity_supplier"
+    },
+    {
+      "id": "expense-demo-water",
+      "name": "Оплата воды",
+      "systemCode": "water_supplier"
+    },
+    {
+      "id": "expense-demo-trash",
+      "name": "Вывоз мусора",
+      "systemCode": "trash_supplier"
+    }
+  ],
+  "tariffs": [
+    {
+      "id": "tariff-demo-membership-2026",
+      "name": "Членский взнос 2026",
+      "calculationBase": "fixed",
+      "rate": 500.00,
+      "effectiveFrom": "2026-01-01"
+    },
+    {
+      "id": "tariff-demo-water-2026",
+      "name": "Вода по счетчику 2026",
+      "calculationBase": "meter_water",
+      "rate": 45.00,
+      "effectiveFrom": "2026-01-01"
+    },
+    {
+      "id": "tariff-demo-electricity-2026",
+      "name": "Электроэнергия 2026",
+      "calculationBase": "meter_electricity",
+      "rate": 6.20,
+      "effectiveFrom": "2026-01-01"
+    },
+    {
+      "id": "tariff-demo-target-2026",
+      "name": "Целевой сбор на ремонт ворот",
+      "calculationBase": "fixed",
+      "rate": 1200.00,
+      "effectiveFrom": "2026-07-01"
+    }
+  ],
+  "chargeServiceSettings": [
+    {
+      "id": "charge-service-demo-membership",
+      "name": "Ежемесячный членский взнос",
+      "incomeTypeId": "income-demo-membership",
+      "tariffId": "tariff-demo-membership-2026",
+      "isRegular": true,
+      "periodicity": "monthly"
+    },
+    {
+      "id": "charge-service-demo-water",
+      "name": "Вода по показаниям",
+      "incomeTypeId": "income-demo-water",
+      "tariffId": "tariff-demo-water-2026",
+      "isRegular": true,
+      "periodicity": "monthly"
+    },
+    {
+      "id": "charge-service-demo-electricity",
+      "name": "Электроэнергия по показаниям",
+      "incomeTypeId": "income-demo-electricity",
+      "tariffId": "tariff-demo-electricity-2026",
+      "isRegular": true,
+      "periodicity": "monthly"
+    }
+  ],
+  "meterReadings": [
+    {
+      "garageId": "garage-demo-12",
+      "meterKind": "water",
+      "month": "2026-07-01",
+      "previousValue": 118.4,
+      "currentValue": 122.9,
+      "consumption": 4.5
+    },
+    {
+      "garageId": "garage-demo-12",
+      "meterKind": "electricity",
+      "month": "2026-07-01",
+      "previousValue": 2410.0,
+      "currentValue": 2478.0,
+      "consumption": 68.0
+    },
+    {
+      "garageId": "garage-demo-27",
+      "meterKind": "electricity",
+      "month": "2026-07-01",
+      "previousValue": 978.5,
+      "currentValue": 1010.5,
+      "consumption": 32.0
+    }
+  ],
+  "accruals": [
+    {
+      "garageId": "garage-demo-12",
+      "incomeTypeId": "income-demo-membership",
+      "month": "2026-07-01",
+      "amount": 500.00,
+      "description": "Членский взнос за июль"
+    },
+    {
+      "garageId": "garage-demo-12",
+      "incomeTypeId": "income-demo-water",
+      "month": "2026-07-01",
+      "amount": 202.50,
+      "description": "Вода 4.5 м3"
+    },
+    {
+      "garageId": "garage-demo-12",
+      "incomeTypeId": "income-demo-electricity",
+      "month": "2026-07-01",
+      "amount": 421.60,
+      "description": "Электроэнергия 68 кВт⋅ч"
+    },
+    {
+      "garageId": "garage-demo-27",
+      "incomeTypeId": "income-demo-membership",
+      "month": "2026-07-01",
+      "amount": 500.00,
+      "description": "Членский взнос за июль"
+    },
+    {
+      "garageId": "garage-demo-27",
+      "incomeTypeId": "income-demo-electricity",
+      "month": "2026-07-01",
+      "amount": 198.40,
+      "description": "Электроэнергия 32 кВт⋅ч"
+    },
+    {
+      "garageId": "garage-demo-41",
+      "incomeTypeId": "income-demo-target",
+      "month": "2026-07-01",
+      "amount": 1200.00,
+      "description": "Целевой сбор на ремонт ворот"
+    }
+  ],
+  "payments": [
+    {
+      "garageId": "garage-demo-12",
+      "incomeTypeId": "income-demo-membership",
+      "paidAt": "2026-07-10T09:15:00+07:00",
+      "amount": 1000.00,
+      "documentNumber": "DEMO-IN-001",
+      "description": "Частичная оплата долга и членского взноса"
+    },
+    {
+      "garageId": "garage-demo-27",
+      "incomeTypeId": "income-demo-electricity",
+      "paidAt": "2026-07-12T14:40:00+07:00",
+      "amount": 1000.00,
+      "documentNumber": "DEMO-IN-002",
+      "description": "Оплата с сохранением переплаты"
+    },
+    {
+      "garageId": "garage-demo-41",
+      "incomeTypeId": "income-demo-target",
+      "paidAt": "2026-07-15T11:20:00+07:00",
+      "amount": 1200.00,
+      "documentNumber": "DEMO-IN-003",
+      "description": "Полная оплата целевого сбора"
+    }
+  ],
+  "supplierAccruals": [
+    {
+      "supplierId": "supplier-demo-energy",
+      "expenseTypeId": "expense-demo-electricity",
+      "month": "2026-07-01",
+      "amount": 18500.00,
+      "documentNumber": "DEMO-SUP-001"
+    },
+    {
+      "supplierId": "supplier-demo-water",
+      "expenseTypeId": "expense-demo-water",
+      "month": "2026-07-01",
+      "amount": 4200.00,
+      "documentNumber": "DEMO-SUP-002"
+    },
+    {
+      "supplierId": "supplier-demo-cleaning",
+      "expenseTypeId": "expense-demo-trash",
+      "month": "2026-07-01",
+      "amount": 3000.00,
+      "documentNumber": "DEMO-SUP-003"
+    }
+  ],
+  "supplierPayments": [
+    {
+      "supplierId": "supplier-demo-energy",
+      "expenseTypeId": "expense-demo-electricity",
+      "paidAt": "2026-07-18T10:00:00+07:00",
+      "amount": 15000.00,
+      "documentNumber": "DEMO-OUT-001"
+    },
+    {
+      "supplierId": "supplier-demo-water",
+      "expenseTypeId": "expense-demo-water",
+      "paidAt": "2026-07-19T10:30:00+07:00",
+      "amount": 3500.00,
+      "documentNumber": "DEMO-OUT-002"
+    }
+  ],
+  "expectedBalances": [
+    {
+      "garageId": "garage-demo-12",
+      "garageNumber": "12",
+      "balanceKind": "debt",
+      "closingDebt": 1624.10,
+      "explanation": "Opening debt 1500.00 + July accruals 1124.10 - payments 1000.00"
+    },
+    {
+      "garageId": "garage-demo-27",
+      "garageNumber": "27",
+      "balanceKind": "overpayment",
+      "closingDebt": -1101.60,
+      "explanation": "Opening overpayment -800.00 + July accruals 698.40 - payments 1000.00"
+    },
+    {
+      "garageId": "garage-demo-41",
+      "garageNumber": "41",
+      "balanceKind": "settled",
+      "closingDebt": 0.00,
+      "explanation": "Target accrual 1200.00 is fully paid"
+    }
+  ],
+  "demoChecklist": [
+    "Log in as administrator and confirm all Stage 8 sections are visible.",
+    "Open dictionaries and verify owners, garages, suppliers, income/expense types and tariffs.",
+    "Open payments and show one garage with debt, one with overpayment and one fully paid target fee.",
+    "Open meter readings and verify water/electricity consumption rows.",
+    "Open reports for July 2026 and verify debts, overpayments, supplier obligations and payments.",
+    "Log in or switch permissions to reports_viewer and verify protected sections show no-access states."
+  ]
+}

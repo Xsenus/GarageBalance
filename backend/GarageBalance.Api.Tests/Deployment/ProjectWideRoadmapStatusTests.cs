@@ -1441,6 +1441,67 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageEightTestDataIsMarkedCompleteWhenDemoFixtureCoversCoreAcceptanceScenarios()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var testDataLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить набор тестовых данных", StringComparison.Ordinal));
+        var testDataPath = Path.Combine(repositoryRoot, "docs", "stage-8-demo-test-data.json");
+        var testDataText = File.ReadAllText(testDataPath);
+
+        using var document = System.Text.Json.JsonDocument.Parse(testDataText);
+        var root = document.RootElement;
+        var owners = root.GetProperty("owners").EnumerateArray().ToArray();
+        var garages = root.GetProperty("garages").EnumerateArray().ToArray();
+        var suppliers = root.GetProperty("suppliers").EnumerateArray().ToArray();
+        var tariffs = root.GetProperty("tariffs").EnumerateArray().ToArray();
+        var accruals = root.GetProperty("accruals").EnumerateArray().ToArray();
+        var payments = root.GetProperty("payments").EnumerateArray().ToArray();
+        var supplierAccruals = root.GetProperty("supplierAccruals").EnumerateArray().ToArray();
+        var meterReadings = root.GetProperty("meterReadings").EnumerateArray().ToArray();
+        var expectedBalances = root.GetProperty("expectedBalances").EnumerateArray().ToArray();
+        var demoChecklist = root.GetProperty("demoChecklist").EnumerateArray().ToArray();
+
+        Assert.StartsWith("- `[x]`", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("stage-8-demo-test-data.json", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("гаража", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("владельца", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("поставщика", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("тариф", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("долг", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("переплата", testDataLine, StringComparison.Ordinal);
+        Assert.Contains("счетчик", testDataLine, StringComparison.Ordinal);
+
+        Assert.Contains("fictional", root.GetProperty("metadata").GetProperty("privacy").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.True(owners.Length >= 3);
+        Assert.True(garages.Length >= 3);
+        Assert.True(suppliers.Length >= 3);
+        Assert.True(tariffs.Length >= 4);
+        Assert.True(accruals.Length >= 6);
+        Assert.True(payments.Length >= 3);
+        Assert.True(supplierAccruals.Length >= 3);
+        Assert.True(meterReadings.Length >= 3);
+        Assert.True(demoChecklist.Length >= 6);
+
+        Assert.Equal(owners.Length, owners.Select(item => item.GetProperty("id").GetString()).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(garages.Length, garages.Select(item => item.GetProperty("id").GetString()).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(suppliers.Length, suppliers.Select(item => item.GetProperty("id").GetString()).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(tariffs.Length, tariffs.Select(item => item.GetProperty("id").GetString()).Distinct(StringComparer.Ordinal).Count());
+
+        Assert.Contains(garages, item => item.GetProperty("meters").EnumerateArray().Any(meter => meter.GetString() == "water"));
+        Assert.Contains(garages, item => item.GetProperty("meters").EnumerateArray().Any(meter => meter.GetString() == "electricity"));
+        Assert.Contains(expectedBalances, item => item.GetProperty("balanceKind").GetString() == "debt" && item.GetProperty("closingDebt").GetDecimal() > 0);
+        Assert.Contains(expectedBalances, item => item.GetProperty("balanceKind").GetString() == "overpayment" && item.GetProperty("closingDebt").GetDecimal() < 0);
+        Assert.Contains(expectedBalances, item => item.GetProperty("balanceKind").GetString() == "settled" && item.GetProperty("closingDebt").GetDecimal() == 0);
+        Assert.All(payments, item => Assert.StartsWith("DEMO-IN-", item.GetProperty("documentNumber").GetString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
