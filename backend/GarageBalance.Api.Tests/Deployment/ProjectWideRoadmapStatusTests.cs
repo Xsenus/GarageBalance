@@ -1601,6 +1601,46 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshReactCoverageIsMarkedCompleteWhenSettingsLaunchStatusesAndErrorsAreTested()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var reactCoverageLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить React-тесты настроек, запуска, статусов и ошибок", StringComparison.Ordinal));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var projectWideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        Assert.StartsWith("- `[x]`", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("без раскрытия токена", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("ненастроенное состояние", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("ошибку загрузки статуса", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("ошибки preview/retry", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("отсутствие запроса статуса без `import.run`", reactCoverageLine, StringComparison.Ordinal);
+
+        Assert.Contains("shows safe 1C Fresh integration status in settings", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows unconfigured 1C Fresh status with synchronization controls disabled", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows 1C Fresh status loading errors without exposing synchronization actions", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("starts 1C Fresh synchronization from settings with confirmation", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps 1C Fresh preview and retry dialogs open when synchronization requests fail", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("previews 1C Fresh synchronization before sending changes", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows 1C Fresh retry and conflict recovery states from backend result", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("does not request 1C Fresh status without import permission", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("toBeDisabled()", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("findByRole('alert')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("toHaveValue('Проверить проблемный период')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("toHaveValue('Повторить после сбоя')", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("React coverage закрепляет настройки 1C Fresh", projectWideText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshReactCoverageIsMarkedCompleteWhenSettingsLaunchStatusesAndErrorsAreTested", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1924,9 +1964,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("pending_adapter", integrationLine, StringComparison.Ordinal);
         Assert.Contains("без plaintext-токена", integrationLine, StringComparison.Ordinal);
         Assert.Contains("backend regression coverage", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("React coverage закрепляет настройки 1C Fresh", integrationLine, StringComparison.Ordinal);
         Assert.Contains("Реальный обмен с 1C Fresh", integrationLine, StringComparison.Ordinal);
-        Assert.Contains("React coverage финального среза", integrationLine, StringComparison.Ordinal);
-        Assert.Contains("conflict resolution остаются будущими задачами", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("conflict resolution на контуре остаются будущими задачами", integrationLine, StringComparison.Ordinal);
     }
 
     [Fact]

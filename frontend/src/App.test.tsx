@@ -4321,6 +4321,59 @@ describe('App', () => {
     expect(tokenSeen).toBe('token')
   })
 
+  it('shows unconfigured 1C Fresh status with synchronization controls disabled', async () => {
+    const user = userEvent.setup()
+    const previewOneCFreshSync = vi.fn(async () => createOneCFreshPreview())
+    const startOneCFreshSync = vi.fn(async () => createOneCFreshSync())
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => createOneCFreshStatus({
+        isConfigured: false,
+        status: 'not_configured',
+        statusMessage: 'Для будущей синхронизации нужно сохранить защищенную настройку OneCFresh:RefreshToken.',
+        configuredSettings: [],
+      }),
+      previewOneCFreshSync,
+      startOneCFreshSync,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const statusStrip = within(integrationPanel).getByLabelText('Статус интеграции 1C Fresh')
+    expect(within(statusStrip).getByText('Не настроено')).toBeInTheDocument()
+    expect(within(statusStrip).getByText('Ожидает адаптер')).toBeInTheDocument()
+    expect(within(statusStrip).getByText('0 / 1')).toBeInTheDocument()
+    expect(within(integrationPanel).getByText('Для будущей синхронизации нужно сохранить защищенную настройку OneCFresh:RefreshToken.')).toHaveAttribute('role', 'status')
+    expect(within(integrationPanel).getByRole('button', { name: 'Подготовить предпросмотр' })).toBeDisabled()
+    expect(within(integrationPanel).getByRole('button', { name: 'Запустить синхронизацию' })).toBeDisabled()
+    expect(screen.queryByRole('dialog', { name: /синхронизацию 1C Fresh/i })).not.toBeInTheDocument()
+    expect(previewOneCFreshSync).not.toHaveBeenCalled()
+    expect(startOneCFreshSync).not.toHaveBeenCalled()
+  })
+
+  it('shows 1C Fresh status loading errors without exposing synchronization actions', async () => {
+    const user = userEvent.setup()
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => {
+        throw new Error('Не удалось получить статус защищенных настроек 1C Fresh.')
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    expect(await within(integrationPanel).findByRole('alert')).toHaveTextContent('Не удалось получить статус защищенных настроек 1C Fresh.')
+    expect(within(integrationPanel).queryByLabelText('Статус интеграции 1C Fresh')).not.toBeInTheDocument()
+    expect(within(integrationPanel).queryByRole('button', { name: 'Подготовить предпросмотр' })).not.toBeInTheDocument()
+    expect(within(integrationPanel).queryByRole('button', { name: 'Запустить синхронизацию' })).not.toBeInTheDocument()
+  })
+
   it('starts 1C Fresh synchronization from settings with confirmation', async () => {
     const user = userEvent.setup()
     const startOneCFreshSync = vi.fn(async (_accessToken: string, request: OneCFreshSyncRequest) => createOneCFreshSync({
@@ -4376,6 +4429,63 @@ describe('App', () => {
     await user.click(within(retryDialog).getByRole('button', { name: 'Повторить' }))
     await waitFor(() => expect(retryOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Повтор после ошибки адаптера' }))
     expect(await within(integrationPanel).findByText('Повтор 1C зарегистрирован: Повтор после ошибки адаптера')).toHaveAttribute('role', 'status')
+  })
+
+  it('keeps 1C Fresh preview and retry dialogs open when synchronization requests fail', async () => {
+    const user = userEvent.setup()
+    const previewOneCFreshSync = vi.fn(async () => {
+      throw new Error('Предпросмотр 1C Fresh временно недоступен.')
+    })
+    const startOneCFreshSync = vi.fn(async () => createOneCFreshSync({
+      statusMessage: 'Запуск зарегистрирован для последующего повтора.',
+      canRetry: true,
+      recoveryAction: 'retry',
+    }))
+    const retryOneCFreshSync = vi.fn(async () => {
+      throw new Error('Повтор 1C Fresh временно недоступен.')
+    })
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => createOneCFreshStatus({
+        isConfigured: true,
+        status: 'prepared',
+        configuredSettings: ['RefreshToken'],
+      }),
+      previewOneCFreshSync,
+      startOneCFreshSync,
+      retryOneCFreshSync,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    await user.click(await within(integrationPanel).findByRole('button', { name: 'Подготовить предпросмотр' }))
+    const previewDialog = await screen.findByRole('dialog', { name: 'Подготовить предпросмотр синхронизации 1C Fresh?' })
+    await user.type(within(previewDialog).getByLabelText('Комментарий к предпросмотру синхронизации 1C Fresh'), 'Проверить проблемный период')
+    await user.click(within(previewDialog).getByRole('button', { name: 'Подготовить' }))
+    expect(await within(previewDialog).findByRole('alert')).toHaveTextContent('Предпросмотр 1C Fresh временно недоступен.')
+    expect(within(previewDialog).getByLabelText('Комментарий к предпросмотру синхронизации 1C Fresh')).toHaveValue('Проверить проблемный период')
+    expect(screen.getByRole('dialog', { name: 'Подготовить предпросмотр синхронизации 1C Fresh?' })).toBeInTheDocument()
+    await user.click(within(previewDialog).getByRole('button', { name: 'Отмена' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подготовить предпросмотр синхронизации 1C Fresh?' })).not.toBeInTheDocument())
+
+    await user.click(within(integrationPanel).getByRole('button', { name: 'Запустить синхронизацию' }))
+    const syncDialog = await screen.findByRole('dialog', { name: 'Запустить синхронизацию 1C Fresh?' })
+    await user.click(within(syncDialog).getByRole('button', { name: 'Запустить' }))
+    expect(await within(integrationPanel).findByText('Запуск зарегистрирован для последующего повтора.')).toHaveAttribute('role', 'status')
+    expect(startOneCFreshSync).toHaveBeenCalledTimes(1)
+
+    await user.click(within(integrationPanel).getByRole('button', { name: 'Повторить запрос' }))
+    const retryDialog = await screen.findByRole('dialog', { name: 'Повторить запрос синхронизации 1C Fresh?' })
+    await user.type(within(retryDialog).getByLabelText('Комментарий к повтору синхронизации 1C Fresh'), 'Повторить после сбоя')
+    await user.click(within(retryDialog).getByRole('button', { name: 'Повторить' }))
+    expect(await within(retryDialog).findByRole('alert')).toHaveTextContent('Повтор 1C Fresh временно недоступен.')
+    expect(within(retryDialog).getByLabelText('Комментарий к повтору синхронизации 1C Fresh')).toHaveValue('Повторить после сбоя')
+    expect(screen.getByRole('dialog', { name: 'Повторить запрос синхронизации 1C Fresh?' })).toBeInTheDocument()
+    expect(retryOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Повторить после сбоя' })
+    expect(within(integrationPanel).getByText('Запуск зарегистрирован для последующего повтора.')).toBeInTheDocument()
   })
 
   it('previews 1C Fresh synchronization before sending changes', async () => {
