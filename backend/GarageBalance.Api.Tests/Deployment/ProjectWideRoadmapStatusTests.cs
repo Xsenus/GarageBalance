@@ -67,6 +67,30 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DefaultDeletionRuleIsMarkedCompleteWhenSoftArchiveCancelAndPolicyCoverageExist()
+    {
+        var deletionRuleLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("Удаление по умолчанию", StringComparison.Ordinal) &&
+                line.Contains("soft delete / archive / cancel", StringComparison.Ordinal));
+
+        Assert.Contains("IsArchived", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("IsCanceled", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("IsActive=false", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ResolvedAtUtc", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.*_archived", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("finance.*_canceled", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_canceled", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("docs/soft-delete-cancel-coverage.md", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("SoftDeleteCancelCoverageDocumentationTests", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("DatabaseMigrationPolicyTests.ProductionBackendCode_DoesNotPhysicallyDeleteDataOutsideMigrations", deletionRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", deletionRuleLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File
