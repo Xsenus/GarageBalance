@@ -189,6 +189,29 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task RequestAccessImportRollbackAsync_RejectsRunAfterApplyRequest()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+        await service.RequestAccessImportApplyAsync(
+            dryRun.Value!.Id,
+            new AccessImportApplyRequest { Reason = "Dry-run проверен", BackupConfirmed = true },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        var result = await service.RequestAccessImportRollbackAsync(
+            dryRun.Value.Id,
+            new AccessImportRollbackRequest { Reason = "Остановить заявку" },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_import_requested", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AccessImportRunLogEntries, item => item.StepCode == "rollback_requested");
+    }
+
+    [Fact]
     public async Task RequestAccessImportApplyAsync_MarksRunAndWritesAuditWithBackupConfirmation()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -170,6 +170,11 @@ public sealed class ImportService(
             return ImportResult<AccessImportRunDto>.Success(ToDto(run));
         }
 
+        if (run.Status == "import_requested")
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_import_requested", "Нельзя запрашивать rollback после заявки на фактический импорт.");
+        }
+
         run.Status = "rollback_requested";
         run.Summary = "Rollback запрошен: фактических данных для отката нет, пока запуск импорта находится в режиме dry-run.";
 

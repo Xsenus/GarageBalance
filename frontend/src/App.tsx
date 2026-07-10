@@ -7790,7 +7790,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const applyActionLabel = currentRun ? `Запросить фактический импорт ${currentRun.originalFileName}` : 'Запросить фактический импорт'
   const rollbackActionLabel = currentRun ? `Запросить rollback импорта ${currentRun.originalFileName}` : 'Запросить rollback импорта'
   const applyDisabled = !currentRun || currentRun.status !== 'completed' || applyingRunId !== null || rollbackingRunId !== null
-  const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || rollbackingRunId !== null
+  const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || currentRun.status === 'import_requested' || rollbackingRunId !== null
   useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
   useRestoreFocusOnClose(Boolean(applyTarget))
   useRestoreFocusOnClose(Boolean(rollbackTarget))

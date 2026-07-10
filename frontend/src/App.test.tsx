@@ -8394,6 +8394,7 @@ describe('App', () => {
     expect(applyRequest).toEqual({ reason: 'Dry-run проверен, backup создан', backupConfirmed: true })
     expect(within(importPanel).getAllByText('Импорт запрошен').length).toBeGreaterThan(0)
     expect(within(importPanel).getByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })).toBeDisabled()
+    expect(within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })).toBeDisabled()
   })
 
   it('shows visible counters for long Access import lists', async () => {
