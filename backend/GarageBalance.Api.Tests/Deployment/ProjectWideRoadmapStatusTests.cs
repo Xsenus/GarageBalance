@@ -174,6 +174,44 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void UnifiedUiControlStyleRuleIsMarkedCompleteWhenMilestoneAndCoverageAgree()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var topRuleLines = activeRoadmapLines
+            .TakeWhile(line => !string.Equals(line, "## Решения И Допущения", StringComparison.Ordinal))
+            .ToArray();
+        var definitionOfDoneLines = activeRoadmapLines
+            .SkipWhile(line => !string.Equals(line, "## Definition Of Done", StringComparison.Ordinal))
+            .ToArray();
+
+        var styleRuleLine = topRuleLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Все контролы проекта должны использовать единый стиль", StringComparison.Ordinal));
+        var definitionOfDoneLine = definitionOfDoneLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Все controls проекта приведены к единому стилю", StringComparison.Ordinal));
+
+        Assert.Contains("primary/secondary/ghost/icon/destructive/link buttons", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("date/month/year inputs", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("pagination/filter states", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("empty/loading/error states", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("sidebar/topbar/dashboard", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("palette", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("docs/ui-control-style-coverage.md", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("UiControlStyleCoverageDocumentationTests", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("accessibleStatus.test.ts", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("responsiveLayout.test.ts", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("focusHooks.test.tsx", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("[acceptance]", styleRuleLine, StringComparison.Ordinal);
+        Assert.Contains("единому стилю", definitionOfDoneLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File

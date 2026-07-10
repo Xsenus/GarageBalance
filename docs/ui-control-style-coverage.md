@@ -1,6 +1,6 @@
 # Инвентаризация UI Контролов И Стилей
 
-Документ фиксирует текущую карту контролов GarageBalance после проверки `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/src/App.test.tsx` и frontend shared-тестов. Он нужен, чтобы дальнейшая реализация общего стиля шла по проверяемому списку, а не по визуальным догадкам.
+Документ фиксирует текущую карту контролов GarageBalance после проверки `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/src/App.test.tsx` и frontend shared-тестов. Он нужен, чтобы единый стиль текущих контролов оставался проверяемым контрактом, а новые экраны добавлялись по списку, а не по визуальным догадкам.
 
 ## Источники
 
@@ -49,7 +49,7 @@
 | Платежи-прототип | Payments table, add accrual/payment/bank dialogs, full payment dialog | Требуется дальнейшее удаление лишней информации и привязка к backend-логике |
 | Управление фондами-прототип | Fund table, deposit/withdraw dialogs | Confirmation UI есть, backend/audit для фондов остается открытым |
 | Финансы/backend экран | Forms, month/date controls, tables, cancel confirmations | Текущие create/update/cancel workflows покрыты тестами |
-| Отчеты | Tabs, filters, date/month controls, export buttons, tables | Есть workflow tests и export tests; style audit остается частично открытым |
+| Отчеты | Tabs, filters, date/month controls, export buttons, tables | Есть workflow tests, export tests и общий style contract; новые отчеты должны переиспользовать эти controls |
 | Импорт Access | File input, dry-run button, quarantine table, export actions | File picker, dry-run, JSON export, quarantine resolve и close confirmation actions имеют иконки/подсказки и workflow tests; rollback confirmation остается открытым, потому что фактический rollback еще не реализован |
 | История изменений | Filters, pagination, export buttons, detail dialog | Общий экран есть; отдельный доступ к истории внутри рабочих разделов не нужен |
 | "Что нового" | Read-only release list | Admin UI управления release notes еще не реализован |
@@ -67,12 +67,12 @@
 ## Открытые Хвосты
 
 - Закрепить единые классы для всех новых primary/secondary/ghost/icon/destructive/link buttons по мере переноса прототипов на backend-модели.
-- Довести style audit до фактических правок по date/month/year, select, checkbox/toggle, tabs, tables, dialogs, sidebar/topbar/dashboard и palette.
-- Добавить visual/DOM regression tests для экранов, где появятся реальные backend-данные сборов, персонала, фондов и чеков.
+- Для новых backend-моделей и интеграционных экранов добавлять строки coverage по тем же семействам controls до закрытия их roadmap-пунктов.
+- Добавлять visual/DOM regression tests для экранов, где появятся новые реальные backend-данные сборов, персонала, фондов и чеков.
 - Сделать скриншоты ключевых экранов и получить ручное подтверждение заказчика после завершения UI style audit.
 
 ## Связь С Roadmap
 
 - Закрывает Milestone 0: `Найти все кнопки, input, textarea, select, date/month controls, tabs, dialogs и проверить стили`.
-- Закрывает первый пункт Milestone 8: `Составить инвентарь всех button/input/select/textarea/date/month/year controls/tabs/dialogs/tables`.
-- Не закрывает оставшиеся пункты Milestone 8 с фактическими UI-правками: они должны выполняться отдельными проверяемыми срезами.
+- Закрывает Milestone 8 по текущему UI: инвентарь, единые классы, destructive states, date/month/year, select, text inputs, textarea, checkbox/toggle, tabs, tables, dialogs, sidebar/topbar/dashboard, palette и DOM regression.
+- Не закрывает ручную acceptance-приемку скриншотов: она остается отдельным пунктом roadmap.

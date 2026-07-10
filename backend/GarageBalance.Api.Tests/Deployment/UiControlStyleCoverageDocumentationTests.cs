@@ -121,6 +121,19 @@ public sealed class UiControlStyleCoverageDocumentationTests
         Assert.Contains("docs/ui-control-style-coverage.md", roadmap, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[ ]` Найти все кнопки, input, textarea, select, date/month controls, tabs, dialogs и проверить стили.", roadmap, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[ ]` Составить инвентарь всех button/input/select/textarea/date/month/year controls/tabs/dialogs/tables.", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[ ]` Все контролы проекта должны использовать единый стиль", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[ ]` Все controls проекта приведены к единому стилю", roadmap, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UiControlStyleCoverageDocumentKeepsCurrentStyleAuditClosedExceptManualAcceptance()
+    {
+        var document = ReadUiCoverageDocument();
+
+        Assert.Contains("Закрывает Milestone 8 по текущему UI", document, StringComparison.Ordinal);
+        Assert.Contains("ручную acceptance-приемку скриншотов", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("style audit остается частично открытым", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("Довести style audit до фактических правок", document, StringComparison.Ordinal);
     }
 
     private static string ReadUiCoverageDocument()
