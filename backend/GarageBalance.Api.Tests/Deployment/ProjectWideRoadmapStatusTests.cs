@@ -1338,6 +1338,51 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void MainScreenPrototypeIsMarkedCompleteWhenAuthDashboardDictionariesTariffsPaymentsReportsAndImportExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var prototypeLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить прототип основных экранов", StringComparison.Ordinal));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        Assert.StartsWith("- `[x]`", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("auth gate", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("dashboard tiles", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("Справочники", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("Тарифы и сборы", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("Платежи", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("Отчеты", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("Импорт Access", prototypeLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", prototypeLine, StringComparison.Ordinal);
+
+        Assert.Contains("case 'dashboard'", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'dictionaries'", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'tariffsAndFees'", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'payments'", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'reports'", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'import'", appText, StringComparison.Ordinal);
+        Assert.Contains("<DictionaryPanelV2", appText, StringComparison.Ordinal);
+        Assert.Contains("<TariffsAndFeesPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.Contains("<FinancePanel", appText, StringComparison.Ordinal);
+        Assert.Contains("<ReportPanel", appText, StringComparison.Ordinal);
+        Assert.Contains("<ImportPanel", appText, StringComparison.Ordinal);
+
+        Assert.Contains("shows auth gate before workspace is available", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("creates first administrator and opens the workspace with users and dictionaries", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows tariffs and fees", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows contractors tabs", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows payments prototype and opens payment form modals", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows report workbook tabs with Excel-like filters and tables", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("runs Access import dry-run and shows checks history", appTestsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
