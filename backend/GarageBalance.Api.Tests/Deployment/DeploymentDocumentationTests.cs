@@ -43,6 +43,10 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия локальной установки", document, StringComparison.Ordinal);
+        Assert.Contains("docker compose config", document, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", document, StringComparison.Ordinal);
+        Assert.Contains("Миграции применены к чистой локальной PostgreSQL", document, StringComparison.Ordinal);
         Assert.Contains("Не открывать порты", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
     }

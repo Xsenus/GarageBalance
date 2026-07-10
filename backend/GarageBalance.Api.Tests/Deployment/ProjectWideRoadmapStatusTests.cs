@@ -2346,6 +2346,51 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenLocalPcInstallGuideRemainsBlockedUntilLiveLocalInstallButHasCompleteChecklist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var localInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+        var preflightScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "check-local-postgres.ps1"));
+
+        var localInstallLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить инструкцию локальной установки на ПК заказчика", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("local-pc-install-checklist.md", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenLocalPcInstallGuideRemainsBlockedUntilLiveLocalInstallButHasCompleteChecklist", localInstallLine, StringComparison.Ordinal);
+
+        Assert.Contains("http://127.0.0.1:5173", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("C:\\GarageBalance\\Config\\garagebalance.local.env", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("POSTGRES_BIND_ADDRESS=127.0.0.1", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("BACKUP_HOST_PATH=./backups", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("docker compose up --build -d", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("check-local-postgres.ps1", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef database update", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("backup-postgres.ps1", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("restore-postgres.ps1", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия локальной установки", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("docker compose config", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", localInstallText, StringComparison.Ordinal);
+
+        Assert.Contains("Test-NetConnection", preflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("psqlConnection=True", preflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", preflightScriptText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Подготовить инструкцию локальной установки на ПК заказчика\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("live Docker Compose или без-Docker запуск", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();

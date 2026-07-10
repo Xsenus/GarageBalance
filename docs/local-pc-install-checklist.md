@@ -170,3 +170,13 @@ dotnet .\backend\GarageBalance.Api\bin\Release\net10.0\GarageBalance.Api.dll
 - [ ] Не запускать импорт Access без свежего backup.
 - [ ] Не хранить единственный backup на том же диске без копии.
 - [ ] Не выполнять push в Git без отдельного разрешения пользователя.
+
+## 10. Условия финального закрытия локальной установки
+
+- [ ] На выбранном ПК подтвержден способ запуска: Docker Compose или без Docker.
+- [ ] Если выбран Docker Compose, выполнены `docker compose config`, `docker compose up --build -d`, `docker compose ps` и health-check API.
+- [ ] Если выбран запуск без Docker, `check-local-postgres.ps1 -RequirePsql` завершился `localPostgresPreflight=OK`.
+- [ ] Миграции применены к чистой локальной PostgreSQL и повторно применены без ошибок.
+- [ ] Создан backup, выполнен restore-check в `garagebalance_restore_check`.
+- [ ] Выполнена smoke-проверка входа, справочников, платежей, отчетов, импорта dry-run и "Что нового".
+- [ ] В roadmap history записаны выбранный способ запуска, backup-файл, результат health-check и все блокеры.
