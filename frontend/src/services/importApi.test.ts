@@ -23,6 +23,20 @@ describe('importApi', () => {
     })
   })
 
+  it('loads Access reader status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ provider: 'disabled', status: 'not_configured', isAvailable: false }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await importApi.getAccessReaderStatus('token')
+
+    expect(result.status).toBe('not_configured')
+    expect(fetchMock).toHaveBeenCalledWith('/api/import/access/reader/status', {
+      headers: {
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('requests Access import rollback with a required reason', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'run-42', status: 'rollback_requested' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)

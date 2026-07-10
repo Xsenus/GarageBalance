@@ -10,6 +10,7 @@ namespace GarageBalance.Api.Application.Import;
 
 public sealed class ImportService(
     GarageBalanceDbContext dbContext,
+    IAccessImportReader accessImportReader,
     IAuditEventWriter auditEventWriter) : IImportService
 {
     private const long MaxDryRunFileSizeBytes = 512L * 1024L * 1024L;
@@ -18,6 +19,11 @@ public sealed class ImportService(
     {
         WriteIndented = true
     };
+
+    public Task<AccessImportReaderStatusDto> GetAccessImportReaderStatusAsync(CancellationToken cancellationToken)
+    {
+        return accessImportReader.GetStatusAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
     {

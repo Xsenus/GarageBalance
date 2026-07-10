@@ -23,7 +23,7 @@ import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
-import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -8243,6 +8243,11 @@ describe('App', () => {
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
     const file = new File(['garage owner payment'], 'ГСК.accdb', { type: 'application/octet-stream' })
 
+    expect(within(importPanel).getByText('Reader Access')).toBeInTheDocument()
+    expect(await within(importPanel).findByText('Не настроен')).toHaveAttribute('role', 'status')
+    expect(within(importPanel).getByText('Фактическое чтение Access не подключено.')).toBeInTheDocument()
+    expect(within(importPanel).getByLabelText('Требования reader Access')).toHaveTextContent('ACE OLE DB driver')
+
     const filePickerButton = within(importPanel).getByText('Выбрать .accdb или .mdb').closest('label')
     expect(filePickerButton).toHaveAttribute('title', 'Выбрать файл Access .accdb или .mdb')
     expect(filePickerButton).toHaveAttribute('data-tooltip', 'Выбрать файл Access .accdb или .mdb')
@@ -10741,6 +10746,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
   const run = createAccessImportRun()
 
   return {
+    getAccessReaderStatus: async () => createAccessImportReaderStatus(),
     getAccessRuns: async () => [],
     getAccessRunLog: async () => [],
     getAccessCreatedRecords: async () => [],
@@ -10870,6 +10876,7 @@ function createStatefulImportClient(): ImportClient {
   let logsByRunId = new Map<string, AccessImportRunLogEntryDto[]>()
 
   return {
+    getAccessReaderStatus: async () => createAccessImportReaderStatus(),
     getAccessRuns: async () => runs,
     getAccessRunLog: async (_token, runId) => logsByRunId.get(runId) ?? [],
     getAccessCreatedRecords: async () => [],
@@ -12109,6 +12116,19 @@ function createAccessImportRun(overrides: Partial<AccessImportRunDto> = {}): Acc
       { code: 'signature', title: 'Сигнатура Access', status: 'passed', message: 'Файл похож на Access.' },
       { code: 'native_reader', title: 'Драйвер чтения .accdb', status: 'warning', message: 'Нужен ACE-драйвер или конвертация.' },
     ],
+    ...overrides,
+  }
+}
+
+function createAccessImportReaderStatus(overrides: Partial<AccessImportReaderStatusDto> = {}): AccessImportReaderStatusDto {
+  return {
+    provider: 'disabled',
+    displayName: 'Reader Access',
+    isAvailable: false,
+    status: 'not_configured',
+    statusMessage: 'Фактическое чтение Access не подключено.',
+    requiredComponents: ['ACE OLE DB driver'],
+    checkedAtUtc: new Date().toISOString(),
     ...overrides,
   }
 }

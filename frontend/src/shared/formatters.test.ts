@@ -10,6 +10,7 @@ import {
   formatImportCheckStatus,
   formatImportCreatedRecordRollbackStatus,
   formatImportLogLevel,
+  formatImportReaderStatus,
   formatImportRunCheckSummary,
   formatImportRunStatus,
   formatMissingMeterReadings,
@@ -112,6 +113,10 @@ describe('shared formatters', () => {
     expect(formatImportCreatedRecordRollbackStatus('rollback_requested')).toBe('Rollback запрошен')
     expect(formatImportCreatedRecordRollbackStatus('rolled_back')).toBe('Откат выполнен')
     expect(formatImportCreatedRecordRollbackStatus('rollback_failed')).toBe('Ошибка отката')
+    expect(formatImportReaderStatus('ready')).toBe('Готов')
+    expect(formatImportReaderStatus('not_configured')).toBe('Не настроен')
+    expect(formatImportReaderStatus('unavailable')).toBe('Недоступен')
+    expect(formatImportReaderStatus('error')).toBe('Ошибка')
     expect(formatImportRunCheckSummary(run)).toBe('3/4 · 1 предупреждение · 0 ошибок')
   })
 

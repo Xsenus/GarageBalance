@@ -491,15 +491,54 @@ public sealed class ImportServiceTests
         Assert.Equal("import_run_not_found", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task GetAccessImportReaderStatusAsync_ReturnsAdapterStatus()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var reader = new FakeAccessImportReader(new AccessImportReaderStatusDto(
+            "test-reader",
+            "Reader Access test",
+            true,
+            "ready",
+            "Reader готов.",
+            [],
+            DateTimeOffset.UtcNow));
+        var service = CreateService(database.Context, reader);
+
+        var result = await service.GetAccessImportReaderStatusAsync(CancellationToken.None);
+
+        Assert.Equal("test-reader", result.Provider);
+        Assert.True(result.IsAvailable);
+        Assert.True(reader.WasCalled);
+    }
+
     private static MemoryStream CreateAccessLikeStream(string text)
     {
         var oleSignature = new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
         return new MemoryStream([.. oleSignature, .. Encoding.UTF8.GetBytes(text)]);
     }
 
-    private static ImportService CreateService(GarageBalanceDbContext context)
+    private static ImportService CreateService(GarageBalanceDbContext context, IAccessImportReader? reader = null)
     {
-        return new ImportService(context, new AuditEventWriter(context));
+        return new ImportService(context, reader ?? new FakeAccessImportReader(), new AuditEventWriter(context));
+    }
+
+    private sealed class FakeAccessImportReader(AccessImportReaderStatusDto? status = null) : IAccessImportReader
+    {
+        public bool WasCalled { get; private set; }
+
+        public Task<AccessImportReaderStatusDto> GetStatusAsync(CancellationToken cancellationToken)
+        {
+            WasCalled = true;
+            return Task.FromResult(status ?? new AccessImportReaderStatusDto(
+                "disabled",
+                "Reader Access",
+                false,
+                "not_configured",
+                "Reader не настроен.",
+                ["ACE OLE DB driver"],
+                DateTimeOffset.UtcNow));
+        }
     }
 
     private sealed class TestDatabase : IAsyncDisposable

@@ -38,7 +38,7 @@ import type { FundDto, FundOperationDto, FundsClient } from './services/fundsApi
 import { formStatesApi } from './services/formStatesApi'
 import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
-import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { integrationsApi } from './services/integrationsApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingActionKind, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import { reportsApi } from './services/reportsApi'
@@ -65,6 +65,7 @@ import {
   formatImportCheckStatus,
   formatImportCreatedRecordRollbackStatus,
   formatImportLogLevel,
+  formatImportReaderStatus,
   formatImportRunCheckSummary,
   formatImportRunStatus,
   formatMissingMeterReadings,
@@ -7762,6 +7763,7 @@ function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsC
 function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient: ImportClient }) {
   const fileInputId = useId()
   const [runs, setRuns] = useState<AccessImportRunDto[]>([])
+  const [readerStatus, setReaderStatus] = useState<AccessImportReaderStatusDto | null>(null)
   const [quarantineItems, setQuarantineItems] = useState<AccessImportQuarantineItemDto[]>([])
   const [runLogEntries, setRunLogEntries] = useState<AccessImportRunLogEntryDto[]>([])
   const [createdRecords, setCreatedRecords] = useState<AccessImportCreatedRecordDto[]>([])
@@ -7836,11 +7838,13 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       setLoading(true)
       setError(null)
       try {
-        const [loadedRuns, loadedQuarantineItems] = await Promise.all([
+        const [loadedReaderStatus, loadedRuns, loadedQuarantineItems] = await Promise.all([
+          importClient.getAccessReaderStatus(auth.accessToken),
           importClient.getAccessRuns(auth.accessToken),
           importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit),
         ])
         if (!ignore) {
+          setReaderStatus(loadedReaderStatus)
           setRuns(loadedRuns)
           setQuarantineItems(loadedQuarantineItems)
           setCurrentRun(loadedRuns[0] ?? null)
@@ -8183,6 +8187,26 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <span>Проверить файл</span>
           </button>
         </form>
+
+        <div className="dictionary-form">
+          <h3>Reader Access</h3>
+          {readerStatus ? (
+            <>
+              <p className={readerStatus.isAvailable ? 'status-active' : 'warning-text'} role="status" aria-live="polite">{formatImportReaderStatus(readerStatus.status)}</p>
+              <p className="empty-state">{readerStatus.statusMessage}</p>
+              {readerStatus.requiredComponents.length > 0 ? (
+                <div className="summary-strip" aria-label="Требования reader Access">
+                  {readerStatus.requiredComponents.map((component) => (
+                    <div key={component}>
+                      <span>Компонент</span>
+                      <strong>{component}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : <p className="empty-state" role="status" aria-live="polite">Статус reader Access загружается...</p>}
+        </div>
 
         <div className="dictionary-form">
           <h3>Отчет проверки</h3>

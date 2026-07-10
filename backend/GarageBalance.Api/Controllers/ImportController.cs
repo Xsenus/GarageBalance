@@ -11,6 +11,13 @@ namespace GarageBalance.Api.Controllers;
 [Route("api/import/access")]
 public sealed class ImportController(IImportService importService, IImportQuarantineService importQuarantineService) : ControllerBase
 {
+    [HttpGet("reader/status")]
+    [ProducesResponseType<AccessImportReaderStatusDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<AccessImportReaderStatusDto>> GetAccessImportReaderStatus(CancellationToken cancellationToken)
+    {
+        return Ok(await importService.GetAccessImportReaderStatusAsync(cancellationToken));
+    }
+
     [HttpGet("runs")]
     [ProducesResponseType<IReadOnlyList<AccessImportRunDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccessImportRunDto>>> GetAccessImportRuns(

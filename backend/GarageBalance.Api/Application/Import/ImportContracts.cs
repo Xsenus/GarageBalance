@@ -53,6 +53,15 @@ public sealed record AccessImportCheckDto(
     string Status,
     string Message);
 
+public sealed record AccessImportReaderStatusDto(
+    string Provider,
+    string DisplayName,
+    bool IsAvailable,
+    string Status,
+    string StatusMessage,
+    IReadOnlyList<string> RequiredComponents,
+    DateTimeOffset CheckedAtUtc);
+
 public sealed record AccessImportRunDto(
     Guid Id,
     string Mode,

@@ -10,6 +10,17 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class ImportControllerTests
 {
     [Fact]
+    public void GetAccessImportReaderStatus_UsesGetReaderStatusEndpoint()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.GetAccessImportReaderStatus))!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var getAttribute = Assert.Single(attributes.OfType<HttpGetAttribute>());
+        Assert.Equal("reader/status", getAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpPostAttribute>());
+    }
+
+    [Fact]
     public void ExportAccessImportRunReport_UsesPostBecauseExportWritesAuditEvent()
     {
         var method = typeof(ImportController).GetMethod(nameof(ImportController.ExportAccessImportRunReport))!;
@@ -76,6 +87,31 @@ public sealed class ImportControllerTests
         Assert.Equal("file_required", problem.Title);
         Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
         Assert.Equal("file_required", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
+    }
+
+    [Fact]
+    public async Task GetAccessImportReaderStatus_ReturnsStatus()
+    {
+        var service = new FakeImportService
+        {
+            ReaderStatus = new AccessImportReaderStatusDto(
+                "disabled",
+                "Reader Access",
+                false,
+                "not_configured",
+                "Reader не настроен.",
+                ["ACE OLE DB driver"],
+                DateTimeOffset.UtcNow)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportReaderStatus(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var status = Assert.IsType<AccessImportReaderStatusDto>(ok.Value);
+        Assert.False(status.IsAvailable);
+        Assert.Equal("not_configured", status.Status);
+        Assert.True(service.ReaderStatusWasRequested);
     }
 
     [Fact]
@@ -613,7 +649,16 @@ public sealed class ImportControllerTests
         public AccessImportRunListRequest? LastRunRequest { get; private set; }
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
         public AccessImportCreatedRecordListRequest? LastCreatedRecordsRequest { get; private set; }
+        public bool ReaderStatusWasRequested { get; private set; }
         public IReadOnlyList<AccessImportRunDto> Runs { get; init; } = [];
+        public AccessImportReaderStatusDto ReaderStatus { get; init; } = new(
+            "disabled",
+            "Reader Access",
+            false,
+            "not_configured",
+            "Reader не настроен.",
+            [],
+            DateTimeOffset.UtcNow);
         public ImportResult<AccessImportRunDto> DryRunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
         public ImportResult<AccessImportRunDto> RollbackResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
@@ -628,6 +673,12 @@ public sealed class ImportControllerTests
         {
             LastRunRequest = request;
             return Task.FromResult(Runs);
+        }
+
+        public Task<AccessImportReaderStatusDto> GetAccessImportReaderStatusAsync(CancellationToken cancellationToken)
+        {
+            ReaderStatusWasRequested = true;
+            return Task.FromResult(ReaderStatus);
         }
 
         public Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken)

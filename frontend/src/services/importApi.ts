@@ -68,7 +68,18 @@ export type AccessImportCreatedRecordDto = {
   rollbackReason: string | null
 }
 
+export type AccessImportReaderStatusDto = {
+  provider: string
+  displayName: string
+  isAvailable: boolean
+  status: 'ready' | 'not_configured' | 'unavailable' | 'error'
+  statusMessage: string
+  requiredComponents: string[]
+  checkedAtUtc: string
+}
+
 export type ImportClient = {
+  getAccessReaderStatus(accessToken: string): Promise<AccessImportReaderStatusDto>
   getAccessRuns(accessToken: string, limit?: number): Promise<AccessImportRunDto[]>
   getAccessRunLog(accessToken: string, runId: string, limit?: number): Promise<AccessImportRunLogEntryDto[]>
   getAccessCreatedRecords(accessToken: string, runId: string, limit?: number): Promise<AccessImportCreatedRecordDto[]>
@@ -118,6 +129,9 @@ async function requestBlob(accessToken: string, path: string, init?: RequestInit
 }
 
 export const importApi: ImportClient = {
+  getAccessReaderStatus(accessToken) {
+    return requestJson(accessToken, '/api/import/access/reader/status')
+  },
   getAccessRuns(accessToken, limit = 50) {
     return requestJson(accessToken, `/api/import/access/runs?limit=${encodeURIComponent(limit)}`)
   },
