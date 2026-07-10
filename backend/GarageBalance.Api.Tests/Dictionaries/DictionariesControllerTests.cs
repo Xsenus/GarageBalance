@@ -196,6 +196,27 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateSupplier_ReturnsConflictForDuplicateSupplier()
+    {
+        var actorUserId = Guid.NewGuid();
+        var groupId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateSupplierResult = DictionaryResult<SupplierDto>.Failure("supplier_duplicate", "Active supplier already exists.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateSupplier(
+            new UpsertSupplierRequest("Water", groupId, null, null, null, null, null, 0, null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("supplier_duplicate", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task UpdateSupplier_ReturnsOkAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();

@@ -741,9 +741,15 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.");
         }
 
+        var name = request.Name.Trim();
+        if (await ActiveSupplierDuplicateExistsAsync(null, group.Id, name, cancellationToken))
+        {
+            return DictionaryResult<SupplierDto>.Failure("supplier_duplicate", "Активный поставщик с таким названием уже существует в выбранной группе.");
+        }
+
         var supplier = new Supplier
         {
-            Name = request.Name.Trim(),
+            Name = name,
             GroupId = group.Id,
             Group = group,
             Inn = NormalizeOptional(request.Inn),
@@ -786,6 +792,11 @@ public sealed class DictionaryService(
         if (SupplierMatches(supplier, name, group.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
         {
             return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+        }
+
+        if (await ActiveSupplierDuplicateExistsAsync(id, group.Id, name, cancellationToken))
+        {
+            return DictionaryResult<SupplierDto>.Failure("supplier_duplicate", "Активный поставщик с таким названием уже существует в выбранной группе.");
         }
 
         var oldValues = new Dictionary<string, object?>
@@ -862,6 +873,11 @@ public sealed class DictionaryService(
         if (supplier.Group.IsArchived)
         {
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Сначала восстановите группу поставщика.");
+        }
+
+        if (await ActiveSupplierDuplicateExistsAsync(id, supplier.GroupId, supplier.Name, cancellationToken))
+        {
+            return DictionaryResult<SupplierDto>.Failure("supplier_duplicate", "Активный поставщик с таким названием уже существует в выбранной группе.");
         }
 
         supplier.IsArchived = false;
@@ -979,6 +995,11 @@ public sealed class DictionaryService(
             if (contact.Supplier.Group.IsArchived)
             {
                 return DictionaryResult<SupplierContactDto>.Failure("supplier_group_not_found", "Сначала восстановите группу поставщика.");
+            }
+
+            if (await ActiveSupplierDuplicateExistsAsync(contact.Supplier.Id, contact.Supplier.GroupId, contact.Supplier.Name, cancellationToken))
+            {
+                return DictionaryResult<SupplierContactDto>.Failure("supplier_duplicate", "Активный поставщик с таким названием уже существует в выбранной группе.");
             }
 
             contact.Supplier.IsArchived = false;
@@ -2806,6 +2827,17 @@ public sealed class DictionaryService(
     private static bool StringEquals(string? left, string? right)
     {
         return string.Equals(left, right, StringComparison.Ordinal);
+    }
+
+    private Task<bool> ActiveSupplierDuplicateExistsAsync(Guid? ignoredSupplierId, Guid groupId, string name, CancellationToken cancellationToken)
+    {
+        return dbContext.Suppliers.AsNoTracking().AnyAsync(
+            supplier =>
+                supplier.Id != ignoredSupplierId &&
+                !supplier.IsArchived &&
+                supplier.GroupId == groupId &&
+                supplier.Name == name,
+            cancellationToken);
     }
 
     private async Task<bool> IsIrregularPaymentUsedAsync(string name, CancellationToken cancellationToken)

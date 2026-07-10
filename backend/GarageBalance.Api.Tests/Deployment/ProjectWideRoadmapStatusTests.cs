@@ -52,6 +52,25 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("duplicate number", garagesLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void SuppliersObjectCoverageIsMarkedCompleteWhenAuditRestoreAndDuplicateFlowsAreCovered()
+    {
+        var suppliersLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Поставщики: создание", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Поставщики:", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.supplier_created", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.supplier_updated", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.supplier_archived", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.supplier_restored", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("архивирование требует причину", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("активную группу", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("активный дубль", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("восстановление через контакт", suppliersLine, StringComparison.Ordinal);
+        Assert.Contains("duplicate supplier", suppliersLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -230,6 +230,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [HttpPost("suppliers")]
     [ProducesResponseType<SupplierDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SupplierDto>> CreateSupplier(UpsertSupplierRequest request, CancellationToken cancellationToken)
     {
         var result = await dictionaryService.CreateSupplierAsync(request, GetActorUserId(), cancellationToken);
@@ -245,6 +246,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [HttpPut("suppliers/{id:guid}")]
     [ProducesResponseType<SupplierDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SupplierDto>> UpdateSupplier(Guid id, UpsertSupplierRequest request, CancellationToken cancellationToken)
     {
         var result = await dictionaryService.UpdateSupplierAsync(id, request, GetActorUserId(), cancellationToken);
@@ -271,6 +273,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [HttpPost("suppliers/{id:guid}/restore")]
     [ProducesResponseType<SupplierDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SupplierDto>> RestoreSupplier(Guid id, CancellationToken cancellationToken)
     {
         var result = await dictionaryService.RestoreSupplierAsync(id, GetActorUserId(), cancellationToken);
@@ -330,6 +333,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     [HttpPost("supplier-contacts/{id:guid}/restore")]
     [ProducesResponseType<SupplierContactDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SupplierContactDto>> RestoreSupplierContact(Guid id, CancellationToken cancellationToken)
     {
         var result = await dictionaryService.RestoreSupplierContactAsync(id, GetActorUserId(), cancellationToken);
@@ -873,7 +877,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.ErrorCode switch
         {
             "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" or "fee_campaign_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

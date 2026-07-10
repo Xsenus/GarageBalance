@@ -655,6 +655,57 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateSupplierAsync_RejectsDuplicateNameInActiveGroup()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
+        await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        var result = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAsync_AllowsDuplicateNameInDifferentGroupAndArchivedSupplier()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var utilityGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
+        var bankGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Banks"), null, CancellationToken.None);
+        var archived = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", utilityGroup.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(archived.Value!.Id, "Archived supplier duplicate check", null, CancellationToken.None);
+
+        var sameGroupAfterArchive = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", utilityGroup.Value.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        var differentGroup = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", bankGroup.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        Assert.True(sameGroupAfterArchive.Succeeded);
+        Assert.True(differentGroup.Succeeded);
+        Assert.Equal(3, await database.Context.Suppliers.CountAsync(item => item.Name == "Water"));
+    }
+
+    [Fact]
+    public async Task UpdateSupplierAsync_RejectsDuplicateNameInActiveGroup()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
+        await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Electricity", group.Value.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        var result = await service.UpdateSupplierAsync(
+            supplier.Value!.Id,
+            new UpsertSupplierRequest("Water", group.Value.Id, null, null, null, null, null, 0, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task SupplierContactAsync_SavesContactAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -835,6 +886,43 @@ public sealed class DictionaryServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_group_not_found", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RestoreSupplierAsync_RejectsDuplicateActiveNameInGroup()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
+        var archived = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(archived.Value!.Id, "Archived supplier duplicate restore check", null, CancellationToken.None);
+        await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        var result = await service.RestoreSupplierAsync(archived.Value.Id, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RestoreSupplierContactAsync_RejectsDuplicateSupplierRestore()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        var contact = await service.CreateSupplierContactAsync(
+            new UpsertSupplierContactRequest(supplier.Value!.Id, "Contact", null, null, null, "Active", null),
+            null,
+            CancellationToken.None);
+        await service.ArchiveSupplierContactAsync(contact.Value!.Id, "Archived contact duplicate restore check", null, CancellationToken.None);
+        await service.ArchiveSupplierAsync(supplier.Value.Id, "Archived supplier duplicate restore check", null, CancellationToken.None);
+        await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        var result = await service.RestoreSupplierContactAsync(contact.Value.Id, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_duplicate", result.ErrorCode);
     }
 
     [Fact]
