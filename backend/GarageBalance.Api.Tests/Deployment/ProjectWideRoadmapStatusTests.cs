@@ -2279,7 +2279,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass", fullTestRunLine, StringComparison.Ordinal);
 
         Assert.StartsWith("- `[!]`", performanceLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", finalReleaseLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", finalReleaseLine, StringComparison.Ordinal);
+        Assert.Contains("0.538.0", finalReleaseLine, StringComparison.Ordinal);
 
         Assert.Contains("закрыт пункт Stage 11 \"Провести полные backend/frontend тесты\"", historyText, StringComparison.Ordinal);
         Assert.Contains("полный backend 1199/1199", historyText, StringComparison.Ordinal);
@@ -2329,6 +2330,41 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("BackendPerformanceGuardTests.FinalPerformanceChecklistCoversAutomatedGatesPostgresQueriesFrontendAndAcceptanceThresholds", historyText, StringComparison.Ordinal);
         Assert.Contains("StageElevenFinalPerformanceCheckRemainsBlockedWithoutRealPostgresDataAndHasChecklist", historyText, StringComparison.Ordinal);
         Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StageElevenFinalReleaseNoteIsMarkedCompleteWhenReleaseEntryWarnsAboutAcceptanceGates()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var finalReleaseLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить финальную запись \"Что нового\"", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", finalReleaseLine, StringComparison.Ordinal);
+        Assert.Contains("0.538.0", finalReleaseLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenFinalReleaseNoteIsMarkedCompleteWhenReleaseEntryWarnsAboutAcceptanceGates", finalReleaseLine, StringComparison.Ordinal);
+
+        Assert.Contains("\"releaseId\": \"2026-07-11-final-acceptance-readiness\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.538.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"title\": \"Финальный контроль готовности перед приемкой\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"type\": \"important\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("полные автоматические проверки backend и frontend", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("восстановление после сбоя", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("производительность на объемах ГСК", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("печати, 1C Fresh и правилам учета", releaseNotesText, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт пункт Stage 11 \"Подготовить финальную запись", historyText, StringComparison.Ordinal);
+        Assert.Contains("JSON release-файла", historyText, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("psql=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("docker=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("live backup/restore", historyText, StringComparison.Ordinal);
     }
 
     [Fact]
