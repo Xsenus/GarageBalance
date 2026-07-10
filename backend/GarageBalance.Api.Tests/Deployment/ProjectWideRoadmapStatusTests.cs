@@ -659,7 +659,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist", dryRunLine, StringComparison.Ordinal);
         Assert.Contains("реальные row counts/checksums", dryRunLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[~]`", quarantineLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", transferLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", transferLine, StringComparison.Ordinal);
+        Assert.Contains("AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist", transferLine, StringComparison.Ordinal);
+        Assert.Contains("pending_access_reader", transferLine, StringComparison.Ordinal);
 
         Assert.Contains("access_dry_run_report_exported", importServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("runs/{id:guid}/report", importControllerTestsText, StringComparison.Ordinal);
@@ -1114,6 +1116,64 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("пункт Stage 5 \"Реализовать dry-run импорт с отчетом\"", historyText, StringComparison.Ordinal);
         Assert.Contains("AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-transfer-implementation-checklist.md"));
+        var mappingChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-postgresql-mapping-checklist.md"));
+        var dryRunChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-dry-run-verification-checklist.md"));
+        var importService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportService.cs"));
+        var importContracts = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportContracts.cs"));
+        var importServiceTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
+        var dbContext = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+
+        var transferLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать перенос справочников, гаражей, владельцев", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Реализовать перенос справочников", transferLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-transfer-implementation-checklist.md", transferLine, StringComparison.Ordinal);
+        Assert.Contains("live Access reader/конвертации", transferLine, StringComparison.Ordinal);
+        Assert.Contains("field-level mapping", transferLine, StringComparison.Ordinal);
+        Assert.Contains("reconciliation report", transferLine, StringComparison.Ordinal);
+        Assert.Contains("pending_access_reader", transferLine, StringComparison.Ordinal);
+        Assert.Contains("AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist", transferLine, StringComparison.Ordinal);
+
+        Assert.Contains("нельзя закрывать как `[x]`", checklist, StringComparison.Ordinal);
+        Assert.Contains("pending_access_reader", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_row_fingerprints", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_quarantine_items", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_created_records", checklist, StringComparison.Ordinal);
+        Assert.Contains("Владельцы: `Vladelci` -> `owners`", checklist, StringComparison.Ordinal);
+        Assert.Contains("Гаражи: `garage` -> `garages`", checklist, StringComparison.Ordinal);
+        Assert.Contains("Исторические поступления", checklist, StringComparison.Ordinal);
+        Assert.Contains("Счетчики", checklist, StringComparison.Ordinal);
+        Assert.Contains("deterministic idempotency key", checklist, StringComparison.Ordinal);
+        Assert.Contains("Все created target records фиксируются", checklist, StringComparison.Ordinal);
+        Assert.Contains("Compare imported counts with pre-import baseline", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("Mapping покрывает гаражи, владельцев", mappingChecklist, StringComparison.Ordinal);
+        Assert.Contains("Reader/conversion returned real schema and row counts", dryRunChecklist, StringComparison.Ordinal);
+        Assert.Contains("pending_access_reader", importService, StringComparison.Ordinal);
+        Assert.Contains("AccessImportCreatedRecords", importService, StringComparison.Ordinal);
+        Assert.Contains("AccessImportCreatedRecordDto", importContracts, StringComparison.Ordinal);
+        Assert.Contains("RequestAccessImportApplyAsync_MarksRunAndWritesAuditWithBackupConfirmation", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecordsAsync_ReturnsRunRecordsWithLimit", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("DbSet<AccessImportRowFingerprint>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("DbSet<AccessImportQuarantineItem>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("DbSet<AccessImportCreatedRecord>", dbContext, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Реализовать перенос справочников", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist", historyText, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
     }
 
