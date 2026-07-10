@@ -19,6 +19,13 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
         Assert.Contains("Не коммитить", document, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия VPS/domain deployment", document, StringComparison.Ordinal);
+        Assert.Contains("VPS_HOST", document, StringComparison.Ordinal);
+        Assert.Contains("sudo -l -U garagebalance-deploy", document, StringComparison.Ordinal);
+        Assert.Contains(".github/workflows/deploy-staging.yml", document, StringComparison.Ordinal);
+        Assert.Contains("/usr/local/bin/garagebalance-deploy-apply <release-id>", document, StringComparison.Ordinal);
+        Assert.Contains("systemctl status garagebalance-staging.service", document, StringComparison.Ordinal);
+        Assert.Contains("desktop/mobile", document, StringComparison.Ordinal);
     }
 
     [Fact]

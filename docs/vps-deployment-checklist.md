@@ -191,3 +191,14 @@ server {
 - [ ] Не запускать миграции без свежего `pg_dump`.
 - [ ] Не коммитить `/etc/garagebalance-staging.env`, backup, `.accdb`, `.mdb`, `.pgdump`, `.sql.gz`.
 - [ ] Не публиковать проект в Git и не выполнять push без отдельного разрешения пользователя.
+
+## 11. Условия финального закрытия VPS/domain deployment
+
+- [ ] GitHub Secrets `VPS_HOST`, `VPS_DEPLOY_USER` и `VPS_SSH_KEY` добавлены в репозиторий на GitHub без раскрытия в Git.
+- [ ] На VPS проверены `sudo -l -U garagebalance-deploy`, `/etc/sudoers.d/garagebalance-deploy`, права `/etc/garagebalance-staging.env` и отсутствие лишних sudo-команд.
+- [ ] Workflow `.github/workflows/deploy-staging.yml` успешно прошел до конца на актуальном коммите.
+- [ ] Apply-скрипт `/usr/local/bin/garagebalance-deploy-apply <release-id>` создал непустой `pg_dump`, применил idempotent SQL, заменил API/frontend и сохранил предыдущие каталоги для rollback.
+- [ ] Проверены `systemctl status garagebalance-staging.service`, `journalctl -u garagebalance-staging.service -n 100 --no-pager`, `nginx -t` и `systemctl reload nginx`.
+- [ ] Проверены `curl -fsS https://sgk.blagodaty.ru/health`, открытие `https://sgk.blagodaty.ru` на desktop/mobile и hard refresh frontend.
+- [ ] Выполнен smoke входа, справочников, платежей, отчетов, импорта dry-run, audit и "Что нового".
+- [ ] В roadmap history записаны commit, workflow run, release id, backup-файл, health-check и все оставшиеся блокеры.

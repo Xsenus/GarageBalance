@@ -2391,6 +2391,53 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenVpsDeploymentGuideRemainsBlockedUntilLiveDeployButHasCompleteChecklist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "vps-deployment-checklist.md"));
+        var workflowText = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "deploy-staging.yml"));
+        var applyScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "vps-apply-release.sh"));
+
+        var deploymentLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить инструкцию VPS/domain deployment", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", deploymentLine, StringComparison.Ordinal);
+        Assert.Contains("vps-deployment-checklist.md", deploymentLine, StringComparison.Ordinal);
+        Assert.Contains("GitHub Secrets", deploymentLine, StringComparison.Ordinal);
+        Assert.Contains("https://sgk.blagodaty.ru/health", deploymentLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenVpsDeploymentGuideRemainsBlockedUntilLiveDeployButHasCompleteChecklist", deploymentLine, StringComparison.Ordinal);
+
+        Assert.Contains("sgk.blagodaty.ru", checklistText, StringComparison.Ordinal);
+        Assert.Contains("/opt/garagebalance-staging", checklistText, StringComparison.Ordinal);
+        Assert.Contains("/etc/garagebalance-staging.env", checklistText, StringComparison.Ordinal);
+        Assert.Contains("VPS_HOST", checklistText, StringComparison.Ordinal);
+        Assert.Contains("sudo -l -U garagebalance-deploy", checklistText, StringComparison.Ordinal);
+        Assert.Contains("/usr/local/bin/garagebalance-deploy-apply <release-id>", checklistText, StringComparison.Ordinal);
+        Assert.Contains("pg_dump", checklistText, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef migrations script --idempotent", checklistText, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging.service", checklistText, StringComparison.Ordinal);
+        Assert.Contains("certbot --nginx -d sgk.blagodaty.ru", checklistText, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия VPS/domain deployment", checklistText, StringComparison.Ordinal);
+        Assert.Contains("desktop/mobile", checklistText, StringComparison.Ordinal);
+
+        Assert.Contains("secrets.VPS_SSH_KEY", workflowText, StringComparison.Ordinal);
+        Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply", workflowText, StringComparison.Ordinal);
+        Assert.Contains("pg_dump --format=custom", applyScriptText, StringComparison.Ordinal);
+        Assert.Contains("restore_previous_release", applyScriptText, StringComparison.Ordinal);
+        Assert.Contains("curl -fsSk -H \"Host: ${PUBLIC_HOST}\" \"https://127.0.0.1/health\"", applyScriptText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Подготовить инструкцию VPS/domain deployment\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("workflow/deploy run отсутствует", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();
