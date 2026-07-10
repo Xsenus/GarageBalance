@@ -35,6 +35,23 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("no-op не создает событие", ownersLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void GaragesObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
+    {
+        var garagesLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Гаражи: создание", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Гаражи:", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.garage_created", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.garage_updated", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.garage_archived", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.garage_restored", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("архивирование требует причину", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("конфликте активного номера", garagesLine, StringComparison.Ordinal);
+        Assert.Contains("duplicate number", garagesLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
