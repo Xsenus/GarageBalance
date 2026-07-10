@@ -966,6 +966,60 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessPostgreSqlMappingRoadmapItemRemainsBlockedUntilFieldLevelInventoryMappingExists()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-postgresql-mapping-checklist.md"));
+        var sourceAnalysis = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+        var schemaChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-schema-inventory-checklist.md"));
+        var baselineChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-preimport-baseline-checklist.md"));
+        var dbContext = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+
+        var mappingLine = activeRoadmapLines.Single(line =>
+            line.Contains("Составить карту соответствия Access -> PostgreSQL", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Составить карту соответствия Access -> PostgreSQL", mappingLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-postgresql-mapping-checklist.md", mappingLine, StringComparison.Ordinal);
+        Assert.Contains("field-level mapping", mappingLine, StringComparison.Ordinal);
+        Assert.Contains("privacy-check", mappingLine, StringComparison.Ordinal);
+        Assert.Contains("AccessPostgreSqlMappingRoadmapItemRemainsBlockedUntilFieldLevelInventoryMappingExists", mappingLine, StringComparison.Ordinal);
+
+        Assert.Contains("предварительной", checklist, StringComparison.Ordinal);
+        Assert.Contains("не считается финальной field-level mapping", checklist, StringComparison.Ordinal);
+        Assert.Contains("`garage`, `Vladelci`, `vidoplati`, `VidViplat`", checklist, StringComparison.Ordinal);
+        Assert.Contains("GARAGENUMBER", checklist, StringComparison.Ordinal);
+        Assert.Contains("OwnerID", checklist, StringComparison.Ordinal);
+        Assert.Contains("owners", checklist, StringComparison.Ordinal);
+        Assert.Contains("garages", checklist, StringComparison.Ordinal);
+        Assert.Contains("financial_operations", checklist, StringComparison.Ordinal);
+        Assert.Contains("accruals", checklist, StringComparison.Ordinal);
+        Assert.Contains("meter_readings", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_row_fingerprints", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_created_records", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_quarantine_items", checklist, StringComparison.Ordinal);
+        Assert.Contains("rawRowsExported=false", checklist, StringComparison.Ordinal);
+        Assert.Contains("Privacy-check подтверждает", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessPostgreSqlMappingRoadmapItemRemainsBlockedUntilFieldLevelInventoryMappingExists`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("таблицы/объекты: `garage`, `Vladelci`, `vidoplati`, `VidViplat`", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("Таблицы, колонки, ключи, связи, индексы и row counts сняты", schemaChecklist, StringComparison.Ordinal);
+        Assert.Contains("Row counts и checksums есть для всех ключевых таблиц", baselineChecklist, StringComparison.Ordinal);
+        Assert.Contains("DbSet<Owner>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("DbSet<Garage>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("DbSet<FinancialOperation>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("DbSet<MeterReading>", dbContext, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Составить карту соответствия Access -> PostgreSQL\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessPostgreSqlMappingRoadmapItemRemainsBlockedUntilFieldLevelInventoryMappingExists", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
