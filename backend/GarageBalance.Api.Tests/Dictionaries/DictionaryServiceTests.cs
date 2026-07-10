@@ -314,6 +314,59 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CurrentExtendedUpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0m, null), null, CancellationToken.None);
+        var contact = await service.CreateSupplierContactAsync(
+            new UpsertSupplierContactRequest(supplier.Value!.Id, "Петров И.А.", "Директор", "+7 901", "contact@example.com", "Работает", "Основной"),
+            null,
+            CancellationToken.None);
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Бухгалтерия"), null, CancellationToken.None);
+        var staffMember = await service.CreateStaffMemberAsync(new UpsertStaffMemberRequest("Петрова Ольга", department.Value!.Id, 40000.005m), null, CancellationToken.None);
+        var irregularPayment = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Вступительный взнос", 1500.005m), null, CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой сбор", "target_fee"), null, CancellationToken.None);
+        var feeCampaign = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Ремонт ворот", incomeType.Value!.Id, "Замена механизма", 100.005m, 1000.005m, new DateOnly(2026, 7, 1), null, true, 30),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.UpdateSupplierContactAsync(
+            contact.Value!.Id,
+            new UpsertSupplierContactRequest(supplier.Value.Id, " Петров И.А. ", " Директор ", " +7 901 ", " contact@example.com ", " Работает ", " Основной "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateStaffDepartmentAsync(
+            department.Value!.Id,
+            new UpsertStaffDepartmentRequest(" Бухгалтерия "),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateStaffMemberAsync(
+            staffMember.Value!.Id,
+            new UpsertStaffMemberRequest(" Петрова Ольга ", department.Value.Id, 40000.005m),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateIrregularPaymentAsync(
+            irregularPayment.Value!.Id,
+            new UpsertIrregularPaymentRequest(" Вступительный взнос ", 1500.005m),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateFeeCampaignAsync(
+            feeCampaign.Value!.Id,
+            new UpsertFeeCampaignRequest(" Ремонт ворот ", incomeType.Value.Id, " Замена механизма ", 100.005m, 1000.005m, new DateOnly(2026, 7, 1), null, true, 30),
+            actorUserId,
+            CancellationToken.None)).Succeeded);
+
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task UpdateOwnerAsync_WritesOldAndNewValuesToAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

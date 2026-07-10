@@ -117,6 +117,34 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void NoOpUpdateCoverageIsMarkedCompleteWhenCurrentServicesSkipFalseAuditEvents()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var noOpUpdateLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Если update не меняет данные", StringComparison.Ordinal));
+
+        Assert.Contains("контакты поставщиков", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("отделы персонала", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("сотрудники", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("нерегулярные платежи", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("сборы", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("операции фондов", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("права роли", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("release notes", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("CurrentExtendedUpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateOperationAsync_DoesNotWriteAuditWhenNothingChanged", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateRolePermissionsAsync_DoesNotWriteAuditWhenPermissionsAreUnchanged", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("UpsertSecretAsync_DoesNotWriteAuditWhenSecretIsUnchanged", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateReleaseAsync_WritesReadableAuditDiffAndSkipsNoOpUpdate", noOpUpdateLine, StringComparison.Ordinal);
+        Assert.Contains("future update-модели", noOpUpdateLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultDeletionRuleIsMarkedCompleteWhenSoftArchiveCancelAndPolicyCoverageExist()
     {
         var deletionRuleLine = File
