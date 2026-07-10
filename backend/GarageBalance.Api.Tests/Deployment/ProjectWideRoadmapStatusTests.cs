@@ -1090,6 +1090,103 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshTokenStorageIsMarkedCompleteWhenProtectedSecretInfrastructureExists()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var tokenStorageLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать безопасное хранение токенов/доступов", StringComparison.Ordinal));
+        var programText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var domainText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Domain",
+            "Integrations",
+            "IntegrationSecretSetting.cs"));
+        var serviceContractText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "IIntegrationSecretSettingsService.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "IntegrationSecretSettingsService.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationSecretSettingsServiceTests.cs"));
+        var syncServiceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncService.cs"));
+        var migrationText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260624021433_IntegrationSecretSettings.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "AppReleases",
+            "releases.json"));
+        var securityDocsText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "security-data-protection.md"));
+
+        Assert.StartsWith("- `[x]`", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSecretSetting", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("integration_secret_settings", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("IIntegrationSecretSettingsService", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("ISensitiveDataProtector", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("integration.secret_upserted", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFresh:RefreshToken", tokenStorageLine, StringComparison.Ordinal);
+        Assert.Contains("runtime-секрет", tokenStorageLine, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed class IntegrationSecretSetting", domainText, StringComparison.Ordinal);
+        Assert.Contains("public string ProtectedValue", domainText, StringComparison.Ordinal);
+        Assert.Contains("Task<IntegrationSecretSettingResult<string>> GetSecretAsync", serviceContractText, StringComparison.Ordinal);
+        Assert.Contains("IIntegrationSecretSettingsService, IntegrationSecretSettingsService", programText, StringComparison.Ordinal);
+        Assert.Contains("sensitiveDataProtector.Protect", serviceText, StringComparison.Ordinal);
+        Assert.Contains("sensitiveDataProtector.Unprotect", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"integration.secret_upserted\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("[\"protectedValueState\"] = protectedValueState", serviceText, StringComparison.Ordinal);
+        Assert.Contains("UpsertSecretAsync_StoresProtectedValueAndWritesAuditWithoutPlaintext", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.DoesNotContain(secret, stored.ProtectedValue", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.DoesNotContain(secret, auditEvent.MetadataJson", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("OneCFresh", syncServiceText, StringComparison.Ordinal);
+        Assert.Contains("RefreshToken", syncServiceText, StringComparison.Ordinal);
+        Assert.Contains("secretSettingsService.GetSecretAsync", syncServiceText, StringComparison.Ordinal);
+        Assert.Contains("name: \"integration_secret_settings\"", migrationText, StringComparison.Ordinal);
+        Assert.Contains("ProtectedValue = table.Column<string>", migrationText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.115.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Добавлено хранилище секретов интеграций", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("1C Fresh", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("IIntegrationSecretSettingsService", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("integration.secret_upserted", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("ISensitiveDataProtector", securityDocsText, StringComparison.Ordinal);
+        Assert.Contains("IIntegrationSecretSettingsService", securityDocsText, StringComparison.Ordinal);
+        Assert.Contains("gb:protected:v1:", securityDocsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
