@@ -254,6 +254,29 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryServiceTestCoverageIsMarkedCompleteWhenAuditServiceScenariosAreCovered()
+    {
+        var serviceTestsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("service tests: diff", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditServiceTests", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventWriterTests", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditChangeDiffBuilderTests", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("DatabaseMigrationPolicyTests", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ordering", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("pagination", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("masking", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("oldValue/newValue", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("metadata", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("entityDisplayName", serviceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("CSV structured columns", serviceTestsLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
