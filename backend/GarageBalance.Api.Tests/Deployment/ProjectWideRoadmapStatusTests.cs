@@ -1968,6 +1968,48 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AuthenticatedStartScreenIsMarkedCompleteWhenLoginOpensWorkspaceDashboardWithoutLandingPage()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var startScreenLine = activeRoadmapLines.Single(line =>
+            line.Contains("Основной экран не должен быть landing page", StringComparison.Ordinal));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        Assert.StartsWith("- `[x]`", startScreenLine, StringComparison.Ordinal);
+        Assert.Contains("auth-entry", startScreenLine, StringComparison.Ordinal);
+        Assert.Contains("AuthGate", startScreenLine, StringComparison.Ordinal);
+        Assert.Contains("app-shell", startScreenLine, StringComparison.Ordinal);
+        Assert.Contains("Главные разделы", startScreenLine, StringComparison.Ordinal);
+        Assert.Contains("AuthenticatedStartScreenIsMarkedCompleteWhenLoginOpensWorkspaceDashboardWithoutLandingPage", startScreenLine, StringComparison.Ordinal);
+
+        Assert.Contains("if (!auth)", appText, StringComparison.Ordinal);
+        Assert.Contains("<main className=\"auth-entry\">", appText, StringComparison.Ordinal);
+        Assert.Contains("<AuthGate authClient={authClient} onAuthenticated={handleAuthenticated} />", appText, StringComparison.Ordinal);
+        Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'dashboard'", appText, StringComparison.Ordinal);
+        Assert.Contains("className=\"dashboard-home\"", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"group\" aria-label=\"Главные разделы\"", appText, StringComparison.Ordinal);
+        Assert.Contains("const dashboardTiles", appText, StringComparison.Ordinal);
+        Assert.Contains("{ title: 'Платежи', section: 'payments'", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("hero", appText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("shows auth gate before workspace is available", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("queryByRole('navigation', { name: 'Основные разделы' })", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("creates first administrator and opens the workspace with users and dictionaries", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("findByRole('group', { name: 'Главные разделы' })", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("restores authenticated workspace after page reload", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Главное меню", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("AuthenticatedStartScreenIsMarkedCompleteWhenLoginOpensWorkspaceDashboardWithoutLandingPage", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainScreenPrototypeIsMarkedCompleteWhenAuthDashboardDictionariesTariffsPaymentsReportsAndImportExist()
     {
         var repositoryRoot = FindRepositoryRoot();
