@@ -2257,6 +2257,46 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+
+        var fullTestRunLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести полные backend/frontend тесты", StringComparison.Ordinal));
+        var performanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести финальную проверку производительности", StringComparison.Ordinal));
+        var finalReleaseLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить финальную запись \"Что нового\"", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", fullTestRunLine, StringComparison.Ordinal);
+        Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", fullTestRunLine, StringComparison.Ordinal);
+        Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", fullTestRunLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass", fullTestRunLine, StringComparison.Ordinal);
+
+        Assert.StartsWith("- `[ ]`", performanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", finalReleaseLine, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт пункт Stage 11 \"Провести полные backend/frontend тесты\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("полный backend 1199/1199", historyText, StringComparison.Ordinal);
+        Assert.Contains("полный frontend 303/303", historyText, StringComparison.Ordinal);
+        Assert.Contains("dotnet format GarageBalance.slnx --verify-no-changes --no-restore", historyText, StringComparison.Ordinal);
+        Assert.Contains("npm exec tsc -- --noEmit", historyText, StringComparison.Ordinal);
+        Assert.Contains("npm run lint", historyText, StringComparison.Ordinal);
+        Assert.Contains("npm run build", historyText, StringComparison.Ordinal);
+        Assert.Contains("npm run check:bundle", historyText, StringComparison.Ordinal);
+        Assert.Contains("idempotent EF migration script", historyText, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("psql=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("docker=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
