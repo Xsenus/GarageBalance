@@ -8296,6 +8296,38 @@ describe('App', () => {
     expect(exportReadyMessage).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('shows duplicate Access file warning in dry-run checks', async () => {
+    const user = userEvent.setup()
+    const run = createAccessImportRun({
+      totalChecks: 4,
+      passedChecks: 2,
+      warningCount: 2,
+      checks: [
+        { code: 'extension', title: 'Формат файла', status: 'passed', message: 'Расширение поддерживается.' },
+        { code: 'signature', title: 'Сигнатура Access', status: 'passed', message: 'Файл похож на Access.' },
+        { code: 'native_reader', title: 'Драйвер чтения .accdb', status: 'warning', message: 'Нужен ACE-драйвер или конвертация.' },
+        { code: 'duplicate_content', title: 'Повторная проверка файла', status: 'warning', message: 'Файл уже проверялся в запуске first.accdb от 10.07.2026 10:00. Перед фактическим импортом убедитесь, что это осознанная повторная загрузка.' },
+      ],
+    })
+    const importClient = createImportClient({
+      getAccessRuns: async () => [run],
+      getAccessRunLog: async () => [
+        createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'duplicate_content_detected', level: 'warning', message: 'Найден предыдущий dry-run с тем же содержимым файла Access.' }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
+    expect(within(importPanel).getByText('Повторная проверка файла')).toBeInTheDocument()
+    expect(within(importPanel).getByText(/осознанная повторная загрузка/)).toBeInTheDocument()
+    expect(within(importPanel).getAllByText('Предупреждение').length).toBeGreaterThan(1)
+  })
+
   it('requests Access import rollback through confirmation with reason', async () => {
     const user = userEvent.setup()
     let rollbackReason: string | undefined

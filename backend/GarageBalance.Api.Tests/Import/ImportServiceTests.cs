@@ -60,6 +60,28 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task DryRunAccessImportAsync_WarnsWhenSameFileContentWasAlreadyChecked()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("first.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("second.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("completed", result.Value!.Status);
+        Assert.Contains(result.Value.Checks, check => check.Code == "duplicate_content" && check.Status == "warning");
+        Assert.True(result.Value.WarningCount >= 1);
+        Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.AccessImportRunId == result.Value.Id && item.StepCode == "duplicate_content_detected");
+        var auditEvent = database.Context.AuditEvents
+            .First(item => item.Action == "import.access_dry_run" && item.EntityId == result.Value.Id.ToString());
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("True", metadata.RootElement.GetProperty("duplicateContentDetected").GetString());
+        Assert.Equal("first.accdb", metadata.RootElement.GetProperty("duplicateContentFileName").GetString());
+        Assert.DoesNotContain("garage owner", auditEvent.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetAccessImportRunsAsync_ReturnsLatestRunsFirst()
     {
         await using var database = await TestDatabase.CreateAsync();

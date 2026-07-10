@@ -432,7 +432,31 @@ public sealed class ImportService(
         }
 
         var bytes = buffer.ToArray();
+        var contentSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var sameContentQuery = dbContext.AccessImportRuns
+            .AsNoTracking()
+            .Where(item => item.ContentSha256 == contentSha256);
+        var previousRunWithSameContent = string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal)
+            ? (await sameContentQuery.ToListAsync(cancellationToken))
+                .OrderByDescending(item => item.StartedAtUtc)
+                .ThenByDescending(item => item.Id)
+                .Select(item => new { item.Id, item.OriginalFileName, item.StartedAtUtc })
+                .FirstOrDefault()
+            : await sameContentQuery
+                .OrderByDescending(item => item.StartedAtUtc)
+                .ThenByDescending(item => item.Id)
+                .Select(item => new { item.Id, item.OriginalFileName, item.StartedAtUtc })
+                .FirstOrDefaultAsync(cancellationToken);
         var checks = BuildChecks(extension, bytes);
+        if (previousRunWithSameContent is not null)
+        {
+            checks.Add(new AccessImportCheckDto(
+                "duplicate_content",
+                "Повторная проверка файла",
+                "warning",
+                $"Файл уже проверялся в запуске {previousRunWithSameContent.OriginalFileName} от {previousRunWithSameContent.StartedAtUtc:dd.MM.yyyy HH:mm}. Перед фактическим импортом убедитесь, что это осознанная повторная загрузка."));
+        }
+
         var errors = checks.Count(check => check.Status == "error");
         var warnings = checks.Count(check => check.Status == "warning");
         var passed = checks.Count(check => check.Status == "passed");
@@ -450,7 +474,7 @@ public sealed class ImportService(
             OriginalFileName = fileName,
             FileExtension = extension,
             FileSizeBytes = buffer.Length,
-            ContentSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            ContentSha256 = contentSha256,
             ActorUserId = actorUserId,
             FinishedAtUtc = DateTimeOffset.UtcNow,
             TotalChecks = checks.Count,
@@ -472,6 +496,16 @@ public sealed class ImportService(
         {
             contentSha256 = run.ContentSha256
         });
+        if (previousRunWithSameContent is not null)
+        {
+            AddRunLog(run, "warning", "duplicate_content_detected", "Найден предыдущий dry-run с тем же содержимым файла Access.", new
+            {
+                previousRunId = previousRunWithSameContent.Id,
+                previousFileName = previousRunWithSameContent.OriginalFileName,
+                previousStartedAtUtc = previousRunWithSameContent.StartedAtUtc
+            });
+        }
+
         foreach (var check in checks)
         {
             AddRunLog(run, check.Status == "error" ? "error" : check.Status == "warning" ? "warning" : "info", $"check_{check.Code}", check.Message, new
@@ -506,6 +540,9 @@ public sealed class ImportService(
                 ["fileExtension"] = extension,
                 ["fileSizeBytes"] = buffer.Length,
                 ["contentSha256"] = run.ContentSha256,
+                ["duplicateContentDetected"] = previousRunWithSameContent is not null,
+                ["duplicateContentRunId"] = previousRunWithSameContent?.Id,
+                ["duplicateContentFileName"] = previousRunWithSameContent?.OriginalFileName,
                 ["totalChecks"] = checks.Count,
                 ["passedChecks"] = passed,
                 ["warningCount"] = warnings,
