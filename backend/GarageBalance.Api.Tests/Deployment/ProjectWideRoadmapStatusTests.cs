@@ -731,6 +731,61 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var localInstallChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+        var backupRestoreChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "postgres-backup-restore.md"));
+        var migrationChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "migration-verification-checklist.md"));
+        var vpsChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "vps-deployment-checklist.md"));
+
+        var acceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Acceptance checks: реальные данные Access", StringComparison.Ordinal));
+        var accessImportLine = activeRoadmapLines.Single(line =>
+            line.Contains("Администратор запускает dry-run импорта Access", StringComparison.Ordinal));
+        var migrationLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить миграции на чистой базе и на базе после импорта", StringComparison.Ordinal));
+        var localInstallLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить инструкцию локальной установки на ПК заказчика", StringComparison.Ordinal));
+        var backupRestoreLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить backup/restore PostgreSQL", StringComparison.Ordinal));
+        var vpsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить инструкцию VPS/domain deployment", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[acceptance]` Acceptance checks:", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("ручной приемки на копии реальной Access-БД", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("сверки ролей заказчика", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("сверки отчетов", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("локальной установки на ПК", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("Docker/VPS smoke", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("нельзя отмечать `[x]`", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks", acceptanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[~]`", accessImportLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", migrationLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", localInstallLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", backupRestoreLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", vpsLine, StringComparison.Ordinal);
+
+        Assert.Contains("C:\\GarageBalance", localInstallChecklist, StringComparison.Ordinal);
+        Assert.Contains("check-local-postgres.ps1", localInstallChecklist, StringComparison.Ordinal);
+        Assert.Contains("restore-check", backupRestoreChecklist, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("garagebalance_restore_check", backupRestoreChecklist, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_migration_clean_check", migrationChecklist, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_migration_import_check", migrationChecklist, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging.service", vpsChecklist, StringComparison.Ordinal);
+        Assert.Contains("nginx", vpsChecklist, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("синхронизирован пункт матрицы тестирования `Acceptance checks:", historyText, StringComparison.Ordinal);
+        Assert.Contains("AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
