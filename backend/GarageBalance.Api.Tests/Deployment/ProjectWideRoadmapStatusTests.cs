@@ -1502,6 +1502,46 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageEightAcceptanceAndFullTestRunStatusesAreConsistent()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+
+        var demoLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести демонстрацию на тестовых данных", StringComparison.Ordinal));
+        var feedbackLine = activeRoadmapLines.Single(line =>
+            line.Contains("Собрать замечания и внести их в roadmap", StringComparison.Ordinal));
+        var backendRunLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести полный backend test run", StringComparison.Ordinal));
+        var frontendRunLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести полный frontend test run", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[acceptance]`", demoLine, StringComparison.Ordinal);
+        Assert.Contains("ручной показ", demoLine, StringComparison.Ordinal);
+        Assert.Contains("stage-8-demo-test-data.json", demoLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Провести демонстрацию", demoLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[acceptance]`", feedbackLine, StringComparison.Ordinal);
+        Assert.Contains("список замечаний", feedbackLine, StringComparison.Ordinal);
+        Assert.Contains("подтверждение, что замечаний нет", feedbackLine, StringComparison.Ordinal);
+
+        Assert.StartsWith("- `[x]`", backendRunLine, StringComparison.Ordinal);
+        Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", backendRunLine, StringComparison.Ordinal);
+        Assert.Contains("idempotent EF SQL", backendRunLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", frontendRunLine, StringComparison.Ordinal);
+        Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", frontendRunLine, StringComparison.Ordinal);
+        Assert.Contains("jsdom", frontendRunLine, StringComparison.Ordinal);
+
+        Assert.Contains("StageEightAcceptanceAndFullTestRunStatusesAreConsistent", historyText, StringComparison.Ordinal);
+        Assert.Contains("Демонстрация на тестовых данных и сбор замечаний переведены в `[acceptance]`", historyText, StringComparison.Ordinal);
+        Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", historyText, StringComparison.Ordinal);
+        Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
