@@ -684,6 +684,53 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void BackendUnitTestingMatrixIsInProgressWhenFinanceTariffMeterDebtBalanceAndDateCoverageExists()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var dictionaryServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+
+        var backendUnitLine = activeRoadmapLines.Single(line =>
+            line.Contains("Backend unit: тарифы, счетчики, начисления, платежи", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[~]` Backend unit:", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryServiceTests", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceServiceTests", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("ReportServiceTests", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("AwayFromZero", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("DateOnly", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL-specific edge cases", backendUnitLine, StringComparison.Ordinal);
+        Assert.Contains("BackendUnitTestingMatrixIsInProgressWhenFinanceTariffMeterDebtBalanceAndDateCoverageExists", backendUnitLine, StringComparison.Ordinal);
+
+        Assert.Contains("Dictionaries_RoundMoneyAndTariffRateBeforeSaving", dictionaryServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_SavesElectricityTiersAndWritesAudit", dictionaryServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_RejectsUnsupportedCalculationBase", dictionaryServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual", dictionaryServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateFinanceDocuments_RoundsManualMoneyAmountsAwayFromZero", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateGarageDebtPaymentAsync_CreatesSystemIncomeAndReducesOpeningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageBalanceHistoryAsync_ReturnsMonthlyRunningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_CalculatesMeterAmountFromReading", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_CalculatesTieredElectricityAmountFromReading", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateMeterReadingAsync_RoundsMeterValuesAndConsumptionAwayFromZero", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetConsolidatedReportAsync_NormalizesReportPeriodToMonthStarts", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_ReturnsDebtAfterEachPayment", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_IncludesSupplierStartingBalanceAsObligation", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("синхронизирован пункт матрицы тестирования `Backend unit:", historyText, StringComparison.Ordinal);
+        Assert.Contains("BackendUnitTestingMatrixIsInProgressWhenFinanceTariffMeterDebtBalanceAndDateCoverageExists", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
