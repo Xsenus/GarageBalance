@@ -875,6 +875,29 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryObjectQuickLinksAreMarkedCompleteWhenContractorCardsOpenFromAuditDetails()
+    {
+        const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
+            .ToArray();
+
+        var quickLinksLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("ContractorOpenTarget", StringComparison.Ordinal));
+
+        Assert.Contains("owner", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains("garage", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains("supplier", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains("staff_member", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.read", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains("future deep links", quickLinksLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(ChangeHistoryObjectQuickLinksAreMarkedCompleteWhenContractorCardsOpenFromAuditDetails), File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConfirmationDeleteCloseFrontendCoverageIsMarkedCompleteWhenCurrentFlowsAreCovered()
     {
         const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";

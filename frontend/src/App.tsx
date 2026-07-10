@@ -192,6 +192,55 @@ type AuditPanelPreset = {
   entityType?: string
   relatedCounterparty?: string
 }
+type ContractorOpenTarget = {
+  section: 'garages' | 'suppliers' | 'staff'
+  entityId?: string | null
+  displayName?: string | null
+  garageNumber?: string | null
+}
+type WorkspaceOpenContext = {
+  contractorTarget?: ContractorOpenTarget
+}
+
+function normalizeContractorTargetText(value?: string | null) {
+  return (value ?? '').trim().toLocaleLowerCase('ru-RU')
+}
+
+function extractGarageNumberFromTarget(target: ContractorOpenTarget) {
+  if (target.garageNumber?.trim()) {
+    return target.garageNumber.trim()
+  }
+
+  return target.displayName?.match(/\d+/)?.[0] ?? null
+}
+
+function findGarageForOpenTarget(garages: ContractorGarageRow[], target: ContractorOpenTarget) {
+  const garageNumber = extractGarageNumberFromTarget(target)
+  const displayName = normalizeContractorTargetText(target.displayName)
+
+  return garages.find((garage) => target.entityId && garage.id === target.entityId)
+    ?? garages.find((garage) => garageNumber && garage.number === garageNumber)
+    ?? garages.find((garage) => displayName.length > 0 && normalizeContractorTargetText(garage.owner).includes(displayName))
+    ?? null
+}
+
+function findSupplierForOpenTarget(suppliers: ContractorSupplierRow[], target: ContractorOpenTarget) {
+  const displayName = normalizeContractorTargetText(target.displayName)
+
+  return suppliers.find((supplier) => target.entityId && supplier.id === target.entityId)
+    ?? suppliers.find((supplier) => displayName.length > 0 && normalizeContractorTargetText(supplier.name) === displayName)
+    ?? suppliers.find((supplier) => displayName.length > 0 && normalizeContractorTargetText(supplier.name).includes(displayName))
+    ?? null
+}
+
+function findStaffForOpenTarget(staff: ContractorStaffRow[], target: ContractorOpenTarget) {
+  const displayName = normalizeContractorTargetText(target.displayName)
+
+  return staff.find((employee) => target.entityId && employee.id === target.entityId)
+    ?? staff.find((employee) => displayName.length > 0 && normalizeContractorTargetText(employee.fullName) === displayName)
+    ?? staff.find((employee) => displayName.length > 0 && normalizeContractorTargetText(employee.fullName).includes(displayName))
+    ?? null
+}
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Главное меню', icon: Gauge },
@@ -239,6 +288,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
+  const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)
   const [isSidebarExpanded, setSidebarExpanded] = useState(() => loadStoredSidebarExpanded(sidebarExpandedStorageKey))
 
   function handleAuthenticated(nextAuth: AuthResponse) {
@@ -263,6 +313,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
     setAuth(null)
     setActiveSection('dashboard')
     setAuditPreset(null)
+    setWorkspaceOpenContext(null)
   }
 
   if (!auth) {
@@ -287,13 +338,15 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
     })
   }
 
-  function openWorkspaceSection(section: WorkspaceSection) {
+  function openWorkspaceSection(section: WorkspaceSection, context: WorkspaceOpenContext | null = null) {
     setAuditPreset(null)
+    setWorkspaceOpenContext(context)
     setActiveSection(section)
   }
 
   function openAuditWithPreset(preset: AuditPanelPreset) {
     setAuditPreset(preset)
+    setWorkspaceOpenContext(null)
     setActiveSection('audit')
   }
 
@@ -346,7 +399,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -416,6 +469,7 @@ function Workspace({
   authClient,
   auditClient,
   auditPreset,
+  workspaceOpenContext,
   dictionaryClient,
   financeClient,
   fundsClient,
@@ -435,6 +489,7 @@ function Workspace({
   authClient: AuthClient
   auditClient: AuditClient
   auditPreset: AuditPanelPreset | null
+  workspaceOpenContext: WorkspaceOpenContext | null
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   fundsClient: FundsClient
@@ -445,7 +500,7 @@ function Workspace({
   releaseClient: ReleaseClient
   userClient: UserManagementClient
   onOpenAudit: (preset: AuditPanelPreset) => void
-  onOpenSection: (section: WorkspaceSection) => void
+  onOpenSection: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }) {
@@ -497,7 +552,7 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} onOpenAudit={onOpenAudit} />
+          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} initialTarget={workspaceOpenContext?.contractorTarget ?? null} onOpenAudit={onOpenAudit} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -8765,8 +8820,48 @@ function getAuditRelatedContext(auditEvent: AuditEventDto) {
   ].filter((item): item is [string, string] => Boolean(item))
 }
 
+function getAuditContractorOpenTarget(auditEvent: AuditEventDto): ContractorOpenTarget | null {
+  if (auditEvent.entityType === 'garage') {
+    return {
+      section: 'garages',
+      entityId: auditEvent.entityId,
+      displayName: auditEvent.entityDisplayName ?? auditEvent.relatedGarageNumber ?? null,
+      garageNumber: auditEvent.relatedGarageNumber,
+    }
+  }
+
+  if (auditEvent.entityType === 'owner') {
+    return {
+      section: 'garages',
+      entityId: auditEvent.relatedGarageId,
+      displayName: auditEvent.entityDisplayName ?? auditEvent.relatedCounterpartyName ?? null,
+      garageNumber: auditEvent.relatedGarageNumber,
+    }
+  }
+
+  if (auditEvent.entityType === 'supplier') {
+    return {
+      section: 'suppliers',
+      entityId: auditEvent.entityId ?? auditEvent.relatedCounterpartyId,
+      displayName: auditEvent.entityDisplayName ?? auditEvent.relatedCounterpartyName ?? null,
+      garageNumber: null,
+    }
+  }
+
+  if (auditEvent.entityType === 'staff_member') {
+    return {
+      section: 'staff',
+      entityId: auditEvent.entityId ?? auditEvent.relatedCounterpartyId,
+      displayName: auditEvent.entityDisplayName ?? auditEvent.relatedCounterpartyName ?? null,
+      garageNumber: null,
+    }
+  }
+
+  return null
+}
+
 function getAuditWorkspaceTarget(auth: AuthResponse, auditEvent: AuditEventDto): { section: WorkspaceSection; label: string } | null {
-  if (auditEvent.entityType === 'owner' || auditEvent.entityType === 'garage' || auditEvent.entityType === 'supplier') {
+  if (auditEvent.entityType === 'owner' || auditEvent.entityType === 'garage' || auditEvent.entityType === 'supplier' || auditEvent.entityType === 'staff_member') {
     return hasPermission(auth, permissions.dictionariesRead) ? { section: 'contractors', label: 'Контрагенты' } : null
   }
 
@@ -8806,7 +8901,7 @@ type AuditPanelError = {
   recovery: 'load' | 'exportCsv' | 'exportXlsx'
 }
 
-function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth: AuthResponse; auditClient: AuditClient; preset: AuditPanelPreset | null; onOpenSection: (section: WorkspaceSection) => void }) {
+function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth: AuthResponse; auditClient: AuditClient; preset: AuditPanelPreset | null; onOpenSection: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void }) {
   const [page, setPage] = useState<PagedItems<AuditEventDto>>(() => createEmptyPage<AuditEventDto>(25))
   const [search, setSearch] = useState('')
   const [section, setSection] = useState(preset?.section ?? '')
@@ -8879,8 +8974,9 @@ function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth: AuthRe
   }
 
   function openAuditWorkspaceTarget(section: WorkspaceSection) {
+    const contractorTarget = section === 'contractors' && detailState ? getAuditContractorOpenTarget(detailState.event) : null
     closeAuditEventDetail()
-    onOpenSection(section)
+    onOpenSection(section, contractorTarget ? { contractorTarget } : null)
   }
 
   async function openAuditEventDetail(auditEvent: AuditEventDto) {
@@ -11686,7 +11782,7 @@ type ContractorsPrototypeSavedState = {
   supplierServices: string[]
 }
 
-function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; onOpenAudit: (preset: AuditPanelPreset) => void }) {
+function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
@@ -11725,6 +11821,7 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
   const [employeeDeleteReason, setEmployeeDeleteReason] = useState('')
   const [departmentDeleteTarget, setDepartmentDeleteTarget] = useState<ContractorDepartmentRow | null>(null)
   const [departmentDeleteReason, setDepartmentDeleteReason] = useState('')
+  const openedInitialTargetRef = useRef<string | null>(null)
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -11818,6 +11915,60 @@ function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, form
       cancelled = true
     }
   }, [auth.accessToken, dictionaryClient])
+
+  useEffect(() => {
+    if (!initialTarget) {
+      openedInitialTargetRef.current = null
+      return
+    }
+
+    const targetKey = `${initialTarget.section}:${initialTarget.entityId ?? ''}:${initialTarget.garageNumber ?? ''}:${initialTarget.displayName ?? ''}`
+    if (openedInitialTargetRef.current === targetKey) {
+      return
+    }
+
+    let nextSection: ContractorSection
+    let nextModal: ContractorModal
+    let closeContextMenu: () => void
+
+    if (initialTarget.section === 'garages') {
+      const targetGarage = findGarageForOpenTarget(garages, initialTarget)
+      if (!targetGarage) {
+        return
+      }
+
+      nextSection = 'garages'
+      nextModal = { type: 'garage', item: targetGarage }
+      closeContextMenu = () => setGarageContextMenu(null)
+    } else if (initialTarget.section === 'suppliers') {
+      const targetSupplier = findSupplierForOpenTarget(suppliers, initialTarget)
+      if (!targetSupplier) {
+        return
+      }
+
+      nextSection = 'suppliers'
+      nextModal = { type: 'supplier', item: targetSupplier }
+      closeContextMenu = () => setSupplierContextMenu(null)
+    } else {
+      const targetEmployee = findStaffForOpenTarget(staff, initialTarget)
+      if (!targetEmployee) {
+        return
+      }
+
+      nextSection = 'staff'
+      nextModal = { type: 'employee', item: targetEmployee }
+      closeContextMenu = () => setEmployeeContextMenu(null)
+    }
+
+    openedInitialTargetRef.current = targetKey
+    const handle = window.setTimeout(() => {
+      setActiveSection(nextSection)
+      closeContextMenu()
+      setModal(nextModal)
+    }, 0)
+
+    return () => window.clearTimeout(handle)
+  }, [garages, initialTarget, staff, suppliers])
 
   useEffect(() => {
     if (!formStateLoaded) {

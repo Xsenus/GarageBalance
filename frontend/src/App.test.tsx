@@ -9146,6 +9146,57 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
   })
 
+  it('opens contractor object card from audit event workspace link', async () => {
+    const user = userEvent.setup()
+    const owner = createOwner({ id: 'owner-audit-target', lastName: 'Ivanov', firstName: 'Ivan' })
+    const garage = createGarage({ id: 'garage-audit-target', number: '12', ownerId: owner.id, ownerName: owner.fullName })
+    const auth = createAuthResponse({
+      user: {
+        permissions: ['users.manage', 'audit.read', 'dictionaries.read'],
+      },
+    })
+    const auditEvent = createAuditEvent({
+      id: 'audit-detail-card-link',
+      action: 'dictionary.owner_updated',
+      entityType: 'owner',
+      entityId: owner.id,
+      entityDisplayName: 'Garage 12',
+      relatedGarageId: garage.id,
+      relatedGarageNumber: garage.number,
+      relatedCounterpartyName: owner.fullName,
+      summary: 'Owner changed.',
+      section: 'dictionary',
+      actionKind: 'update',
+    })
+    const authClient = createAuthClient({
+      login: async () => auth,
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [auditEvent],
+      getEvent: async (_token, id) => ({ ...auditEvent, id }),
+    })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [owner],
+      getGarages: async () => [garage],
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('\u041f\u0430\u0440\u043e\u043b\u044c'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: '\u0412\u043e\u0439\u0442\u0438' }))
+    await openSection(user, '\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439')
+    const auditPanel = await screen.findByRole('region', { name: '\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439' })
+
+    await user.click(await within(auditPanel).findByRole('button', { name: '\u041e\u0442\u043a\u0440\u044b\u0442\u044c' }))
+    const detailDialog = await screen.findByRole('dialog', { name: '\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435' })
+    await user.click(within(detailDialog).getByRole('button', { name: '\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b: \u041a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u044b' }))
+
+    expect(screen.queryByRole('dialog', { name: '\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '\u041a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u044b' })).toBeInTheDocument()
+    const garageDialog = await screen.findByRole('dialog', { name: /12/ })
+    expect(within(garageDialog).getByDisplayValue('12')).toBeInTheDocument()
+    expect(within(garageDialog).getByDisplayValue(owner.fullName)).toBeInTheDocument()
+  })
+
   it('hides audit event workspace links when the user cannot open the target section', async () => {
     const user = userEvent.setup()
     const auth = createAuthResponse({
