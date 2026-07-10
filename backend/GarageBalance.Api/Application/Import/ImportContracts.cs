@@ -25,6 +25,15 @@ public sealed record AccessImportRollbackRequest
     public string Reason { get; init; } = string.Empty;
 }
 
+public sealed record AccessImportApplyRequest
+{
+    [Required]
+    [MaxLength(1000)]
+    public string Reason { get; init; } = string.Empty;
+
+    public bool BackupConfirmed { get; init; }
+}
+
 public sealed record AccessImportCheckDto(
     string Code,
     string Title,

@@ -32,6 +32,17 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public void RequestAccessImportApply_UsesPostApplyEndpoint()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.RequestAccessImportApply))!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var postAttribute = Assert.Single(attributes.OfType<HttpPostAttribute>());
+        Assert.Equal("runs/{id:guid}/apply", postAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpGetAttribute>());
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsBadRequestWhenFileMissing()
     {
         var controller = CreateController(new FakeImportService());
@@ -174,6 +185,71 @@ public sealed class ImportControllerTests
         var result = await controller.CancelAccessImportRun(
             Guid.NewGuid(),
             new AccessImportRollbackRequest { Reason = "Ошибочный запуск" },
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(StatusCodes.Status404NotFound, notFound.StatusCode);
+        Assert.Equal("import_run_not_found", problem.Title);
+    }
+
+    [Fact]
+    public async Task RequestAccessImportApply_ReturnsRunAndPassesActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var run = CreateRun("import_requested");
+        var service = new FakeImportService
+        {
+            ApplyResult = ImportResult<AccessImportRunDto>.Success(run)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.RequestAccessImportApply(
+            run.Id,
+            new AccessImportApplyRequest { Reason = "Dry-run проверен", BackupConfirmed = true },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var value = Assert.IsType<AccessImportRunDto>(ok.Value);
+        Assert.Equal("import_requested", value.Status);
+        Assert.Equal(run.Id, service.LastApplyRunId);
+        Assert.Equal(actorUserId, service.LastApplyActorUserId);
+        Assert.Equal("Dry-run проверен", service.LastApplyRequest?.Reason);
+        Assert.True(service.LastApplyRequest?.BackupConfirmed);
+    }
+
+    [Fact]
+    public async Task RequestAccessImportApply_ReturnsBadRequestWhenBackupIsNotConfirmed()
+    {
+        var service = new FakeImportService
+        {
+            ApplyResult = ImportResult<AccessImportRunDto>.Failure("import_apply_backup_confirmation_required", "Подтвердите backup.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.RequestAccessImportApply(
+            Guid.NewGuid(),
+            new AccessImportApplyRequest { Reason = "Проверено", BackupConfirmed = false },
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+        Assert.Equal("import_apply_backup_confirmation_required", problem.Title);
+    }
+
+    [Fact]
+    public async Task RequestAccessImportApply_ReturnsNotFoundForMissingRun()
+    {
+        var service = new FakeImportService
+        {
+            ApplyResult = ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.RequestAccessImportApply(
+            Guid.NewGuid(),
+            new AccessImportApplyRequest { Reason = "Проверено", BackupConfirmed = true },
             CancellationToken.None);
 
         var notFound = Assert.IsType<ObjectResult>(result.Result);
@@ -381,6 +457,9 @@ public sealed class ImportControllerTests
         public Guid? LastRollbackRunId { get; private set; }
         public Guid? LastRollbackActorUserId { get; private set; }
         public AccessImportRollbackRequest? LastRollbackRequest { get; private set; }
+        public Guid? LastApplyRunId { get; private set; }
+        public Guid? LastApplyActorUserId { get; private set; }
+        public AccessImportApplyRequest? LastApplyRequest { get; private set; }
         public Guid? LastLogRunId { get; private set; }
         public AccessImportRunListRequest? LastRunRequest { get; private set; }
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
@@ -388,6 +467,7 @@ public sealed class ImportControllerTests
         public ImportResult<AccessImportRunDto> DryRunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
         public ImportResult<AccessImportRunDto> RollbackResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
+        public ImportResult<AccessImportRunDto> ApplyResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>> LogResult { get; init; } =
             ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success([]);
 
@@ -410,6 +490,14 @@ public sealed class ImportControllerTests
             LastRollbackRequest = request;
             LastRollbackActorUserId = actorUserId;
             return Task.FromResult(RollbackResult);
+        }
+
+        public Task<ImportResult<AccessImportRunDto>> RequestAccessImportApplyAsync(Guid runId, AccessImportApplyRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastApplyRunId = runId;
+            LastApplyRequest = request;
+            LastApplyActorUserId = actorUserId;
+            return Task.FromResult(ApplyResult);
         }
 
         public Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)

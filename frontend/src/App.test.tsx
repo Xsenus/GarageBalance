@@ -8342,6 +8342,60 @@ describe('App', () => {
     expect(within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })).toBeDisabled()
   })
 
+  it('requests Access import apply through confirmation with backup acknowledgement', async () => {
+    const user = userEvent.setup()
+    let applyRequest: { reason: string; backupConfirmed: boolean } | undefined
+    const run = createAccessImportRun()
+    const importClient = createImportClient({
+      getAccessRuns: async () => [run],
+      getAccessRunLog: async () => [
+        createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'dry_run_finished', message: run.summary }),
+      ],
+      requestAccessImportApply: async (_token, runId, reason, backupConfirmed) => {
+        applyRequest = { reason, backupConfirmed }
+        return createAccessImportRun({
+          ...run,
+          id: runId,
+          status: 'import_requested',
+          summary: 'Фактический импорт запрошен: перенос будет выполнен после подключения reader Access.',
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    const applyButton = within(importPanel).getByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })
+    expect(applyButton).toHaveAttribute('title', 'Запросить фактический импорт ГСК.accdb')
+    expect(applyButton).toHaveAttribute('data-tooltip', 'Запросить фактический импорт ГСК.accdb')
+    await user.click(applyButton)
+
+    const applyDialog = await screen.findByRole('dialog', { name: 'Запросить фактический импорт?' })
+    await waitFor(() => expect(within(applyDialog).getByLabelText('Причина фактического импорта')).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запросить фактический импорт?' })).not.toBeInTheDocument())
+    expect(applyRequest).toBeUndefined()
+    expect(applyButton).toHaveFocus()
+
+    await user.click(applyButton)
+    const reopenedDialog = await screen.findByRole('dialog', { name: 'Запросить фактический импорт?' })
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Запросить импорт' }))
+    expect(within(reopenedDialog).getByRole('alert')).toHaveTextContent('Укажите причину фактического импорта.')
+    await user.type(within(reopenedDialog).getByLabelText('Причина фактического импорта'), 'Dry-run проверен, backup создан')
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Запросить импорт' }))
+    expect(within(reopenedDialog).getByRole('alert')).toHaveTextContent('Подтвердите, что backup PostgreSQL создан перед импортом.')
+    await user.click(within(reopenedDialog).getByLabelText('Backup PostgreSQL создан перед фактическим импортом'))
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Запросить импорт' }))
+
+    expect(await within(importPanel).findByText('Фактический импорт запрошен. Данные не переносились до подключения reader Access.')).toHaveAttribute('role', 'status')
+    expect(applyRequest).toEqual({ reason: 'Dry-run проверен, backup создан', backupConfirmed: true })
+    expect(within(importPanel).getAllByText('Импорт запрошен').length).toBeGreaterThan(0)
+    expect(within(importPanel).getByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })).toBeDisabled()
+  })
+
   it('shows visible counters for long Access import lists', async () => {
     const user = userEvent.setup()
     const runs = Array.from({ length: 9 }, (_, index) => createAccessImportRun({
@@ -10563,6 +10617,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
     getOpenQuarantineItems: async () => [],
     dryRunAccess: async () => run,
     downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
+    requestAccessImportApply: async (_token, runId) => createAccessImportRun({ id: runId, status: 'import_requested' }),
     requestAccessImportRollback: async (_token, runId) => createAccessImportRun({ id: runId, status: 'rollback_requested' }),
     resolveQuarantineItem: async (_token, itemId) => createAccessImportQuarantineItem({ id: itemId, status: 'resolved' }),
     ...overrides,
@@ -10703,6 +10758,20 @@ function createStatefulImportClient(): ImportClient {
     downloadAccessRunReport: async (_token, runId) => {
       const run = runs.find((item) => item.id === runId)
       return new Blob([JSON.stringify(run ?? {})], { type: 'application/json' })
+    },
+    requestAccessImportApply: async (_token, runId, reason) => {
+      const run = runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId })
+      const updatedRun = {
+        ...run,
+        status: 'import_requested' as const,
+        summary: 'Фактический импорт запрошен: перенос будет выполнен после подключения reader Access.',
+      }
+      runs = runs.map((item) => item.id === runId ? updatedRun : item)
+      logsByRunId = new Map(logsByRunId).set(runId, [
+        ...(logsByRunId.get(runId) ?? []),
+        createAccessImportRunLogEntry({ accessImportRunId: runId, stepCode: 'import_requested', level: 'warning', message: `Фактический импорт запрошен: ${reason}` }),
+      ])
+      return updatedRun
     },
     requestAccessImportRollback: async (_token, runId, reason) => {
       const run = runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId })

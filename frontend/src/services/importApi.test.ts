@@ -39,4 +39,21 @@ describe('importApi', () => {
       body: JSON.stringify({ reason: 'Выбран неверный файл' }),
     })
   })
+
+  it('requests Access import apply with reason and backup confirmation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'run-42', status: 'import_requested' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await importApi.requestAccessImportApply('token', 'run-42', 'Dry-run проверен', true)
+
+    expect(result.status).toBe('import_requested')
+    expect(fetchMock).toHaveBeenCalledWith('/api/import/access/runs/run-42/apply', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason: 'Dry-run проверен', backupConfirmed: true }),
+    })
+  })
 })

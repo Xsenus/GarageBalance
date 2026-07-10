@@ -7770,6 +7770,11 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
+  const [applyingRunId, setApplyingRunId] = useState<string | null>(null)
+  const [applyTarget, setApplyTarget] = useState<AccessImportRunDto | null>(null)
+  const [applyReason, setApplyReason] = useState('')
+  const [applyBackupConfirmed, setApplyBackupConfirmed] = useState(false)
+  const [applyError, setApplyError] = useState<string | null>(null)
   const [rollbackingRunId, setRollbackingRunId] = useState<string | null>(null)
   const [rollbackTarget, setRollbackTarget] = useState<AccessImportRunDto | null>(null)
   const [rollbackReason, setRollbackReason] = useState('')
@@ -7782,12 +7787,17 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
   const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
+  const applyActionLabel = currentRun ? `Запросить фактический импорт ${currentRun.originalFileName}` : 'Запросить фактический импорт'
   const rollbackActionLabel = currentRun ? `Запросить rollback импорта ${currentRun.originalFileName}` : 'Запросить rollback импорта'
+  const applyDisabled = !currentRun || currentRun.status !== 'completed' || applyingRunId !== null || rollbackingRunId !== null
   const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || rollbackingRunId !== null
   useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
+  useRestoreFocusOnClose(Boolean(applyTarget))
   useRestoreFocusOnClose(Boolean(rollbackTarget))
   const quarantineResolveCommentRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(quarantineResolveTarget))
   const quarantineResolveDialogRef = useFocusTrap<HTMLElement>(Boolean(quarantineResolveTarget))
+  const applyReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(applyTarget))
+  const applyDialogRef = useFocusTrap<HTMLElement>(Boolean(applyTarget))
   const rollbackReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(rollbackTarget))
   const rollbackDialogRef = useFocusTrap<HTMLElement>(Boolean(rollbackTarget))
   const visibleRunLogEntries = runLogEntries.slice(0, 10)
@@ -7801,6 +7811,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   ]
 
   useEscapeKey(Boolean(quarantineResolveTarget) && resolvingQuarantineId === null, () => closeQuarantineResolveDialog())
+  useEscapeKey(Boolean(applyTarget) && applyingRunId === null, () => closeApplyDialog())
   useEscapeKey(Boolean(rollbackTarget) && rollbackingRunId === null, () => closeRollbackDialog())
 
   useEffect(() => {
@@ -7909,6 +7920,56 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
       setError(caught instanceof Error ? caught.message : 'Не удалось скачать отчет dry-run импорта.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  function openApplyDialog(run: AccessImportRunDto) {
+    setApplyTarget(run)
+    setApplyReason('')
+    setApplyBackupConfirmed(false)
+    setApplyError(null)
+    setError(null)
+    setExportMessage(null)
+  }
+
+  function closeApplyDialog() {
+    setApplyTarget(null)
+    setApplyReason('')
+    setApplyBackupConfirmed(false)
+    setApplyError(null)
+  }
+
+  async function submitApplyRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!applyTarget) {
+      return
+    }
+
+    const reason = applyReason.trim()
+    if (!reason) {
+      setApplyError('Укажите причину фактического импорта.')
+      return
+    }
+
+    if (!applyBackupConfirmed) {
+      setApplyError('Подтвердите, что backup PostgreSQL создан перед импортом.')
+      return
+    }
+
+    setApplyingRunId(applyTarget.id)
+    setError(null)
+    setExportMessage(null)
+    try {
+      const updatedRun = await importClient.requestAccessImportApply(auth.accessToken, applyTarget.id, reason, applyBackupConfirmed)
+      setCurrentRun(updatedRun)
+      setRuns((items) => items.map((item) => item.id === updatedRun.id ? updatedRun : item))
+      setRunLogEntries(await importClient.getAccessRunLog(auth.accessToken, updatedRun.id))
+      setExportMessage('Фактический импорт запрошен. Данные не переносились до подключения reader Access.')
+      closeApplyDialog()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось запросить фактический импорт.')
+    } finally {
+      setApplyingRunId(null)
     }
   }
 
@@ -8037,6 +8098,10 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <FileText size={16} aria-hidden="true" />
             <span>Скачать отчет JSON</span>
           </button>
+          <button className="secondary-button" type="button" aria-label={applyActionLabel} title={applyActionLabel} data-tooltip={applyActionLabel} disabled={applyDisabled} onClick={() => currentRun ? openApplyDialog(currentRun) : undefined}>
+            <DatabaseZap size={16} aria-hidden="true" />
+            <span>Запросить импорт</span>
+          </button>
           <button className="secondary-button" type="button" aria-label={rollbackActionLabel} title={rollbackActionLabel} data-tooltip={rollbackActionLabel} disabled={rollbackDisabled} onClick={() => currentRun ? openRollbackDialog(currentRun) : undefined}>
             <RotateCcw size={16} aria-hidden="true" />
             <span>Запросить rollback</span>
@@ -8147,7 +8212,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <strong>{run.originalFileName}</strong>
                 <small>{run.summary}</small>
               </span>
-              <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' ? 'warning-text' : 'status-disabled'}>
+              <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' || run.status === 'import_requested' ? 'warning-text' : 'status-disabled'}>
                 {formatImportRunStatus(run.status)}
               </span>
               <span role="cell">
@@ -8189,6 +8254,81 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
         </div>
         ) : null}
       </div>
+      {applyTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (applyingRunId === null) {
+            closeApplyDialog()
+          }
+        }}>
+          <section ref={applyDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="import-apply-title" aria-describedby="import-apply-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Фактический импорт</p>
+                <h3 id="import-apply-title">Запросить фактический импорт?</h3>
+                <p>{applyTarget.originalFileName} · {formatImportRunStatus(applyTarget.status)}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeApplyDialog} aria-label="Закрыть подтверждение фактического импорта" title="Закрыть подтверждение фактического импорта" data-tooltip="Закрыть" disabled={applyingRunId !== null}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="import-apply-description">Заявка будет записана в историю импорта. До подключения reader Access система не переносит строки в рабочую базу, поэтому перед реальным переносом нужен свежий backup PostgreSQL.</p>
+            <form className="dictionary-modal-form" onSubmit={submitApplyRequest}>
+              <FormField label="Причина импорта">
+                <textarea
+                  ref={applyReasonRef}
+                  aria-label="Причина фактического импорта"
+                  aria-invalid={Boolean(applyError)}
+                  aria-describedby={applyError ? 'import-apply-error' : undefined}
+                  rows={3}
+                  maxLength={1000}
+                  value={applyReason}
+                  onChange={(event) => {
+                    setApplyReason(event.target.value)
+                    if (applyError && event.target.value.trim() && applyBackupConfirmed) {
+                      setApplyError(null)
+                    }
+                  }}
+                  placeholder="Например: dry-run проверен, backup PostgreSQL создан"
+                  disabled={applyingRunId !== null}
+                />
+              </FormField>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  aria-label="Backup PostgreSQL создан перед фактическим импортом"
+                  checked={applyBackupConfirmed}
+                  onChange={(event) => {
+                    setApplyBackupConfirmed(event.target.checked)
+                    if (applyError && event.target.checked && applyReason.trim()) {
+                      setApplyError(null)
+                    }
+                  }}
+                  disabled={applyingRunId !== null}
+                />
+                <span>Backup PostgreSQL создан перед фактическим импортом</span>
+              </label>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Запуск</dt>
+                  <dd>{applyTarget.originalFileName}</dd>
+                </div>
+                <div>
+                  <dt>Проверки</dt>
+                  <dd>{formatImportRunCheckSummary(applyTarget)}</dd>
+                </div>
+              </dl>
+              {applyError ? <p className="form-error" id="import-apply-error" role="alert">{applyError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" onClick={closeApplyDialog} disabled={applyingRunId !== null}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={applyingRunId !== null}>
+                  <DatabaseZap size={16} aria-hidden="true" />
+                  <span>{applyingRunId === applyTarget.id ? 'Запрашиваем...' : 'Запросить импорт'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
       {rollbackTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
           if (rollbackingRunId === null) {

@@ -205,6 +205,86 @@ public sealed class ImportService(
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
 
+    public async Task<ImportResult<AccessImportRunDto>> RequestAccessImportApplyAsync(
+        Guid runId,
+        AccessImportApplyRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var reason = request.Reason.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_apply_reason_required", "Укажите причину фактического импорта.");
+        }
+
+        if (reason.Length > 1000)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_apply_reason_too_long", "Причина фактического импорта превышает допустимую длину.");
+        }
+
+        if (!request.BackupConfirmed)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_apply_backup_confirmation_required", "Подтвердите, что перед фактическим импортом создан backup PostgreSQL.");
+        }
+
+        var run = await dbContext.AccessImportRuns.SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        if (run is null)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
+        }
+
+        if (run.Status == "import_requested")
+        {
+            return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+        }
+
+        if (run.Status == "blocked")
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_blocked", "Нельзя запрашивать фактический импорт, пока dry-run завершен с ошибками.");
+        }
+
+        if (run.Status == "rollback_requested")
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_rollback_requested", "Нельзя запрашивать фактический импорт после rollback-заявки по этому запуску.");
+        }
+
+        run.Status = "import_requested";
+        run.Summary = "Фактический импорт запрошен: перенос будет выполнен после подключения reader Access и проверки backup.";
+
+        AddRunLog(run, "warning", "import_requested", "Запрошен фактический импорт Access. Данные пока не переносились: reader Access еще не подключен.", new
+        {
+            reason,
+            backupConfirmed = request.BackupConfirmed,
+            mode = run.Mode,
+            status = run.Status
+        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.apply_requested",
+            "access_import_run",
+            run.Id.ToString(),
+            Summary: $"Запрошен фактический импорт Access: {run.OriginalFileName}.",
+            ActionKind: "import",
+            EntityDisplayName: run.OriginalFileName,
+            Reason: reason,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: run.OriginalFileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["mode"] = run.Mode,
+                ["status"] = run.Status,
+                ["originalFileName"] = run.OriginalFileName,
+                ["fileExtension"] = run.FileExtension,
+                ["contentSha256"] = run.ContentSha256,
+                ["backupConfirmed"] = request.BackupConfirmed,
+                ["importExecuted"] = false,
+                ["importState"] = "pending_access_reader"
+            }));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
     public async Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.FileName))

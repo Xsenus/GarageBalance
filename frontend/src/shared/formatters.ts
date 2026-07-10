@@ -99,6 +99,10 @@ export function formatImportRunStatus(status: AccessImportRunDto['status']): str
     return 'Rollback запрошен'
   }
 
+  if (status === 'import_requested') {
+    return 'Импорт запрошен'
+  }
+
   return 'Заблокирован'
 }
 

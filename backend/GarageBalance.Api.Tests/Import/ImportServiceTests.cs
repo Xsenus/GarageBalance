@@ -189,6 +189,95 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task RequestAccessImportApplyAsync_MarksRunAndWritesAuditWithBackupConfirmation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.RequestAccessImportApplyAsync(
+            dryRun.Value!.Id,
+            new AccessImportApplyRequest { Reason = "Dry-run проверен, backup создан", BackupConfirmed = true },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("import_requested", result.Value!.Status);
+        Assert.Contains("Фактический импорт запрошен", result.Value.Summary, StringComparison.Ordinal);
+        Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.AccessImportRunId == dryRun.Value.Id && item.StepCode == "import_requested");
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.apply_requested");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("import", auditEvent.ActionKind);
+        Assert.Equal(dryRun.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("GSK archive.accdb", auditEvent.EntityDisplayName);
+        Assert.Equal(dryRun.Value.Id.ToString(), auditEvent.RelatedDocumentId);
+        Assert.Equal("GSK archive.accdb", auditEvent.RelatedDocumentNumber);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("Dry-run проверен, backup создан", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("dry_run", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal("import_requested", metadata.RootElement.GetProperty("status").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("backupConfirmed").GetString());
+        Assert.Equal("False", metadata.RootElement.GetProperty("importExecuted").GetString());
+        Assert.Equal("pending_access_reader", metadata.RootElement.GetProperty("importState").GetString());
+    }
+
+    [Fact]
+    public async Task RequestAccessImportApplyAsync_RequiresReasonAndBackupConfirmation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var missingReason = await service.RequestAccessImportApplyAsync(
+            dryRun.Value!.Id,
+            new AccessImportApplyRequest { Reason = " ", BackupConfirmed = true },
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var missingBackup = await service.RequestAccessImportApplyAsync(
+            dryRun.Value.Id,
+            new AccessImportApplyRequest { Reason = "Проверено", BackupConfirmed = false },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(missingReason.Succeeded);
+        Assert.Equal("import_apply_reason_required", missingReason.ErrorCode);
+        Assert.False(missingBackup.Succeeded);
+        Assert.Equal("import_apply_backup_confirmation_required", missingBackup.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "import.apply_requested");
+        Assert.DoesNotContain(database.Context.AccessImportRunLogEntries, item => item.StepCode == "import_requested");
+    }
+
+    [Fact]
+    public async Task RequestAccessImportApplyAsync_RejectsBlockedOrRolledBackRuns()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var blocked = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("blocked.accdb", CreateAccessLikeStream("")), null, CancellationToken.None);
+        var rolledBack = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("rollback.accdb", CreateAccessLikeStream("garage")), null, CancellationToken.None);
+        database.Context.AccessImportRuns.Single(run => run.Id == blocked.Value!.Id).Status = "blocked";
+        await database.Context.SaveChangesAsync();
+        await service.RequestAccessImportRollbackAsync(rolledBack.Value!.Id, new AccessImportRollbackRequest { Reason = "Ошибочный файл" }, null, CancellationToken.None);
+
+        var blockedResult = await service.RequestAccessImportApplyAsync(
+            blocked.Value!.Id,
+            new AccessImportApplyRequest { Reason = "Проверено", BackupConfirmed = true },
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var rolledBackResult = await service.RequestAccessImportApplyAsync(
+            rolledBack.Value.Id,
+            new AccessImportApplyRequest { Reason = "Проверено", BackupConfirmed = true },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(blockedResult.Succeeded);
+        Assert.Equal("import_run_blocked", blockedResult.ErrorCode);
+        Assert.False(rolledBackResult.Succeeded);
+        Assert.Equal("import_run_rollback_requested", rolledBackResult.ErrorCode);
+    }
+
+    [Fact]
     public async Task GetAccessImportRunLogEntriesAsync_ReturnsRunLogInChronologicalOrderWithoutDetails()
     {
         await using var database = await TestDatabase.CreateAsync();
