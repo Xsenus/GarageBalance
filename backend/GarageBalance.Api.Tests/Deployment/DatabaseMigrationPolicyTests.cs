@@ -87,6 +87,35 @@ public sealed class DatabaseMigrationPolicyTests
     }
 
     [Fact]
+    public void ProductionBackendCode_CreatesAuditEventsOnlyThroughAuditEventWriter()
+    {
+        var apiRoot = Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api");
+        var auditEventWriterPath = Path.Combine(apiRoot, "Application", "Audit", "AuditEventWriter.cs");
+        var offenders = EnumerateProductionSourceFiles(apiRoot)
+            .Where(path => !string.Equals(path, auditEventWriterPath, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(path =>
+            {
+                var text = File.ReadAllText(path);
+                var violations = new List<string>();
+                if (System.Text.RegularExpressions.Regex.IsMatch(text, @"new\s+AuditEvent\b"))
+                {
+                    violations.Add("new AuditEvent");
+                }
+
+                if (text.Contains("AuditEvents.Add(", StringComparison.Ordinal))
+                {
+                    violations.Add("AuditEvents.Add(");
+                }
+
+                return violations
+                    .Select(pattern => $"{Path.GetRelativePath(apiRoot, path)} writes audit events outside AuditEventWriter: {pattern}");
+            })
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void MigrationFolder_ContainsSnapshotAndConcreteMigrations()
     {
         var migrationRoot = Path.Combine(

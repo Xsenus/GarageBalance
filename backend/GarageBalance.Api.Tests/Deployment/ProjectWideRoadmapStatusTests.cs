@@ -806,6 +806,48 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryApplicationWriterAndReasonFormatAreMarkedCompleteWhenDirectAuditWritesAreForbidden()
+    {
+        const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
+            .ToArray();
+
+        var writerLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("future mutating services", StringComparison.Ordinal));
+        var reasonLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("future manual audit-", StringComparison.Ordinal));
+
+        Assert.Contains("IAuditEventWriter", writerLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventWriter", writerLine, StringComparison.Ordinal);
+        Assert.Contains("auth", writerLine, StringComparison.Ordinal);
+        Assert.Contains("users", writerLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries", writerLine, StringComparison.Ordinal);
+        Assert.Contains("finance", writerLine, StringComparison.Ordinal);
+        Assert.Contains("funds", writerLine, StringComparison.Ordinal);
+        Assert.Contains("import", writerLine, StringComparison.Ordinal);
+        Assert.Contains("integrations", writerLine, StringComparison.Ordinal);
+        Assert.Contains("receipt printing", writerLine, StringComparison.Ordinal);
+        Assert.Contains("reports", writerLine, StringComparison.Ordinal);
+        Assert.Contains("form states", writerLine, StringComparison.Ordinal);
+        Assert.Contains("app releases", writerLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEvents.Add", writerLine, StringComparison.Ordinal);
+        Assert.Contains("future mutating services", writerLine, StringComparison.Ordinal);
+
+        Assert.Contains("AuditEventWriter", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("archive/delete/cancel", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("Reason", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("\u041f\u0440\u0438\u0447\u0438\u043d\u0430", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventWriterTests", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerThinnessTests", reasonLine, StringComparison.Ordinal);
+        Assert.Contains("ProductionBackendCode_CreatesAuditEventsOnlyThroughAuditEventWriter", reasonLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChangeHistoryControllerTestCoverageIsMarkedCompleteWhenAuditControllerContractIsCovered()
     {
         var controllerTestsLine = File
