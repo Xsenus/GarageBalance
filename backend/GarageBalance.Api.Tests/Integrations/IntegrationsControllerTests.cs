@@ -110,6 +110,39 @@ public sealed class IntegrationsControllerTests
     }
 
     [Fact]
+    public async Task PreviewOneCFreshSync_ReturnsResultAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var expected = new OneCFreshSyncPreviewDto(
+            Guid.NewGuid(),
+            "OneCFresh",
+            "preview",
+            "pending_decision",
+            "draft_preview",
+            "Предпросмотр подготовлен.",
+            DateTimeOffset.UtcNow,
+            "Период не выбран.",
+            "snapshot",
+            CanApply: false,
+            [new OneCFreshSyncPreviewCountDto("payment", "export", 0)],
+            [new OneCFreshSyncPreviewNoticeDto("decision_required", "Нужно решение.")],
+            []);
+        var service = new FakeOneCFreshSyncService
+        {
+            PreviewResult = OneCFreshSyncResult<OneCFreshSyncPreviewDto>.Success(expected)
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), actorUserId, service);
+        var request = new OneCFreshSyncRequest("Проверочный предпросмотр");
+
+        var result = await controller.PreviewOneCFreshSync(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(expected, ok.Value);
+        Assert.Equal(request, service.LastPreviewRequest);
+        Assert.Equal(actorUserId, service.LastPreviewActorUserId);
+    }
+
+    [Fact]
     public async Task RetryOneCFreshSync_ReturnsResultAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -149,6 +182,23 @@ public sealed class IntegrationsControllerTests
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal("one_c_fresh_not_configured", problem.Title);
         Assert.NotNull(service.LastRetryRequest);
+    }
+
+    [Fact]
+    public async Task PreviewOneCFreshSync_MapsNotConfiguredToConflict()
+    {
+        var service = new FakeOneCFreshSyncService
+        {
+            PreviewResult = OneCFreshSyncResult<OneCFreshSyncPreviewDto>.Failure("one_c_fresh_not_configured", "Нет токена.")
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), oneCFreshSyncService: service);
+
+        var result = await controller.PreviewOneCFreshSync(null, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("one_c_fresh_not_configured", problem.Title);
+        Assert.NotNull(service.LastPreviewRequest);
     }
 
     [Fact]
@@ -227,6 +277,10 @@ public sealed class IntegrationsControllerTests
 
     private sealed class FakeOneCFreshSyncService : IOneCFreshSyncService
     {
+        public OneCFreshSyncRequest? LastPreviewRequest { get; private set; }
+
+        public Guid? LastPreviewActorUserId { get; private set; }
+
         public OneCFreshSyncRequest? LastRequest { get; private set; }
 
         public Guid? LastActorUserId { get; private set; }
@@ -238,8 +292,21 @@ public sealed class IntegrationsControllerTests
         public OneCFreshSyncResult<OneCFreshSyncDto> Result { get; init; } =
             OneCFreshSyncResult<OneCFreshSyncDto>.Failure("not_configured", "Not configured.");
 
+        public OneCFreshSyncResult<OneCFreshSyncPreviewDto> PreviewResult { get; init; } =
+            OneCFreshSyncResult<OneCFreshSyncPreviewDto>.Failure("not_configured", "Not configured.");
+
         public OneCFreshSyncResult<OneCFreshSyncDto> RetryResult { get; init; } =
             OneCFreshSyncResult<OneCFreshSyncDto>.Failure("not_configured", "Not configured.");
+
+        public Task<OneCFreshSyncResult<OneCFreshSyncPreviewDto>> PreviewSyncAsync(
+            OneCFreshSyncRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastPreviewRequest = request;
+            LastPreviewActorUserId = actorUserId;
+            return Task.FromResult(PreviewResult);
+        }
 
         public Task<OneCFreshSyncResult<OneCFreshSyncDto>> StartSyncAsync(
             OneCFreshSyncRequest request,

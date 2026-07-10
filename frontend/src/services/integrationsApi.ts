@@ -14,6 +14,33 @@ export type OneCFreshSyncRequest = {
   comment?: string | null
 }
 
+export type OneCFreshSyncPreviewCountDto = {
+  objectType: string
+  operation: string
+  count: number
+}
+
+export type OneCFreshSyncPreviewNoticeDto = {
+  code: string
+  message: string
+}
+
+export type OneCFreshSyncPreviewDto = {
+  auditEventId: string
+  provider: string
+  mode: string
+  direction: string
+  status: string
+  statusMessage: string
+  requestedAtUtc: string
+  periodSummary: string
+  snapshotHash: string
+  canApply: boolean
+  counts: OneCFreshSyncPreviewCountDto[]
+  warnings: OneCFreshSyncPreviewNoticeDto[]
+  conflicts: OneCFreshSyncPreviewNoticeDto[]
+}
+
 export type OneCFreshSyncDto = {
   auditEventId: string
   provider: string
@@ -60,6 +87,7 @@ export type ReceiptPrintingActionDto = {
 
 export type IntegrationClient = {
   getOneCFreshStatus(accessToken: string): Promise<OneCFreshIntegrationStatusDto>
+  previewOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncPreviewDto>
   startOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncDto>
   retryOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncDto>
   getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
@@ -69,6 +97,12 @@ export type IntegrationClient = {
 export const integrationsApi: IntegrationClient = {
   getOneCFreshStatus(accessToken) {
     return requestJson<OneCFreshIntegrationStatusDto>(accessToken, '/api/integrations/one-c-fresh/status')
+  },
+  previewOneCFreshSync(accessToken, request) {
+    return requestJson<OneCFreshSyncPreviewDto>(accessToken, '/api/integrations/one-c-fresh/sync-runs/preview', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
   },
   startOneCFreshSync(accessToken, request) {
     return requestJson<OneCFreshSyncDto>(accessToken, '/api/integrations/one-c-fresh/sync-runs', {

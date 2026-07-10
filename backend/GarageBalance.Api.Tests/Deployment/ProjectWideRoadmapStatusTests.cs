@@ -1380,6 +1380,120 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshPreviewModeIsMarkedCompleteWhenEndpointAuditUiTestsAndReleaseNotesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var previewLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать режим предпросмотра синхронизации", StringComparison.Ordinal));
+        var controllerText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Controllers",
+            "IntegrationsController.cs"));
+        var serviceInterfaceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "IOneCFreshSyncService.cs"));
+        var contractsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncContracts.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncService.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationsControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Auth",
+            "ControllerAuthorizationCoverageTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
+        var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "AppReleases",
+            "releases.json"));
+
+        Assert.StartsWith("- `[x]`", previewLine, StringComparison.Ordinal);
+        Assert.Contains("POST /api/integrations/one-c-fresh/sync-runs/preview", previewLine, StringComparison.Ordinal);
+        Assert.Contains("PreviewSyncAsync", previewLine, StringComparison.Ordinal);
+        Assert.Contains("one_c_fresh.sync_preview_requested", previewLine, StringComparison.Ordinal);
+        Assert.Contains("draft_preview", previewLine, StringComparison.Ordinal);
+        Assert.Contains("snapshotHash", previewLine, StringComparison.Ordinal);
+        Assert.Contains("canApply=false", previewLine, StringComparison.Ordinal);
+        Assert.Contains("IOneCFreshSyncAdapter", previewLine, StringComparison.Ordinal);
+        Assert.Contains("0.536.0", previewLine, StringComparison.Ordinal);
+        Assert.Contains("[decision]", previewLine, StringComparison.Ordinal);
+
+        Assert.Contains("[HttpPost(\"one-c-fresh/sync-runs/preview\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("PreviewOneCFreshSync", controllerText, StringComparison.Ordinal);
+        Assert.Contains("Policy = SystemPermissions.ImportRun", controllerText, StringComparison.Ordinal);
+        Assert.Contains("PreviewSyncAsync", serviceInterfaceText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncPreviewDto", contractsText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncPreviewCountDto", contractsText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncPreviewNoticeDto", contractsText, StringComparison.Ordinal);
+        Assert.Contains("\"one_c_fresh.sync_preview_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"draft_preview\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"snapshotHash\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("BuildPreviewSnapshotHash", serviceText, StringComparison.Ordinal);
+        var previewMethodStart = serviceText.IndexOf(
+            "public async Task<OneCFreshSyncResult<OneCFreshSyncPreviewDto>> PreviewSyncAsync",
+            StringComparison.Ordinal);
+        var startSyncMethodStart = serviceText.IndexOf(
+            "public async Task<OneCFreshSyncResult<OneCFreshSyncDto>> StartSyncAsync",
+            StringComparison.Ordinal);
+        Assert.True(previewMethodStart >= 0);
+        Assert.True(startSyncMethodStart > previewMethodStart);
+        var previewMethodText = serviceText[previewMethodStart..startSyncMethodStart];
+        Assert.DoesNotContain("syncAdapter.", previewMethodText, StringComparison.Ordinal);
+        Assert.Contains("PreviewSyncAsync_CreatesAuditEventWithoutCallingAdapterOrPlaintextToken", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("PreviewOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("PreviewOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("previewOneCFreshSync", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("/api/integrations/one-c-fresh/sync-runs/preview", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("Подготовить предпросмотр", appText, StringComparison.Ordinal);
+        Assert.Contains("Предпросмотр синхронизации 1C Fresh", appText, StringComparison.Ordinal);
+        Assert.Contains("oneCFreshPreview.canApply", appText, StringComparison.Ordinal);
+        Assert.Contains("previews 1C Fresh synchronization before sending changes", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("previewOneCFreshSync", integrationsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.536.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Предпросмотр синхронизации 1C Fresh до отправки", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshPreviewModeIsMarkedCompleteWhenEndpointAuditUiTestsAndReleaseNotesExist", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OneCFreshSyncDesignIsMarkedCompleteWhenModelStatusesJournalAndPreviewAreDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();

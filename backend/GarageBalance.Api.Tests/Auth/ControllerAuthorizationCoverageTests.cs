@@ -246,6 +246,7 @@ public sealed class ControllerAuthorizationCoverageTests
 
     [Theory]
     [InlineData(nameof(IntegrationsController.GetOneCFreshStatus), SystemPermissions.ImportRun)]
+    [InlineData(nameof(IntegrationsController.PreviewOneCFreshSync), SystemPermissions.ImportRun)]
     [InlineData(nameof(IntegrationsController.StartOneCFreshSync), SystemPermissions.ImportRun)]
     [InlineData(nameof(IntegrationsController.RetryOneCFreshSync), SystemPermissions.ImportRun)]
     [InlineData(nameof(IntegrationsController.GetReceiptPrintingStatus), SystemPermissions.PaymentsWrite)]

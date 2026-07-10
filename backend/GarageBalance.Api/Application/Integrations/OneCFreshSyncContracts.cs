@@ -4,6 +4,25 @@ namespace GarageBalance.Api.Application.Integrations;
 
 public sealed record OneCFreshSyncRequest([MaxLength(1000)] string? Comment);
 
+public sealed record OneCFreshSyncPreviewDto(
+    Guid AuditEventId,
+    string Provider,
+    string Mode,
+    string Direction,
+    string Status,
+    string StatusMessage,
+    DateTimeOffset RequestedAtUtc,
+    string PeriodSummary,
+    string SnapshotHash,
+    bool CanApply,
+    IReadOnlyList<OneCFreshSyncPreviewCountDto> Counts,
+    IReadOnlyList<OneCFreshSyncPreviewNoticeDto> Warnings,
+    IReadOnlyList<OneCFreshSyncPreviewNoticeDto> Conflicts);
+
+public sealed record OneCFreshSyncPreviewCountDto(string ObjectType, string Operation, int Count);
+
+public sealed record OneCFreshSyncPreviewNoticeDto(string Code, string Message);
+
 public sealed record OneCFreshSyncDto(
     Guid AuditEventId,
     string Provider,

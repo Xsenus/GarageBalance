@@ -23,6 +23,62 @@ public sealed class OneCFreshSyncServiceTests
     }
 
     [Fact]
+    public async Task PreviewSyncAsync_RequiresRefreshToken()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context, new FakeSecretSettingsService(null), new FakeSyncAdapter());
+
+        var result = await service.PreviewSyncAsync(new OneCFreshSyncRequest(null), Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("one_c_fresh_not_configured", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task PreviewSyncAsync_CreatesAuditEventWithoutCallingAdapterOrPlaintextToken()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var actorUserId = Guid.NewGuid();
+        var adapter = new FakeSyncAdapter();
+        var service = CreateService(database.Context, new FakeSecretSettingsService("super-secret-token"), adapter);
+
+        var result = await service.PreviewSyncAsync(new OneCFreshSyncRequest("Проверить период перед обменом"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("OneCFresh", result.Value!.Provider);
+        Assert.Equal("preview", result.Value.Mode);
+        Assert.Equal("pending_decision", result.Value.Direction);
+        Assert.Equal("draft_preview", result.Value.Status);
+        Assert.False(result.Value.CanApply);
+        Assert.NotEmpty(result.Value.SnapshotHash);
+        Assert.All(result.Value.Counts, count => Assert.Equal(0, count.Count));
+        Assert.Contains(result.Value.Warnings, warning => warning.Code == "one_c_fresh_exchange_decisions_required");
+        Assert.Empty(result.Value.Conflicts);
+        Assert.Null(adapter.LastRequest);
+        var audit = Assert.Single(database.Context.AuditEvents);
+        Assert.Equal(result.Value.AuditEventId, audit.Id);
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("one_c_fresh.sync_preview_requested", audit.Action);
+        Assert.Equal("sync", audit.ActionKind);
+        Assert.Equal("integrations", audit.Section);
+        Assert.Equal("integration_sync", audit.EntityType);
+        Assert.Equal("OneCFresh", audit.EntityId);
+        Assert.Equal("1C Fresh", audit.EntityDisplayName);
+        Assert.DoesNotContain("super-secret-token", audit.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("super-secret-token", audit.MetadataJson, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("preview", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal("pending_decision", metadata.RootElement.GetProperty("direction").GetString());
+        Assert.Equal("draft_preview", metadata.RootElement.GetProperty("syncStatus").GetString());
+        Assert.Equal(result.Value.SnapshotHash, metadata.RootElement.GetProperty("snapshotHash").GetString());
+        Assert.Equal("False", metadata.RootElement.GetProperty("canApply").GetString());
+        Assert.Equal("0", metadata.RootElement.GetProperty("conflictCount").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("protectedCredentialConfigured").GetString());
+        Assert.Equal("Проверить период перед обменом", metadata.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task StartSyncAsync_CreatesAuditEventWithoutPlaintextToken()
     {
         await using var database = await TestDatabase.CreateAsync();

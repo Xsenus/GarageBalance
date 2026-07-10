@@ -24,7 +24,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -4376,6 +4376,55 @@ describe('App', () => {
     await user.click(within(retryDialog).getByRole('button', { name: 'Повторить' }))
     await waitFor(() => expect(retryOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Повтор после ошибки адаптера' }))
     expect(await within(integrationPanel).findByText('Повтор 1C зарегистрирован: Повтор после ошибки адаптера')).toHaveAttribute('role', 'status')
+  })
+
+  it('previews 1C Fresh synchronization before sending changes', async () => {
+    const user = userEvent.setup()
+    const previewOneCFreshSync = vi.fn(async (_accessToken: string, request: OneCFreshSyncRequest) => createOneCFreshPreview({
+      statusMessage: `Предпросмотр 1C подготовлен: ${request.comment ?? ''}`,
+      periodSummary: 'Июль 2026, платежи и начисления',
+    }))
+    const startOneCFreshSync = vi.fn(async () => createOneCFreshSync())
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => createOneCFreshStatus({
+        isConfigured: true,
+        status: 'prepared',
+        configuredSettings: ['RefreshToken'],
+      }),
+      previewOneCFreshSync,
+      startOneCFreshSync,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const previewButton = await within(integrationPanel).findByRole('button', { name: 'Подготовить предпросмотр' })
+    await user.click(previewButton)
+    let previewDialog = await screen.findByRole('dialog', { name: 'Подготовить предпросмотр синхронизации 1C Fresh?' })
+    await waitFor(() => expect(within(previewDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подготовить предпросмотр синхронизации 1C Fresh?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(previewButton).toHaveFocus())
+    expect(previewOneCFreshSync).not.toHaveBeenCalled()
+
+    await user.click(previewButton)
+    previewDialog = await screen.findByRole('dialog', { name: 'Подготовить предпросмотр синхронизации 1C Fresh?' })
+    await user.type(within(previewDialog).getByLabelText('Комментарий к предпросмотру синхронизации 1C Fresh'), 'Проверить перед отправкой')
+    await user.click(within(previewDialog).getByRole('button', { name: 'Подготовить' }))
+
+    await waitFor(() => expect(previewOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Проверить перед отправкой' }))
+    expect(startOneCFreshSync).not.toHaveBeenCalled()
+    expect(await within(integrationPanel).findByText('Предпросмотр 1C подготовлен: Проверить перед отправкой')).toHaveAttribute('role', 'status')
+    const preview = within(integrationPanel).getByLabelText('Предпросмотр синхронизации 1C Fresh')
+    expect(within(preview).getByText('Предпросмотр')).toBeInTheDocument()
+    expect(within(preview).getByText('Ожидает решения по направлению обмена')).toBeInTheDocument()
+    expect(within(preview).getByText('Июль 2026, платежи и начисления')).toBeInTheDocument()
+    expect(within(preview).getByText('Нет, нужен реальный контур и подтверждение состава обмена')).toBeInTheDocument()
+    expect(within(preview).getByText('Предпросмотр не отправлял данные в 1C Fresh: направление обмена, документы и тестовый контур еще требуют решения.')).toBeInTheDocument()
+    expect(within(integrationPanel).getByRole('button', { name: 'Запустить синхронизацию' })).toBeDisabled()
   })
 
   it('shows 1C Fresh retry and conflict recovery states from backend result', async () => {
@@ -10904,6 +10953,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
 function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): IntegrationClient {
   return {
     getOneCFreshStatus: async () => createOneCFreshStatus(),
+    previewOneCFreshSync: async () => createOneCFreshPreview(),
     startOneCFreshSync: async () => createOneCFreshSync(),
     retryOneCFreshSync: async () => createOneCFreshSync(),
     getReceiptPrintingStatus: async () => createReceiptPrintingStatus(),
@@ -12355,6 +12405,34 @@ function createOneCFreshSync(overrides: Partial<OneCFreshSyncDto> = {}): OneCFre
     errorCode: null,
     externalRunId: null,
     recoveryAction: 'retry',
+    ...overrides,
+  }
+}
+
+function createOneCFreshPreview(overrides: Partial<OneCFreshSyncPreviewDto> = {}): OneCFreshSyncPreviewDto {
+  return {
+    auditEventId: 'audit-one-c-fresh-preview',
+    provider: 'OneCFresh',
+    mode: 'preview',
+    direction: 'pending_decision',
+    status: 'draft_preview',
+    statusMessage: 'Предпросмотр синхронизации подготовлен без отправки данных в 1C Fresh.',
+    requestedAtUtc: '2026-07-11T00:00:00Z',
+    periodSummary: 'Период и документы не выбраны.',
+    snapshotHash: 'abcdef1234567890',
+    canApply: false,
+    counts: [
+      { objectType: 'counterparty', operation: 'match', count: 0 },
+      { objectType: 'payment', operation: 'export', count: 0 },
+      { objectType: 'accrual', operation: 'export', count: 0 },
+    ],
+    warnings: [
+      {
+        code: 'one_c_fresh_exchange_decisions_required',
+        message: 'Предпросмотр не отправлял данные в 1C Fresh: направление обмена, документы и тестовый контур еще требуют решения.',
+      },
+    ],
+    conflicts: [],
     ...overrides,
   }
 }
