@@ -145,6 +145,42 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void FinancialAuditContextCoverageIsMarkedCompleteWhenCurrentFinanceAndFundEventsHaveMoneyAndRelatedContext()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var financialContextLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("финансовых update/cancel", StringComparison.Ordinal));
+
+        Assert.Contains("FinanceService", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("поступления", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("выплаты", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("начисления владельцам", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("начисления поставщикам", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("показания счетчиков", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("relatedAccountingMonth", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("relatedGarageId/Number", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("relatedCounterpartyId/Name", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("relatedDocumentId/Number", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("FundService", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("операции фондов", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("fundId", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("fundName", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("operationKind", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("amount", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("isCanceled", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceServiceTests", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("FundServiceTests", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("docs/audit-event-coverage.md", financialContextLine, StringComparison.Ordinal);
+        Assert.Contains("future financial-модели", financialContextLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultDeletionRuleIsMarkedCompleteWhenSoftArchiveCancelAndPolicyCoverageExist()
     {
         var deletionRuleLine = File
