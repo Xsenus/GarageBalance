@@ -77,6 +77,16 @@
 - [ ] Проверить появление нового `.pgdump` в `C:\GarageBalance\Backups`.
 - [ ] Раз в месяц выполнять restore-check в отдельную базу.
 
+## Условия финального закрытия регулярного backup
+
+- [ ] На машине установки выбран пользователь Windows, от имени которого задача имеет доступ к PostgreSQL password file или безопасной переменной окружения с паролем.
+- [ ] `register-local-backup-task.ps1` завершился выводом `scheduledTask=GarageBalance Local PostgreSQL Backup`.
+- [ ] В Windows Task Scheduler задача `GarageBalance Local PostgreSQL Backup` включена и имеет ежедневный trigger на согласованное время.
+- [ ] Задача запущена вручную хотя бы один раз после регистрации.
+- [ ] После ручного запуска появился новый `.pgdump` в `C:\GarageBalance\Backups`, файл больше 0 байт.
+- [ ] Последний backup восстановлен через `restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate`.
+- [ ] Результат первого запуска, путь к backup-файлу и результат restore-check записаны в roadmap history или журнал работ администратора.
+
 ## Перед импортом и обновлением
 
 - [ ] Выполнить `check-local-postgres.ps1`.

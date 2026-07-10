@@ -2486,6 +2486,49 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenRegularLocalBackupRemainsBlockedUntilTaskSchedulerRunButHasScriptDocsAndChecklist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var backupDocument = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "postgres-backup-restore.md"));
+        var localChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+        var scheduledTaskScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "register-local-backup-task.ps1"));
+
+        var regularBackupLine = activeRoadmapLines.Single(line =>
+            line.Contains("Настроить регулярный локальный backup для установки на ПК", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", regularBackupLine, StringComparison.Ordinal);
+        Assert.Contains("register-local-backup-task.ps1", regularBackupLine, StringComparison.Ordinal);
+        Assert.Contains("GarageBalance Local PostgreSQL Backup", regularBackupLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", regularBackupLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", regularBackupLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", regularBackupLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenRegularLocalBackupRemainsBlockedUntilTaskSchedulerRunButHasScriptDocsAndChecklist", regularBackupLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Настроить регулярный локальный backup", regularBackupLine, StringComparison.Ordinal);
+
+        Assert.Contains("New-ScheduledTaskTrigger -Daily", scheduledTaskScript, StringComparison.Ordinal);
+        Assert.Contains("Register-ScheduledTask", scheduledTaskScript, StringComparison.Ordinal);
+        Assert.Contains("backup-postgres.ps1", scheduledTaskScript, StringComparison.Ordinal);
+        Assert.Contains("ParseExact($At, \"HH:mm\"", scheduledTaskScript, StringComparison.Ordinal);
+        Assert.Contains("scheduledTask=", scheduledTaskScript, StringComparison.Ordinal);
+
+        Assert.Contains("Условия финального закрытия регулярного backup", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("scheduledTask=GarageBalance Local PostgreSQL Backup", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("Задача запущена вручную хотя бы один раз", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("Для ежедневного backup зарегистрировать задачу `GarageBalance Local PostgreSQL Backup`", localChecklist, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Настроить регулярный локальный backup для установки на ПК\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("live регистрация", historyText, StringComparison.Ordinal);
+        Assert.Contains("ручной запуск задачи", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();

@@ -44,6 +44,7 @@ public sealed class BackupScriptTests
         Assert.Contains("C:\\GarageBalance\\Backups", script, StringComparison.Ordinal);
         Assert.Contains("New-ScheduledTaskTrigger -Daily", script, StringComparison.Ordinal);
         Assert.Contains("Register-ScheduledTask", script, StringComparison.Ordinal);
+        Assert.Contains("ParseExact($At, \"HH:mm\"", script, StringComparison.Ordinal);
         Assert.Contains("scheduledTask=", script, StringComparison.Ordinal);
     }
 
@@ -77,6 +78,9 @@ public sealed class BackupScriptTests
         Assert.Contains("GarageBalance Local PostgreSQL Backup", document, StringComparison.Ordinal);
         Assert.Contains("Раз в месяц выполнять restore-check", document, StringComparison.Ordinal);
         Assert.Contains("Условия финального закрытия backup/restore", document, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия регулярного backup", document, StringComparison.Ordinal);
+        Assert.Contains("scheduledTask=GarageBalance Local PostgreSQL Backup", document, StringComparison.Ordinal);
+        Assert.Contains("Задача запущена вручную хотя бы один раз", document, StringComparison.Ordinal);
         Assert.Contains("localPostgresPreflight=OK", document, StringComparison.Ordinal);
         Assert.Contains("restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate", document, StringComparison.Ordinal);
         Assert.Contains("-AllowProductionTarget", document, StringComparison.Ordinal);
