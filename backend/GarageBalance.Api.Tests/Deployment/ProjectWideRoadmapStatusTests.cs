@@ -304,6 +304,37 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ConfirmationInventoryIsMarkedCompleteWhenCurrentFlowsAndDialogPolicyAreCovered()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var inventoryLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Найти все действия, где уже есть confirmation dialog", StringComparison.Ordinal));
+
+        Assert.Contains("docs/form-workflow-coverage.md", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("create/edit/delete/archive/restore/cancel/import/export/generated", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendDialogPolicyTests", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerThinnessTests", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("пользователей", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("справочников", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("контрагентов", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("тарифов/сборов", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("платежей", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("фондов", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("импорта", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("квитанций", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("window.confirm", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("window.alert", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("window.prompt", inventoryLine, StringComparison.Ordinal);
+        Assert.Contains("workflow/a11y tests", inventoryLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EditSaveConfirmationRulesAreMarkedCompleteWhenDiffAndNoOpCoverageExist()
     {
         var activeRoadmapLines = File
