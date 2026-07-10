@@ -19,6 +19,22 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("429", usersLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
+    {
+        var ownersLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Владельцы: создание", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Владельцы:", ownersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.owner_created", ownersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.owner_updated", ownersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.owner_archived", ownersLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.owner_restored", ownersLine, StringComparison.Ordinal);
+        Assert.Contains("архивирование требует причину", ownersLine, StringComparison.Ordinal);
+        Assert.Contains("no-op не создает событие", ownersLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
