@@ -69,6 +69,38 @@ public sealed class ReceiptPrintingServiceTests
     }
 
     [Fact]
+    public async Task RegisterActionAsync_ReprintCreatesAuditEventWithReasonAndExternalReceiptId()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var operation = await SeedIncomeOperationAsync(database.Context);
+        var adapter = new FakeReceiptPrintingAdapter(ReceiptPrintingAdapterResult.Printed(
+            "Копия квитанции отправлена на печать.",
+            deviceResponseCode: "OK",
+            externalReceiptId: "receipt-copy-42"));
+        var service = CreateService(database.Context, adapter);
+
+        var result = await service.RegisterActionAsync(
+            operation.Id,
+            new ReceiptPrintingActionRequest("reprint", "Повторная выдача владельцу"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("reprint", result.Value!.Action);
+        Assert.Equal("printed", result.Value.Status);
+        Assert.Equal("Повторная выдача владельцу", adapter.LastRequest!.Reason);
+        var audit = Assert.Single(database.Context.AuditEvents);
+        Assert.Equal("receipt.reprint_requested", audit.Action);
+        Assert.Equal("generate", audit.ActionKind);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("reprint", metadata.RootElement.GetProperty("receiptAction").GetString());
+        Assert.Equal("printed", metadata.RootElement.GetProperty("adapterStatus").GetString());
+        Assert.Equal("OK", metadata.RootElement.GetProperty("deviceResponseCode").GetString());
+        Assert.Equal("receipt-copy-42", metadata.RootElement.GetProperty("externalReceiptId").GetString());
+        Assert.Equal("Повторная выдача владельцу", metadata.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task RegisterActionAsync_WritesAdapterStatusAndSafeErrorDetails()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -72,4 +72,33 @@ describe('integrationsApi', () => {
     expect(headers.get('Authorization')).toBe('Bearer token')
     expect(headers.get('Content-Type')).toBe('application/json')
   })
+
+  it('registers receipt printing actions through the operation action endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      auditEventId: 'audit-receipt',
+      financialOperationId: 'operation-77',
+      action: 'reprint',
+      status: 'printed',
+      statusMessage: 'Копия квитанции отправлена на печать.',
+      documentNumber: 'PKO-77',
+      registeredAtUtc: '2026-07-11T00:00:00Z',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await integrationsApi.registerReceiptPrintingAction('token', 'operation/77', {
+      action: 'reprint',
+      reason: 'Повторная выдача',
+    })
+
+    expect(result.status).toBe('printed')
+    expect(result.documentNumber).toBe('PKO-77')
+    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/receipt-printing/operations/operation%2F77/actions', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reprint', reason: 'Повторная выдача' }),
+      headers: expect.any(Headers),
+    })
+    const headers = fetchMock.mock.calls[0][1].headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer token')
+    expect(headers.get('Content-Type')).toBe('application/json')
+  })
 })

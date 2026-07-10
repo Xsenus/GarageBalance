@@ -1710,6 +1710,78 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var journalLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить журнал печати и ошибок", StringComparison.Ordinal));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "ReceiptPrintingService.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "ReceiptPrintingServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationsControllerTests.cs"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        Assert.StartsWith("- `[x]`", journalLine, StringComparison.Ordinal);
+        Assert.Contains("общий audit-журнал", journalLine, StringComparison.Ordinal);
+        Assert.Contains("receipt_printing", journalLine, StringComparison.Ordinal);
+        Assert.Contains("adapterStatus", journalLine, StringComparison.Ordinal);
+        Assert.Contains("deviceResponseCode", journalLine, StringComparison.Ordinal);
+        Assert.Contains("externalReceiptId", journalLine, StringComparison.Ordinal);
+
+        Assert.Contains("\"receipt.print_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"receipt.print_canceled\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"receipt.reprint_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"adapterStatus\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"adapterMessage\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"deviceResponseCode\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"externalReceiptId\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("RelatedGarageNumber", serviceText, StringComparison.Ordinal);
+        Assert.Contains("RelatedCounterpartyName", serviceText, StringComparison.Ordinal);
+        Assert.Contains("RelatedAccountingMonth", serviceText, StringComparison.Ordinal);
+        Assert.Contains("RelatedDocumentNumber", serviceText, StringComparison.Ordinal);
+
+        Assert.Contains("RegisterActionAsync_PrintCreatesAuditEventForIncomeOperation", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterActionAsync_CancelCreatesAuditEventWithReason", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterActionAsync_ReprintCreatesAuditEventWithReasonAndExternalReceiptId", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterActionAsync_WritesAdapterStatusAndSafeErrorDetails", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("device_error", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("NO_CONNECTION", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("receipt-copy-42", serviceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("RegisterReceiptPrintingAction_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterReceiptPrintingAction_MapsServiceErrors", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("loads selected garage payment history from finance backend", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Сформировать квитанцию платежа", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Повторно напечатать квитанцию платежа", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("registers receipt printing actions through the operation action endpoint", integrationsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("2026-07-10-receipt-printing-adapter-status", releaseText, StringComparison.Ordinal);
+        Assert.Contains("2026-07-09-receipt-printing-payment-actions", releaseText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
