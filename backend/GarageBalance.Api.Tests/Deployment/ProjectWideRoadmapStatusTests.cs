@@ -254,6 +254,38 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryMinimumVisibleFieldsCoverageIsMarkedCompleteWhenDtoUiCsvAndStorageAreCovered()
+    {
+        var minimumFieldsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("История должна показывать минимум", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("createdAtUtc", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("actorUserId", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("section", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("entityType", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("entityId", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("entityDisplayName", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("actionKind", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("fieldName", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("oldValue/newValue", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("reason", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("metadata", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("relatedGarageNumber", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("relatedCounterpartyName", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("relatedAccountingMonth", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("relatedDocumentNumber", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventDto", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditServiceTests", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditControllerTests", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("DatabaseMigrationPolicyTests", minimumFieldsLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChangeHistoryServiceTestCoverageIsMarkedCompleteWhenAuditServiceScenariosAreCovered()
     {
         var serviceTestsLine = File
