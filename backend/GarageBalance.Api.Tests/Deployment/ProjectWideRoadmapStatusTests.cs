@@ -868,6 +868,56 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessSchemaInventoryRoadmapItemRemainsBlockedUntilPrivateReaderAndSafeInventoryExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-schema-inventory-checklist.md"));
+        var sourceAnalysis = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+        var importService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportService.cs"));
+        var accessReaderChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-reader-verification.md"));
+        var workingCopyChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-working-copy-checklist.md"));
+
+        var schemaLine = activeRoadmapLines.Single(line =>
+            line.Contains("Снять полную схему таблиц, связей и объемов данных", StringComparison.Ordinal));
+        var readerLine = activeRoadmapLines.Single(line =>
+            line.Contains("Получить рабочий способ чтения `.accdb`", StringComparison.Ordinal));
+        var copyLine = activeRoadmapLines.Single(line =>
+            line.Contains("Создать копию исходной Access-БД для экспериментов", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Снять полную схему таблиц", schemaLine, StringComparison.Ordinal);
+        Assert.Contains("приватную рабочую копию Access-БД", schemaLine, StringComparison.Ordinal);
+        Assert.Contains("рабочий reader/конвертацию", schemaLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-schema-inventory-checklist.md", schemaLine, StringComparison.Ordinal);
+        Assert.Contains("таблицами, колонками, keys/relationships/indexes", schemaLine, StringComparison.Ordinal);
+        Assert.Contains("row counts", schemaLine, StringComparison.Ordinal);
+        Assert.Contains("AccessSchemaInventoryRoadmapItemRemainsBlockedUntilPrivateReaderAndSafeInventoryExist", schemaLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", readerLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", copyLine, StringComparison.Ordinal);
+
+        Assert.Contains("Список пользовательских таблиц", checklist, StringComparison.Ordinal);
+        Assert.Contains("Количество строк по каждой пользовательской таблице", checklist, StringComparison.Ordinal);
+        Assert.Contains("Primary keys", checklist, StringComparison.Ordinal);
+        Assert.Contains("Foreign keys/relationships", checklist, StringComparison.Ordinal);
+        Assert.Contains("Indexes", checklist, StringComparison.Ordinal);
+        Assert.Contains("rawRowsExported=false", checklist, StringComparison.Ordinal);
+        Assert.Contains("ФИО, адреса, телефоны", checklist, StringComparison.Ordinal);
+        Assert.Contains("сам `.accdb/.mdb` файл", checklist, StringComparison.Ordinal);
+        Assert.Contains("полноценную схему и данные нужно снимать через установленный ACE-драйвер", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("schema_hints", importService, StringComparison.Ordinal);
+        Assert.Contains("ACE OLE DB/ODBC provider", accessReaderChecklist, StringComparison.Ordinal);
+        Assert.Contains("Рабочая копия реально создана в приватной папке", workingCopyChecklist, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Снять полную схему таблиц", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessSchemaInventoryRoadmapItemRemainsBlockedUntilPrivateReaderAndSafeInventoryExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
