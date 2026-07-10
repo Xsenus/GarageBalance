@@ -22,11 +22,19 @@ public sealed class ProjectWideRoadmapStatusTests
     [Fact]
     public void CurrentSafeRestoreButtonsAreMarkedCompleteWhenBackendUiCoverageIsDocumented()
     {
-        var restoreButtonsLine = File
+        var activeRoadmapLines = File
             .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var restoreButtonsLine = activeRoadmapLines
             .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("Для каждого текущего soft-deleted/canceled объекта", StringComparison.Ordinal));
+        var definitionOfDoneLine = activeRoadmapLines
+            .SkipWhile(line => !string.Equals(line, "## Definition Of Done", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("soft-deleted", StringComparison.Ordinal) &&
+                line.Contains("restore", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]`", restoreButtonsLine, StringComparison.Ordinal);
         Assert.Contains("пользователи", restoreButtonsLine, StringComparison.Ordinal);
@@ -39,6 +47,16 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("FormWorkflowCoverageDocumentationTests", restoreButtonsLine, StringComparison.Ordinal);
         Assert.Contains("App.test.tsx", restoreButtonsLine, StringComparison.Ordinal);
         Assert.Contains("future restore-формы", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("пользователи", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("контакты поставщиков", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("нерегулярные платежи", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("операции фондов", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("Backend restore endpoints/services", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("frontend restore dialogs/buttons", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("SoftDeleteCancelCoverageDocumentationTests", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", definitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("Future restore-формы", definitionOfDoneLine, StringComparison.Ordinal);
     }
 
     [Fact]
