@@ -1290,6 +1290,52 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshSyncDesignIsMarkedCompleteWhenModelStatusesJournalAndPreviewAreDocumented()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var syncDesignLine = activeRoadmapLines.Single(line =>
+            line.Contains("Спроектировать модель синхронизации", StringComparison.Ordinal));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "one-c-fresh-sync-design.md"));
+
+        Assert.StartsWith("- `[x]`", syncDesignLine, StringComparison.Ordinal);
+        Assert.Contains("one-c-fresh-sync-design.md", syncDesignLine, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSyncRun", syncDesignLine, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSyncItem", syncDesignLine, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSyncConflict", syncDesignLine, StringComparison.Ordinal);
+        Assert.Contains("preview mode", syncDesignLine, StringComparison.Ordinal);
+        Assert.Contains("[decision]", syncDesignLine, StringComparison.Ordinal);
+
+        Assert.Contains("# 1C Fresh Sync Design", designText, StringComparison.Ordinal);
+        Assert.Contains("IOneCFreshSyncAdapter", designText, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSyncRun", designText, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSyncItem", designText, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSyncConflict", designText, StringComparison.Ordinal);
+        Assert.Contains("Run statuses", designText, StringComparison.Ordinal);
+        Assert.Contains("draft_preview", designText, StringComparison.Ordinal);
+        Assert.Contains("preview_ready", designText, StringComparison.Ordinal);
+        Assert.Contains("succeeded_with_warnings", designText, StringComparison.Ordinal);
+        Assert.Contains("conflict", designText, StringComparison.Ordinal);
+        Assert.Contains("Item statuses", designText, StringComparison.Ordinal);
+        Assert.Contains("Preview Mode", designText, StringComparison.Ordinal);
+        Assert.Contains("Preview is mandatory before applying changes", designText, StringComparison.Ordinal);
+        Assert.Contains("Error, Retry And Conflict Rules", designText, StringComparison.Ordinal);
+        Assert.Contains("Retry creates a new `IntegrationSyncRun`", designText, StringComparison.Ordinal);
+        Assert.Contains("Conflicts block apply until resolved or skipped", designText, StringComparison.Ordinal);
+        Assert.Contains("Permissions", designText, StringComparison.Ordinal);
+        Assert.Contains("Journal UI", designText, StringComparison.Ordinal);
+        Assert.Contains("No plaintext token", designText, StringComparison.Ordinal);
+
+        Assert.Contains("OneCFreshSyncDesignIsMarkedCompleteWhenModelStatusesJournalAndPreviewAreDocumented", historyText, StringComparison.Ordinal);
+        Assert.Contains("Decision-пункты по API 1C Fresh", historyText, StringComparison.Ordinal);
+        Assert.Contains("preview до apply", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
