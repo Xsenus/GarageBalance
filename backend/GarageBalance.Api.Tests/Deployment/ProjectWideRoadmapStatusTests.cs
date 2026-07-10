@@ -575,6 +575,55 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void FullPaymentAcceptanceScenarioIsMarkedCompleteWhenRoadmapCodeTestsAndReleaseNotesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
+        var financeApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.test.ts"));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var acceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Оператор принимает полную оплату по выбранному месяцу", StringComparison.Ordinal));
+        var detailLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать форму `Полная оплата`", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("readonly рассчитанную сумму", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("CreateGarageDebtPayment", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("0.412.0", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("0.429.0", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("0.437.0", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("FullPaymentAcceptanceScenarioIsMarkedCompleteWhenRoadmapCodeTestsAndReleaseNotesExist", acceptanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", detailLine, StringComparison.Ordinal);
+
+        Assert.Contains("<h3 id=\"full-payment-title\">Полная оплата</h3>", appText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Сумма полной оплаты\" inputMode=\"decimal\" value={amount} readOnly", appText, StringComparison.Ordinal);
+        Assert.Contains("createGarageDebtPayment", appText, StringComparison.Ordinal);
+        Assert.Contains("shows payments prototype and opens payment form modals", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("pays opening debt through full payment when worksheet has no service rows", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("expect(fullPaymentAmount).toHaveAttribute('readonly')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("/api/finance/income/debt-payment", financeApiText, StringComparison.Ordinal);
+        Assert.Contains("posts opening debt payment to the debt payment endpoint", financeApiTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("\"version\": \"0.412.0\"", releaseText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.429.0\"", releaseText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.437.0\"", releaseText, StringComparison.Ordinal);
+        Assert.Contains("Полная оплата использует рассчитанную сумму", releaseText, StringComparison.Ordinal);
+        Assert.Contains("Полная оплата учитывает входящий долг периода", releaseText, StringComparison.Ordinal);
+
+        Assert.Contains("синхронизирован верхний пользовательский сценарий приемки", historyText, StringComparison.Ordinal);
+        Assert.Contains("FullPaymentAcceptanceScenarioIsMarkedCompleteWhenRoadmapCodeTestsAndReleaseNotesExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
