@@ -95,6 +95,10 @@
 | `dictionary.tariff_updated` | `tariff` | Да | Нет | Да | `DictionaryServiceTests` | diff по ставке/периоду/порогам |
 | `dictionary.tariff_archived` | `tariff` | Нет | Да | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | archive вместо физического удаления |
 | `dictionary.tariff_restored` | `tariff` | Нет | Нет | Да | `DictionaryServiceTests` | проверяет конфликт активного тарифа |
+| `dictionary.charge_service_created` | `charge_service` | Нет | Нет | Да | `DictionaryServiceTests` | регулярные услуги, периодичность, сроки, счетчик, пороговая тарификация и единица |
+| `dictionary.charge_service_updated` | `charge_service` | Да | Нет | Да | `DictionaryServiceTests` | diff по единице, периодичности, срокам, признакам счетчика/порогов и связям учета |
+| `dictionary.charge_service_archived` | `charge_service` | Нет | Да | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | archive вместо физического удаления |
+| `dictionary.charge_service_restored` | `charge_service` | Нет | Нет | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | проверяет конфликт активной услуги |
 | `dictionary.fee_campaign_created` | `fee_campaign` | Нет | Нет | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | объявление сбора с целью, суммами, датами и переносом долга |
 | `dictionary.fee_campaign_updated` | `fee_campaign` | Да | Нет | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | diff по цели, суммам, периоду, участникам и дням просрочки |
 | `dictionary.fee_campaign_archived` | `fee_campaign` | Нет | Да | Да | `DictionaryServiceTests`, `DictionariesControllerTests` | archive вместо физического удаления |

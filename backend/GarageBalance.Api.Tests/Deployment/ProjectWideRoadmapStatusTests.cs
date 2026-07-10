@@ -71,6 +71,27 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("duplicate supplier", suppliersLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TariffsAndServicesObjectCoverageIsMarkedCompleteWhenAuditArchiveRestoreFlowsAreCovered()
+    {
+        var tariffsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Тарифы и услуги: создание", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Тарифы и услуги:", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_created", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_updated", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_archived", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_restored", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.charge_service_created", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.charge_service_updated", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.charge_service_archived", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.charge_service_restored", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("архивирование требует причину", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("restore блокирует активный дубль", tariffsLine, StringComparison.Ordinal);
+        Assert.Contains("duplicate tariff/charge service", tariffsLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

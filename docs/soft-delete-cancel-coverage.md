@@ -29,6 +29,7 @@
 | Вид поступления | `IsArchived` | `ArchiveIncomeTypeAsync` / `ArchiveIncomeType` | `RestoreIncomeTypeAsync` / `RestoreIncomeType` | Да | `dictionary.income_type_archived`, `dictionary.income_type_restored` | имя активного вида поступления | `DictionaryServiceTests`, `DictionariesControllerTests` |
 | Вид выплаты | `IsArchived` | `ArchiveExpenseTypeAsync` / `ArchiveExpenseType` | `RestoreExpenseTypeAsync` / `RestoreExpenseType` | Да | `dictionary.expense_type_archived`, `dictionary.expense_type_restored` | имя активного вида выплаты | `DictionaryServiceTests`, `DictionariesControllerTests` |
 | Тариф | `IsArchived` | `ArchiveTariffAsync` / `ArchiveTariff` | `RestoreTariffAsync` / `RestoreTariff` | Да | `dictionary.tariff_archived`, `dictionary.tariff_restored` | активный тариф с тем же именем и датой действия | `DictionaryServiceTests`, `DictionariesControllerTests` |
+| Регулярная услуга | `IsArchived` | `ArchiveChargeServiceSettingAsync` / `ArchiveChargeServiceSetting` | `RestoreChargeServiceSettingAsync` / `RestoreChargeServiceSetting` | Да | `dictionary.charge_service_archived`, `dictionary.charge_service_restored` | активная услуга с тем же названием | `DictionaryServiceTests`, `DictionariesControllerTests` |
 | Сбор | `IsArchived` | `ArchiveFeeCampaignAsync` / `ArchiveFeeCampaign` | `RestoreFeeCampaignAsync` / `RestoreFeeCampaign` | Да | `dictionary.fee_campaign_archived`, `dictionary.fee_campaign_restored` | активный сбор с тем же названием | `DictionaryServiceTests`, `DictionariesControllerTests` |
 
 ## Backend Финансы
