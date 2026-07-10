@@ -1754,12 +1754,11 @@ describe('App', () => {
     expect(within(supplierReport).getByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
     expect(within(supplierReport).getByText('INV-1')).toBeInTheDocument()
     expect(within(supplierReport).getByText('RKO-1')).toBeInTheDocument()
-    expect(await within(supplierReport).findByRole('table', { name: 'История изменений контрагента' })).toBeInTheDocument()
-    expect(within(supplierReport).getByText('Изменен контакт поставщика.')).toBeInTheDocument()
-    expect(within(supplierReport).getByText('Проверка карточки')).toBeInTheDocument()
+    expect(within(supplierReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
+    expect(within(supplierReport).getByRole('button', { name: 'Открыть в истории изменений' })).toBeInTheDocument()
     expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }))
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }))
-    expect(getEvents).toHaveBeenCalledWith('token', expect.objectContaining({ relatedCounterparty: supplierId, limit: 5 }))
+    expect(getEvents).not.toHaveBeenCalled()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Водоканал' })).not.toBeInTheDocument()
     await waitFor(() => expect(openSupplierReportButton).toHaveFocus())
@@ -1773,12 +1772,18 @@ describe('App', () => {
     expect(within(staffReport).getByRole('table', { name: 'Финансовый отчет сотрудника' })).toBeInTheDocument()
     expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(6)
     expect(within(staffReport).getByText('RKO-2')).toBeInTheDocument()
-    expect(await within(staffReport).findByText('Изменена ставка сотрудника.')).toBeInTheDocument()
+    expect(within(staffReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }))
-    expect(getEvents).toHaveBeenCalledWith('token', expect.objectContaining({ relatedCounterparty: staffMemberId, limit: 5 }))
-    await user.keyboard('{Escape}')
+    await user.click(within(staffReport).getByRole('button', { name: 'Открыть в истории изменений' }))
     expect(screen.queryByRole('dialog', { name: 'Петрова Ольга' })).not.toBeInTheDocument()
-    await waitFor(() => expect(openStaffReportButton).toHaveFocus())
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    await waitFor(() => expect(within(auditPanel).getByLabelText('Связанный контрагент истории изменений')).toHaveValue(staffMemberId))
+    await waitFor(() => expect(getEvents).toHaveBeenCalledWith('token', expect.objectContaining({
+      section: 'dictionary',
+      entityType: 'staff_member',
+      relatedCounterparty: staffMemberId,
+      limit: 25,
+    })))
   }, 30000)
 
   it('filters contractor debtors and sorts visible contractor rows', async () => {

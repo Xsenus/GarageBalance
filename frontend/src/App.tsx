@@ -187,6 +187,11 @@ type NavigationItem = {
 
 type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'tariffsAndFees' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 type ImportTab = 'checks' | 'log' | 'created' | 'history' | 'quarantine'
+type AuditPanelPreset = {
+  section?: string
+  entityType?: string
+  relatedCounterparty?: string
+}
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Главное меню', icon: Gauge },
@@ -233,6 +238,7 @@ function saveStoredSidebarExpanded(key: string, expanded: boolean) {
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, formStateClient = formStatesApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
+  const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
   const [isSidebarExpanded, setSidebarExpanded] = useState(() => loadStoredSidebarExpanded(sidebarExpandedStorageKey))
 
   function handleAuthenticated(nextAuth: AuthResponse) {
@@ -256,6 +262,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
     clearStoredAuthSession(authSessionStorageKey)
     setAuth(null)
     setActiveSection('dashboard')
+    setAuditPreset(null)
   }
 
   if (!auth) {
@@ -278,6 +285,16 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       saveStoredSidebarExpanded(sidebarExpandedStorageKey, next)
       return next
     })
+  }
+
+  function openWorkspaceSection(section: WorkspaceSection) {
+    setAuditPreset(null)
+    setActiveSection(section)
+  }
+
+  function openAuditWithPreset(preset: AuditPanelPreset) {
+    setAuditPreset(preset)
+    setActiveSection('audit')
   }
 
   return (
@@ -309,7 +326,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
                   aria-label={item.label}
                   title={item.label}
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setActiveSection(item.section)}
+                  onClick={() => openWorkspaceSection(item.section)}
                 >
                   <Icon size={18} />
                   <span>{item.label}</span>
@@ -329,7 +346,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenSection={setActiveSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
   )
@@ -398,6 +415,7 @@ function Workspace({
   auth,
   authClient,
   auditClient,
+  auditPreset,
   dictionaryClient,
   financeClient,
   fundsClient,
@@ -407,6 +425,7 @@ function Workspace({
   reportClient,
   releaseClient,
   userClient,
+  onOpenAudit,
   onOpenSection,
   onUserChanged,
   onLogout,
@@ -415,6 +434,7 @@ function Workspace({
   auth: AuthResponse
   authClient: AuthClient
   auditClient: AuditClient
+  auditPreset: AuditPanelPreset | null
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   fundsClient: FundsClient
@@ -424,6 +444,7 @@ function Workspace({
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
+  onOpenAudit: (preset: AuditPanelPreset) => void
   onOpenSection: (section: WorkspaceSection) => void
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
@@ -476,7 +497,7 @@ function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel auth={auth} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} />
+          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} formStateClient={formStateClient} onOpenAudit={onOpenAudit} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -523,7 +544,13 @@ function Workspace({
         )
       case 'audit':
         return canReadAudit ? (
-          <AuditPanel auth={auth} auditClient={auditClient} onOpenSection={onOpenSection} />
+          <AuditPanel
+            key={auditPreset ? `${auditPreset.section ?? ''}:${auditPreset.entityType ?? ''}:${auditPreset.relatedCounterparty ?? ''}` : 'audit-default'}
+            auth={auth}
+            auditClient={auditClient}
+            preset={auditPreset}
+            onOpenSection={onOpenSection}
+          />
         ) : (
           <AccessNotice label="История изменений недоступна" title="История изменений" permission={permissions.auditRead} description="История изменений доступна только пользователям с правом просмотра audit-событий." />
         )
@@ -8779,19 +8806,19 @@ type AuditPanelError = {
   recovery: 'load' | 'exportCsv' | 'exportXlsx'
 }
 
-function AuditPanel({ auth, auditClient, onOpenSection }: { auth: AuthResponse; auditClient: AuditClient; onOpenSection: (section: WorkspaceSection) => void }) {
+function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth: AuthResponse; auditClient: AuditClient; preset: AuditPanelPreset | null; onOpenSection: (section: WorkspaceSection) => void }) {
   const [page, setPage] = useState<PagedItems<AuditEventDto>>(() => createEmptyPage<AuditEventDto>(25))
   const [search, setSearch] = useState('')
-  const [section, setSection] = useState('')
+  const [section, setSection] = useState(preset?.section ?? '')
   const [actionKind, setActionKind] = useState('')
-  const [entityType, setEntityType] = useState('')
+  const [entityType, setEntityType] = useState(preset?.entityType ?? '')
   const [actorUserId, setActorUserId] = useState('')
   const [quickFilter, setQuickFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [relatedGarage, setRelatedGarage] = useState('')
   const [relatedAccountingMonth, setRelatedAccountingMonth] = useState('')
-  const [relatedCounterparty, setRelatedCounterparty] = useState('')
+  const [relatedCounterparty, setRelatedCounterparty] = useState(preset?.relatedCounterparty ?? '')
   const [relatedDocument, setRelatedDocument] = useState('')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
@@ -11659,7 +11686,7 @@ type ContractorsPrototypeSavedState = {
   supplierServices: string[]
 }
 
-function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; auditClient: AuditClient; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
+function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
   const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
@@ -11690,9 +11717,6 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
   const [contractorFinancialReportFilters, setContractorFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
   const [contractorFinancialReportLoading, setContractorFinancialReportLoading] = useState(false)
   const [contractorFinancialReportError, setContractorFinancialReportError] = useState<string | null>(null)
-  const [contractorHistoryEvents, setContractorHistoryEvents] = useState<AuditEventDto[]>([])
-  const [contractorHistoryLoading, setContractorHistoryLoading] = useState(false)
-  const [contractorHistoryError, setContractorHistoryError] = useState<string | null>(null)
   const [supplierContextMenu, setSupplierContextMenu] = useState<{ row: ContractorSupplierRow; x: number; y: number } | null>(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState<ContractorSupplierRow | null>(null)
   const [supplierDeleteReason, setSupplierDeleteReason] = useState('')
@@ -12048,40 +12072,6 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
     }
   }
 
-  async function loadContractorHistory(target = contractorFinancialReportTarget) {
-    if (!target) {
-      return
-    }
-
-    if (!isBackendDictionaryId(target.row.id)) {
-      setContractorHistoryEvents([])
-      setContractorHistoryError(null)
-      return
-    }
-
-    if (!canReadContractorHistory) {
-      setContractorHistoryEvents([])
-      setContractorHistoryError(null)
-      return
-    }
-
-    setContractorHistoryLoading(true)
-    setContractorHistoryError(null)
-
-    try {
-      const events = await auditClient.getEvents(auth.accessToken, {
-        relatedCounterparty: target.row.id,
-        limit: 5,
-      })
-      setContractorHistoryEvents(events)
-    } catch (error) {
-      setContractorHistoryEvents([])
-      setContractorHistoryError(error instanceof Error ? error.message : 'Не удалось загрузить историю изменений контрагента.')
-    } finally {
-      setContractorHistoryLoading(false)
-    }
-  }
-
   function openContractorFinancialReport(target: ContractorFinancialReportTarget) {
     setSupplierContextMenu(null)
     setEmployeeContextMenu(null)
@@ -12091,10 +12081,7 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
     setContractorFinancialReportFilters(filters)
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)
-    setContractorHistoryEvents([])
-    setContractorHistoryError(null)
     void loadContractorFinancialReport(target, filters)
-    void loadContractorHistory(target)
   }
 
   function closeContractorFinancialReport() {
@@ -12102,9 +12089,19 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)
     setContractorFinancialReportLoading(false)
-    setContractorHistoryEvents([])
-    setContractorHistoryError(null)
-    setContractorHistoryLoading(false)
+  }
+
+  function openContractorHistoryInAudit(target = contractorFinancialReportTarget) {
+    if (!target || !isBackendDictionaryId(target.row.id)) {
+      return
+    }
+
+    closeContractorFinancialReport()
+    onOpenAudit({
+      section: 'dictionary',
+      entityType: target.type === 'supplier' ? 'supplier' : 'staff_member',
+      relatedCounterparty: target.row.id,
+    })
   }
 
   const saveSupplier = async (supplier: ContractorSupplierRow) => {
@@ -13023,34 +13020,19 @@ function ContractorsPrototypePanel({ auth, auditClient, dictionaryClient, financ
                   </table>
                   {contractorFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
                 </div>
-                <section className="contractor-history-section" aria-label="История изменений контрагента">
+                <section className="contractor-history-section" aria-label="Переход к истории изменений контрагента">
                   <h4>История изменений</h4>
-                  {!canReadContractorHistory ? <p className="empty-state" role="status" aria-live="polite">История изменений доступна пользователям с правом просмотра audit-событий.</p> : null}
-                  {contractorHistoryLoading ? <p className="prototype-status" role="status">Загружаем историю изменений...</p> : null}
-                  {contractorHistoryError ? <FormError>{contractorHistoryError}</FormError> : null}
-                  {canReadContractorHistory && !contractorHistoryLoading && !contractorHistoryError ? (
-                    <div className="dictionary-table-scroll">
-                      <table className="dictionary-data-table" aria-label="История изменений контрагента">
-                        <thead>
-                          <tr>
-                            <th>Дата</th>
-                            <th>Действие</th>
-                            <th>Причина</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {contractorHistoryEvents.map((event) => (
-                            <tr key={event.id}>
-                              <td>{formatDateTime(event.createdAtUtc)}</td>
-                              <td>{event.summary}</td>
-                              <td>{event.reason || '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {contractorHistoryEvents.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Истории изменений по контрагенту пока нет</p> : null}
+                  {!canReadContractorHistory ? (
+                    <p className="empty-state" role="status" aria-live="polite">История изменений доступна пользователям с правом просмотра audit-событий.</p>
+                  ) : (
+                    <div className="inline-action-row">
+                      <p>Откройте общий журнал с фильтром по этому контрагенту.</p>
+                      <button className="secondary-button" type="button" onClick={() => openContractorHistoryInAudit()}>
+                        <FileText size={16} />
+                        <span>Открыть в истории изменений</span>
+                      </button>
                     </div>
-                  ) : null}
+                  )}
                 </section>
               </>
             ) : null}
