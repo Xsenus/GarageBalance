@@ -117,6 +117,35 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void RolesAndPermissionsAuditContextIsMarkedCompleteWhenAssignmentsAndPermissionMatrixWriteOldAndNewSets()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var rolesAndPermissionsLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Для прав и ролей добавить старый и новый набор ролей/прав", StringComparison.Ordinal));
+
+        Assert.Contains("назначенные роли пользователя", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("role codes", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("матрица прав роли", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("permissions", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("users.user_updated", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("users.role_permissions_updated", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("OldValues/NewValues", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("oldValue/newValue", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("roleCode", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateUserAsync_UpdatesUserAndWritesAudit", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateRolePermissionsAsync_UpdatesPermissionsAndWritesAudit", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateRolePermissionsAsync_DoesNotWriteAuditWhenPermissionsAreUnchanged", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateRolePermissions_ReturnsUpdatedRoleAndPassesActorUserId", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", rolesAndPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("future role/permission-модели", rolesAndPermissionsLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NoOpUpdateCoverageIsMarkedCompleteWhenCurrentServicesSkipFalseAuditEvents()
     {
         var activeRoadmapLines = File
