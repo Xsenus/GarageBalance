@@ -137,11 +137,36 @@ public sealed class ApiEndpointDocumentationTests
 
         const string milestoneLine =
             "Показания: история через общий экран, confirmations, restore/отмена, style audit.";
+        const string restoreRuleLine =
+            "Для показаний счетчиков решить restore vs повторный ввод; реализовать безопасный вариант.";
 
         Assert.Contains($"- `[x]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.Contains($"- `[x]` {restoreRuleLine}", roadmap, StringComparison.Ordinal);
         Assert.DoesNotContain($"- `[ ]` {milestoneLine}", roadmap, StringComparison.Ordinal);
         Assert.DoesNotContain($"- `[~]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[ ]` {restoreRuleLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[~]` {restoreRuleLine}", roadmap, StringComparison.Ordinal);
         Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone9MeterReadingsStatusSync", roadmap, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProjectWideHistoryRoadmapDocumentsMilestone9PaymentsStatusSync()
+    {
+        var roadmap = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        const string milestoneLine =
+            "Платежи: история через общий экран, confirmations, restore/обратные операции, style audit.";
+        const string restoreRuleLine =
+            "Для платежей/выплат/начислений решить restore vs обратная операция; реализовать выбранное правило.";
+
+        Assert.Contains($"- `[x]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.Contains($"- `[x]` {restoreRuleLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[ ]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[~]` {milestoneLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[ ]` {restoreRuleLine}", roadmap, StringComparison.Ordinal);
+        Assert.DoesNotContain($"- `[~]` {restoreRuleLine}", roadmap, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideHistoryRoadmapDocumentsMilestone9PaymentsStatusSync", roadmap, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
