@@ -655,7 +655,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("заявка на фактический перенос", acceptanceLine, StringComparison.Ordinal);
         Assert.Contains("фактический перенос строк Access", acceptanceLine, StringComparison.Ordinal);
         Assert.Contains("AccessImportAcceptanceScenarioIsInProgressWhenDryRunReportQuarantineAndApplyRequestExist", acceptanceLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[~]`", dryRunLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", dryRunLine, StringComparison.Ordinal);
+        Assert.Contains("AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist", dryRunLine, StringComparison.Ordinal);
+        Assert.Contains("реальные row counts/checksums", dryRunLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[~]`", quarantineLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[ ]`", transferLine, StringComparison.Ordinal);
 
@@ -1061,6 +1063,57 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("пункт Stage 5 \"Согласовать, какие старые формы/запросы Access", historyText, StringComparison.Ordinal);
         Assert.Contains("AccessFormsQueriesDecisionRoadmapItemRequiresInventoryAndBusinessApproval", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-dry-run-verification-checklist.md"));
+        var importService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportService.cs"));
+        var importServiceTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
+        var importControllerTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportControllerTests.cs"));
+        var importApi = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "importApi.ts"));
+
+        var dryRunLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать dry-run импорт с отчетом", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Реализовать dry-run импорт с отчетом", dryRunLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-dry-run-verification-checklist.md", dryRunLine, StringComparison.Ordinal);
+        Assert.Contains("live Access reader/конвертацию", dryRunLine, StringComparison.Ordinal);
+        Assert.Contains("реальные row counts/checksums", dryRunLine, StringComparison.Ordinal);
+        Assert.Contains("AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist", dryRunLine, StringComparison.Ordinal);
+
+        Assert.Contains("Текущий dry-run уже проверяет файл", checklist, StringComparison.Ordinal);
+        Assert.Contains("Принимается файл `.accdb`/`.mdb`", checklist, StringComparison.Ordinal);
+        Assert.Contains("Рассчитывается SHA-256", checklist, StringComparison.Ordinal);
+        Assert.Contains("Сохраняется JSON report", checklist, StringComparison.Ordinal);
+        Assert.Contains("Пишется пошаговый run log", checklist, StringComparison.Ordinal);
+        Assert.Contains("rawRowsExported=false", checklist, StringComparison.Ordinal);
+        Assert.Contains("Reader/conversion returned real schema and row counts", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("DryRunAccessImportAsync", importService, StringComparison.Ordinal);
+        Assert.Contains("ContentSha256", importService, StringComparison.Ordinal);
+        Assert.Contains("ReportJson", importService, StringComparison.Ordinal);
+        Assert.Contains("native_reader", importService, StringComparison.Ordinal);
+        Assert.Contains("schema_hints", importService, StringComparison.Ordinal);
+        Assert.Contains("AddRunLog", importService, StringComparison.Ordinal);
+        Assert.Contains("DryRunAccessImportAsync_PersistsReportAndWritesAudit", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("DryRunAccessImportAsync_WarnsWhenSameFileContentWasAlreadyChecked", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("ExportAccessImportRunReportAsync_ReturnsJsonReportFile", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("DryRunAccessImport_ReturnsBadRequestWhenFileMissing", importControllerTests, StringComparison.Ordinal);
+        Assert.Contains("dryRunAccess", importApi, StringComparison.Ordinal);
+        Assert.Contains("downloadAccessRunReport", importApi, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Реализовать dry-run импорт с отчетом\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist", historyText, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
     }
 
