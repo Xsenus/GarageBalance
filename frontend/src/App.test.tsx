@@ -3500,6 +3500,8 @@ describe('App', () => {
     const registerReceiptPrintingAction = vi.fn(async (_token: string, operationId: string, request: ReceiptPrintingActionRequest) => createReceiptPrintingAction({
       financialOperationId: operationId,
       action: request.action,
+      isCopy: request.action === 'reprint',
+      copyMark: request.action === 'reprint' ? 'КОПИЯ' : null,
       statusMessage: `Квитанция: ${request.action}`,
     }))
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage, updateIncome, cancelOperation })} importClient={createImportClient()} integrationClient={createIntegrationClient({ registerReceiptPrintingAction })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -3549,12 +3551,14 @@ describe('App', () => {
     await user.click(within(receiptReasonDialog).getByRole('button', { name: 'Отменить печать' }))
     await waitFor(() => expect(registerReceiptPrintingAction).toHaveBeenCalledWith('token', 'operation-garage-77', { action: 'cancel', reason: 'Ошибка печати' }))
 
-    const reprintReceiptButton = within(historyTable).getByRole('button', { name: 'Повторно напечатать квитанцию платежа Серверная оплата' })
+    const reprintReceiptButton = within(historyTable).getByRole('button', { name: 'Напечатать копию квитанции платежа Серверная оплата' })
     await user.click(reprintReceiptButton)
-    receiptReasonDialog = await screen.findByRole('dialog', { name: 'Повторно напечатать квитанцию?' })
+    receiptReasonDialog = await screen.findByRole('dialog', { name: 'Напечатать копию квитанции?' })
+    expect(within(receiptReasonDialog).getByText(/как копия квитанции с отдельной отметкой/i)).toBeInTheDocument()
     await user.type(within(receiptReasonDialog).getByLabelText('Причина действия с квитанцией'), 'Повторная выдача')
-    await user.click(within(receiptReasonDialog).getByRole('button', { name: 'Повторная печать' }))
+    await user.click(within(receiptReasonDialog).getByRole('button', { name: 'Напечатать копию' }))
     await waitFor(() => expect(registerReceiptPrintingAction).toHaveBeenCalledWith('token', 'operation-garage-77', { action: 'reprint', reason: 'Повторная выдача' }))
+    expect(await screen.findByText('Квитанция: reprint Отметка: КОПИЯ.')).toBeInTheDocument()
 
     const editPaymentButton = within(historyTable).getByRole('button', { name: 'Изменить платеж Серверная оплата' })
     await user.click(editPaymentButton)
@@ -4625,7 +4629,7 @@ describe('App', () => {
           status: 'prepared',
           statusMessage: 'Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования.',
           configuredSettings: ['DeviceConnection', 'ReceiptTemplate'],
-          plannedActions: ['Печать квитанции', 'Отмена печати', 'Повторная печать'],
+          plannedActions: ['Печать квитанции', 'Отмена печати', 'Печать копии квитанции'],
           lastProtectedSettingUpdatedAtUtc: '2026-06-30T03:10:00Z',
         })
       },
@@ -4642,7 +4646,7 @@ describe('App', () => {
     expect(within(statusStrip).getByText('Ожидает адаптер')).toBeInTheDocument()
     expect(within(statusStrip).getByText('2 / 2')).toBeInTheDocument()
     expect(within(receiptPanel).getByText('Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования.')).toHaveAttribute('role', 'status')
-    expect(within(receiptPanel).getByText('Будущие действия: Печать квитанции, Отмена печати, Повторная печать.')).toBeInTheDocument()
+    expect(within(receiptPanel).getByText('Будущие действия: Печать квитанции, Отмена печати, Печать копии квитанции.')).toBeInTheDocument()
     expect(receiptPanel).not.toHaveTextContent('fiscal-device-connection-string')
     expect(tokenSeen).toBe('token')
   })
@@ -12557,7 +12561,7 @@ function createReceiptPrintingStatus(overrides: Partial<ReceiptPrintingIntegrati
     statusMessage: 'Для будущей печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate.',
     requiredSettings: ['DeviceConnection', 'ReceiptTemplate'],
     configuredSettings: [],
-    plannedActions: ['Печать квитанции', 'Отмена печати', 'Повторная печать'],
+    plannedActions: ['Печать квитанции', 'Отмена печати', 'Печать копии квитанции'],
     lastProtectedSettingUpdatedAtUtc: null,
     ...overrides,
   }
@@ -12571,6 +12575,8 @@ function createReceiptPrintingAction(overrides: Partial<ReceiptPrintingActionDto
     status: 'pending_adapter',
     statusMessage: 'Действие квитанции зарегистрировано.',
     documentNumber: null,
+    isCopy: false,
+    copyMark: null,
     registeredAtUtc: '2026-07-09T10:00:00Z',
     ...overrides,
   }

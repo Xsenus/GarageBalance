@@ -13,6 +13,8 @@ public sealed record ReceiptPrintingActionDto(
     string Status,
     string StatusMessage,
     string? DocumentNumber,
+    bool IsCopy,
+    string? CopyMark,
     DateTimeOffset RegisteredAtUtc);
 
 public sealed record ReceiptPrintingResult<T>(bool Succeeded, T? Value, string? ErrorCode, string? ErrorMessage)

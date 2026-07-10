@@ -65,10 +65,12 @@ public sealed class ReceiptPrintingService(
             _ => "receipt.print_requested"
         };
         var actionKind = action == ReceiptPrintingActions.Cancel ? "cancel" : "generate";
+        var isCopy = action == ReceiptPrintingActions.Reprint;
+        var copyMark = isCopy ? "КОПИЯ" : null;
         var actionLabel = action switch
         {
             ReceiptPrintingActions.Cancel => "Отмена печати",
-            ReceiptPrintingActions.Reprint => "Повторная печать",
+            ReceiptPrintingActions.Reprint => "Повторная печать копии",
             _ => "Печать квитанции"
         };
         var documentNumber = string.IsNullOrWhiteSpace(operation.DocumentNumber)
@@ -87,7 +89,9 @@ public sealed class ReceiptPrintingService(
                 garageNumber,
                 ownerName,
                 operation.IncomeType?.Name,
-                reason),
+                reason,
+                isCopy,
+                copyMark),
             cancellationToken);
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -97,7 +101,7 @@ public sealed class ReceiptPrintingService(
             Summary: $"{actionLabel}: поступление {documentNumber} на сумму {operation.Amount:0.00}.",
             Section: "integrations",
             ActionKind: actionKind,
-            EntityDisplayName: $"Квитанция {documentNumber}",
+            EntityDisplayName: isCopy ? $"Копия квитанции {documentNumber}" : $"Квитанция {documentNumber}",
             Reason: reason,
             Metadata: new Dictionary<string, object?>
             {
@@ -105,6 +109,8 @@ public sealed class ReceiptPrintingService(
                 ["operationKind"] = operation.OperationKind,
                 ["amount"] = operation.Amount,
                 ["incomeTypeName"] = operation.IncomeType?.Name,
+                ["isCopy"] = isCopy,
+                ["copyMark"] = copyMark,
                 ["adapterStatus"] = adapterResult.Status,
                 ["adapterMessage"] = adapterResult.StatusMessage,
                 ["deviceResponseCode"] = adapterResult.DeviceResponseCode,
@@ -126,6 +132,8 @@ public sealed class ReceiptPrintingService(
             adapterResult.Status,
             adapterResult.StatusMessage,
             documentNumber,
+            isCopy,
+            copyMark,
             auditEvent.CreatedAtUtc));
     }
 

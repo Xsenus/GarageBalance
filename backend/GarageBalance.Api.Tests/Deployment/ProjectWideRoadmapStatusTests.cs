@@ -1774,11 +1774,75 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("RegisterReceiptPrintingAction_MapsServiceErrors", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("loads selected garage payment history from finance backend", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Сформировать квитанцию платежа", appTestsText, StringComparison.Ordinal);
-        Assert.Contains("Повторно напечатать квитанцию платежа", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Напечатать копию квитанции платежа", appTestsText, StringComparison.Ordinal);
         Assert.Contains("registers receipt printing actions through the operation action endpoint", integrationsApiTestsText, StringComparison.Ordinal);
         Assert.Contains("2026-07-10-receipt-printing-adapter-status", releaseText, StringComparison.Ordinal);
         Assert.Contains("2026-07-09-receipt-printing-payment-actions", releaseText, StringComparison.Ordinal);
         Assert.Contains("ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReceiptPrintingReprintCopyMarkIsMarkedCompleteWhenBackendUiAuditAndReleaseNotesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var copyLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать повторную печать/копию с отметкой", StringComparison.Ordinal));
+        var adapterText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "ReceiptPrintingAdapter.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "ReceiptPrintingService.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "ReceiptPrintingServiceTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        Assert.StartsWith("- `[x]`", copyLine, StringComparison.Ordinal);
+        Assert.Contains("`IsCopy=true`", copyLine, StringComparison.Ordinal);
+        Assert.Contains("`CopyMark=КОПИЯ`", copyLine, StringComparison.Ordinal);
+        Assert.Contains("Печать копии квитанции", copyLine, StringComparison.Ordinal);
+        Assert.Contains("0.537.0", copyLine, StringComparison.Ordinal);
+
+        Assert.Contains("bool IsCopy", adapterText, StringComparison.Ordinal);
+        Assert.Contains("string? CopyMark", adapterText, StringComparison.Ordinal);
+        Assert.Contains("\"КОПИЯ\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"isCopy\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"copyMark\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("Копия квитанции", serviceText, StringComparison.Ordinal);
+        Assert.Contains("RegisterActionAsync_ReprintCreatesAuditEventWithReasonAndExternalReceiptId", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.True(result.Value.IsCopy)", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal(\"КОПИЯ\", result.Value.CopyMark)", serviceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Напечатать копию квитанции?", appText, StringComparison.Ordinal);
+        Assert.Contains("Отметка:", appText, StringComparison.Ordinal);
+        Assert.Contains("isCopy: boolean", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("copyMark: string | null", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("Напечатать копию квитанции платежа", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Квитанция: reprint Отметка: КОПИЯ.", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("2026-07-11-receipt-copy-mark", releaseText, StringComparison.Ordinal);
+        Assert.Contains("Отметка копии при повторной печати квитанции", releaseText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingReprintCopyMarkIsMarkedCompleteWhenBackendUiAuditAndReleaseNotesExist", historyText, StringComparison.Ordinal);
     }
 
     [Fact]

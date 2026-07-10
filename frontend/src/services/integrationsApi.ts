@@ -82,6 +82,8 @@ export type ReceiptPrintingActionDto = {
   status: string
   statusMessage: string
   documentNumber: string | null
+  isCopy: boolean
+  copyMark: string | null
   registeredAtUtc: string
 }
 

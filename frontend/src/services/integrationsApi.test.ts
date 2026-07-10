@@ -81,6 +81,8 @@ describe('integrationsApi', () => {
       status: 'printed',
       statusMessage: 'Копия квитанции отправлена на печать.',
       documentNumber: 'PKO-77',
+      isCopy: true,
+      copyMark: 'КОПИЯ',
       registeredAtUtc: '2026-07-11T00:00:00Z',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -92,6 +94,8 @@ describe('integrationsApi', () => {
 
     expect(result.status).toBe('printed')
     expect(result.documentNumber).toBe('PKO-77')
+    expect(result.isCopy).toBe(true)
+    expect(result.copyMark).toBe('КОПИЯ')
     expect(fetchMock).toHaveBeenCalledWith('/api/integrations/receipt-printing/operations/operation%2F77/actions', {
       method: 'POST',
       body: JSON.stringify({ action: 'reprint', reason: 'Повторная выдача' }),

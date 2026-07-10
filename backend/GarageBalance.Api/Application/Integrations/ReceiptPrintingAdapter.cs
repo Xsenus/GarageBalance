@@ -15,7 +15,9 @@ public sealed record ReceiptPrintingAdapterRequest(
     string? GarageNumber,
     string? OwnerName,
     string? IncomeTypeName,
-    string? Reason);
+    string? Reason,
+    bool IsCopy,
+    string? CopyMark);
 
 public sealed record ReceiptPrintingAdapterResult(
     string Status,
@@ -39,12 +41,14 @@ public sealed class DisabledReceiptPrintingAdapter : IReceiptPrintingAdapter
         var actionLabel = request.Action switch
         {
             ReceiptPrintingActions.Cancel => "Отмена печати",
-            ReceiptPrintingActions.Reprint => "Повторная печать",
+            ReceiptPrintingActions.Reprint => "Повторная печать копии",
             _ => "Печать квитанции"
         };
 
         return Task.FromResult(ReceiptPrintingAdapterResult.Pending(
-            $"{actionLabel} зарегистрирована в истории. Фактическая печать будет доступна после подключения адаптера."));
+            request.IsCopy
+                ? $"{actionLabel} с отметкой {request.CopyMark} зарегистрирована в истории. Фактическая печать будет доступна после подключения адаптера."
+                : $"{actionLabel} зарегистрирована в истории. Фактическая печать будет доступна после подключения адаптера."));
     }
 }
 

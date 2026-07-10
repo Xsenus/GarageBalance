@@ -1606,10 +1606,10 @@ const receiptPrintingActionLabels: Record<ReceiptPrintingActionKind, { title: st
     description: 'Отмена печати сохранится в общей истории изменений. Укажите причину, чтобы бухгалтер мог сверить действие позже.',
   },
   reprint: {
-    title: 'Повторно напечатать квитанцию?',
-    button: 'Повторная печать',
+    title: 'Напечатать копию квитанции?',
+    button: 'Напечатать копию',
     saving: 'Регистрируем...',
-    description: 'Повторная печать будет зафиксирована в истории изменений. Укажите причину, например потерю квитанции или исправление печати.',
+    description: 'Повторная печать будет зафиксирована как копия квитанции с отдельной отметкой в истории изменений. Укажите причину, например потерю квитанции или исправление печати.',
   },
 }
 
@@ -4833,7 +4833,7 @@ function PaymentsPrototypePanel({
         reason: reason || undefined,
       })
       closeReceiptActionDialog()
-      setReceiptActionStatus(result.statusMessage)
+      setReceiptActionStatus(result.isCopy && result.copyMark ? `${result.statusMessage} Отметка: ${result.copyMark}.` : result.statusMessage)
     } catch (error) {
       setReceiptAction((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось зарегистрировать действие квитанции.' } : state)
     } finally {
@@ -5606,7 +5606,7 @@ function PaymentsPrototypePanel({
                               <button className="icon-button danger-icon-button" type="button" title="Отменить печать квитанции" aria-label={`Отменить печать квитанции платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'cancel', event.currentTarget)}>
                                 <Trash2 size={16} aria-hidden="true" />
                               </button>
-                              <button className="icon-button" type="button" title="Повторная печать квитанции" aria-label={`Повторно напечатать квитанцию платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'reprint', event.currentTarget)}>
+                              <button className="icon-button" type="button" title="Напечатать копию квитанции" aria-label={`Напечатать копию квитанции платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'reprint', event.currentTarget)}>
                                 <RotateCcw size={16} aria-hidden="true" />
                               </button>
                             </>

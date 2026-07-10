@@ -43,7 +43,7 @@ public sealed class IntegrationsControllerTests
             "Настройки сохранены.",
             ["DeviceConnection", "ReceiptTemplate"],
             ["DeviceConnection", "ReceiptTemplate"],
-            ["Печать квитанции", "Отмена печати", "Повторная печать"],
+            ["Печать квитанции", "Отмена печати", "Печать копии квитанции"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(receiptPrintingStatus: expected);
         var controller = new IntegrationsController(service, new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
@@ -67,6 +67,8 @@ public sealed class IntegrationsControllerTests
             "registered",
             "Печать зарегистрирована.",
             "PKO-1",
+            IsCopy: false,
+            CopyMark: null,
             DateTimeOffset.UtcNow);
         var service = new FakeReceiptPrintingService
         {

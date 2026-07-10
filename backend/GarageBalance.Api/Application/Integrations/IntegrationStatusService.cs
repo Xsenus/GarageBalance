@@ -9,7 +9,7 @@ public sealed class IntegrationStatusService(IIntegrationSecretSettingsService s
     private const string ReceiptTemplateSettingKey = "ReceiptTemplate";
     private static readonly string[] OneCFreshRequiredSettings = [RefreshTokenSettingKey];
     private static readonly string[] ReceiptPrintingRequiredSettings = [DeviceConnectionSettingKey, ReceiptTemplateSettingKey];
-    private static readonly string[] ReceiptPrintingPlannedActions = ["Печать квитанции", "Отмена печати", "Повторная печать"];
+    private static readonly string[] ReceiptPrintingPlannedActions = ["Печать квитанции", "Отмена печати", "Печать копии квитанции"];
 
     public async Task<OneCFreshIntegrationStatusDto> GetOneCFreshStatusAsync(CancellationToken cancellationToken)
     {

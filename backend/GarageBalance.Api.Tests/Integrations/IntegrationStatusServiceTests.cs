@@ -69,7 +69,7 @@ public sealed class IntegrationStatusServiceTests
         Assert.Contains("ReceiptPrinting:ReceiptTemplate", status.StatusMessage, StringComparison.Ordinal);
         Assert.Contains("DeviceConnection", status.RequiredSettings);
         Assert.Contains("ReceiptTemplate", status.RequiredSettings);
-        Assert.Contains("Повторная печать", status.PlannedActions);
+        Assert.Contains("Печать копии квитанции", status.PlannedActions);
         Assert.Empty(status.ConfiguredSettings);
         Assert.Null(status.LastProtectedSettingUpdatedAtUtc);
     }
