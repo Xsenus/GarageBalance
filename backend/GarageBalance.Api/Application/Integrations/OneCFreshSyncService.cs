@@ -61,6 +61,7 @@ public sealed class OneCFreshSyncService(
         var adapterResult = await syncAdapter.StartAsync(
             new OneCFreshSyncAdapterRequest(refreshToken.Value, comment, requestedAtUtc, isRetry),
             cancellationToken);
+        var outcome = ClassifyAdapterResult(adapterResult);
 
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -78,8 +79,11 @@ public sealed class OneCFreshSyncService(
                 ["syncStatus"] = adapterResult.Status,
                 ["syncMessage"] = adapterResult.StatusMessage,
                 ["externalRunId"] = adapterResult.ExternalRunId,
-                ["adapterErrorCode"] = adapterResult.ErrorCode,
+                ["adapterErrorCode"] = outcome.ErrorCode,
                 ["isRetry"] = isRetry,
+                ["canRetry"] = outcome.CanRetry,
+                ["hasConflict"] = outcome.HasConflict,
+                ["recoveryAction"] = outcome.RecoveryAction,
                 ["protectedCredentialConfigured"] = true
             }));
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -89,6 +93,53 @@ public sealed class OneCFreshSyncService(
             Provider,
             adapterResult.Status,
             adapterResult.StatusMessage,
-            auditEvent.CreatedAtUtc));
+            auditEvent.CreatedAtUtc,
+            isRetry,
+            outcome.CanRetry,
+            outcome.HasConflict,
+            outcome.ErrorCode,
+            adapterResult.ExternalRunId,
+            outcome.RecoveryAction));
     }
+
+    private static OneCFreshSyncOutcome ClassifyAdapterResult(OneCFreshSyncAdapterResult adapterResult)
+    {
+        var normalizedStatus = adapterResult.Status.Trim().ToLowerInvariant();
+        var hasConflict =
+            normalizedStatus == "conflict" ||
+            normalizedStatus.StartsWith("conflict_", StringComparison.Ordinal) ||
+            normalizedStatus.Contains("_conflict", StringComparison.Ordinal);
+        var canRetry =
+            !hasConflict &&
+            (normalizedStatus == "pending_adapter" ||
+             normalizedStatus == "adapter_error" ||
+             normalizedStatus == "rate_limited" ||
+             normalizedStatus == "timeout" ||
+             normalizedStatus == "failed" ||
+             normalizedStatus.EndsWith("_failed", StringComparison.Ordinal) ||
+             normalizedStatus.EndsWith("_error", StringComparison.Ordinal) ||
+             !string.IsNullOrWhiteSpace(adapterResult.ErrorCode));
+        var recoveryAction = hasConflict
+            ? "resolve_conflict"
+            : canRetry
+                ? "retry"
+                : normalizedStatus is "started" or "running"
+                    ? "watch_status"
+                    : null;
+        var errorCode = string.IsNullOrWhiteSpace(adapterResult.ErrorCode)
+            ? hasConflict
+                ? "one_c_fresh_conflict"
+                : canRetry && normalizedStatus != "pending_adapter"
+                    ? "one_c_fresh_adapter_error"
+                    : null
+            : adapterResult.ErrorCode.Trim();
+
+        return new OneCFreshSyncOutcome(canRetry, hasConflict, errorCode, recoveryAction);
+    }
+
+    private sealed record OneCFreshSyncOutcome(
+        bool CanRetry,
+        bool HasConflict,
+        string? ErrorCode,
+        string? RecoveryAction);
 }

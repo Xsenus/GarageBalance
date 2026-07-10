@@ -1290,6 +1290,96 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshErrorRetryConflictHandlingIsMarkedCompleteWhenBackendUiTestsAndReleaseNotesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var errorRetryConflictLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать обработку ошибок, повторов и конфликтов", StringComparison.Ordinal));
+        var contractsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncContracts.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncService.cs"));
+        var adapterText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncAdapter.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncServiceTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
+        var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "AppReleases",
+            "releases.json"));
+
+        Assert.StartsWith("- `[x]`", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("canRetry", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("hasConflict", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("recoveryAction", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncServiceTests", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("0.535.0", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("conflict resolution", errorRetryConflictLine, StringComparison.Ordinal);
+        Assert.Contains("[decision]", errorRetryConflictLine, StringComparison.Ordinal);
+
+        Assert.Contains("bool CanRetry", contractsText, StringComparison.Ordinal);
+        Assert.Contains("bool HasConflict", contractsText, StringComparison.Ordinal);
+        Assert.Contains("string? ErrorCode", contractsText, StringComparison.Ordinal);
+        Assert.Contains("string? ExternalRunId", contractsText, StringComparison.Ordinal);
+        Assert.Contains("string? RecoveryAction", contractsText, StringComparison.Ordinal);
+
+        Assert.Contains("ClassifyAdapterResult", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"canRetry\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"hasConflict\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"recoveryAction\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"resolve_conflict\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("adapterResult.ErrorCode.Trim()", serviceText, StringComparison.Ordinal);
+        Assert.Contains("Conflict(string statusMessage", adapterText, StringComparison.Ordinal);
+
+        Assert.Contains("StartSyncAsync_WritesAdapterErrorStatusAsRetryable", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_WritesConflictStatusWithoutRetry", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetrySyncAsync_CreatesSeparateAuditEventWithoutPlaintextToken", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("getOneCFreshSyncRecoveryMessage", appText, StringComparison.Ordinal);
+        Assert.Contains("oneCFreshSyncResult?.canRetry", appText, StringComparison.Ordinal);
+        Assert.Contains("Обнаружен конфликт синхронизации", appText, StringComparison.Ordinal);
+        Assert.Contains("canRetry: boolean", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("hasConflict: boolean", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("recoveryAction: string | null", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("shows 1C Fresh retry and conflict recovery states from backend result", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Найдены конфликтующие документы 1C Fresh.", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("result.canRetry", integrationsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.535.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Понятные статусы повторов и конфликтов 1C Fresh", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshErrorRetryConflictHandlingIsMarkedCompleteWhenBackendUiTestsAndReleaseNotesExist", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OneCFreshSyncDesignIsMarkedCompleteWhenModelStatusesJournalAndPreviewAreDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();

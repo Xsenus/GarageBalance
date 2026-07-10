@@ -14,12 +14,21 @@ describe('integrationsApi', () => {
       status: 'pending_adapter',
       statusMessage: 'Повтор зарегистрирован.',
       requestedAtUtc: '2026-07-10T00:00:00Z',
+      isRetry: true,
+      canRetry: true,
+      hasConflict: false,
+      errorCode: null,
+      externalRunId: null,
+      recoveryAction: 'retry',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await integrationsApi.retryOneCFreshSync('token', { comment: 'Повтор после ошибки' })
 
     expect(result.statusMessage).toBe('Повтор зарегистрирован.')
+    expect(result.canRetry).toBe(true)
+    expect(result.hasConflict).toBe(false)
+    expect(result.recoveryAction).toBe('retry')
     expect(fetchMock).toHaveBeenCalledWith('/api/integrations/one-c-fresh/sync-runs/retry', {
       method: 'POST',
       body: JSON.stringify({ comment: 'Повтор после ошибки' }),

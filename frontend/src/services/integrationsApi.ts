@@ -20,6 +20,12 @@ export type OneCFreshSyncDto = {
   status: string
   statusMessage: string
   requestedAtUtc: string
+  isRetry: boolean
+  canRetry: boolean
+  hasConflict: boolean
+  errorCode: string | null
+  externalRunId: string | null
+  recoveryAction: string | null
 }
 
 export type ReceiptPrintingIntegrationStatusDto = {

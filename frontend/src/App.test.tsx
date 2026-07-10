@@ -4378,6 +4378,58 @@ describe('App', () => {
     expect(await within(integrationPanel).findByText('Повтор 1C зарегистрирован: Повтор после ошибки адаптера')).toHaveAttribute('role', 'status')
   })
 
+  it('shows 1C Fresh retry and conflict recovery states from backend result', async () => {
+    const user = userEvent.setup()
+    const startOneCFreshSync = vi
+      .fn()
+      .mockResolvedValueOnce(createOneCFreshSync({
+        status: 'adapter_error',
+        statusMessage: '1C Fresh временно недоступен.',
+        canRetry: true,
+        errorCode: 'TIMEOUT',
+        recoveryAction: 'retry',
+      }))
+      .mockResolvedValueOnce(createOneCFreshSync({
+        status: 'conflict',
+        statusMessage: 'Найдены конфликтующие документы 1C Fresh.',
+        canRetry: false,
+        hasConflict: true,
+        errorCode: 'duplicate_external',
+        recoveryAction: 'resolve_conflict',
+      }))
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: async () => createOneCFreshStatus({
+        isConfigured: true,
+        status: 'prepared',
+        configuredSettings: ['RefreshToken'],
+      }),
+      startOneCFreshSync,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const syncButton = await within(integrationPanel).findByRole('button', { name: 'Запустить синхронизацию' })
+    await user.click(syncButton)
+    let syncDialog = await screen.findByRole('dialog', { name: 'Запустить синхронизацию 1C Fresh?' })
+    await user.click(within(syncDialog).getByRole('button', { name: 'Запустить' }))
+
+    expect(await within(integrationPanel).findByText('1C Fresh временно недоступен.')).toHaveAttribute('role', 'status')
+    expect(within(integrationPanel).getByText('Повтор доступен: новый запрос будет записан отдельным событием истории без раскрытия токена 1C Fresh.')).toHaveAttribute('role', 'status')
+    expect(within(integrationPanel).getByRole('button', { name: 'Повторить запрос' })).toBeInTheDocument()
+
+    await user.click(syncButton)
+    syncDialog = await screen.findByRole('dialog', { name: 'Запустить синхронизацию 1C Fresh?' })
+    await user.click(within(syncDialog).getByRole('button', { name: 'Запустить' }))
+
+    expect(await within(integrationPanel).findByText('Найдены конфликтующие документы 1C Fresh.')).toHaveAttribute('role', 'status')
+    expect(within(integrationPanel).getByText('Обнаружен конфликт синхронизации. Перед повтором проверьте журнал обмена и выберите решение по конфликтным строкам.')).toHaveAttribute('role', 'status')
+    expect(within(integrationPanel).queryByRole('button', { name: 'Повторить запрос' })).not.toBeInTheDocument()
+  })
+
   it('does not request 1C Fresh status without import permission', async () => {
     const user = userEvent.setup()
     const authWithoutImport = createAuthResponse({
@@ -12297,6 +12349,12 @@ function createOneCFreshSync(overrides: Partial<OneCFreshSyncDto> = {}): OneCFre
     status: 'pending_adapter',
     statusMessage: 'Запуск синхронизации зарегистрирован в истории.',
     requestedAtUtc: '2026-07-10T00:00:00Z',
+    isRetry: false,
+    canRetry: true,
+    hasConflict: false,
+    errorCode: null,
+    externalRunId: null,
+    recoveryAction: 'retry',
     ...overrides,
   }
 }

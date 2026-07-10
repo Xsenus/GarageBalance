@@ -22,6 +22,8 @@ public sealed record OneCFreshSyncAdapterResult(
     public static OneCFreshSyncAdapterResult Started(string statusMessage, string? externalRunId = null) => new("started", statusMessage, externalRunId);
 
     public static OneCFreshSyncAdapterResult Failed(string status, string statusMessage, string? errorCode = null) => new(status, statusMessage, null, errorCode);
+
+    public static OneCFreshSyncAdapterResult Conflict(string statusMessage, string? errorCode = "one_c_fresh_conflict") => new("conflict", statusMessage, null, errorCode);
 }
 
 public sealed class DisabledOneCFreshSyncAdapter : IOneCFreshSyncAdapter

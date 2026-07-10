@@ -37,6 +37,11 @@ public sealed class OneCFreshSyncServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("OneCFresh", result.Value!.Provider);
         Assert.Equal("pending_adapter", result.Value.Status);
+        Assert.False(result.Value.IsRetry);
+        Assert.True(result.Value.CanRetry);
+        Assert.False(result.Value.HasConflict);
+        Assert.Null(result.Value.ErrorCode);
+        Assert.Equal("retry", result.Value.RecoveryAction);
         Assert.Equal("super-secret-token", adapter.LastRequest!.RefreshToken);
         Assert.Equal("Тестовая синхронизация", adapter.LastRequest.Comment);
         var audit = Assert.Single(database.Context.AuditEvents);
@@ -52,11 +57,14 @@ public sealed class OneCFreshSyncServiceTests
         Assert.DoesNotContain("super-secret-token", audit.MetadataJson, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("pending_adapter", metadata.RootElement.GetProperty("syncStatus").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("canRetry").GetString());
+        Assert.Equal("False", metadata.RootElement.GetProperty("hasConflict").GetString());
+        Assert.Equal("retry", metadata.RootElement.GetProperty("recoveryAction").GetString());
         Assert.Equal("True", metadata.RootElement.GetProperty("protectedCredentialConfigured").GetString());
     }
 
     [Fact]
-    public async Task StartSyncAsync_WritesAdapterErrorStatus()
+    public async Task StartSyncAsync_WritesAdapterErrorStatusAsRetryable()
     {
         await using var database = await TestDatabase.CreateAsync();
         var adapter = new FakeSyncAdapter(new OneCFreshSyncAdapterResult(
@@ -69,10 +77,43 @@ public sealed class OneCFreshSyncServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("adapter_error", result.Value!.Status);
+        Assert.True(result.Value.CanRetry);
+        Assert.False(result.Value.HasConflict);
+        Assert.Equal("TIMEOUT", result.Value.ErrorCode);
+        Assert.Equal("retry", result.Value.RecoveryAction);
         var audit = Assert.Single(database.Context.AuditEvents);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("adapter_error", metadata.RootElement.GetProperty("syncStatus").GetString());
         Assert.Equal("TIMEOUT", metadata.RootElement.GetProperty("adapterErrorCode").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("canRetry").GetString());
+        Assert.Equal("False", metadata.RootElement.GetProperty("hasConflict").GetString());
+        Assert.Equal("retry", metadata.RootElement.GetProperty("recoveryAction").GetString());
+    }
+
+    [Fact]
+    public async Task StartSyncAsync_WritesConflictStatusWithoutRetry()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var adapter = new FakeSyncAdapter(OneCFreshSyncAdapterResult.Conflict(
+            "Найдены конфликтующие документы 1C Fresh.",
+            "duplicate_external"));
+        var service = CreateService(database.Context, new FakeSecretSettingsService("token"), adapter);
+
+        var result = await service.StartSyncAsync(new OneCFreshSyncRequest("Проверка конфликтов"), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("conflict", result.Value!.Status);
+        Assert.False(result.Value.CanRetry);
+        Assert.True(result.Value.HasConflict);
+        Assert.Equal("duplicate_external", result.Value.ErrorCode);
+        Assert.Equal("resolve_conflict", result.Value.RecoveryAction);
+        var audit = Assert.Single(database.Context.AuditEvents);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("conflict", metadata.RootElement.GetProperty("syncStatus").GetString());
+        Assert.Equal("duplicate_external", metadata.RootElement.GetProperty("adapterErrorCode").GetString());
+        Assert.Equal("False", metadata.RootElement.GetProperty("canRetry").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("hasConflict").GetString());
+        Assert.Equal("resolve_conflict", metadata.RootElement.GetProperty("recoveryAction").GetString());
     }
 
     [Fact]
@@ -89,6 +130,8 @@ public sealed class OneCFreshSyncServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("pending_adapter", result.Value!.Status);
+        Assert.True(result.Value.IsRetry);
+        Assert.True(result.Value.CanRetry);
         Assert.True(adapter.LastRequest!.IsRetry);
         Assert.Equal("Повтор после ошибки адаптера", adapter.LastRequest.Comment);
         var audit = Assert.Single(database.Context.AuditEvents);
@@ -102,6 +145,7 @@ public sealed class OneCFreshSyncServiceTests
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("pending_adapter", metadata.RootElement.GetProperty("syncStatus").GetString());
         Assert.Equal("True", metadata.RootElement.GetProperty("isRetry").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("canRetry").GetString());
         Assert.Equal("Повтор после ошибки адаптера", metadata.RootElement.GetProperty("reason").GetString());
     }
 

@@ -9,7 +9,13 @@ public sealed record OneCFreshSyncDto(
     string Provider,
     string Status,
     string StatusMessage,
-    DateTimeOffset RequestedAtUtc);
+    DateTimeOffset RequestedAtUtc,
+    bool IsRetry = false,
+    bool CanRetry = false,
+    bool HasConflict = false,
+    string? ErrorCode = null,
+    string? ExternalRunId = null,
+    string? RecoveryAction = null);
 
 public sealed record OneCFreshSyncResult<T>(bool Succeeded, T? Value, string? ErrorCode, string? ErrorMessage)
 {

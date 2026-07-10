@@ -40,7 +40,7 @@ import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { integrationsApi } from './services/integrationsApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingActionKind, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, ReceiptPrintingActionKind, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import { reportsApi } from './services/reportsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import { releasesApi } from './services/releasesApi'
@@ -657,6 +657,7 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
   const [oneCFreshSyncConfirmation, setOneCFreshSyncConfirmation] = useState<{ mode: 'start' | 'retry'; comment: string; error: string | null } | null>(null)
   const [oneCFreshSyncSaving, setOneCFreshSyncSaving] = useState(false)
   const [oneCFreshSyncMessage, setOneCFreshSyncMessage] = useState<string | null>(null)
+  const [oneCFreshSyncResult, setOneCFreshSyncResult] = useState<OneCFreshSyncDto | null>(null)
   const oneCFreshSyncTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [receiptPrintingStatus, setReceiptPrintingStatus] = useState<ReceiptPrintingIntegrationStatusDto | null>(null)
   const [receiptPrintingLoading, setReceiptPrintingLoading] = useState(false)
@@ -793,6 +794,7 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
     setIntegrationError(null)
     if (mode === 'start') {
       setOneCFreshSyncMessage(null)
+      setOneCFreshSyncResult(null)
     }
     setOneCFreshSyncConfirmation({ mode, comment: '', error: null })
   }
@@ -824,6 +826,7 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
         : await integrationClient.startOneCFreshSync(auth.accessToken, request)
       closeOneCFreshSyncConfirmation()
       setOneCFreshSyncMessage(result.statusMessage)
+      setOneCFreshSyncResult(result)
     } catch (caught) {
       setOneCFreshSyncConfirmation((state) => state ? { ...state, error: caught instanceof Error ? caught.message : 'Не удалось отправить запрос синхронизации 1C Fresh.' } : state)
     } finally {
@@ -897,13 +900,14 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
             <p className="empty-state" role="status" aria-live="polite">{oneCFreshStatus.statusMessage}</p>
           ) : null}
           {oneCFreshSyncMessage ? <div className="form-success" role="status" aria-live="polite">{oneCFreshSyncMessage}</div> : null}
+          {oneCFreshSyncResult ? <p className={oneCFreshSyncResult.hasConflict ? 'form-note warning-text' : 'form-note'} role="status" aria-live="polite">{getOneCFreshSyncRecoveryMessage(oneCFreshSyncResult)}</p> : null}
           {oneCFreshStatus ? (
             <button className="secondary-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'start')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
               <RefreshCw size={16} aria-hidden="true" />
               <span>{oneCFreshSyncSaving ? 'Запускаем...' : 'Запустить синхронизацию'}</span>
             </button>
           ) : null}
-          {oneCFreshStatus && oneCFreshSyncMessage ? (
+          {oneCFreshStatus && oneCFreshSyncResult?.canRetry ? (
             <button className="ghost-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'retry')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
               <RefreshCw size={16} aria-hidden="true" />
               <span>Повторить запрос</span>
@@ -1028,6 +1032,24 @@ function AccessNotice({ label, title, permission, description }: { label: string
       </div>
     </section>
   )
+}
+
+function getOneCFreshSyncRecoveryMessage(result: OneCFreshSyncDto) {
+  if (result.hasConflict) {
+    return 'Обнаружен конфликт синхронизации. Перед повтором проверьте журнал обмена и выберите решение по конфликтным строкам.'
+  }
+
+  if (result.canRetry) {
+    return result.isRetry
+      ? 'Повтор записан отдельным событием истории. Если адаптер снова вернет ошибку, можно создать новый повтор с комментарием.'
+      : 'Повтор доступен: новый запрос будет записан отдельным событием истории без раскрытия токена 1C Fresh.'
+  }
+
+  if (result.recoveryAction === 'watch_status') {
+    return 'Запуск передан адаптеру. Следите за статусом обмена и журналом интеграции.'
+  }
+
+  return 'Запрос синхронизации обработан. Дополнительные действия сейчас не требуются.'
 }
 
 function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClient: ReleaseClient }) {
