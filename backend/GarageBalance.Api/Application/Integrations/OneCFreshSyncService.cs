@@ -17,6 +17,37 @@ public sealed class OneCFreshSyncService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        return await RunSyncAsync(
+            request,
+            actorUserId,
+            isRetry: false,
+            action: "one_c_fresh.sync_requested",
+            summary: "Запрошен запуск синхронизации 1C Fresh.",
+            cancellationToken);
+    }
+
+    public async Task<OneCFreshSyncResult<OneCFreshSyncDto>> RetrySyncAsync(
+        OneCFreshSyncRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        return await RunSyncAsync(
+            request,
+            actorUserId,
+            isRetry: true,
+            action: "one_c_fresh.sync_retry_requested",
+            summary: "Запрошен повтор синхронизации 1C Fresh.",
+            cancellationToken);
+    }
+
+    private async Task<OneCFreshSyncResult<OneCFreshSyncDto>> RunSyncAsync(
+        OneCFreshSyncRequest request,
+        Guid? actorUserId,
+        bool isRetry,
+        string action,
+        string summary,
+        CancellationToken cancellationToken)
+    {
         var comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
         var refreshToken = await secretSettingsService.GetSecretAsync(Provider, RefreshTokenSettingKey, cancellationToken);
         if (!refreshToken.Succeeded || string.IsNullOrWhiteSpace(refreshToken.Value))
@@ -28,15 +59,15 @@ public sealed class OneCFreshSyncService(
 
         var requestedAtUtc = DateTimeOffset.UtcNow;
         var adapterResult = await syncAdapter.StartAsync(
-            new OneCFreshSyncAdapterRequest(refreshToken.Value, comment, requestedAtUtc),
+            new OneCFreshSyncAdapterRequest(refreshToken.Value, comment, requestedAtUtc, isRetry),
             cancellationToken);
 
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
-            "one_c_fresh.sync_requested",
+            action,
             "integration_sync",
             Provider,
-            Summary: "Запрошен запуск синхронизации 1C Fresh.",
+            Summary: summary,
             Section: "integrations",
             ActionKind: "sync",
             EntityDisplayName: "1C Fresh",
@@ -48,6 +79,7 @@ public sealed class OneCFreshSyncService(
                 ["syncMessage"] = adapterResult.StatusMessage,
                 ["externalRunId"] = adapterResult.ExternalRunId,
                 ["adapterErrorCode"] = adapterResult.ErrorCode,
+                ["isRetry"] = isRetry,
                 ["protectedCredentialConfigured"] = true
             }));
         await dbContext.SaveChangesAsync(cancellationToken);

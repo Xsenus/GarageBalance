@@ -6,4 +6,9 @@ public interface IOneCFreshSyncService
         OneCFreshSyncRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+
+    Task<OneCFreshSyncResult<OneCFreshSyncDto>> RetrySyncAsync(
+        OneCFreshSyncRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
 }

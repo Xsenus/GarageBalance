@@ -110,6 +110,48 @@ public sealed class IntegrationsControllerTests
     }
 
     [Fact]
+    public async Task RetryOneCFreshSync_ReturnsResultAndPassesActorUserId()
+    {
+        var actorUserId = Guid.NewGuid();
+        var expected = new OneCFreshSyncDto(
+            Guid.NewGuid(),
+            "OneCFresh",
+            "pending_adapter",
+            "Повтор ожидает адаптер.",
+            DateTimeOffset.UtcNow);
+        var service = new FakeOneCFreshSyncService
+        {
+            RetryResult = OneCFreshSyncResult<OneCFreshSyncDto>.Success(expected)
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), actorUserId, service);
+        var request = new OneCFreshSyncRequest("Повтор после ошибки");
+
+        var result = await controller.RetryOneCFreshSync(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(expected, ok.Value);
+        Assert.Equal(request, service.LastRetryRequest);
+        Assert.Equal(actorUserId, service.LastRetryActorUserId);
+    }
+
+    [Fact]
+    public async Task RetryOneCFreshSync_MapsNotConfiguredToConflict()
+    {
+        var service = new FakeOneCFreshSyncService
+        {
+            RetryResult = OneCFreshSyncResult<OneCFreshSyncDto>.Failure("one_c_fresh_not_configured", "Нет токена.")
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), oneCFreshSyncService: service);
+
+        var result = await controller.RetryOneCFreshSync(null, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("one_c_fresh_not_configured", problem.Title);
+        Assert.NotNull(service.LastRetryRequest);
+    }
+
+    [Fact]
     public async Task StartOneCFreshSync_MapsNotConfiguredToConflict()
     {
         var service = new FakeOneCFreshSyncService
@@ -189,7 +231,14 @@ public sealed class IntegrationsControllerTests
 
         public Guid? LastActorUserId { get; private set; }
 
+        public OneCFreshSyncRequest? LastRetryRequest { get; private set; }
+
+        public Guid? LastRetryActorUserId { get; private set; }
+
         public OneCFreshSyncResult<OneCFreshSyncDto> Result { get; init; } =
+            OneCFreshSyncResult<OneCFreshSyncDto>.Failure("not_configured", "Not configured.");
+
+        public OneCFreshSyncResult<OneCFreshSyncDto> RetryResult { get; init; } =
             OneCFreshSyncResult<OneCFreshSyncDto>.Failure("not_configured", "Not configured.");
 
         public Task<OneCFreshSyncResult<OneCFreshSyncDto>> StartSyncAsync(
@@ -200,6 +249,16 @@ public sealed class IntegrationsControllerTests
             LastRequest = request;
             LastActorUserId = actorUserId;
             return Task.FromResult(Result);
+        }
+
+        public Task<OneCFreshSyncResult<OneCFreshSyncDto>> RetrySyncAsync(
+            OneCFreshSyncRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastRetryRequest = request;
+            LastRetryActorUserId = actorUserId;
+            return Task.FromResult(RetryResult);
         }
     }
 

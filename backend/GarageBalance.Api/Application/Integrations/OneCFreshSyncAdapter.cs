@@ -8,7 +8,8 @@ public interface IOneCFreshSyncAdapter
 public sealed record OneCFreshSyncAdapterRequest(
     string RefreshToken,
     string? Comment,
-    DateTimeOffset RequestedAtUtc);
+    DateTimeOffset RequestedAtUtc,
+    bool IsRetry = false);
 
 public sealed record OneCFreshSyncAdapterResult(
     string Status,

@@ -569,7 +569,7 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
   const [oneCFreshStatus, setOneCFreshStatus] = useState<OneCFreshIntegrationStatusDto | null>(null)
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
-  const [oneCFreshSyncConfirmation, setOneCFreshSyncConfirmation] = useState<{ comment: string; error: string | null } | null>(null)
+  const [oneCFreshSyncConfirmation, setOneCFreshSyncConfirmation] = useState<{ mode: 'start' | 'retry'; comment: string; error: string | null } | null>(null)
   const [oneCFreshSyncSaving, setOneCFreshSyncSaving] = useState(false)
   const [oneCFreshSyncMessage, setOneCFreshSyncMessage] = useState<string | null>(null)
   const oneCFreshSyncTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -703,11 +703,13 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
     }
   }
 
-  function openOneCFreshSyncConfirmation(trigger: HTMLButtonElement) {
+  function openOneCFreshSyncConfirmation(trigger: HTMLButtonElement, mode: 'start' | 'retry' = 'start') {
     oneCFreshSyncTriggerRef.current = trigger
     setIntegrationError(null)
-    setOneCFreshSyncMessage(null)
-    setOneCFreshSyncConfirmation({ comment: '', error: null })
+    if (mode === 'start') {
+      setOneCFreshSyncMessage(null)
+    }
+    setOneCFreshSyncConfirmation({ mode, comment: '', error: null })
   }
 
   function closeOneCFreshSyncConfirmation() {
@@ -729,13 +731,16 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
     setOneCFreshSyncSaving(true)
     setOneCFreshSyncConfirmation((state) => state ? { ...state, error: null } : state)
     try {
-      const result = await integrationClient.startOneCFreshSync(auth.accessToken, {
+      const request = {
         comment: oneCFreshSyncConfirmation.comment.trim() || undefined,
-      })
+      }
+      const result = oneCFreshSyncConfirmation.mode === 'retry'
+        ? await integrationClient.retryOneCFreshSync(auth.accessToken, request)
+        : await integrationClient.startOneCFreshSync(auth.accessToken, request)
       closeOneCFreshSyncConfirmation()
       setOneCFreshSyncMessage(result.statusMessage)
     } catch (caught) {
-      setOneCFreshSyncConfirmation((state) => state ? { ...state, error: caught instanceof Error ? caught.message : 'Не удалось запустить синхронизацию 1C Fresh.' } : state)
+      setOneCFreshSyncConfirmation((state) => state ? { ...state, error: caught instanceof Error ? caught.message : 'Не удалось отправить запрос синхронизации 1C Fresh.' } : state)
     } finally {
       setOneCFreshSyncSaving(false)
     }
@@ -808,9 +813,15 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
           ) : null}
           {oneCFreshSyncMessage ? <div className="form-success" role="status" aria-live="polite">{oneCFreshSyncMessage}</div> : null}
           {oneCFreshStatus ? (
-            <button className="secondary-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget)} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
+            <button className="secondary-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'start')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
               <RefreshCw size={16} aria-hidden="true" />
               <span>{oneCFreshSyncSaving ? 'Запускаем...' : 'Запустить синхронизацию'}</span>
+            </button>
+          ) : null}
+          {oneCFreshStatus && oneCFreshSyncMessage ? (
+            <button className="ghost-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'retry')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
+              <RefreshCw size={16} aria-hidden="true" />
+              <span>Повторить запрос</span>
             </button>
           ) : null}
         </section>
@@ -895,22 +906,22 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
             <div className="dialog-heading">
               <div>
                 <p className="eyebrow">Интеграции</p>
-                <h3 id="one-c-fresh-sync-confirmation-title">Запустить синхронизацию 1C Fresh?</h3>
+                <h3 id="one-c-fresh-sync-confirmation-title">{oneCFreshSyncConfirmation.mode === 'retry' ? 'Повторить запрос синхронизации 1C Fresh?' : 'Запустить синхронизацию 1C Fresh?'}</h3>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить запуск синхронизации 1C Fresh" onClick={closeOneCFreshSyncConfirmation} disabled={oneCFreshSyncSaving}>
+              <button className="icon-button" type="button" aria-label={oneCFreshSyncConfirmation.mode === 'retry' ? 'Отменить повтор синхронизации 1C Fresh' : 'Отменить запуск синхронизации 1C Fresh'} onClick={closeOneCFreshSyncConfirmation} disabled={oneCFreshSyncSaving}>
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="one-c-fresh-sync-confirmation-description">Запуск будет записан в историю изменений. До подключения адаптера система зарегистрирует запрос и не будет передавать данные во внешнюю 1C Fresh.</p>
+            <p className="confirmation-text" id="one-c-fresh-sync-confirmation-description">{oneCFreshSyncConfirmation.mode === 'retry' ? 'Повтор будет записан в историю изменений отдельным событием. До подключения адаптера система зарегистрирует запрос и не будет передавать данные во внешнюю 1C Fresh.' : 'Запуск будет записан в историю изменений. До подключения адаптера система зарегистрирует запрос и не будет передавать данные во внешнюю 1C Fresh.'}</p>
             <FormField label="Комментарий">
-              <textarea aria-label="Комментарий к запуску синхронизации 1C Fresh" rows={4} value={oneCFreshSyncConfirmation.comment} onChange={(event) => setOneCFreshSyncConfirmation((state) => state ? { ...state, comment: event.target.value, error: null } : state)} disabled={oneCFreshSyncSaving} />
+              <textarea aria-label={oneCFreshSyncConfirmation.mode === 'retry' ? 'Комментарий к повтору синхронизации 1C Fresh' : 'Комментарий к запуску синхронизации 1C Fresh'} rows={4} value={oneCFreshSyncConfirmation.comment} onChange={(event) => setOneCFreshSyncConfirmation((state) => state ? { ...state, comment: event.target.value, error: null } : state)} disabled={oneCFreshSyncSaving} />
             </FormField>
             {oneCFreshSyncConfirmation.error ? <FormError>{oneCFreshSyncConfirmation.error}</FormError> : null}
             <div className="dialog-actions">
               <button ref={oneCFreshSyncCancelRef} className="ghost-button" type="button" onClick={closeOneCFreshSyncConfirmation} disabled={oneCFreshSyncSaving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmOneCFreshSync()} disabled={oneCFreshSyncSaving}>
                 <RefreshCw size={16} />
-                <span>{oneCFreshSyncSaving ? 'Запускаем...' : 'Запустить'}</span>
+                  <span>{oneCFreshSyncSaving ? 'Отправляем...' : oneCFreshSyncConfirmation.mode === 'retry' ? 'Повторить' : 'Запустить'}</span>
               </button>
             </div>
           </section>

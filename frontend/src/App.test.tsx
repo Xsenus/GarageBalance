@@ -4321,6 +4321,9 @@ describe('App', () => {
     const startOneCFreshSync = vi.fn(async (_accessToken: string, request: OneCFreshSyncRequest) => createOneCFreshSync({
       statusMessage: `Запуск 1C зарегистрирован: ${request.comment ?? ''}`,
     }))
+    const retryOneCFreshSync = vi.fn(async (_accessToken: string, request: OneCFreshSyncRequest) => createOneCFreshSync({
+      statusMessage: `Повтор 1C зарегистрирован: ${request.comment ?? ''}`,
+    }))
     const integrationClient = createIntegrationClient({
       getOneCFreshStatus: async () => createOneCFreshStatus({
         isConfigured: true,
@@ -4328,6 +4331,7 @@ describe('App', () => {
         configuredSettings: ['RefreshToken'],
       }),
       startOneCFreshSync,
+      retryOneCFreshSync,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -4351,6 +4355,22 @@ describe('App', () => {
     await user.click(within(syncDialog).getByRole('button', { name: 'Запустить' }))
     await waitFor(() => expect(startOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Проверка расписания' }))
     expect(await within(integrationPanel).findByText('Запуск 1C зарегистрирован: Проверка расписания')).toHaveAttribute('role', 'status')
+
+    const retryButton = within(integrationPanel).getByRole('button', { name: 'Повторить запрос' })
+    await user.click(retryButton)
+    let retryDialog = await screen.findByRole('dialog', { name: 'Повторить запрос синхронизации 1C Fresh?' })
+    await waitFor(() => expect(within(retryDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Повторить запрос синхронизации 1C Fresh?' })).not.toBeInTheDocument())
+    expect(retryOneCFreshSync).not.toHaveBeenCalled()
+    await waitFor(() => expect(retryButton).toHaveFocus())
+
+    await user.click(retryButton)
+    retryDialog = await screen.findByRole('dialog', { name: 'Повторить запрос синхронизации 1C Fresh?' })
+    await user.type(within(retryDialog).getByLabelText('Комментарий к повтору синхронизации 1C Fresh'), 'Повтор после ошибки адаптера')
+    await user.click(within(retryDialog).getByRole('button', { name: 'Повторить' }))
+    await waitFor(() => expect(retryOneCFreshSync).toHaveBeenCalledWith('token', { comment: 'Повтор после ошибки адаптера' }))
+    expect(await within(integrationPanel).findByText('Повтор 1C зарегистрирован: Повтор после ошибки адаптера')).toHaveAttribute('role', 'status')
   })
 
   it('does not request 1C Fresh status without import permission', async () => {
@@ -10553,6 +10573,7 @@ function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): In
   return {
     getOneCFreshStatus: async () => createOneCFreshStatus(),
     startOneCFreshSync: async () => createOneCFreshSync(),
+    retryOneCFreshSync: async () => createOneCFreshSync(),
     getReceiptPrintingStatus: async () => createReceiptPrintingStatus(),
     registerReceiptPrintingAction: async (_token, operationId, request) => createReceiptPrintingAction({
       financialOperationId: operationId,

@@ -34,6 +34,19 @@ public sealed class IntegrationsController(
         return result.Succeeded ? Ok(result.Value) : ToOneCFreshSyncError(result);
     }
 
+    [HttpPost("one-c-fresh/sync-runs/retry")]
+    [Authorize(Policy = SystemPermissions.ImportRun)]
+    [ProducesResponseType<OneCFreshSyncDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<OneCFreshSyncDto>> RetryOneCFreshSync(
+        [FromBody] OneCFreshSyncRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await oneCFreshSyncService.RetrySyncAsync(request ?? new OneCFreshSyncRequest(null), GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToOneCFreshSyncError(result);
+    }
+
     [HttpGet("receipt-printing/status")]
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [ProducesResponseType<ReceiptPrintingIntegrationStatusDto>(StatusCodes.Status200OK)]

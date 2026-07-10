@@ -75,6 +75,36 @@ public sealed class OneCFreshSyncServiceTests
         Assert.Equal("TIMEOUT", metadata.RootElement.GetProperty("adapterErrorCode").GetString());
     }
 
+    [Fact]
+    public async Task RetrySyncAsync_CreatesSeparateAuditEventWithoutPlaintextToken()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var actorUserId = Guid.NewGuid();
+        var adapter = new FakeSyncAdapter(new OneCFreshSyncAdapterResult(
+            "pending_adapter",
+            "Повтор ожидает адаптер."));
+        var service = CreateService(database.Context, new FakeSecretSettingsService("super-secret-token"), adapter);
+
+        var result = await service.RetrySyncAsync(new OneCFreshSyncRequest("Повтор после ошибки адаптера"), actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("pending_adapter", result.Value!.Status);
+        Assert.True(adapter.LastRequest!.IsRetry);
+        Assert.Equal("Повтор после ошибки адаптера", adapter.LastRequest.Comment);
+        var audit = Assert.Single(database.Context.AuditEvents);
+        Assert.Equal(result.Value.AuditEventId, audit.Id);
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("one_c_fresh.sync_retry_requested", audit.Action);
+        Assert.Equal("sync", audit.ActionKind);
+        Assert.Equal("integrations", audit.Section);
+        Assert.DoesNotContain("super-secret-token", audit.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("super-secret-token", audit.MetadataJson, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("pending_adapter", metadata.RootElement.GetProperty("syncStatus").GetString());
+        Assert.Equal("True", metadata.RootElement.GetProperty("isRetry").GetString());
+        Assert.Equal("Повтор после ошибки адаптера", metadata.RootElement.GetProperty("reason").GetString());
+    }
+
     private static OneCFreshSyncService CreateService(
         GarageBalanceDbContext context,
         IIntegrationSecretSettingsService secretSettingsService,
