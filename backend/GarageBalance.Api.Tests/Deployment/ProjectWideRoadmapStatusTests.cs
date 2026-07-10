@@ -836,6 +836,40 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryLeftMenuNamingDecisionIsMarkedCompleteWhenCustomerLabelIsUsed()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## РСЃС‚РѕСЂРёСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ", StringComparison.Ordinal))
+            .ToArray();
+
+        const string customerLabel = "\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439";
+        const string technicalLabel = "\u0410\u0443\u0434\u0438\u0442";
+        const string decisionText = "\u0420\u0435\u0448\u0435\u043d\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043b\u0435\u0432\u043e\u0433\u043e \u043f\u0443\u043d\u043a\u0442\u0430";
+        const string riskText = "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043b\u0435\u0432\u043e\u0433\u043e \u043f\u0443\u043d\u043a\u0442\u0430 \u0440\u0435\u0448\u0435\u043d\u043e";
+
+        Assert.DoesNotContain(activeRoadmapLines, line =>
+            line.StartsWith("- `[decision]`", StringComparison.Ordinal) &&
+            line.Contains(customerLabel, StringComparison.Ordinal) &&
+            line.Contains(technicalLabel, StringComparison.Ordinal));
+
+        var namingDecisionLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains(decisionText, StringComparison.Ordinal));
+        var riskDecisionLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains(riskText, StringComparison.Ordinal));
+
+        Assert.Contains(customerLabel, namingDecisionLine, StringComparison.Ordinal);
+        Assert.Contains(technicalLabel, namingDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("App.tsx", namingDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", namingDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", namingDecisionLine, StringComparison.Ordinal);
+        Assert.Contains(customerLabel, riskDecisionLine, StringComparison.Ordinal);
+        Assert.Contains(technicalLabel, riskDecisionLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
