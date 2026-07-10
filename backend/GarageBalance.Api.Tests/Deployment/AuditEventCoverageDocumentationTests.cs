@@ -131,6 +131,63 @@ public sealed class AuditEventCoverageDocumentationTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AuditCoverageSummaryCountsMatchDocumentedActionRows()
+    {
+        var lines = File.ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "audit-event-coverage.md"));
+        var sections = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Auth",
+            "Users",
+            "Dictionaries",
+            "Finance",
+            "Funds",
+            "Import",
+            "Integrations",
+            "Reports"
+        };
+
+        var summaryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var actionCounts = sections.ToDictionary(section => section, _ => 0, StringComparer.Ordinal);
+        string? currentSection = null;
+
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("| ", StringComparison.Ordinal))
+            {
+                foreach (var section in sections)
+                {
+                    if (!line.StartsWith($"| {section} |", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var columns = line.Split('|', StringSplitOptions.TrimEntries);
+                    summaryCounts[section] = int.Parse(columns[2]);
+                }
+            }
+
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                var heading = line[3..];
+                currentSection = sections.Contains(heading) ? heading : null;
+                continue;
+            }
+
+            if (currentSection is not null && line.StartsWith("| `", StringComparison.Ordinal))
+            {
+                actionCounts[currentSection]++;
+            }
+        }
+
+        Assert.Equal(sections, summaryCounts.Keys.ToHashSet(StringComparer.Ordinal));
+
+        foreach (var section in sections)
+        {
+            Assert.Equal(actionCounts[section], summaryCounts[section]);
+        }
+    }
+
     [Theory]
     [MemberData(nameof(DocumentedAuditActions))]
     public void AuditCoverageDocumentListsCurrentBackendAuditAction(string action)
