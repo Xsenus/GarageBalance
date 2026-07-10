@@ -130,6 +130,25 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GetGarageIncomeWorksheet", ownerPaymentsLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
+    {
+        var payoutsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Выплаты поставщикам и персоналу: создание", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Выплаты поставщикам и персоналу:", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("CreateStaffPaymentAsync", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.expense_created", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.expense_updated", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.operation_canceled", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.operation_restored", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("остаток банка/кассы", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("доступный лимит", payoutsLine, StringComparison.Ordinal);
+        Assert.Contains("server-side expense worksheet", payoutsLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

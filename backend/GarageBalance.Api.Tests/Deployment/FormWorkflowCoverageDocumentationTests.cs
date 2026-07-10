@@ -44,6 +44,7 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "RestoreTariff",
             "CreateIncome",
             "CreateExpense",
+            "CreateStaffPayment",
             "CreateGarageDebtPayment",
             "UpdateOperation",
             "CancelOperation",

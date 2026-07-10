@@ -110,8 +110,8 @@
 |---|---|---|---|---|---|---|
 | `finance.income_created` | `financial_operation` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, документ и сумма в structured metadata |
 | `finance.income_updated` | `financial_operation` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, даты, месяца, документа, комментария |
-| `finance.expense_created` | `financial_operation` | Нет | Нет | Да | `FinanceServiceTests` | поставщик, месяц, документ и сумма в structured metadata |
-| `finance.expense_updated` | `financial_operation` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, даты, месяца, документа, комментария |
+| `finance.expense_created` | `financial_operation` | Нет | Нет | Да | `FinanceServiceTests` | поставщик или сотрудник, месяц, документ, сумма и касса/банк в structured metadata |
+| `finance.expense_updated` | `financial_operation` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, даты, месяца, документа, комментария и касса/банк checks |
 | `finance.operation_canceled` | `financial_operation` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason; audit reason пока нормализован как отмена записи, а текстовая причина остается в summary |
 | `finance.operation_restored` | `financial_operation` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененной операции с проверкой активного документа и кассово-банковских лимитов |
 | `finance.accrual_created` | `accrual` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, вид начисления |

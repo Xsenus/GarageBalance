@@ -36,7 +36,7 @@
 
 | Объект | Маркер | Cancel endpoint/service | Restore | Причина обязательна | Audit | Бизнес-правило |
 |---|---|---|---|---|---|---|
-| Поступление/выплата | `IsCanceled` | `CancelOperationAsync` / `CancelOperation` | `RestoreOperationAsync` / `RestoreOperation` | Да | `finance.operation_canceled`, `finance.operation_restored` | отмененная операция скрывается из рабочих списков и расчетов; восстановление проверяет активный документ, кассу/банк и лимиты |
+| Поступление/выплата | `IsCanceled` | `CancelOperationAsync` / `CancelOperation` | `RestoreOperationAsync` / `RestoreOperation` | Да | `finance.operation_canceled`, `finance.operation_restored` | отмененная операция скрывается из рабочих списков и расчетов; восстановление проверяет активный документ, кассу/банк и лимит сотрудника |
 | Начисление владельцу | `IsCanceled` | `CancelAccrualAsync` / `CancelAccrual` | `[decision]` восстановление или обратная операция | Да | `finance.accrual_canceled` | отмененное начисление скрывается из рабочих списков и расчетов |
 | Начисление поставщику | `IsCanceled` | `CancelSupplierAccrualAsync` / `CancelSupplierAccrual` | `[decision]` восстановление или обратная операция | Да | `finance.supplier_accrual_canceled` | отмененное начисление скрывается из рабочих списков и расчетов |
 | Показание счетчика | `IsCanceled` | `CancelMeterReadingAsync` / `CancelMeterReading` | `RestoreMeterReadingAsync` / `RestoreMeterReading` | Да | `finance.meter_reading_canceled`, `finance.meter_reading_restored` | отмененное показание исключается из активной цепочки показаний; восстановление проверяет активный дубль |
