@@ -484,11 +484,19 @@ public sealed class ProjectWideRoadmapStatusTests
     [Fact]
     public void ChangeHistoryMinimumVisibleFieldsCoverageIsMarkedCompleteWhenDtoUiCsvAndStorageAreCovered()
     {
-        var minimumFieldsLine = File
+        var activeRoadmapLines = File
             .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
-            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            .ToArray();
+        var definitionOfDoneLines = activeRoadmapLines
+            .SkipWhile(line => !string.Equals(line, "## Definition Of Done", StringComparison.Ordinal))
+            .ToArray();
+
+        var minimumFieldsLine = activeRoadmapLines.Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("История должна показывать минимум", StringComparison.Ordinal));
+        var visibleHistoryDefinitionLine = definitionOfDoneLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("История показывает `кто`", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]`", minimumFieldsLine, StringComparison.Ordinal);
         Assert.Contains("createdAtUtc", minimumFieldsLine, StringComparison.Ordinal);
@@ -511,6 +519,15 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("AuditControllerTests", minimumFieldsLine, StringComparison.Ordinal);
         Assert.Contains("App.test.tsx", minimumFieldsLine, StringComparison.Ordinal);
         Assert.Contains("DatabaseMigrationPolicyTests", minimumFieldsLine, StringComparison.Ordinal);
+        Assert.Contains("actorUserId", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("createdAtUtc", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("entityDisplayName", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("oldValue/newValue", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("reason", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("metadata", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventDto", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("CSV/XLSX export", visibleHistoryDefinitionLine, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL", visibleHistoryDefinitionLine, StringComparison.Ordinal);
     }
 
     [Fact]
