@@ -149,6 +149,26 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("server-side expense worksheet", payoutsLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OwnerAccrualsObjectCoverageIsMarkedCompleteWhenManualRegularMeterCancelAndRestoreFlowsAreCovered()
+    {
+        var ownerAccrualsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Начисления владельцам: ручные", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Начисления владельцам:", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("CreateAccrualAsync", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.accrual_created", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.accrual_updated", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.accrual_canceled", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.accrual_restored", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.regular_accruals_generated", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("meter_water", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("meter_electricity", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccruals", ownerAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularCatalogAccruals", ownerAccrualsLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

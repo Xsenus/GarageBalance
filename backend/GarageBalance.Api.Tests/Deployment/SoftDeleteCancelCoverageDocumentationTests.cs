@@ -25,6 +25,7 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "CancelOperationAsync",
             "RestoreOperationAsync",
             "CancelAccrualAsync",
+            "RestoreAccrualAsync",
             "CancelSupplierAccrualAsync",
             "CancelMeterReadingAsync",
             "RestoreMeterReadingAsync",

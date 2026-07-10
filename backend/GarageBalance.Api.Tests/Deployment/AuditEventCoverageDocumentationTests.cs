@@ -57,6 +57,7 @@ public sealed class AuditEventCoverageDocumentationTests
             "finance.accrual_created",
             "finance.accrual_updated",
             "finance.accrual_canceled",
+            "finance.accrual_restored",
             "finance.debt_transfer_created",
             "finance.debt_transfer_updated",
             "finance.supplier_accrual_created",

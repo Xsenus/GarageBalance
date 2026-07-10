@@ -117,6 +117,7 @@
 | `finance.accrual_created` | `accrual` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, вид начисления |
 | `finance.accrual_updated` | `accrual` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, месяца, источника, комментария |
 | `finance.accrual_canceled` | `accrual` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
+| `finance.accrual_restored` | `accrual` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененного начисления с проверкой активного дубля |
 | `finance.debt_transfer_created` | `accrual` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | перенос задолженности владельца в целевой месяц |
 | `finance.debt_transfer_updated` | `accrual` | Да | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | дозапись суммы переноса задолженности в существующее системное начисление |
 | `finance.supplier_accrual_created` | `supplier_accrual` | Нет | Нет | Да | `FinanceServiceTests` | поставщик, месяц, документ |
