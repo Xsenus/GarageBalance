@@ -157,6 +157,30 @@ public sealed class BackendPerformanceGuardTests
         Assert.All(expectedIndexNames, indexName => Assert.Contains(indexName, source, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void FinalPerformanceChecklistCoversAutomatedGatesPostgresQueriesFrontendAndAcceptanceThresholds()
+    {
+        var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "final-performance-checklist.md"));
+
+        Assert.Contains("final performance verification", document, StringComparison.Ordinal);
+        Assert.Contains("BackendPerformanceGuardTests", document, StringComparison.Ordinal);
+        Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", document, StringComparison.Ordinal);
+        Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", document, StringComparison.Ordinal);
+        Assert.Contains("npm run check:bundle", document, StringComparison.Ordinal);
+        Assert.Contains("main JS gzip: `180 KiB`", document, StringComparison.Ordinal);
+        Assert.Contains("EXPLAIN (ANALYZE, BUFFERS)", document, StringComparison.Ordinal);
+        Assert.Contains("GIN trigram indexes", document, StringComparison.Ordinal);
+        Assert.Contains("limit", document, StringComparison.Ordinal);
+        Assert.Contains("rowCount", document, StringComparison.Ordinal);
+        Assert.Contains("CountAsync", document, StringComparison.Ordinal);
+        Assert.Contains("SumAsync", document, StringComparison.Ordinal);
+        Assert.Contains("browser console", document, StringComparison.Ordinal);
+        Assert.Contains("realistic customer data", document, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", document, StringComparison.Ordinal);
+        Assert.Contains("psql=False", document, StringComparison.Ordinal);
+        Assert.Contains("docker=False", document, StringComparison.Ordinal);
+    }
+
     private static string ReadApiSource(string relativePath)
     {
         return File.ReadAllText(Path.Combine(FindApiProjectRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
@@ -191,6 +215,23 @@ public sealed class BackendPerformanceGuardTests
         }
 
         throw new DirectoryNotFoundException("Не удалось найти проект GarageBalance.Api.");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
+                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Не удалось найти корень репозитория GarageBalance.");
     }
 
     private static Regex BoundedQueryRegex(string pattern)

@@ -2278,7 +2278,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", fullTestRunLine, StringComparison.Ordinal);
         Assert.Contains("StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass", fullTestRunLine, StringComparison.Ordinal);
 
-        Assert.StartsWith("- `[ ]`", performanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", performanceLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[ ]`", finalReleaseLine, StringComparison.Ordinal);
 
         Assert.Contains("закрыт пункт Stage 11 \"Провести полные backend/frontend тесты\"", historyText, StringComparison.Ordinal);
@@ -2293,6 +2293,41 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("postgresTcp=False", historyText, StringComparison.Ordinal);
         Assert.Contains("psql=False", historyText, StringComparison.Ordinal);
         Assert.Contains("docker=False", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StageElevenFinalPerformanceCheckRemainsBlockedWithoutRealPostgresDataAndHasChecklist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var performanceChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "final-performance-checklist.md"));
+
+        var performanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести финальную проверку производительности", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("final-performance-checklist.md", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("BackendPerformanceGuardTests", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("npm run check:bundle", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenFinalPerformanceCheckRemainsBlockedWithoutRealPostgresDataAndHasChecklist", performanceLine, StringComparison.Ordinal);
+
+        Assert.Contains("EXPLAIN (ANALYZE, BUFFERS)", performanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("GIN trigram indexes", performanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("CountAsync", performanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("SumAsync", performanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("browser console", performanceChecklist, StringComparison.Ordinal);
+
+        Assert.Contains("подготовлен checklist финальной проверки производительности", historyText, StringComparison.Ordinal);
+        Assert.Contains("BackendPerformanceGuardTests.FinalPerformanceChecklistCoversAutomatedGatesPostgresQueriesFrontendAndAcceptanceThresholds", historyText, StringComparison.Ordinal);
+        Assert.Contains("StageElevenFinalPerformanceCheckRemainsBlockedWithoutRealPostgresDataAndHasChecklist", historyText, StringComparison.Ordinal);
         Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
     }
 
