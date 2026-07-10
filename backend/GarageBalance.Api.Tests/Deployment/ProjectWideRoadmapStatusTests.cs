@@ -227,6 +227,33 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryContractCoverageIsMarkedCompleteWhenStructuredFieldsAndIndexesAreCovered()
+    {
+        var changeHistoryLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("ChangeHistoryEvent", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventDto", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("section", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("actionKind", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("fieldName", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("oldValue", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("newValue", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("reason", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("metadata", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("entityDisplayName", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("relatedGarageId", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("relatedDocumentNumber", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventRelatedFields", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventSectionActionKind", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventLookupIndexes", changeHistoryLine, StringComparison.Ordinal);
+        Assert.Contains("DatabaseMigrationPolicyTests", changeHistoryLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
