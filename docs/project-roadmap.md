@@ -318,7 +318,7 @@
 
 ## Этап 8. Прототип И Приемка Этапа 1
 
-- `[ ]` Подготовить кликабельный shell в стиле спокойного рабочего интерфейса: боковое меню, поиск, рабочая область, модалки, таблицы.
+- `[x]` Подготовить кликабельный shell в стиле спокойного рабочего интерфейса: боковое меню, поиск, рабочая область, модалки, таблицы. Готово: `App.tsx` содержит responsive `app-shell`, сворачиваемый sidebar с icon-navigation, рабочую область `Workspace`, поисковые поля в рабочих разделах, доступные `role="dialog"` модалки и рабочие таблицы; shell закреплен `App.test.tsx`, `accessibleStatus.test.ts` и `responsiveLayout.test.ts`.
 - `[ ]` Подготовить прототип основных экранов: вход, панель, справочники, тарифы, платежи, отчеты, импорт.
 - `[ ]` Показать состояния без данных, с ошибками, без прав и при загрузке.
 - `[ ]` Провести демонстрацию на тестовых данных.
@@ -399,6 +399,8 @@
 - `[decision]` Нужно подтвердить стратегию резервного копирования для локальной установки: куда складывать backup и кто отвечает за проверку восстановления.
 
 ## История выполнения
+
+- `[x]` 10.07.2026: синхронизирован статус этапа 8 по кликабельному shell рабочего интерфейса. Проверено, что текущий frontend уже содержит спокойный рабочий `app-shell` со сворачиваемым sidebar, доступной навигацией по разделам, рабочей областью `Workspace`, поиском в рабочих таблицах, модальными `role="dialog"` окнами, таблицами справочников/платежей/отчетов/импорта и responsive-правилами для узких экранов. Добавлен guard-test `InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist`, который сверяет закрытый roadmap-пункт с `App.tsx`, `App.test.tsx`, `accessibleStatus.test.ts` и `responsiveLayout.test.ts`. Новая запись "Что нового" не нужна: пользовательское поведение не менялось, это синхронизация roadmap с уже реализованным shell. Что остается по этапу 8: отдельное закрытие прототипов основных экранов, состояний пусто/ошибка/без прав/загрузка, демонстрация, тестовые данные, Docker/local-install проверки и приемка.
 
 - `[x]` 10.07.2026: синхронизирован статус этапа 9 по ручному запуску синхронизации 1C Fresh. Проверено, что backend уже содержит endpoints `POST /api/integrations/one-c-fresh/sync-runs` и `/retry` под правом `import.run`, `OneCFreshSyncService` получает защищенный `OneCFresh:RefreshToken` только через `IIntegrationSecretSettingsService.GetSecretAsync`, передает его runtime-адаптеру `IOneCFreshSyncAdapter`, пишет `one_c_fresh.sync_requested` и `one_c_fresh.sync_retry_requested` без plaintext-токена, а disabled-адаптер возвращает безопасный `pending_adapter` до подключения реального обмена. Frontend в настройках показывает `Запустить синхронизацию` и `Повторить запрос`, открывает confirmation dialogs, поддерживает optional comment, Escape/отмену и возврат фокуса; backend/frontend тесты уже покрывают старт, retry, ошибки конфигурации и UI workflow. Добавлен guard-test `OneCFreshManualSyncIsMarkedCompleteWhenControllerServiceUiTestsAndReleaseNotesExist`, чтобы roadmap-статус не разошелся с endpoints, service, UI, тестами и существующими release notes. Новая запись "Что нового" не нужна: видимое поведение уже описано в релизах `0.507.0` и `0.524.0`. Фоновый режим не добавлялся, потому что необходимость фонового обмена, формат синхронизации и тестовый контур 1C Fresh остаются `[decision]`; что остается по этапу 9: модель sync-runs/журнал, preview, реальный обмен, conflict resolution и приемка на контуре 1C Fresh.
 

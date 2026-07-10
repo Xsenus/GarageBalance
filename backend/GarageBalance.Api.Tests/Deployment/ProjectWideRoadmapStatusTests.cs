@@ -1290,6 +1290,54 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var shellLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить кликабельный shell", StringComparison.Ordinal));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var accessibleStatusTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "accessibleStatus.test.ts"));
+        var responsiveLayoutTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "responsiveLayout.test.ts"));
+
+        Assert.StartsWith("- `[x]`", shellLine, StringComparison.Ordinal);
+        Assert.Contains("app-shell", shellLine, StringComparison.Ordinal);
+        Assert.Contains("sidebar", shellLine, StringComparison.Ordinal);
+        Assert.Contains("Workspace", shellLine, StringComparison.Ordinal);
+        Assert.Contains("поисковые поля", shellLine, StringComparison.Ordinal);
+        Assert.Contains("role=\"dialog\"", shellLine, StringComparison.Ordinal);
+        Assert.Contains("таблицы", shellLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", shellLine, StringComparison.Ordinal);
+        Assert.Contains("accessibleStatus.test.ts", shellLine, StringComparison.Ordinal);
+        Assert.Contains("responsiveLayout.test.ts", shellLine, StringComparison.Ordinal);
+
+        Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appText, StringComparison.Ordinal);
+        Assert.Contains("sidebarToggleLabel", appText, StringComparison.Ordinal);
+        Assert.Contains("const navigation: NavigationItem[]", appText, StringComparison.Ordinal);
+        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appText, StringComparison.Ordinal);
+        Assert.Contains("aria-label={`Поиск: ${activeOption.label}`}", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"dialog\"", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"table\"", appText, StringComparison.Ordinal);
+        Assert.Contains("dictionary-data-table", appText, StringComparison.Ordinal);
+        Assert.Contains("report-workbook-table", appText, StringComparison.Ordinal);
+        Assert.Contains("opens the workspace with users and dictionaries", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Главное меню", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Справочники", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Платежи", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Импорт", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps sidebar topbar and dashboard icon navigation labeled titled and focusable", accessibleStatusTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps detail dialogs named, described and modal", accessibleStatusTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps tables scrollable focused and announced", accessibleStatusTestsText, StringComparison.Ordinal);
+        Assert.Contains("collapses the main shell and data rows on tablet width", responsiveLayoutTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps tall dialogs scrollable inside the viewport", responsiveLayoutTestsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
