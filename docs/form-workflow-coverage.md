@@ -35,6 +35,7 @@
 | Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `RestoreMeterReading` | `CancelMeterReading` | Нет | Нет |
 | Funds: operations | `CreateFundOperation` | `UpdateFundOperation` | Нет | `RestoreFundOperation` | `CancelFundOperation` | Нет | reverse via opposite `CreateFundOperation` |
 | Import Access | Нет | `ResolveQuarantineItem`, `CancelAccessImportApplyRequest` | Нет | Нет | `RequestAccessImportRollback` | `DryRunAccessImport`, `RequestAccessImportApply` | `ExportAccessImportRunReport` |
+| Integrations: 1C Fresh | Нет | `StartOneCFreshSync`, `RetryOneCFreshSync` | Нет | Нет | Нет | Нет | Нет |
 | Reports | Нет | Нет | Нет | Нет | Нет | Нет | `Get*Report`, `Export*ReportXlsx`, `Export*ReportPdf` |
 | Audit | Нет | Нет | Нет | Нет | Нет | Нет | `ExportEvents`, `ExportEventsXlsx` |
 
@@ -62,6 +63,7 @@
 | Импорт Access | rollback-заявка dry-run | cancel | Backend API | confirmation с обязательной причиной; фактический rollback не выполняется |
 | Импорт Access | закрытие карантина | edit/resolve | Backend API | button action с audit; отдельного confirmation пока нет |
 | Импорт Access | JSON-отчет dry-run | export | Backend API | POST export, пишет audit |
+| Настройки | запуск и повтор 1C Fresh | edit | Backend API | confirmation с optional comment; `pending_adapter`, без plaintext refresh token |
 | Отчеты | фильтры и просмотр | generated/read | Backend API | generate/read, пишет audit для формирования |
 | Отчеты | XLSX/PDF export | export | Backend API | POST export, пишет audit |
 | История изменений | CSV/XLSX export | export | Backend API | export текущей выборки |

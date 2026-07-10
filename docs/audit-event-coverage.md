@@ -40,7 +40,7 @@
 | Dictionaries | 32 | create/update/archive/restore для текущих справочников, diff на update, причина archive | начисление участников сборов и полная UI-связка сборов остаются следующим срезом |
 | Finance | 21 | create/update/cancel/restore/generate, diff на update, связанные месяц/гараж/контрагент/документ, перенос задолженности | следующие объектные строки начислений и выплат синхронизируются отдельными срезами |
 | Import | 5 | dry-run, отчет, карантин, fingerprints, безопасная metadata | фактический импорт/rollback еще не завершены |
-| Integrations | 1 | secret upsert без plaintext-секретов, diff состояния секрета | запуск синхронизации и конфликты будущих интеграций впереди |
+| Integrations | 3 | secret upsert без plaintext-секретов, diff состояния секрета, запрос и retry синхронизации 1C Fresh без раскрытия токена | реальный обмен и конфликты будущих интеграций впереди |
 | Reports | 6 | формирование/выгрузка, период, строка, формат, audit-writing export через POST | тест прямо закрепляет income export; остальные report actions покрыты общими report-service и endpoint тестами |
 
 ## Auth
@@ -160,6 +160,8 @@
 | Action | Объект | Было/стало | Причина | Actor | Тесты | Примечание |
 |---|---|---|---|---|---|---|
 | `integration.secret_upserted` | `integration_secret_setting` | Да | Нет | Да | `IntegrationSecretSettingsServiceTests` | plaintext-секреты не раскрываются, diff показывает состояние секрета |
+| `one_c_fresh.sync_requested` | `one_c_fresh_sync` | Нет | Да | Да | `OneCFreshSyncServiceTests`, `IntegrationsControllerTests` | запуск пишет optional comment как reason, adapter status и не раскрывает refresh token |
+| `one_c_fresh.sync_retry_requested` | `one_c_fresh_sync` | Нет | Да | Да | `OneCFreshSyncServiceTests`, `IntegrationsControllerTests` | retry пишет optional comment, `isRetry=true`, adapter status и не раскрывает refresh token |
 
 ## Reports
 

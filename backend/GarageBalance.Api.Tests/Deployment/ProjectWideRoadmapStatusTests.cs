@@ -243,6 +243,21 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("настоящий rollback созданных записей остаются следующими срезами", importLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OneCFreshCoverageKeepsPartialStatusUntilRealSyncAndConflictResolutionAreImplemented()
+    {
+        var integrationLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("1C Fresh и будущие интеграции:", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[~]` 1C Fresh и будущие интеграции:", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("one_c_fresh.sync_retry_requested", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("pending_adapter", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("без plaintext-токена", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("Реальный обмен с 1C Fresh", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("conflict resolution остаются будущими срезами", integrationLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

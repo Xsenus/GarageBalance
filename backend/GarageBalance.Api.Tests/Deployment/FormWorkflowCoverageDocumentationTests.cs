@@ -74,6 +74,8 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "CancelAccessImportApplyRequest",
             "RequestAccessImportRollback",
             "ResolveQuarantineItem",
+            "StartOneCFreshSync",
+            "RetryOneCFreshSync",
             "ExportAccessImportRunReport",
             "ExportEventsXlsx"
         };
@@ -91,6 +93,7 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "Управление фондами",
             "Импорт Access",
             "rollback-заявка dry-run",
+            "запуск и повтор 1C Fresh",
             "Отчеты",
             "История изменений",
             "Тарифы-прототип",

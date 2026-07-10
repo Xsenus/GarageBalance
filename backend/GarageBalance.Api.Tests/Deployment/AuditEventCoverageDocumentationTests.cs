@@ -85,6 +85,8 @@ public sealed class AuditEventCoverageDocumentationTests
             "import.quarantine_resolved",
             "import.row_fingerprint_registered",
             "integration.secret_upserted",
+            "one_c_fresh.sync_requested",
+            "one_c_fresh.sync_retry_requested",
             "reports.consolidated_generated",
             "reports.income_generated",
             "reports.expense_generated",
