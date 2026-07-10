@@ -908,6 +908,40 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void FrontendDialogAccessibilityCoverageIsMarkedCompleteWhenCurrentDialogFamiliesAreCovered()
+    {
+        const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
+            .ToArray();
+
+        var accessibilityLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Frontend accessibility tests for dialogs and keyboard", StringComparison.Ordinal));
+
+        Assert.Contains("App.test.tsx", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("focus-loop", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("initial focus", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("Escape", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("restore focus", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("useFocusTrap", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("useEscapeKey", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("useFocusOnOpen", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("useRestoreFocusOnClose", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("docs/ui-control-style-coverage.md", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendDialogPolicyTests", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("Access import", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("1C Fresh", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("receipt print/cancel/reprint", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("audit event detail", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("validation dialogs", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains("future dialogs/control families", accessibilityLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(FrontendDialogAccessibilityCoverageIsMarkedCompleteWhenCurrentDialogFamiliesAreCovered), accessibilityLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChangeHistoryControllerTestCoverageIsMarkedCompleteWhenAuditControllerContractIsCovered()
     {
         var controllerTestsLine = File
