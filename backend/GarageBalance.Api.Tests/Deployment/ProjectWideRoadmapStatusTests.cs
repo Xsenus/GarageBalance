@@ -1601,6 +1601,80 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void IntegrationTestingMatrixIsMarkedCompleteWhenOneCFreshSecretsAndReceiptAdapterErrorsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var integrationTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Integration tests: 1C Fresh client mocks", StringComparison.Ordinal));
+        var oneCFreshAdapterTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncAdapterTests.cs"));
+        var oneCFreshServiceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncServiceTests.cs"));
+        var secretTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationSecretSettingsServiceTests.cs"));
+        var receiptPrintingTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "ReceiptPrintingServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationsControllerTests.cs"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
+
+        Assert.StartsWith("- `[x]`", integrationTestsLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncAdapterTests", integrationTestsLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncServiceTests", integrationTestsLine, StringComparison.Ordinal);
+        Assert.Contains("IntegrationSecretSettingsServiceTests", integrationTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingServiceTests", integrationTestsLine, StringComparison.Ordinal);
+        Assert.Contains("device_error", integrationTestsLine, StringComparison.Ordinal);
+        Assert.Contains("IsCopy", integrationTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("DisabledAdapter_ReturnsPendingStatusWithoutLeakingRequestData", oneCFreshAdapterTestsText, StringComparison.Ordinal);
+        Assert.Contains("AdapterResultFactories_PreserveExternalRunConflictAndErrorMappingData", oneCFreshAdapterTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_ForwardsTrimmedCommentRetryFlagAndCancellationTokenToAdapter", oneCFreshServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_MapsRetryableAdapterStatusesAndErrorCodes", oneCFreshServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_MapsConflictStatusFamiliesToResolutionRequired", oneCFreshServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("PreviewSyncAsync_CreatesAuditEventWithoutCallingAdapterOrPlaintextToken", oneCFreshServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetrySyncAsync_CreatesSeparateAuditEventWithoutPlaintextToken", oneCFreshServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetSecretAsync_ReturnsPlaintextThroughProtector", secretTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpsertSecretAsync_StoresProtectedValueAndWritesAuditWithoutPlaintext", secretTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterActionAsync_WritesAdapterStatusAndSafeErrorDetails", receiptPrintingTestsText, StringComparison.Ordinal);
+        Assert.Contains("device_error", receiptPrintingTestsText, StringComparison.Ordinal);
+        Assert.Contains("NO_CONNECTION", receiptPrintingTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterActionAsync_ReprintCreatesAuditEventWithReasonAndExternalReceiptId", receiptPrintingTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.True(result.Value.IsCopy)", receiptPrintingTestsText, StringComparison.Ordinal);
+        Assert.Contains("RegisterReceiptPrintingAction_MapsServiceErrors", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows 1C Fresh retry and conflict recovery states from backend result", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Квитанция: reprint Отметка: КОПИЯ.", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("registers receipt printing actions through the operation action endpoint", integrationsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("IntegrationTestingMatrixIsMarkedCompleteWhenOneCFreshSecretsAndReceiptAdapterErrorsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OneCFreshReactCoverageIsMarkedCompleteWhenSettingsLaunchStatusesAndErrorsAreTested()
     {
         var repositoryRoot = FindRepositoryRoot();
