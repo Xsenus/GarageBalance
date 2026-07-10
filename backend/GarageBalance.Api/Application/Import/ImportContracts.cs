@@ -34,6 +34,13 @@ public sealed record AccessImportApplyRequest
     public bool BackupConfirmed { get; init; }
 }
 
+public sealed record AccessImportApplyCancelRequest
+{
+    [Required]
+    [MaxLength(1000)]
+    public string Reason { get; init; } = string.Empty;
+}
+
 public sealed record AccessImportCheckDto(
     string Code,
     string Title,

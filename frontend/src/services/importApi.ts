@@ -8,7 +8,7 @@ export type AccessImportCheckDto = {
 export type AccessImportRunDto = {
   id: string
   mode: string
-  status: 'completed' | 'blocked' | 'rollback_requested' | 'import_requested'
+  status: 'completed' | 'blocked' | 'rollback_requested' | 'import_requested' | 'import_request_cancelled'
   originalFileName: string
   fileExtension: string
   fileSizeBytes: number
@@ -57,6 +57,7 @@ export type ImportClient = {
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
   requestAccessImportApply(accessToken: string, runId: string, reason: string, backupConfirmed: boolean): Promise<AccessImportRunDto>
+  cancelAccessImportApplyRequest(accessToken: string, runId: string, reason: string): Promise<AccessImportRunDto>
   requestAccessImportRollback(accessToken: string, runId: string, reason: string): Promise<AccessImportRunDto>
   resolveQuarantineItem(accessToken: string, itemId: string, resolutionComment?: string): Promise<AccessImportQuarantineItemDto>
 }
@@ -127,6 +128,15 @@ export const importApi: ImportClient = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ reason, backupConfirmed }),
+    })
+  },
+  cancelAccessImportApplyRequest(accessToken, runId, reason) {
+    return requestJson(accessToken, `/api/import/access/runs/${runId}/apply/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason }),
     })
   },
   requestAccessImportRollback(accessToken, runId, reason) {

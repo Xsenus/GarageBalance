@@ -56,4 +56,21 @@ describe('importApi', () => {
       body: JSON.stringify({ reason: 'Dry-run проверен', backupConfirmed: true }),
     })
   })
+
+  it('cancels Access import apply request with a required reason', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'run-42', status: 'import_request_cancelled' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await importApi.cancelAccessImportApplyRequest('token', 'run-42', 'Нужно перепроверить backup')
+
+    expect(result.status).toBe('import_request_cancelled')
+    expect(fetchMock).toHaveBeenCalledWith('/api/import/access/runs/run-42/apply/cancel', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason: 'Нужно перепроверить backup' }),
+    })
+  })
 })

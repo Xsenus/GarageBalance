@@ -100,6 +100,7 @@ describe('shared formatters', () => {
     expect(formatImportRunStatus('blocked')).toBe('Заблокирован')
     expect(formatImportRunStatus('rollback_requested')).toBe('Rollback запрошен')
     expect(formatImportRunStatus('import_requested')).toBe('Импорт запрошен')
+    expect(formatImportRunStatus('import_request_cancelled')).toBe('Заявка отменена')
     expect(formatImportCheckStatus('passed')).toBe('Пройдено')
     expect(formatImportCheckStatus('warning')).toBe('Предупреждение')
     expect(formatImportCheckStatus('error')).toBe('Ошибка')

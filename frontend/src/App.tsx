@@ -7775,6 +7775,10 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [applyReason, setApplyReason] = useState('')
   const [applyBackupConfirmed, setApplyBackupConfirmed] = useState(false)
   const [applyError, setApplyError] = useState<string | null>(null)
+  const [cancelingApplyRunId, setCancelingApplyRunId] = useState<string | null>(null)
+  const [applyCancelTarget, setApplyCancelTarget] = useState<AccessImportRunDto | null>(null)
+  const [applyCancelReason, setApplyCancelReason] = useState('')
+  const [applyCancelError, setApplyCancelError] = useState<string | null>(null)
   const [rollbackingRunId, setRollbackingRunId] = useState<string | null>(null)
   const [rollbackTarget, setRollbackTarget] = useState<AccessImportRunDto | null>(null)
   const [rollbackReason, setRollbackReason] = useState('')
@@ -7788,16 +7792,21 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
   const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
   const applyActionLabel = currentRun ? `Запросить фактический импорт ${currentRun.originalFileName}` : 'Запросить фактический импорт'
+  const applyCancelActionLabel = currentRun ? `Отменить заявку на импорт ${currentRun.originalFileName}` : 'Отменить заявку на импорт'
   const rollbackActionLabel = currentRun ? `Запросить rollback импорта ${currentRun.originalFileName}` : 'Запросить rollback импорта'
-  const applyDisabled = !currentRun || currentRun.status !== 'completed' || applyingRunId !== null || rollbackingRunId !== null
-  const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || currentRun.status === 'import_requested' || rollbackingRunId !== null
+  const applyDisabled = !currentRun || (currentRun.status !== 'completed' && currentRun.status !== 'import_request_cancelled') || applyingRunId !== null || cancelingApplyRunId !== null || rollbackingRunId !== null
+  const applyCancelDisabled = !currentRun || currentRun.status !== 'import_requested' || cancelingApplyRunId !== null
+  const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || currentRun.status === 'import_requested' || rollbackingRunId !== null || cancelingApplyRunId !== null
   useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
   useRestoreFocusOnClose(Boolean(applyTarget))
+  useRestoreFocusOnClose(Boolean(applyCancelTarget))
   useRestoreFocusOnClose(Boolean(rollbackTarget))
   const quarantineResolveCommentRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(quarantineResolveTarget))
   const quarantineResolveDialogRef = useFocusTrap<HTMLElement>(Boolean(quarantineResolveTarget))
   const applyReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(applyTarget))
   const applyDialogRef = useFocusTrap<HTMLElement>(Boolean(applyTarget))
+  const applyCancelReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(applyCancelTarget))
+  const applyCancelDialogRef = useFocusTrap<HTMLElement>(Boolean(applyCancelTarget))
   const rollbackReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(rollbackTarget))
   const rollbackDialogRef = useFocusTrap<HTMLElement>(Boolean(rollbackTarget))
   const visibleRunLogEntries = runLogEntries.slice(0, 10)
@@ -7812,6 +7821,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
 
   useEscapeKey(Boolean(quarantineResolveTarget) && resolvingQuarantineId === null, () => closeQuarantineResolveDialog())
   useEscapeKey(Boolean(applyTarget) && applyingRunId === null, () => closeApplyDialog())
+  useEscapeKey(Boolean(applyCancelTarget) && cancelingApplyRunId === null, () => closeApplyCancelDialog())
   useEscapeKey(Boolean(rollbackTarget) && rollbackingRunId === null, () => closeRollbackDialog())
 
   useEffect(() => {
@@ -7973,6 +7983,49 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
     }
   }
 
+  function openApplyCancelDialog(run: AccessImportRunDto) {
+    setApplyCancelTarget(run)
+    setApplyCancelReason('')
+    setApplyCancelError(null)
+    setError(null)
+    setExportMessage(null)
+  }
+
+  function closeApplyCancelDialog() {
+    setApplyCancelTarget(null)
+    setApplyCancelReason('')
+    setApplyCancelError(null)
+  }
+
+  async function submitApplyCancelRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!applyCancelTarget) {
+      return
+    }
+
+    const reason = applyCancelReason.trim()
+    if (!reason) {
+      setApplyCancelError('Укажите причину отмены заявки на импорт.')
+      return
+    }
+
+    setCancelingApplyRunId(applyCancelTarget.id)
+    setError(null)
+    setExportMessage(null)
+    try {
+      const updatedRun = await importClient.cancelAccessImportApplyRequest(auth.accessToken, applyCancelTarget.id, reason)
+      setCurrentRun(updatedRun)
+      setRuns((items) => items.map((item) => item.id === updatedRun.id ? updatedRun : item))
+      setRunLogEntries(await importClient.getAccessRunLog(auth.accessToken, updatedRun.id))
+      setExportMessage('Заявка на фактический импорт отменена. Данные не переносились.')
+      closeApplyCancelDialog()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось отменить заявку на импорт.')
+    } finally {
+      setCancelingApplyRunId(null)
+    }
+  }
+
   function openRollbackDialog(run: AccessImportRunDto) {
     setRollbackTarget(run)
     setRollbackReason('')
@@ -8102,6 +8155,10 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             <DatabaseZap size={16} aria-hidden="true" />
             <span>Запросить импорт</span>
           </button>
+          <button className="secondary-button" type="button" aria-label={applyCancelActionLabel} title={applyCancelActionLabel} data-tooltip={applyCancelActionLabel} disabled={applyCancelDisabled} onClick={() => currentRun ? openApplyCancelDialog(currentRun) : undefined}>
+            <RotateCcw size={16} aria-hidden="true" />
+            <span>Отменить заявку</span>
+          </button>
           <button className="secondary-button" type="button" aria-label={rollbackActionLabel} title={rollbackActionLabel} data-tooltip={rollbackActionLabel} disabled={rollbackDisabled} onClick={() => currentRun ? openRollbackDialog(currentRun) : undefined}>
             <RotateCcw size={16} aria-hidden="true" />
             <span>Запросить rollback</span>
@@ -8212,7 +8269,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <strong>{run.originalFileName}</strong>
                 <small>{run.summary}</small>
               </span>
-              <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' || run.status === 'import_requested' ? 'warning-text' : 'status-disabled'}>
+              <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' || run.status === 'import_requested' || run.status === 'import_request_cancelled' ? 'warning-text' : 'status-disabled'}>
                 {formatImportRunStatus(run.status)}
               </span>
               <span role="cell">
@@ -8323,6 +8380,66 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <button className="secondary-button" type="submit" disabled={applyingRunId !== null}>
                   <DatabaseZap size={16} aria-hidden="true" />
                   <span>{applyingRunId === applyTarget.id ? 'Запрашиваем...' : 'Запросить импорт'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {applyCancelTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (cancelingApplyRunId === null) {
+            closeApplyCancelDialog()
+          }
+        }}>
+          <section ref={applyCancelDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="import-apply-cancel-title" aria-describedby="import-apply-cancel-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Отмена заявки</p>
+                <h3 id="import-apply-cancel-title">Отменить заявку на импорт?</h3>
+                <p>{applyCancelTarget.originalFileName} · {formatImportRunStatus(applyCancelTarget.status)}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeApplyCancelDialog} aria-label="Закрыть подтверждение отмены заявки на импорт" title="Закрыть подтверждение отмены заявки на импорт" data-tooltip="Закрыть" disabled={cancelingApplyRunId !== null}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="import-apply-cancel-description">Отмена заявки будет записана в историю импорта. Это не rollback данных: строки Access еще не переносились в рабочую базу.</p>
+            <form className="dictionary-modal-form" onSubmit={submitApplyCancelRequest}>
+              <FormField label="Причина отмены заявки">
+                <textarea
+                  ref={applyCancelReasonRef}
+                  aria-label="Причина отмены заявки на импорт"
+                  aria-invalid={Boolean(applyCancelError)}
+                  aria-describedby={applyCancelError ? 'import-apply-cancel-error' : undefined}
+                  rows={3}
+                  maxLength={1000}
+                  value={applyCancelReason}
+                  onChange={(event) => {
+                    setApplyCancelReason(event.target.value)
+                    if (applyCancelError && event.target.value.trim()) {
+                      setApplyCancelError(null)
+                    }
+                  }}
+                  placeholder="Например: нужно перепроверить backup"
+                  disabled={cancelingApplyRunId !== null}
+                />
+              </FormField>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Запуск</dt>
+                  <dd>{applyCancelTarget.originalFileName}</dd>
+                </div>
+                <div>
+                  <dt>Проверки</dt>
+                  <dd>{formatImportRunCheckSummary(applyCancelTarget)}</dd>
+                </div>
+              </dl>
+              {applyCancelError ? <p className="form-error" id="import-apply-cancel-error" role="alert">{applyCancelError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" onClick={closeApplyCancelDialog} disabled={cancelingApplyRunId !== null}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={cancelingApplyRunId !== null}>
+                  <RotateCcw size={16} aria-hidden="true" />
+                  <span>{cancelingApplyRunId === applyCancelTarget.id ? 'Отменяем...' : 'Отменить заявку'}</span>
                 </button>
               </div>
             </form>

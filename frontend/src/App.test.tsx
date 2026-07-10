@@ -8397,6 +8397,63 @@ describe('App', () => {
     expect(within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })).toBeDisabled()
   })
 
+  it('cancels Access import apply request through confirmation with reason', async () => {
+    const user = userEvent.setup()
+    let cancelReason: string | undefined
+    const run = createAccessImportRun({
+      status: 'import_requested',
+      summary: 'Фактический импорт запрошен: перенос будет выполнен после подключения reader Access.',
+    })
+    const importClient = createImportClient({
+      getAccessRuns: async () => [run],
+      getAccessRunLog: async () => [
+        createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'import_requested', level: 'warning', message: run.summary }),
+      ],
+      cancelAccessImportApplyRequest: async (_token, runId, reason) => {
+        cancelReason = reason
+        return createAccessImportRun({
+          ...run,
+          id: runId,
+          status: 'import_request_cancelled',
+          summary: 'Заявка на фактический импорт отменена. Dry-run остается доступным.',
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    expect(within(importPanel).getByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })).toBeDisabled()
+    expect(within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })).toBeDisabled()
+    const cancelButton = within(importPanel).getByRole('button', { name: 'Отменить заявку на импорт ГСК.accdb' })
+    expect(cancelButton).toHaveAttribute('title', 'Отменить заявку на импорт ГСК.accdb')
+    expect(cancelButton).toHaveAttribute('data-tooltip', 'Отменить заявку на импорт ГСК.accdb')
+    await user.click(cancelButton)
+
+    const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить заявку на импорт?' })
+    await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены заявки на импорт')).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить заявку на импорт?' })).not.toBeInTheDocument())
+    expect(cancelReason).toBeUndefined()
+    expect(cancelButton).toHaveFocus()
+
+    await user.click(cancelButton)
+    const reopenedDialog = await screen.findByRole('dialog', { name: 'Отменить заявку на импорт?' })
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Отменить заявку' }))
+    expect(within(reopenedDialog).getByRole('alert')).toHaveTextContent('Укажите причину отмены заявки на импорт.')
+    await user.type(within(reopenedDialog).getByLabelText('Причина отмены заявки на импорт'), 'Нужно перепроверить backup')
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Отменить заявку' }))
+
+    expect(await within(importPanel).findByText('Заявка на фактический импорт отменена. Данные не переносились.')).toHaveAttribute('role', 'status')
+    expect(cancelReason).toBe('Нужно перепроверить backup')
+    expect(within(importPanel).getAllByText('Заявка отменена').length).toBeGreaterThan(0)
+    expect(within(importPanel).getByRole('button', { name: 'Отменить заявку на импорт ГСК.accdb' })).toBeDisabled()
+    expect(within(importPanel).getByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })).not.toBeDisabled()
+  })
+
   it('shows visible counters for long Access import lists', async () => {
     const user = userEvent.setup()
     const runs = Array.from({ length: 9 }, (_, index) => createAccessImportRun({
@@ -10619,6 +10676,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
     dryRunAccess: async () => run,
     downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
     requestAccessImportApply: async (_token, runId) => createAccessImportRun({ id: runId, status: 'import_requested' }),
+    cancelAccessImportApplyRequest: async (_token, runId) => createAccessImportRun({ id: runId, status: 'import_request_cancelled' }),
     requestAccessImportRollback: async (_token, runId) => createAccessImportRun({ id: runId, status: 'rollback_requested' }),
     resolveQuarantineItem: async (_token, itemId) => createAccessImportQuarantineItem({ id: itemId, status: 'resolved' }),
     ...overrides,
@@ -10771,6 +10829,20 @@ function createStatefulImportClient(): ImportClient {
       logsByRunId = new Map(logsByRunId).set(runId, [
         ...(logsByRunId.get(runId) ?? []),
         createAccessImportRunLogEntry({ accessImportRunId: runId, stepCode: 'import_requested', level: 'warning', message: `Фактический импорт запрошен: ${reason}` }),
+      ])
+      return updatedRun
+    },
+    cancelAccessImportApplyRequest: async (_token, runId, reason) => {
+      const run = runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId })
+      const updatedRun = {
+        ...run,
+        status: 'import_request_cancelled' as const,
+        summary: 'Заявка на фактический импорт отменена. Dry-run остается доступным.',
+      }
+      runs = runs.map((item) => item.id === runId ? updatedRun : item)
+      logsByRunId = new Map(logsByRunId).set(runId, [
+        ...(logsByRunId.get(runId) ?? []),
+        createAccessImportRunLogEntry({ accessImportRunId: runId, stepCode: 'import_request_cancelled', level: 'warning', message: `Заявка на импорт отменена: ${reason}` }),
       ])
       return updatedRun
     },

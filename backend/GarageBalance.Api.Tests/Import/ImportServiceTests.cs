@@ -301,6 +301,67 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task CancelAccessImportApplyRequestAsync_MarksRunAndWritesAuditWithReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+        await service.RequestAccessImportApplyAsync(
+            dryRun.Value!.Id,
+            new AccessImportApplyRequest { Reason = "Dry-run проверен", BackupConfirmed = true },
+            null,
+            CancellationToken.None);
+
+        var result = await service.CancelAccessImportApplyRequestAsync(
+            dryRun.Value.Id,
+            new AccessImportApplyCancelRequest { Reason = "Нужно перепроверить backup" },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("import_request_cancelled", result.Value!.Status);
+        Assert.Contains("Заявка на фактический импорт отменена", result.Value.Summary, StringComparison.Ordinal);
+        Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.AccessImportRunId == dryRun.Value.Id && item.StepCode == "import_request_cancelled");
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.apply_request_cancelled");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("cancel", auditEvent.ActionKind);
+        Assert.Equal(dryRun.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("GSK archive.accdb", auditEvent.EntityDisplayName);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("Нужно перепроверить backup", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("import_request_cancelled", metadata.RootElement.GetProperty("status").GetString());
+        Assert.Equal("False", metadata.RootElement.GetProperty("importExecuted").GetString());
+        Assert.Equal("apply_request_cancelled", metadata.RootElement.GetProperty("importState").GetString());
+    }
+
+    [Fact]
+    public async Task CancelAccessImportApplyRequestAsync_RequiresActiveRequestAndReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var missingReason = await service.CancelAccessImportApplyRequestAsync(
+            dryRun.Value!.Id,
+            new AccessImportApplyCancelRequest { Reason = " " },
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var inactiveRequest = await service.CancelAccessImportApplyRequestAsync(
+            dryRun.Value.Id,
+            new AccessImportApplyCancelRequest { Reason = "Ошибочная заявка" },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(missingReason.Succeeded);
+        Assert.Equal("import_apply_cancel_reason_required", missingReason.ErrorCode);
+        Assert.False(inactiveRequest.Succeeded);
+        Assert.Equal("import_apply_request_not_active", inactiveRequest.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "import.apply_request_cancelled");
+    }
+
+    [Fact]
     public async Task GetAccessImportRunLogEntriesAsync_ReturnsRunLogInChronologicalOrderWithoutDetails()
     {
         await using var database = await TestDatabase.CreateAsync();

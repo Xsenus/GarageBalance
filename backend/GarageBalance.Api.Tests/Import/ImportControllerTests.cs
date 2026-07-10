@@ -43,6 +43,17 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public void CancelAccessImportApplyRequest_UsesPostApplyCancelEndpoint()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.CancelAccessImportApplyRequest))!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var postAttribute = Assert.Single(attributes.OfType<HttpPostAttribute>());
+        Assert.Equal("runs/{id:guid}/apply/cancel", postAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpGetAttribute>());
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsBadRequestWhenFileMissing()
     {
         var controller = CreateController(new FakeImportService());
@@ -259,6 +270,70 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public async Task CancelAccessImportApplyRequest_ReturnsRunAndPassesActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var run = CreateRun("import_request_cancelled");
+        var service = new FakeImportService
+        {
+            ApplyCancelResult = ImportResult<AccessImportRunDto>.Success(run)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CancelAccessImportApplyRequest(
+            run.Id,
+            new AccessImportApplyCancelRequest { Reason = "Нужно перепроверить backup" },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var value = Assert.IsType<AccessImportRunDto>(ok.Value);
+        Assert.Equal("import_request_cancelled", value.Status);
+        Assert.Equal(run.Id, service.LastApplyCancelRunId);
+        Assert.Equal(actorUserId, service.LastApplyCancelActorUserId);
+        Assert.Equal("Нужно перепроверить backup", service.LastApplyCancelRequest?.Reason);
+    }
+
+    [Fact]
+    public async Task CancelAccessImportApplyRequest_ReturnsBadRequestWhenReasonMissing()
+    {
+        var service = new FakeImportService
+        {
+            ApplyCancelResult = ImportResult<AccessImportRunDto>.Failure("import_apply_cancel_reason_required", "Укажите причину отмены заявки на импорт.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.CancelAccessImportApplyRequest(
+            Guid.NewGuid(),
+            new AccessImportApplyCancelRequest { Reason = " " },
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+        Assert.Equal("import_apply_cancel_reason_required", problem.Title);
+    }
+
+    [Fact]
+    public async Task CancelAccessImportApplyRequest_ReturnsNotFoundForMissingRun()
+    {
+        var service = new FakeImportService
+        {
+            ApplyCancelResult = ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.CancelAccessImportApplyRequest(
+            Guid.NewGuid(),
+            new AccessImportApplyCancelRequest { Reason = "Ошибочная заявка" },
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(StatusCodes.Status404NotFound, notFound.StatusCode);
+        Assert.Equal("import_run_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task GetAccessImportRuns_ReturnsRunsAndPassesLimit()
     {
         var run = CreateRun();
@@ -460,6 +535,9 @@ public sealed class ImportControllerTests
         public Guid? LastApplyRunId { get; private set; }
         public Guid? LastApplyActorUserId { get; private set; }
         public AccessImportApplyRequest? LastApplyRequest { get; private set; }
+        public Guid? LastApplyCancelRunId { get; private set; }
+        public Guid? LastApplyCancelActorUserId { get; private set; }
+        public AccessImportApplyCancelRequest? LastApplyCancelRequest { get; private set; }
         public Guid? LastLogRunId { get; private set; }
         public AccessImportRunListRequest? LastRunRequest { get; private set; }
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
@@ -468,6 +546,7 @@ public sealed class ImportControllerTests
         public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
         public ImportResult<AccessImportRunDto> RollbackResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<AccessImportRunDto> ApplyResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
+        public ImportResult<AccessImportRunDto> ApplyCancelResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>> LogResult { get; init; } =
             ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success([]);
 
@@ -498,6 +577,14 @@ public sealed class ImportControllerTests
             LastApplyRequest = request;
             LastApplyActorUserId = actorUserId;
             return Task.FromResult(ApplyResult);
+        }
+
+        public Task<ImportResult<AccessImportRunDto>> CancelAccessImportApplyRequestAsync(Guid runId, AccessImportApplyCancelRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastApplyCancelRunId = runId;
+            LastApplyCancelRequest = request;
+            LastApplyCancelActorUserId = actorUserId;
+            return Task.FromResult(ApplyCancelResult);
         }
 
         public Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)

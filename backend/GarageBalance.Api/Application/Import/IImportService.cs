@@ -7,5 +7,6 @@ public interface IImportService
     Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> RequestAccessImportApplyAsync(Guid runId, AccessImportApplyRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<ImportResult<AccessImportRunDto>> CancelAccessImportApplyRequestAsync(Guid runId, AccessImportApplyCancelRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> RequestAccessImportRollbackAsync(Guid runId, AccessImportRollbackRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 }

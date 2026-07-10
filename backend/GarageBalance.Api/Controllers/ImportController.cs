@@ -85,6 +85,28 @@ public sealed class ImportController(IImportService importService, IImportQuaran
         return StatusCode(statusCode, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, statusCode));
     }
 
+    [HttpPost("runs/{id:guid}/apply/cancel")]
+    [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AccessImportRunDto>> CancelAccessImportApplyRequest(
+        Guid id,
+        [FromBody] AccessImportApplyCancelRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await importService.CancelAccessImportApplyRequestAsync(id, request, GetActorUserId(), cancellationToken);
+        if (result.Succeeded)
+        {
+            return Ok(result.Value);
+        }
+
+        var statusCode = result.ErrorCode == "import_run_not_found"
+            ? StatusCodes.Status404NotFound
+            : StatusCodes.Status400BadRequest;
+
+        return StatusCode(statusCode, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, statusCode));
+    }
+
     [HttpGet("runs/{id:guid}/log")]
     [ProducesResponseType<IReadOnlyList<AccessImportRunLogEntryDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

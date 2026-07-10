@@ -253,6 +253,11 @@ public sealed class ImportService(
             return ImportResult<AccessImportRunDto>.Failure("import_run_rollback_requested", "Нельзя запрашивать фактический импорт после rollback-заявки по этому запуску.");
         }
 
+        if (run.Status is not "completed" and not "import_request_cancelled")
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_not_ready", "Фактический импорт можно запросить только после успешного dry-run.");
+        }
+
         run.Status = "import_requested";
         run.Summary = "Фактический импорт запрошен: перенос будет выполнен после подключения reader Access и проверки backup.";
 
@@ -284,6 +289,74 @@ public sealed class ImportService(
                 ["backupConfirmed"] = request.BackupConfirmed,
                 ["importExecuted"] = false,
                 ["importState"] = "pending_access_reader"
+            }));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
+    public async Task<ImportResult<AccessImportRunDto>> CancelAccessImportApplyRequestAsync(
+        Guid runId,
+        AccessImportApplyCancelRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var reason = request.Reason.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_apply_cancel_reason_required", "Укажите причину отмены заявки на импорт.");
+        }
+
+        if (reason.Length > 1000)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_apply_cancel_reason_too_long", "Причина отмены заявки на импорт превышает допустимую длину.");
+        }
+
+        var run = await dbContext.AccessImportRuns.SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        if (run is null)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
+        }
+
+        if (run.Status == "import_request_cancelled")
+        {
+            return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+        }
+
+        if (run.Status != "import_requested")
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_apply_request_not_active", "Нет активной заявки на фактический импорт для отмены.");
+        }
+
+        run.Status = "import_request_cancelled";
+        run.Summary = "Заявка на фактический импорт отменена. Dry-run остается доступным для повторной заявки или rollback-заявки.";
+
+        AddRunLog(run, "warning", "import_request_cancelled", "Отменена заявка на фактический импорт Access. Данные не переносились.", new
+        {
+            reason,
+            mode = run.Mode,
+            status = run.Status
+        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.apply_request_cancelled",
+            "access_import_run",
+            run.Id.ToString(),
+            Summary: $"Отменена заявка на фактический импорт Access: {run.OriginalFileName}.",
+            ActionKind: "cancel",
+            EntityDisplayName: run.OriginalFileName,
+            Reason: reason,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: run.OriginalFileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["mode"] = run.Mode,
+                ["status"] = run.Status,
+                ["originalFileName"] = run.OriginalFileName,
+                ["fileExtension"] = run.FileExtension,
+                ["contentSha256"] = run.ContentSha256,
+                ["importExecuted"] = false,
+                ["importState"] = "apply_request_cancelled"
             }));
 
         await dbContext.SaveChangesAsync(cancellationToken);

@@ -103,6 +103,10 @@ export function formatImportRunStatus(status: AccessImportRunDto['status']): str
     return 'Импорт запрошен'
   }
 
+  if (status === 'import_request_cancelled') {
+    return 'Заявка отменена'
+  }
+
   return 'Заблокирован'
 }
 
