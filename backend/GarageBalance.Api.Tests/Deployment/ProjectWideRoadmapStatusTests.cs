@@ -124,6 +124,56 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void EditSaveConfirmationRulesAreMarkedCompleteWhenDiffAndNoOpCoverageExist()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var topRuleLines = activeRoadmapLines
+            .TakeWhile(line => !string.Equals(line, "## Решения И Допущения", StringComparison.Ordinal))
+            .ToArray();
+        var definitionOfDoneLines = activeRoadmapLines
+            .SkipWhile(line => !string.Equals(line, "## Definition Of Done", StringComparison.Ordinal))
+            .ToArray();
+
+        var diffRuleLine = topRuleLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Каждое сохранение формы с изменениями", StringComparison.Ordinal));
+        var noOpRuleLine = topRuleLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Если изменений нет", StringComparison.Ordinal));
+        var diffDefinitionOfDoneLine = definitionOfDoneLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Все edit-save actions с изменениями", StringComparison.Ordinal));
+        var noOpDefinitionOfDoneLine = definitionOfDoneLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("No-op save/close", StringComparison.Ordinal));
+
+        Assert.Contains("users/settings", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("contractors", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("tariffs/services/thresholds/fees", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("meter readings", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("finance operations/accruals/payments", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("funds", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ChangePreview", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("changePreview.test.ts", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("future edit-save", diffRuleLine, StringComparison.Ordinal);
+        Assert.Contains("no-op save", noOpRuleLine, StringComparison.Ordinal);
+        Assert.Contains("без update-запроса", noOpRuleLine, StringComparison.Ordinal);
+        Assert.Contains("changePreview.test.ts", noOpRuleLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", noOpRuleLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", noOpRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", noOpRuleLine, StringComparison.Ordinal);
+        Assert.Contains("confirmation", diffDefinitionOfDoneLine, StringComparison.Ordinal);
+        Assert.Contains("confirmation", noOpDefinitionOfDoneLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File
