@@ -786,6 +786,47 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessReaderRoadmapItemRemainsBlockedUntilAceOrConversionSmokeReadExists()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-reader-verification.md"));
+        var disabledReader = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Import", "DisabledAccessImportReader.cs"));
+        var userGuide = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "user-guide.md"));
+        var sourceAnalysis = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+
+        var readerLine = activeRoadmapLines.Single(line =>
+            line.Contains("Получить рабочий способ чтения `.accdb`", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Получить рабочий способ чтения `.accdb`:", readerLine, StringComparison.Ordinal);
+        Assert.Contains("32-bit ODBC-драйверы", readerLine, StringComparison.Ordinal);
+        Assert.Contains("ACE/DAO provider для `.accdb` не зарегистрирован", readerLine, StringComparison.Ordinal);
+        Assert.Contains("Access.Application", readerLine, StringComparison.Ordinal);
+        Assert.Contains("не является переносимым backend-reader", readerLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-reader-verification.md", readerLine, StringComparison.Ordinal);
+        Assert.Contains("smoke-read", readerLine, StringComparison.Ordinal);
+        Assert.Contains("AccessReaderRoadmapItemRemainsBlockedUntilAceOrConversionSmokeReadExists", readerLine, StringComparison.Ordinal);
+
+        Assert.Contains("Get-OdbcDriver", checklist, StringComparison.Ordinal);
+        Assert.Contains("DAO.DBEngine.160", checklist, StringComparison.Ordinal);
+        Assert.Contains("ACE OLE DB/ODBC provider", checklist, StringComparison.Ordinal);
+        Assert.Contains("C:\\GarageBalance\\Imports", checklist, StringComparison.Ordinal);
+        Assert.Contains("Не коммитить `.accdb`, `.mdb`", checklist, StringComparison.Ordinal);
+        Assert.Contains("Фактическое чтение Access не подключено", disabledReader, StringComparison.Ordinal);
+        Assert.Contains("ACE-драйвер, Microsoft Access или предварительная конвертация", disabledReader, StringComparison.Ordinal);
+        Assert.Contains("Reader Access", userGuide, StringComparison.Ordinal);
+        Assert.Contains("Access repair/compact или конвертацию", sourceAnalysis, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Получить рабочий способ чтения `.accdb`", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessReaderRoadmapItemRemainsBlockedUntilAceOrConversionSmokeReadExists", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
