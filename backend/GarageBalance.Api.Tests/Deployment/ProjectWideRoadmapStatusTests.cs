@@ -1187,6 +1187,109 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshManualSyncIsMarkedCompleteWhenControllerServiceUiTestsAndReleaseNotesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var manualSyncLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать ручной запуск синхронизации", StringComparison.Ordinal));
+        var controllerText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Controllers",
+            "IntegrationsController.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncService.cs"));
+        var adapterText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncAdapter.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationsControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Auth",
+            "ControllerAuthorizationCoverageTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
+        var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "AppReleases",
+            "releases.json"));
+
+        Assert.StartsWith("- `[x]`", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("POST /api/integrations/one-c-fresh/sync-runs", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("/retry", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("import.run", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncService", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("IOneCFreshSyncAdapter", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("one_c_fresh.sync_requested", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("one_c_fresh.sync_retry_requested", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("Запустить синхронизацию", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("Повторить запрос", manualSyncLine, StringComparison.Ordinal);
+        Assert.Contains("Фоновый режим не включался", manualSyncLine, StringComparison.Ordinal);
+
+        Assert.Contains("[HttpPost(\"one-c-fresh/sync-runs\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"one-c-fresh/sync-runs/retry\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("Policy = SystemPermissions.ImportRun", controllerText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync", controllerText, StringComparison.Ordinal);
+        Assert.Contains("RetrySyncAsync", controllerText, StringComparison.Ordinal);
+        Assert.Contains("secretSettingsService.GetSecretAsync", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"one_c_fresh.sync_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"one_c_fresh.sync_retry_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("new OneCFreshSyncAdapterRequest(refreshToken.Value", serviceText, StringComparison.Ordinal);
+        Assert.Contains("pending_adapter", adapterText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_CreatesAuditEventWithoutPlaintextToken", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetrySyncAsync_CreatesSeparateAuditEventWithoutPlaintextToken", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetryOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetryOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("Запустить синхронизацию", appText, StringComparison.Ordinal);
+        Assert.Contains("Повторить запрос", appText, StringComparison.Ordinal);
+        Assert.Contains("startOneCFreshSync", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("retryOneCFreshSync", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("/api/integrations/one-c-fresh/sync-runs", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("/api/integrations/one-c-fresh/sync-runs/retry", integrationsApiText, StringComparison.Ordinal);
+        Assert.Contains("starts 1C Fresh synchronization from settings with confirmation", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Повтор после ошибки адаптера", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("retryOneCFreshSync", integrationsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.507.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Запуск синхронизации 1C Fresh", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.524.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Повтор запроса синхронизации 1C Fresh", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
