@@ -50,9 +50,28 @@ export type AccessImportRunLogEntryDto = {
   message: string
 }
 
+export type AccessImportCreatedRecordDto = {
+  id: string
+  accessImportRunId: string
+  sourceSystem: string
+  sourceEntityType: string
+  sourceExternalId: string | null
+  sourceRowHash: string
+  targetEntityType: string
+  targetEntityId: string
+  targetDisplayName: string | null
+  rollbackStatus: 'created' | 'rollback_requested' | 'rolled_back' | 'rollback_failed'
+  createdAtUtc: string
+  createdByUserId: string | null
+  rolledBackAtUtc: string | null
+  rolledBackByUserId: string | null
+  rollbackReason: string | null
+}
+
 export type ImportClient = {
   getAccessRuns(accessToken: string, limit?: number): Promise<AccessImportRunDto[]>
   getAccessRunLog(accessToken: string, runId: string, limit?: number): Promise<AccessImportRunLogEntryDto[]>
+  getAccessCreatedRecords(accessToken: string, runId: string, limit?: number): Promise<AccessImportCreatedRecordDto[]>
   getOpenQuarantineItems(accessToken: string, accessImportRunId?: string, limit?: number): Promise<AccessImportQuarantineItemDto[]>
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
@@ -104,6 +123,9 @@ export const importApi: ImportClient = {
   },
   getAccessRunLog(accessToken, runId, limit = 100) {
     return requestJson(accessToken, `/api/import/access/runs/${runId}/log?limit=${encodeURIComponent(limit)}`)
+  },
+  getAccessCreatedRecords(accessToken, runId, limit = 100) {
+    return requestJson(accessToken, `/api/import/access/runs/${runId}/created-records?limit=${encodeURIComponent(limit)}`)
   },
   getOpenQuarantineItems(accessToken, accessImportRunId, limit = 50) {
     const params = new URLSearchParams()

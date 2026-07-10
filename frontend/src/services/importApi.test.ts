@@ -73,4 +73,18 @@ describe('importApi', () => {
       body: JSON.stringify({ reason: 'Нужно перепроверить backup' }),
     })
   })
+
+  it('loads created records for Access import run with a bounded limit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{ id: 'created-1', targetEntityType: 'garage' }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await importApi.getAccessCreatedRecords('token', 'run-42', 25)
+
+    expect(result).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/import/access/runs/run-42/created-records?limit=25', {
+      headers: {
+        Authorization: 'Bearer token',
+      },
+    })
+  })
 })

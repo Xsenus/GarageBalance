@@ -18,6 +18,12 @@ public sealed record AccessImportRunLogListRequest
     public int Limit { get; init; } = 100;
 }
 
+public sealed record AccessImportCreatedRecordListRequest
+{
+    [Range(1, 500)]
+    public int Limit { get; init; } = 100;
+}
+
 public sealed record AccessImportRollbackRequest
 {
     [Required]
@@ -71,6 +77,23 @@ public sealed record AccessImportRunLogEntryDto(
     string Level,
     string StepCode,
     string Message);
+
+public sealed record AccessImportCreatedRecordDto(
+    Guid Id,
+    Guid AccessImportRunId,
+    string SourceSystem,
+    string SourceEntityType,
+    string? SourceExternalId,
+    string SourceRowHash,
+    string TargetEntityType,
+    string TargetEntityId,
+    string? TargetDisplayName,
+    string RollbackStatus,
+    DateTimeOffset CreatedAtUtc,
+    Guid? CreatedByUserId,
+    DateTimeOffset? RolledBackAtUtc,
+    Guid? RolledBackByUserId,
+    string? RollbackReason);
 
 public sealed record ImportReportFileDto(
     string FileName,

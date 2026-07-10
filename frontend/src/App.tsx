@@ -38,7 +38,7 @@ import type { FundDto, FundOperationDto, FundsClient } from './services/fundsApi
 import { formStatesApi } from './services/formStatesApi'
 import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
-import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import { integrationsApi } from './services/integrationsApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, ReceiptPrintingActionKind, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import { reportsApi } from './services/reportsApi'
@@ -63,6 +63,7 @@ import {
   formatDebtAmount,
   formatDebtLabel,
   formatImportCheckStatus,
+  formatImportCreatedRecordRollbackStatus,
   formatImportLogLevel,
   formatImportRunCheckSummary,
   formatImportRunStatus,
@@ -110,6 +111,7 @@ const sidebarExpandedStorageKey = 'garagebalance.sidebar.expanded'
 const financeScreenRequestLimit = 50
 const dictionaryScreenRequestLimit = 100
 const importQuarantineScreenRequestLimit = 50
+const importCreatedRecordsScreenRequestLimit = 100
 const contractorsFormStateScope = 'contractors-prototype'
 const tariffsFormStateScope = 'tariffs-and-fees-prototype'
 const paymentsFormStateScope = 'payments-prototype'
@@ -183,7 +185,7 @@ type NavigationItem = {
 }
 
 type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'tariffsAndFees' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
-type ImportTab = 'checks' | 'log' | 'history' | 'quarantine'
+type ImportTab = 'checks' | 'log' | 'created' | 'history' | 'quarantine'
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Главное меню', icon: Gauge },
@@ -7762,11 +7764,13 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [runs, setRuns] = useState<AccessImportRunDto[]>([])
   const [quarantineItems, setQuarantineItems] = useState<AccessImportQuarantineItemDto[]>([])
   const [runLogEntries, setRunLogEntries] = useState<AccessImportRunLogEntryDto[]>([])
+  const [createdRecords, setCreatedRecords] = useState<AccessImportCreatedRecordDto[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
   const [activeImportTab, setActiveImportTab] = useState<ImportTab>('checks')
   const [loading, setLoading] = useState(true)
   const [loadingLog, setLoadingLog] = useState(false)
+  const [loadingCreatedRecords, setLoadingCreatedRecords] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
@@ -7810,11 +7814,13 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const rollbackReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(rollbackTarget))
   const rollbackDialogRef = useFocusTrap<HTMLElement>(Boolean(rollbackTarget))
   const visibleRunLogEntries = runLogEntries.slice(0, 10)
+  const visibleCreatedRecords = createdRecords.slice(0, 10)
   const visibleRuns = runs.slice(0, 8)
   const visibleQuarantineItems = quarantineItems.slice(0, 8)
   const importTabs: Array<{ key: ImportTab; label: string; meta: string }> = [
     { key: 'checks', label: 'Проверки', meta: currentRun ? formatImportRunCheckSummary(currentRun) : 'ожидают запуска' },
     { key: 'log', label: 'Лог', meta: loadingLog ? 'загрузка' : `${runLogEntries.length} строк` },
+    { key: 'created', label: 'Создано', meta: loadingCreatedRecords ? 'загрузка' : `${createdRecords.length} записей` },
     { key: 'history', label: 'История', meta: `${runs.length} запусков` },
     { key: 'quarantine', label: 'Карантин', meta: `${quarantineItems.length} открыто` },
   ]
@@ -7884,6 +7890,39 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
     }
 
     void loadRunLog()
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, currentRun, importClient])
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadCreatedRecords() {
+      if (!currentRun) {
+        setCreatedRecords([])
+        return
+      }
+
+      setLoadingCreatedRecords(true)
+      try {
+        const records = await importClient.getAccessCreatedRecords(auth.accessToken, currentRun.id, importCreatedRecordsScreenRequestLimit)
+        if (!ignore) {
+          setCreatedRecords(records)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setCreatedRecords([])
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить созданные импортом записи.')
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingCreatedRecords(false)
+        }
+      }
+    }
+
+    void loadCreatedRecords()
     return () => {
       ignore = true
     }
@@ -8278,6 +8317,34 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
             </button>
           ))}
           {runs.length > visibleRuns.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleRuns.length} из {runs.length} запусков</p> : null}
+        </div>
+        ) : null}
+
+        {activeImportTab === 'created' ? (
+        <div className="operation-list import-table import-table--created" role="table" aria-label="Созданные импортом записи Access">
+          <div className="operation-row header" role="row">
+            <span role="columnheader">Созданная запись</span>
+            <span role="columnheader">Источник</span>
+            <span role="columnheader">Rollback</span>
+          </div>
+          {loadingCreatedRecords ? <p className="empty-state" role="status" aria-live="polite">Загрузка созданных записей...</p> : null}
+          {!loadingCreatedRecords && createdRecords.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
+          {visibleCreatedRecords.map((record) => (
+            <div className="operation-row" role="row" key={record.id}>
+              <span role="cell">
+                <strong>{record.targetDisplayName ?? record.targetEntityId}</strong>
+                <small>{record.targetEntityType} · {formatDateTime(record.createdAtUtc)}</small>
+              </span>
+              <span role="cell">
+                <strong>{record.sourceEntityType}{record.sourceExternalId ? ` #${record.sourceExternalId}` : ''}</strong>
+                <small>{record.sourceSystem} · {record.sourceRowHash.slice(0, 12)}</small>
+              </span>
+              <span role="cell" className={record.rollbackStatus === 'created' ? 'warning-text' : record.rollbackStatus === 'rolled_back' ? 'status-disabled' : 'status-active'}>
+                {formatImportCreatedRecordRollbackStatus(record.rollbackStatus)}
+              </span>
+            </div>
+          ))}
+          {createdRecords.length > visibleCreatedRecords.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleCreatedRecords.length} из {createdRecords.length} созданных записей</p> : null}
         </div>
         ) : null}
 

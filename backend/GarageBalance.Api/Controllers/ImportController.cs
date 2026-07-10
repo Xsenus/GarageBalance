@@ -121,6 +121,20 @@ public sealed class ImportController(IImportService importService, IImportQuaran
             : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
     }
 
+    [HttpGet("runs/{id:guid}/created-records")]
+    [ProducesResponseType<IReadOnlyList<AccessImportCreatedRecordDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecords(
+        Guid id,
+        [FromQuery] AccessImportCreatedRecordListRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await importService.GetAccessImportCreatedRecordsAsync(id, request, cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
+    }
+
     [HttpPost("dry-run")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status201Created)]

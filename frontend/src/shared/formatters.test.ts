@@ -8,6 +8,7 @@ import {
   formatDebtAmount,
   formatDebtLabel,
   formatImportCheckStatus,
+  formatImportCreatedRecordRollbackStatus,
   formatImportLogLevel,
   formatImportRunCheckSummary,
   formatImportRunStatus,
@@ -107,6 +108,10 @@ describe('shared formatters', () => {
     expect(formatImportLogLevel('info')).toBe('Инфо')
     expect(formatImportLogLevel('warning')).toBe('Предупреждение')
     expect(formatImportLogLevel('error')).toBe('Ошибка')
+    expect(formatImportCreatedRecordRollbackStatus('created')).toBe('Ожидает rollback')
+    expect(formatImportCreatedRecordRollbackStatus('rollback_requested')).toBe('Rollback запрошен')
+    expect(formatImportCreatedRecordRollbackStatus('rolled_back')).toBe('Откат выполнен')
+    expect(formatImportCreatedRecordRollbackStatus('rollback_failed')).toBe('Ошибка отката')
     expect(formatImportRunCheckSummary(run)).toBe('3/4 · 1 предупреждение · 0 ошибок')
   })
 

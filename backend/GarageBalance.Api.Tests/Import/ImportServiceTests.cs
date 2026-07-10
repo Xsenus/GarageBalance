@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
+using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -396,6 +397,64 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task GetAccessImportCreatedRecordsAsync_ReturnsRunRecordsWithLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+        var otherRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("other.accdb", CreateAccessLikeStream("payment")), null, CancellationToken.None);
+
+        database.Context.AccessImportCreatedRecords.AddRange(
+            new AccessImportCreatedRecord
+            {
+                AccessImportRunId = dryRun.Value!.Id,
+                SourceEntityType = "Garage",
+                SourceExternalId = "12",
+                SourceRowHash = new string('a', 64),
+                TargetEntityType = "garage",
+                TargetEntityId = "garage-12",
+                TargetDisplayName = "Гараж 12",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-2)
+            },
+            new AccessImportCreatedRecord
+            {
+                AccessImportRunId = dryRun.Value.Id,
+                SourceEntityType = "FinancialOperation",
+                SourceExternalId = "PAY-12",
+                SourceRowHash = new string('b', 64),
+                TargetEntityType = "financial_operation",
+                TargetEntityId = "operation-12",
+                TargetDisplayName = "Платеж PAY-12",
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            },
+            new AccessImportCreatedRecord
+            {
+                AccessImportRunId = otherRun.Value!.Id,
+                SourceEntityType = "Garage",
+                SourceExternalId = "99",
+                SourceRowHash = new string('c', 64),
+                TargetEntityType = "garage",
+                TargetEntityId = "garage-99",
+                TargetDisplayName = "Гараж 99",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(1)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetAccessImportCreatedRecordsAsync(
+            dryRun.Value.Id,
+            new AccessImportCreatedRecordListRequest { Limit = 1 },
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var record = Assert.Single(result.Value!);
+        Assert.Equal("financial_operation", record.TargetEntityType);
+        Assert.Equal("operation-12", record.TargetEntityId);
+        Assert.Equal("Платеж PAY-12", record.TargetDisplayName);
+        Assert.Equal("created", record.RollbackStatus);
+        Assert.Equal(new string('b', 64), record.SourceRowHash);
+    }
+
+    [Fact]
     public async Task ExportAccessImportRunReportAsync_ReturnsNotFoundForMissingRun()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -415,6 +474,18 @@ public sealed class ImportServiceTests
         var service = CreateService(database.Context);
 
         var result = await service.GetAccessImportRunLogEntriesAsync(Guid.NewGuid(), new AccessImportRunLogListRequest(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_not_found", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetAccessImportCreatedRecordsAsync_ReturnsNotFoundForMissingRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetAccessImportCreatedRecordsAsync(Guid.NewGuid(), new AccessImportCreatedRecordListRequest(), CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("import_run_not_found", result.ErrorCode);

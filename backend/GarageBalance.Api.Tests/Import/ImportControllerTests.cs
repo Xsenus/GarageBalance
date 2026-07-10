@@ -54,6 +54,17 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public void GetAccessImportCreatedRecords_UsesGetCreatedRecordsEndpoint()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.GetAccessImportCreatedRecords))!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var getAttribute = Assert.Single(attributes.OfType<HttpGetAttribute>());
+        Assert.Equal("runs/{id:guid}/created-records", getAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpPostAttribute>());
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsBadRequestWhenFileMissing()
     {
         var controller = CreateController(new FakeImportService());
@@ -391,6 +402,45 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public async Task GetAccessImportCreatedRecords_ReturnsRecords()
+    {
+        var runId = Guid.NewGuid();
+        var service = new FakeImportService
+        {
+            CreatedRecordsResult = ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success(
+            [
+                CreateCreatedRecord(runId, "garage", "garage-12"),
+                CreateCreatedRecord(runId, "financial_operation", "operation-12")
+            ])
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportCreatedRecords(runId, new AccessImportCreatedRecordListRequest { Limit = 25 }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var records = Assert.IsAssignableFrom<IReadOnlyList<AccessImportCreatedRecordDto>>(ok.Value);
+        Assert.Equal(2, records.Count);
+        Assert.Equal(runId, service.LastCreatedRecordsRunId);
+        Assert.Equal(25, service.LastCreatedRecordsRequest?.Limit);
+    }
+
+    [Fact]
+    public async Task GetAccessImportCreatedRecords_ReturnsNotFoundForMissingRun()
+    {
+        var service = new FakeImportService
+        {
+            CreatedRecordsResult = ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportCreatedRecords(Guid.NewGuid(), new AccessImportCreatedRecordListRequest(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("import_run_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task GetOpenQuarantineItems_ReturnsItemsFromService()
     {
         var quarantineItem = CreateQuarantineItem();
@@ -523,6 +573,26 @@ public sealed class ImportControllerTests
             $"Step {stepCode}");
     }
 
+    private static AccessImportCreatedRecordDto CreateCreatedRecord(Guid runId, string targetEntityType, string targetEntityId)
+    {
+        return new AccessImportCreatedRecordDto(
+            Guid.NewGuid(),
+            runId,
+            "Access",
+            "Garage",
+            "12",
+            new string('a', 64),
+            targetEntityType,
+            targetEntityId,
+            targetEntityId,
+            "created",
+            DateTimeOffset.UtcNow,
+            null,
+            null,
+            null,
+            null);
+    }
+
     private sealed class FakeImportService : IImportService
     {
         public Guid? LastActorUserId { get; private set; }
@@ -539,8 +609,10 @@ public sealed class ImportControllerTests
         public Guid? LastApplyCancelActorUserId { get; private set; }
         public AccessImportApplyCancelRequest? LastApplyCancelRequest { get; private set; }
         public Guid? LastLogRunId { get; private set; }
+        public Guid? LastCreatedRecordsRunId { get; private set; }
         public AccessImportRunListRequest? LastRunRequest { get; private set; }
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
+        public AccessImportCreatedRecordListRequest? LastCreatedRecordsRequest { get; private set; }
         public IReadOnlyList<AccessImportRunDto> Runs { get; init; } = [];
         public ImportResult<AccessImportRunDto> DryRunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<ImportReportFileDto> ExportResult { get; init; } = ImportResult<ImportReportFileDto>.Failure("not_configured", "Not configured.");
@@ -549,6 +621,8 @@ public sealed class ImportControllerTests
         public ImportResult<AccessImportRunDto> ApplyCancelResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>> LogResult { get; init; } =
             ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success([]);
+        public ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>> CreatedRecordsResult { get; init; } =
+            ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success([]);
 
         public Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
         {
@@ -592,6 +666,13 @@ public sealed class ImportControllerTests
             LastLogRunId = runId;
             LastLogRequest = request;
             return Task.FromResult(LogResult);
+        }
+
+        public Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken)
+        {
+            LastCreatedRecordsRunId = runId;
+            LastCreatedRecordsRequest = request;
+            return Task.FromResult(CreatedRecordsResult);
         }
 
         public Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)

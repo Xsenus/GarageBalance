@@ -23,7 +23,7 @@ import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
-import type { AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
+import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
@@ -8465,14 +8465,25 @@ describe('App', () => {
       accessImportRunId: runs[0].id,
       stepCode: `step_${index + 1}`,
     }))
+    const createdRecords = Array.from({ length: 11 }, (_, index) => createAccessImportCreatedRecord({
+      id: `created-${index}`,
+      accessImportRunId: runs[0].id,
+      targetEntityId: `garage-${index + 1}`,
+      targetDisplayName: `Гараж ${index + 1}`,
+    }))
     const quarantineItems = Array.from({ length: 9 }, (_, index) => createAccessImportQuarantineItem({
       id: `quarantine-${index}`,
       externalId: `${index + 1}`,
     }))
     let quarantineLimit: number | undefined
+    let createdLimit: number | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => runs,
       getAccessRunLog: async () => logEntries,
+      getAccessCreatedRecords: async (_token, _runId, limit) => {
+        createdLimit = limit
+        return createdRecords
+      },
       getOpenQuarantineItems: async (_token, _accessImportRunId, limit) => {
         quarantineLimit = limit
         return quarantineItems
@@ -8490,6 +8501,11 @@ describe('App', () => {
     expect(within(importPanel).getByText('step_10')).toBeInTheDocument()
     expect(within(importPanel).queryByText('step_11')).not.toBeInTheDocument()
 
+    await user.click(within(importPanel).getByRole('tab', { name: /Создано/ }))
+    const createdCounter = await within(importPanel).findByText('Показано 10 из 11 созданных записей')
+    expect(within(importPanel).getByText('Гараж 10')).toBeInTheDocument()
+    expect(within(importPanel).queryByText('Гараж 11')).not.toBeInTheDocument()
+
     await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
     const runCounter = within(importPanel).getByText('Показано 8 из 9 запусков')
 
@@ -8497,10 +8513,13 @@ describe('App', () => {
     const quarantineCounter = within(importPanel).getByText('Показано 8 из 9 строк карантина')
     expect(logCounter).toHaveAttribute('role', 'status')
     expect(logCounter).toHaveAttribute('aria-live', 'polite')
+    expect(createdCounter).toHaveAttribute('role', 'status')
+    expect(createdCounter).toHaveAttribute('aria-live', 'polite')
     expect(runCounter).toHaveAttribute('role', 'status')
     expect(runCounter).toHaveAttribute('aria-live', 'polite')
     expect(quarantineCounter).toHaveAttribute('role', 'status')
     expect(quarantineCounter).toHaveAttribute('aria-live', 'polite')
+    expect(createdLimit).toBe(100)
     expect(quarantineLimit).toBe(50)
   })
 
@@ -8523,15 +8542,67 @@ describe('App', () => {
     await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
     const emptyLogState = within(importPanel).getByText('Лог выбранного запуска пока пуст')
 
+    await user.click(within(importPanel).getByRole('tab', { name: /Создано/ }))
+    const emptyCreatedState = within(importPanel).getByText('Созданные записи появятся после фактического переноса Access')
+
     await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
     const emptyHistoryState = within(importPanel).getByText('Истории импорта пока нет')
 
     await user.click(within(importPanel).getByRole('tab', { name: /Карантин/ }))
     const emptyQuarantineState = within(importPanel).getByText('Открытых строк карантина нет')
-    for (const state of [emptyRunState, emptyCheckState, emptyLogState, emptyHistoryState, emptyQuarantineState]) {
+    for (const state of [emptyRunState, emptyCheckState, emptyLogState, emptyCreatedState, emptyHistoryState, emptyQuarantineState]) {
       expect(state).toHaveAttribute('role', 'status')
       expect(state).toHaveAttribute('aria-live', 'polite')
     }
+  })
+
+  it('shows Access import created records for selected run', async () => {
+    const user = userEvent.setup()
+    const run = createAccessImportRun()
+    let requestedRunId: string | undefined
+    const importClient = createImportClient({
+      getAccessRuns: async () => [run],
+      getAccessCreatedRecords: async (_token, runId) => {
+        requestedRunId = runId
+        return [
+          createAccessImportCreatedRecord({
+            accessImportRunId: runId,
+            sourceEntityType: 'Garage',
+            sourceExternalId: '12',
+            targetEntityType: 'garage',
+            targetEntityId: 'garage-12',
+            targetDisplayName: 'Гараж 12',
+          }),
+          createAccessImportCreatedRecord({
+            id: 'created-payment',
+            accessImportRunId: runId,
+            sourceEntityType: 'Payment',
+            sourceExternalId: 'PAY-12',
+            targetEntityType: 'financial_operation',
+            targetEntityId: 'operation-12',
+            targetDisplayName: 'Платеж PAY-12',
+            rollbackStatus: 'rolled_back',
+          }),
+        ]
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    await user.click(within(importPanel).getByRole('tab', { name: /Создано/ }))
+    const createdTable = await within(importPanel).findByRole('table', { name: 'Созданные импортом записи Access' })
+
+    expect(requestedRunId).toBe(run.id)
+    expect(within(createdTable).getByText('Гараж 12')).toBeInTheDocument()
+    expect(within(createdTable).getByText('Garage #12')).toBeInTheDocument()
+    expect(within(createdTable).getByText('Ожидает rollback')).toBeInTheDocument()
+    expect(within(createdTable).getByText('Платеж PAY-12')).toBeInTheDocument()
+    expect(within(createdTable).getByText('Payment #PAY-12')).toBeInTheDocument()
+    expect(within(createdTable).getByText('Откат выполнен')).toBeInTheDocument()
   })
 
   it('shows and resolves Access import quarantine rows', async () => {
@@ -10672,6 +10743,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
   return {
     getAccessRuns: async () => [],
     getAccessRunLog: async () => [],
+    getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],
     dryRunAccess: async () => run,
     downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
@@ -10800,6 +10872,7 @@ function createStatefulImportClient(): ImportClient {
   return {
     getAccessRuns: async () => runs,
     getAccessRunLog: async (_token, runId) => logsByRunId.get(runId) ?? [],
+    getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],
     dryRunAccess: async (_token, file) => {
       const run = createAccessImportRun({
@@ -12057,6 +12130,27 @@ function createAccessImportQuarantineItem(overrides: Partial<AccessImportQuarant
     resolvedAtUtc: null,
     resolvedByUserId: null,
     resolutionComment: null,
+    ...overrides,
+  }
+}
+
+function createAccessImportCreatedRecord(overrides: Partial<AccessImportCreatedRecordDto> = {}): AccessImportCreatedRecordDto {
+  return {
+    id: 'created-record-1',
+    accessImportRunId: 'access-run',
+    sourceSystem: 'Access',
+    sourceEntityType: 'Garage',
+    sourceExternalId: '42',
+    sourceRowHash: 'c'.repeat(64),
+    targetEntityType: 'garage',
+    targetEntityId: 'garage-42',
+    targetDisplayName: 'Гараж 42',
+    rollbackStatus: 'created',
+    createdAtUtc: new Date().toISOString(),
+    createdByUserId: null,
+    rolledBackAtUtc: null,
+    rolledBackByUserId: null,
+    rollbackReason: null,
     ...overrides,
   }
 }

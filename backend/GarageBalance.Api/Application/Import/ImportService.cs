@@ -79,6 +79,42 @@ public sealed class ImportService(
         return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success(entries.Select(ToLogEntryDto).ToList());
     }
 
+    public async Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken)
+    {
+        var runExists = await dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
+        if (!runExists)
+        {
+            return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
+        }
+
+        var query = dbContext.AccessImportCreatedRecords
+            .AsNoTracking()
+            .Where(record => record.AccessImportRunId == runId);
+
+        List<AccessImportCreatedRecord> records;
+        if (dbContext.Database.IsNpgsql())
+        {
+            records = await query
+                .OrderByDescending(record => record.CreatedAtUtc)
+                .ThenBy(record => record.TargetEntityType)
+                .ThenBy(record => record.TargetEntityId)
+                .Take(request.Limit)
+                .ToListAsync(cancellationToken);
+        }
+        else
+        {
+            records = await query.ToListAsync(cancellationToken);
+            records = records
+                .OrderByDescending(record => record.CreatedAtUtc)
+                .ThenBy(record => record.TargetEntityType, StringComparer.Ordinal)
+                .ThenBy(record => record.TargetEntityId, StringComparer.Ordinal)
+                .Take(request.Limit)
+                .ToList();
+        }
+
+        return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success(records.Select(ToCreatedRecordDto).ToList());
+    }
+
     public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var run = await dbContext.AccessImportRuns.AsNoTracking().SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
@@ -561,5 +597,25 @@ public sealed class ImportService(
             entry.Level,
             entry.StepCode,
             entry.Message);
+    }
+
+    private static AccessImportCreatedRecordDto ToCreatedRecordDto(AccessImportCreatedRecord record)
+    {
+        return new AccessImportCreatedRecordDto(
+            record.Id,
+            record.AccessImportRunId,
+            record.SourceSystem,
+            record.SourceEntityType,
+            record.SourceExternalId,
+            record.SourceRowHash,
+            record.TargetEntityType,
+            record.TargetEntityId,
+            record.TargetDisplayName,
+            record.RollbackStatus,
+            record.CreatedAtUtc,
+            record.CreatedByUserId,
+            record.RolledBackAtUtc,
+            record.RolledBackByUserId,
+            record.RollbackReason);
     }
 }

@@ -42,6 +42,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AccessImportRunLogEntry> AccessImportRunLogEntries => Set<AccessImportRunLogEntry>();
     public DbSet<AccessImportRowFingerprint> AccessImportRowFingerprints => Set<AccessImportRowFingerprint>();
     public DbSet<AccessImportQuarantineItem> AccessImportQuarantineItems => Set<AccessImportQuarantineItem>();
+    public DbSet<AccessImportCreatedRecord> AccessImportCreatedRecords => Set<AccessImportCreatedRecord>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -563,6 +564,27 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.CreatedAtUtc);
             entity.HasIndex(item => new { item.SourceSystem, item.EntityType });
             entity.HasIndex(item => item.RowHash);
+        });
+
+        modelBuilder.Entity<AccessImportCreatedRecord>(entity =>
+        {
+            entity.ToTable("access_import_created_records");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.SourceSystem).HasMaxLength(80).IsRequired();
+            entity.Property(record => record.SourceEntityType).HasMaxLength(120).IsRequired();
+            entity.Property(record => record.SourceExternalId).HasMaxLength(240);
+            entity.Property(record => record.SourceRowHash).HasMaxLength(64).IsRequired();
+            entity.Property(record => record.TargetEntityType).HasMaxLength(120).IsRequired();
+            entity.Property(record => record.TargetEntityId).HasMaxLength(120).IsRequired();
+            entity.Property(record => record.TargetDisplayName).HasMaxLength(300);
+            entity.Property(record => record.RollbackStatus).HasMaxLength(40).IsRequired();
+            entity.Property(record => record.RollbackReason).HasMaxLength(1000);
+            entity.HasIndex(record => record.AccessImportRunId);
+            entity.HasIndex(record => record.CreatedAtUtc);
+            entity.HasIndex(record => record.RollbackStatus);
+            entity.HasIndex(record => new { record.AccessImportRunId, record.TargetEntityType, record.TargetEntityId }).IsUnique();
+            entity.HasIndex(record => new { record.SourceSystem, record.SourceEntityType });
+            entity.HasIndex(record => record.SourceRowHash);
         });
 
         modelBuilder.Entity<IntegrationSecretSetting>(entity =>

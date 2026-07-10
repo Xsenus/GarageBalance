@@ -1,6 +1,6 @@
 import type { TariffDto } from '../services/dictionariesApi'
 import type { MissingMeterReadingDto, PaymentAllocationDto } from '../services/financeApi'
-import type { AccessImportCheckDto, AccessImportRunDto, AccessImportRunLogEntryDto } from '../services/importApi'
+import type { AccessImportCheckDto, AccessImportCreatedRecordDto, AccessImportRunDto, AccessImportRunLogEntryDto } from '../services/importApi'
 
 export function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
@@ -132,6 +132,22 @@ export function formatImportLogLevel(level: AccessImportRunLogEntryDto['level'])
   }
 
   return 'Инфо'
+}
+
+export function formatImportCreatedRecordRollbackStatus(status: AccessImportCreatedRecordDto['rollbackStatus']): string {
+  if (status === 'rollback_requested') {
+    return 'Rollback запрошен'
+  }
+
+  if (status === 'rolled_back') {
+    return 'Откат выполнен'
+  }
+
+  if (status === 'rollback_failed') {
+    return 'Ошибка отката'
+  }
+
+  return 'Ожидает rollback'
 }
 
 export function formatImportRunCheckSummary(run: AccessImportRunDto): string {
