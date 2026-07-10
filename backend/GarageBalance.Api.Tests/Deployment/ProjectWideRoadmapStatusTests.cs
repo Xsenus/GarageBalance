@@ -91,6 +91,39 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DangerousActionsConfirmationRuleIsMarkedCompleteWhenFrontendBackendAndCoverageAgree()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var confirmationRuleLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Каждое опасное действие удаления/архивации/отмены", StringComparison.Ordinal));
+        var definitionOfDoneLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Все delete/archive/cancel actions требуют confirmation", StringComparison.Ordinal));
+
+        Assert.Contains("пользователи", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("справочники", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("платежи/выплаты/начисления/показания", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("фонды", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("импортные cancel/rollback-заявки", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("квитанциями", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendDialogPolicyTests", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("window.confirm", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("window.prompt", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("window.alert", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerThinnessTests", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("Archive*", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("Cancel*", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("Delete*", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("Reason", confirmationRuleLine, StringComparison.Ordinal);
+        Assert.Contains("confirmation", definitionOfDoneLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File
