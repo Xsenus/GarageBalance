@@ -39,7 +39,7 @@
 | Поступление/выплата | `IsCanceled` | `CancelOperationAsync` / `CancelOperation` | `[decision]` восстановление или обратная операция | Да | `finance.operation_canceled` | отмененная операция скрывается из рабочих списков и расчетов |
 | Начисление владельцу | `IsCanceled` | `CancelAccrualAsync` / `CancelAccrual` | `[decision]` восстановление или обратная операция | Да | `finance.accrual_canceled` | отмененное начисление скрывается из рабочих списков и расчетов |
 | Начисление поставщику | `IsCanceled` | `CancelSupplierAccrualAsync` / `CancelSupplierAccrual` | `[decision]` восстановление или обратная операция | Да | `finance.supplier_accrual_canceled` | отмененное начисление скрывается из рабочих списков и расчетов |
-| Показание счетчика | `IsCanceled` | `CancelMeterReadingAsync` / `CancelMeterReading` | `[decision]` восстановление или повторный ввод | Да | `finance.meter_reading_canceled` | отмененное показание исключается из активной цепочки показаний |
+| Показание счетчика | `IsCanceled` | `CancelMeterReadingAsync` / `CancelMeterReading` | `RestoreMeterReadingAsync` / `RestoreMeterReading` | Да | `finance.meter_reading_canceled`, `finance.meter_reading_restored` | отмененное показание исключается из активной цепочки показаний; восстановление проверяет активный дубль |
 
 Финансовые cancel endpoints принимают `CancelFinanceEntryRequest` через body. `ControllerThinnessTests` закрепляет правило: dangerous actions `Archive*`, `Cancel*`, `Delete*` не должны быть safe HTTP methods и должны иметь request с обязательной причиной до 1000 символов.
 
@@ -56,7 +56,7 @@
 |---|---|---|---|---|---|
 | Справочники | архивировать/вернуть владельцев, гаражи, группы, поставщиков, виды, тарифы | Backend API | Да, причина для архива | Да | `App.test.tsx`, `DictionaryPanelV2` workflows |
 | Пользователи | отключить/вернуть пользователя | Backend API | Да, причина для отключения | Да | `App.test.tsx`, user management workflows |
-| Финансы | отменить поступление, выплату, начисление, показание | Backend API | Да, причина отмены | Нет, ждет бизнес-решения | `App.test.tsx`, finance workflows |
+| Финансы | отменить поступление, выплату, начисление, показание | Backend API | Да, причина отмены | Да для отмененных платежей, начислений и показаний | `App.test.tsx`, finance workflows |
 | Контрагенты-прототип | удалить/вернуть гараж, поставщика, сотрудника | React-state прототип | Да в модалках раздела | Да | `App.test.tsx`, contractors prototype |
 | Тарифы-прототип | удалить/вернуть нерегулярный платеж | React-state прототип | Да, причина удаления | Да | `App.test.tsx`, tariffs prototype |
 

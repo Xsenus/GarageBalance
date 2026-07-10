@@ -92,6 +92,25 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("duplicate tariff/charge service", tariffsLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MeterReadingsObjectCoverageIsMarkedCompleteWhenAuditCancelRestoreAndWorkflowFlowsAreCovered()
+    {
+        var meterReadingsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Показания счетчиков: ввод", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Показания счетчиков:", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.meter_reading_created", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.meter_reading_updated", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.meter_reading_canceled", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.meter_reading_restored", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("отмена требует причину", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("проверяет активный дубль", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("duplicate reading", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("decreased value", meterReadingsLine, StringComparison.Ordinal);
+        Assert.Contains("missing readings", meterReadingsLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

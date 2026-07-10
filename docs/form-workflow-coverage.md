@@ -32,7 +32,7 @@
 | Finance: operations | `CreateIncome`, `CreateExpense` | `UpdateOperation` | Нет | `[decision]` | `CancelOperation` | Нет | Нет |
 | Finance: owner accruals | `CreateAccrual` | `UpdateAccrual` | Нет | `[decision]` | `CancelAccrual` | Нет | `GenerateRegularAccruals` |
 | Finance: supplier accruals | `CreateSupplierAccrual` | `UpdateSupplierAccrual` | Нет | `[decision]` | `CancelSupplierAccrual` | Нет | `GenerateSupplierGroupSalaryAccruals` |
-| Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `[decision]` | `CancelMeterReading` | Нет | Нет |
+| Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `RestoreMeterReading` | `CancelMeterReading` | Нет | Нет |
 | Import Access | Нет | `ResolveQuarantineItem` | Нет | Нет | Нет | `DryRunAccessImport` | `ExportAccessImportRunReport` |
 | Reports | Нет | Нет | Нет | Нет | Нет | Нет | `Get*Report`, `Export*ReportXlsx`, `Export*ReportPdf` |
 | Audit | Нет | Нет | Нет | Нет | Нет | Нет | `ExportEvents`, `ExportEventsXlsx` |

@@ -55,6 +55,7 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "CreateMeterReading",
             "UpdateMeterReading",
             "CancelMeterReading",
+            "RestoreMeterReading",
             "DryRunAccessImport",
             "ResolveQuarantineItem",
             "ExportAccessImportRunReport",

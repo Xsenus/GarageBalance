@@ -65,6 +65,7 @@ public sealed class AuditEventCoverageDocumentationTests
             "finance.meter_reading_created",
             "finance.meter_reading_updated",
             "finance.meter_reading_canceled",
+            "finance.meter_reading_restored",
             "import.access_dry_run",
             "import.access_dry_run_report_exported",
             "import.quarantine_registered",

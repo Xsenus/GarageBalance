@@ -125,6 +125,7 @@
 | `finance.meter_reading_created` | `meter_reading` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, тип счетчика, расход |
 | `finance.meter_reading_updated` | `meter_reading` | Да | Нет | Да | `FinanceServiceTests` | diff показаний и расхода |
 | `finance.meter_reading_canceled` | `meter_reading` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
+| `finance.meter_reading_restored` | `meter_reading` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененного показания с проверкой активного дубля |
 
 ## Import
 
