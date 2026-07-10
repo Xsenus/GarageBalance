@@ -14,6 +14,12 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "RestoreSupplierGroupAsync",
             "ArchiveSupplierAsync",
             "RestoreSupplierAsync",
+            "ArchiveSupplierContactAsync",
+            "RestoreSupplierContactAsync",
+            "ArchiveStaffDepartmentAsync",
+            "RestoreStaffDepartmentAsync",
+            "ArchiveStaffMemberAsync",
+            "RestoreStaffMemberAsync",
             "ArchiveIncomeTypeAsync",
             "RestoreIncomeTypeAsync",
             "ArchiveExpenseTypeAsync",
@@ -22,6 +28,10 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "RestoreTariffAsync",
             "ArchiveChargeServiceSettingAsync",
             "RestoreChargeServiceSettingAsync",
+            "ArchiveIrregularPaymentAsync",
+            "RestoreIrregularPaymentAsync",
+            "ArchiveFeeCampaignAsync",
+            "RestoreFeeCampaignAsync",
             "CancelOperationAsync",
             "RestoreOperationAsync",
             "CancelAccrualAsync",
@@ -46,6 +56,11 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "причина обязательна",
             "fund.operation_canceled",
             "fund.operation_restored",
+            "dictionary.supplier_contact_restored",
+            "dictionary.staff_department_restored",
+            "dictionary.staff_member_restored",
+            "dictionary.irregular_payment_restored",
+            "dictionary.fee_campaign_restored",
             "ControllerThinnessTests",
             "frontend/src/App.test.tsx",
             "React-state прототип"
@@ -82,6 +97,16 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
         var document = ReadSoftDeleteCoverageDocument();
 
         Assert.Contains(expectedText, document, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SoftDeleteCoverageDocumentScopesOpenRestoreTailsToFutureForms()
+    {
+        var document = ReadSoftDeleteCoverageDocument();
+
+        Assert.Contains("будущих пользовательских форм", document, StringComparison.Ordinal);
+        Assert.Contains("будущего начисления участников сборов", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("оставшихся пользовательских форм", document, StringComparison.Ordinal);
     }
 
     private static string ReadSoftDeleteCoverageDocument()

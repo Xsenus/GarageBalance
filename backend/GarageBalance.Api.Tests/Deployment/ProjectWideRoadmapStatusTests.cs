@@ -20,6 +20,28 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void CurrentSafeRestoreButtonsAreMarkedCompleteWhenBackendUiCoverageIsDocumented()
+    {
+        var restoreButtonsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("Для каждого текущего soft-deleted/canceled объекта", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("пользователи", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("контакты поставщиков", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("нерегулярные платежи", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("операции фондов", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("Backend restore endpoints/services", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("frontend restore dialogs/buttons", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("SoftDeleteCancelCoverageDocumentationTests", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", restoreButtonsLine, StringComparison.Ordinal);
+        Assert.Contains("future restore-формы", restoreButtonsLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File
