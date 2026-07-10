@@ -60,7 +60,7 @@ public sealed class FundServiceTests
         Assert.Equal("fund_operation", audit.EntityType);
         Assert.Equal("Целевые взносы", audit.EntityDisplayName);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
-        Assert.Equal(targetFund.Id.ToString(), metadata.RootElement.GetProperty("fundId").GetString());
+        Assert.Equal(AuditTextMasker.Mask(targetFund.Id.ToString()), metadata.RootElement.GetProperty("fundId").GetString());
         Assert.Equal("deposit", metadata.RootElement.GetProperty("operationKind").GetString());
         Assert.Equal("1500.13", metadata.RootElement.GetProperty("amount").GetString());
     }
@@ -202,7 +202,7 @@ public sealed class FundServiceTests
         Assert.Equal("Электроэнергия", audit.EntityDisplayName);
         Assert.Contains("Изменена операция фонда Электроэнергия", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
-        Assert.Equal(targetFund.Id.ToString(), metadata.RootElement.GetProperty("fundId").GetString());
+        Assert.Equal(AuditTextMasker.Mask(targetFund.Id.ToString()), metadata.RootElement.GetProperty("fundId").GetString());
         Assert.Equal("Электроэнергия", metadata.RootElement.GetProperty("fundName").GetString());
         Assert.Equal("deposit", metadata.RootElement.GetProperty("operationKind").GetString());
         Assert.Equal("600", metadata.RootElement.GetProperty("amount").GetString());
@@ -338,7 +338,7 @@ public sealed class FundServiceTests
         Assert.Equal("cancel", audit.ActionKind);
         Assert.Contains("Отменена операция фонда Электроэнергия", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
-        Assert.Equal(targetFund.Id.ToString(), metadata.RootElement.GetProperty("fundId").GetString());
+        Assert.Equal(AuditTextMasker.Mask(targetFund.Id.ToString()), metadata.RootElement.GetProperty("fundId").GetString());
         Assert.Equal("Электроэнергия", metadata.RootElement.GetProperty("fundName").GetString());
         Assert.Equal("deposit", metadata.RootElement.GetProperty("operationKind").GetString());
         Assert.Equal("700", metadata.RootElement.GetProperty("amount").GetString());
@@ -398,7 +398,7 @@ public sealed class FundServiceTests
         Assert.Equal("restore", audit.ActionKind);
         Assert.Contains("Восстановлена операция фонда Электроэнергия", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
-        Assert.Equal(targetFund.Id.ToString(), metadata.RootElement.GetProperty("fundId").GetString());
+        Assert.Equal(AuditTextMasker.Mask(targetFund.Id.ToString()), metadata.RootElement.GetProperty("fundId").GetString());
         Assert.Equal("Электроэнергия", metadata.RootElement.GetProperty("fundName").GetString());
         Assert.Equal("deposit", metadata.RootElement.GetProperty("operationKind").GetString());
         Assert.Equal("700", metadata.RootElement.GetProperty("amount").GetString());
