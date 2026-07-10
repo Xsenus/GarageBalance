@@ -58,6 +58,8 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "CreateSupplierAccrual",
             "UpdateSupplierAccrual",
             "CancelSupplierAccrual",
+            "RestoreSupplierAccrual",
+            "GenerateSupplierGroupSalaryAccruals",
             "CreateMeterReading",
             "UpdateMeterReading",
             "CancelMeterReading",

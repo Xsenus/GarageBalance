@@ -123,6 +123,7 @@
 | `finance.supplier_accrual_created` | `supplier_accrual` | Нет | Нет | Да | `FinanceServiceTests` | поставщик, месяц, документ |
 | `finance.supplier_accrual_updated` | `supplier_accrual` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, месяца, документа, комментария |
 | `finance.supplier_accrual_canceled` | `supplier_accrual` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
+| `finance.supplier_accrual_restored` | `supplier_accrual` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененного начисления поставщика/сотрудника с проверкой активного дубля |
 | `finance.regular_accruals_generated` | `accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация начислений |
 | `finance.fee_campaign_accruals_generated` | `accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация начислений по объявленному сбору |
 | `finance.supplier_group_salary_accruals_generated` | `supplier_accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация зарплаты/поставщиков |

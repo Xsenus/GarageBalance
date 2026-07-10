@@ -31,7 +31,7 @@
 | Dictionaries: tariffs | `CreateTariff` | `UpdateTariff` | `ArchiveTariff` | `RestoreTariff` | Нет | Нет | Нет |
 | Finance: operations | `CreateIncome`, `CreateExpense`, `CreateStaffPayment`, `CreateGarageDebtPayment` | `UpdateOperation` | Нет | `RestoreOperation` | `CancelOperation` | Нет | Нет |
 | Finance: owner accruals | `CreateAccrual` | `UpdateAccrual` | Нет | `RestoreAccrual` | `CancelAccrual` | Нет | `GenerateRegularAccruals`, `GenerateRegularCatalogAccruals` |
-| Finance: supplier accruals | `CreateSupplierAccrual` | `UpdateSupplierAccrual` | Нет | `[decision]` | `CancelSupplierAccrual` | Нет | `GenerateSupplierGroupSalaryAccruals` |
+| Finance: supplier accruals | `CreateSupplierAccrual` | `UpdateSupplierAccrual` | Нет | `RestoreSupplierAccrual` | `CancelSupplierAccrual` | Нет | `GenerateSupplierGroupSalaryAccruals` |
 | Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `RestoreMeterReading` | `CancelMeterReading` | Нет | Нет |
 | Import Access | Нет | `ResolveQuarantineItem` | Нет | Нет | Нет | `DryRunAccessImport` | `ExportAccessImportRunReport` |
 | Reports | Нет | Нет | Нет | Нет | Нет | Нет | `Get*Report`, `Export*ReportXlsx`, `Export*ReportPdf` |

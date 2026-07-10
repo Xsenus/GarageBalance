@@ -27,6 +27,7 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "CancelAccrualAsync",
             "RestoreAccrualAsync",
             "CancelSupplierAccrualAsync",
+            "RestoreSupplierAccrualAsync",
             "CancelMeterReadingAsync",
             "RestoreMeterReadingAsync",
             "RestoreUserAsync",
@@ -45,8 +46,7 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "причина обязательна",
             "ControllerThinnessTests",
             "frontend/src/App.test.tsx",
-            "React-state прототип",
-            "[decision]"
+            "React-state прототип"
         };
     }
 
