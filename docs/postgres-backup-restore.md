@@ -85,3 +85,13 @@
 - [ ] Выполнить `restore-postgres.ps1` в `garagebalance_restore_check`, если меняется схема или импортируются реальные данные.
 - [ ] Только после этого запускать импорт Access, `dotnet-ef database update` или выкладку новой версии.
 - [ ] Не удалять предыдущий backup до приемки результата.
+
+## Условия финального закрытия backup/restore
+
+- [ ] `check-local-postgres.ps1 -RequirePsql` завершился `localPostgresPreflight=OK`.
+- [ ] `backup-postgres.ps1` создал `.pgdump` в выбранной папке backup.
+- [ ] Backup-файл больше 0 байт, имя файла записано в roadmap history или журнал работ.
+- [ ] `restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate` восстановил backup в проверочную базу.
+- [ ] Повторная проверка восстановленной базы не показывает ошибок подключения и миграций.
+- [ ] Восстановление в рабочую базу не выполнялось без явного `-AllowProductionTarget`.
+- [ ] После проверки временная база `garagebalance_restore_check` очищена или оставлена с понятной пометкой для администратора.

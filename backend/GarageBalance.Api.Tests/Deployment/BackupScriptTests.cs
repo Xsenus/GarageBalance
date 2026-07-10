@@ -25,6 +25,8 @@ public sealed class BackupScriptTests
         Assert.Contains("garagebalance_restore_check", script, StringComparison.Ordinal);
         Assert.Contains("Get-Command pg_restore", script, StringComparison.Ordinal);
         Assert.Contains("Get-Command psql", script, StringComparison.Ordinal);
+        Assert.Contains("$quotedOwner", script, StringComparison.Ordinal);
+        Assert.Contains("OWNER $quotedOwner", script, StringComparison.Ordinal);
         Assert.Contains("AllowProductionTarget", script, StringComparison.Ordinal);
         Assert.Contains("garagebalance_local", script, StringComparison.Ordinal);
         Assert.Contains("--no-owner", script, StringComparison.Ordinal);
@@ -74,6 +76,10 @@ public sealed class BackupScriptTests
         Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);
         Assert.Contains("GarageBalance Local PostgreSQL Backup", document, StringComparison.Ordinal);
         Assert.Contains("Раз в месяц выполнять restore-check", document, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия backup/restore", document, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", document, StringComparison.Ordinal);
+        Assert.Contains("restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate", document, StringComparison.Ordinal);
+        Assert.Contains("-AllowProductionTarget", document, StringComparison.Ordinal);
     }
 
     [Fact]

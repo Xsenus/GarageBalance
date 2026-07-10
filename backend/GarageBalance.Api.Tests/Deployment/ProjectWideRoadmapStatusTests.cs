@@ -2438,6 +2438,54 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenPostgresBackupRestoreRemainsBlockedWithoutLocalPostgresButHasScriptsDocsAndOwnerFix()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var backupDocument = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "postgres-backup-restore.md"));
+        var preflightScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "check-local-postgres.ps1"));
+        var backupScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "backup-postgres.ps1"));
+        var restoreScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "restore-postgres.ps1"));
+
+        var backupRestoreLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить backup/restore PostgreSQL", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", backupRestoreLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", backupRestoreLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", backupRestoreLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", backupRestoreLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenPostgresBackupRestoreRemainsBlockedWithoutLocalPostgresButHasScriptsDocsAndOwnerFix", backupRestoreLine, StringComparison.Ordinal);
+
+        Assert.Contains("Test-NetConnection", preflightScript, StringComparison.Ordinal);
+        Assert.Contains("SELECT 1;", preflightScript, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", preflightScript, StringComparison.Ordinal);
+        Assert.Contains("Get-Command pg_dump", backupScript, StringComparison.Ordinal);
+        Assert.Contains("--format=custom", backupScript, StringComparison.Ordinal);
+        Assert.Contains(".incomplete", backupScript, StringComparison.Ordinal);
+        Assert.Contains("Backup file is empty.", backupScript, StringComparison.Ordinal);
+        Assert.Contains("Get-Command pg_restore", restoreScript, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check", restoreScript, StringComparison.Ordinal);
+        Assert.Contains("AllowProductionTarget", restoreScript, StringComparison.Ordinal);
+        Assert.Contains("$quotedOwner", restoreScript, StringComparison.Ordinal);
+        Assert.Contains("OWNER $quotedOwner", restoreScript, StringComparison.Ordinal);
+
+        Assert.Contains("Условия финального закрытия backup/restore", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("backup-postgres.ps1", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate", backupDocument, StringComparison.Ordinal);
+        Assert.Contains("-AllowProductionTarget", backupDocument, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Проверить backup/restore PostgreSQL\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("создает проверочную базу с владельцем из `-Username`", historyText, StringComparison.Ordinal);
+        Assert.Contains("live `check-local-postgres.ps1 -RequirePsql`", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();

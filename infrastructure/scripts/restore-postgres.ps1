@@ -34,12 +34,13 @@ if ($backupInfo.Length -le 0) {
 $pgRestore = Get-Command pg_restore -ErrorAction Stop
 $psql = Get-Command psql -ErrorAction Stop
 $quotedDatabase = '"' + $TargetDatabase.Replace('"', '""') + '"'
+$quotedOwner = '"' + $Username.Replace('"', '""') + '"'
 
 if ($DropAndCreate) {
     if ($PSCmdlet.ShouldProcess($TargetDatabase, "drop and recreate PostgreSQL database")) {
         $terminateCommand = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$TargetDatabase';"
         $dropCommand = "DROP DATABASE IF EXISTS $quotedDatabase;"
-        $createCommand = "CREATE DATABASE $quotedDatabase OWNER $quotedDatabase;"
+        $createCommand = "CREATE DATABASE $quotedDatabase OWNER $quotedOwner;"
 
         & $psql.Source "--host=$HostName" "--port=$Port" "--username=$Username" "--dbname=postgres" "--command=$terminateCommand"
         if ($LASTEXITCODE -ne 0) { throw "Failed to terminate sessions for $TargetDatabase." }
