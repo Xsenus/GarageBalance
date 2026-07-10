@@ -624,6 +624,66 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessImportAcceptanceScenarioIsInProgressWhenDryRunReportQuarantineAndApplyRequestExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var importServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
+        var importControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportControllerTests.cs"));
+        var quarantineTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportQuarantineServiceTests.cs"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var importApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "importApi.test.ts"));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var acceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Администратор запускает dry-run импорта Access", StringComparison.Ordinal));
+        var dryRunLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать dry-run импорт с отчетом", StringComparison.Ordinal));
+        var quarantineLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать quarantine/error bucket", StringComparison.Ordinal));
+        var transferLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать перенос справочников, гаражей, владельцев", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[~]`", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("Dry-run", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("JSON-отчет", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("quarantine/error bucket", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("заявка на фактический перенос", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("фактический перенос строк Access", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportAcceptanceScenarioIsInProgressWhenDryRunReportQuarantineAndApplyRequestExist", acceptanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[~]`", dryRunLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[~]`", quarantineLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", transferLine, StringComparison.Ordinal);
+
+        Assert.Contains("access_dry_run_report_exported", importServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("runs/{id:guid}/report", importControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ApplyResult", importControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ApplyCancelResult", importControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("LogResult", importControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreatedRecordsResult", importControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("import.quarantine_registered", quarantineTestsText, StringComparison.Ordinal);
+        Assert.Contains("import.quarantine_resolved", quarantineTestsText, StringComparison.Ordinal);
+        Assert.Contains("runs Access import dry-run and shows checks history", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("requestAccessImportApply", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancelAccessImportApplyRequest", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("downloads dry-run report through POST", importApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("requests Access import apply with reason and backup confirmation", importApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels Access import apply request with a required reason", importApiTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("В dry-run импорта Access теперь видно", releaseText, StringComparison.Ordinal);
+        Assert.Contains("после успешного dry-run можно зафиксировать заявку на фактический перенос", releaseText, StringComparison.Ordinal);
+        Assert.Contains("Закрытие строки карантина Access теперь требует отдельного подтверждения", releaseText, StringComparison.Ordinal);
+
+        Assert.Contains("синхронизирован пользовательский сценарий приемки \"Администратор запускает dry-run импорта Access", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessImportAcceptanceScenarioIsInProgressWhenDryRunReportQuarantineAndApplyRequestExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
