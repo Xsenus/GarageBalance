@@ -206,6 +206,26 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("доступный лимит", fundsLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CashAndBankObjectCoverageIsMarkedCompleteWhenBankDepositFundOperationsAndReportsAreCovered()
+    {
+        var cashAndBankLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Касса и банк: сдача", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Касса и банк:", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("Учет суммы на счете в банке", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("FundsClient.createOperation", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("FundService.CreateOperationAsync", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_updated", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_canceled", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_restored", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("reports.cash_payments_generated", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("reports.bank_deposits_generated", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("reports.cash_payments_exported", cashAndBankLine, StringComparison.Ordinal);
+        Assert.Contains("reports.bank_deposits_exported", cashAndBankLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

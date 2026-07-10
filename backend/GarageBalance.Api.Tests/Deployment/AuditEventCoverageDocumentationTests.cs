@@ -85,9 +85,13 @@ public sealed class AuditEventCoverageDocumentationTests
             "reports.consolidated_generated",
             "reports.income_generated",
             "reports.expense_generated",
+            "reports.cash_payments_generated",
+            "reports.bank_deposits_generated",
             "reports.consolidated_exported",
             "reports.income_exported",
-            "reports.expense_exported"
+            "reports.expense_exported",
+            "reports.cash_payments_exported",
+            "reports.bank_deposits_exported"
         };
     }
 

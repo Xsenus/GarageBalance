@@ -53,7 +53,8 @@
 | Справочники | восстановление записи | restore | Backend API | confirmation dialog и понятные restore-conflict сообщения |
 | Платежи/финансы | финансовый редактор | create/edit | Backend API | закрытие с несохраненными изменениями требует confirmation; create/edit сохраняют через API |
 | Платежи/финансы | отмена записи | cancel | Backend API | confirmation с обязательной причиной |
-| Платежи-прототип | банк, выплата, начисление, полная оплата | create | React-state прототип | modal forms, без backend |
+| Платежи/финансы | сдача кассы в банк | create | Backend API через `FundsClient.createOperation` | modal form, Escape/отмена без API, reason `Сдача кассы в банк ...` |
+| Платежи-прототип | выплата, начисление, полная оплата | create | React-state прототип | modal forms, без backend |
 | Управление фондами | пополнить/изъять, изменить, отменить, восстановить, создать обратную операцию | create/edit/cancel/restore | Backend API | modal forms/dialogs с причиной, confirmation, restore и reverse |
 | Импорт Access | dry-run загрузка файла | import | Backend API | file validation, progress/status |
 | Импорт Access | закрытие карантина | edit/resolve | Backend API | button action с audit; отдельного confirmation пока нет |

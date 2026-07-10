@@ -165,9 +165,13 @@
 | `reports.consolidated_generated` | `report` | Нет | Нет | Да | `ReportServiceTests` | период, количество строк и фильтры в metadata |
 | `reports.income_generated` | `report` | Нет | Нет | Да | `ReportServiceTests` | период, количество строк и фильтры в metadata |
 | `reports.expense_generated` | `report` | Нет | Нет | Да | `ReportServiceTests` | период, количество строк и фильтры в metadata |
+| `reports.cash_payments_generated` | `report` | Нет | Нет | Да | `ReportServiceTests` | отчет по оплатам из кассы исключает отмененные операции |
+| `reports.bank_deposits_generated` | `report` | Нет | Нет | Да | `ReportServiceTests` | отчет по сдаче кассы в банк берет активные deposit-операции фондов с банковским комментарием |
 | `reports.consolidated_exported` | `report` | Нет | Нет | Да | `ReportsControllerTests`, `ReportServiceTests` | export endpoint использует POST, потому пишет audit |
 | `reports.income_exported` | `report` | Нет | Нет | Да | `ReportServiceTests` | прямой service-test проверяет action, формат и file name |
 | `reports.expense_exported` | `report` | Нет | Нет | Да | `ReportsControllerTests`, `ReportServiceTests` | export endpoint использует POST, потому пишет audit |
+| `reports.cash_payments_exported` | `report` | Нет | Нет | Да | `ReportServiceTests` | XLSX/PDF export оплат из кассы пишет audit export |
+| `reports.bank_deposits_exported` | `report` | Нет | Нет | Да | `ReportServiceTests` | XLSX/PDF export сдачи кассы в банк пишет audit export |
 
 ## Что Остается
 
