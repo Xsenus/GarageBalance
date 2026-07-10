@@ -1020,6 +1020,51 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessFormsQueriesDecisionRoadmapItemRequiresInventoryAndBusinessApproval()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-forms-queries-decision-checklist.md"));
+        var schemaChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-schema-inventory-checklist.md"));
+        var mappingChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-postgresql-mapping-checklist.md"));
+
+        var formsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Согласовать, какие старые формы/запросы Access являются только UI", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]` Согласовать, какие старые формы/запросы Access", formsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-forms-queries-decision-checklist.md", formsLine, StringComparison.Ordinal);
+        Assert.Contains("ui_only", formsLine, StringComparison.Ordinal);
+        Assert.Contains("business_rule", formsLine, StringComparison.Ordinal);
+        Assert.Contains("подтверждение заказчика", formsLine, StringComparison.Ordinal);
+        Assert.Contains("raw SQL/screenshots", formsLine, StringComparison.Ordinal);
+        Assert.Contains("AccessFormsQueriesDecisionRoadmapItemRequiresInventoryAndBusinessApproval", formsLine, StringComparison.Ordinal);
+
+        Assert.Contains("не считается финальной field-level mapping", mappingChecklist, StringComparison.Ordinal);
+        Assert.Contains("Список queries/forms/reports", schemaChecklist, StringComparison.Ordinal);
+        Assert.Contains("нельзя закрывать как `[x]`", checklist, StringComparison.Ordinal);
+        Assert.Contains("приватного schema inventory", checklist, StringComparison.Ordinal);
+        Assert.Contains("участник со стороны заказчика", checklist, StringComparison.Ordinal);
+        Assert.Contains("`ui_only`", checklist, StringComparison.Ordinal);
+        Assert.Contains("`report_only`", checklist, StringComparison.Ordinal);
+        Assert.Contains("`business_rule`", checklist, StringComparison.Ordinal);
+        Assert.Contains("`import_helper`", checklist, StringComparison.Ordinal);
+        Assert.Contains("`duplicate_or_obsolete`", checklist, StringComparison.Ordinal);
+        Assert.Contains("`unknown_requires_decision`", checklist, StringComparison.Ordinal);
+        Assert.Contains("no SQL text/raw rows/screenshots", checklist, StringComparison.Ordinal);
+        Assert.Contains("Все `business_rule` и `import_helper` объекты связаны", checklist, StringComparison.Ordinal);
+        Assert.Contains("Privacy-check подтверждает", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessFormsQueriesDecisionRoadmapItemRequiresInventoryAndBusinessApproval`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Согласовать, какие старые формы/запросы Access", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessFormsQueriesDecisionRoadmapItemRequiresInventoryAndBusinessApproval", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
