@@ -918,6 +918,54 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessPreImportBaselineRoadmapItemRemainsBlockedUntilSafeCountsAndChecksumsExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-preimport-baseline-checklist.md"));
+        var schemaChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-schema-inventory-checklist.md"));
+        var workingCopyChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-working-copy-checklist.md"));
+        var privacyScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "verify-package-privacy.ps1"));
+
+        var baselineLine = activeRoadmapLines.Single(line =>
+            line.Contains("Снять контрольные суммы/количество строк по ключевым таблицам до импорта", StringComparison.Ordinal));
+        var schemaLine = activeRoadmapLines.Single(line =>
+            line.Contains("Снять полную схему таблиц, связей и объемов данных", StringComparison.Ordinal));
+        var copyLine = activeRoadmapLines.Single(line =>
+            line.Contains("Создать копию исходной Access-БД для экспериментов", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Снять контрольные суммы/количество строк", baselineLine, StringComparison.Ordinal);
+        Assert.Contains("приватную рабочую копию Access-БД", baselineLine, StringComparison.Ordinal);
+        Assert.Contains("schema inventory", baselineLine, StringComparison.Ordinal);
+        Assert.Contains("row counts", baselineLine, StringComparison.Ordinal);
+        Assert.Contains("checksums/агрегаты", baselineLine, StringComparison.Ordinal);
+        Assert.Contains("AccessPreImportBaselineRoadmapItemRemainsBlockedUntilSafeCountsAndChecksumsExist", baselineLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", schemaLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", copyLine, StringComparison.Ordinal);
+
+        Assert.Contains("SHA-256 и размер рабочей копии Access-БД", checklist, StringComparison.Ordinal);
+        Assert.Contains("Row counts по ключевым таблицам", checklist, StringComparison.Ordinal);
+        Assert.Contains("Checksum или агрегаты", checklist, StringComparison.Ordinal);
+        Assert.Contains("гаражи, владельцы, платежи/поступления, выплаты, счетчики", checklist, StringComparison.Ordinal);
+        Assert.Contains("rawRowsExported=false", checklist, StringComparison.Ordinal);
+        Assert.Contains("ФИО, адреса, телефоны", checklist, StringComparison.Ordinal);
+        Assert.Contains("номера документов и платежные строки", checklist, StringComparison.Ordinal);
+        Assert.Contains("сам `.accdb/.mdb`, exports, dumps", checklist, StringComparison.Ordinal);
+        Assert.Contains("Row counts и checksums есть для всех ключевых таблиц", checklist, StringComparison.Ordinal);
+        Assert.Contains("Таблицы, колонки, ключи, связи, индексы и row counts сняты", schemaChecklist, StringComparison.Ordinal);
+        Assert.Contains("SHA-256/размер оригинала и копии сверены", workingCopyChecklist, StringComparison.Ordinal);
+        Assert.Contains(@"\.(accdb|mdb|pgdump|dump|backup|bak|db|sqlite|sqlite3)$", privacyScript, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Снять контрольные суммы/количество строк", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessPreImportBaselineRoadmapItemRemainsBlockedUntilSafeCountsAndChecksumsExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
