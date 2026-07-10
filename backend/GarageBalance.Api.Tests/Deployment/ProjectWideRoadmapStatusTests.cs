@@ -210,6 +210,43 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void TariffAndAccrualAuditContextIsMarkedCompleteWhenRatesPeriodsThresholdsAndAccrualFieldsAreCovered()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var tariffAndAccrualLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Для тарифов и начислений добавить старую и новую ставку/единицу/порог/период", StringComparison.Ordinal));
+
+        Assert.Contains("dictionary.tariff_updated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.charge_service_updated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.fee_campaign_updated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("finance.accrual_updated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("finance.supplier_accrual_updated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("finance.regular_accruals_generated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("finance.regular_catalog_accruals_generated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("finance.fee_campaign_accruals_generated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("finance.supplier_group_salary_accruals_generated", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("rate", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("calculationBase", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("effectiveFrom", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("electricityTiers", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("accountingMonth", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("documentNumber", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateTariffAsync_UpdatesTariffAndWritesAudit", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("FeeCampaignAsync_CreatesUpdatesArchivesAndRestoresWithAudit", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("UpdateSupplierAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("GenerateFeeCampaignAccrualsAsync_CreatesAccrualsForActiveGaragesAndWritesAudit", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("docs/audit-event-coverage.md", tariffAndAccrualLine, StringComparison.Ordinal);
+        Assert.Contains("future tariff/accrual-модели", tariffAndAccrualLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultDeletionRuleIsMarkedCompleteWhenSoftArchiveCancelAndPolicyCoverageExist()
     {
         var deletionRuleLine = File
