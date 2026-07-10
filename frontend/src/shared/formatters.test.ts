@@ -98,6 +98,7 @@ describe('shared formatters', () => {
     expect(formatAccrualSource('import')).toBe('import')
     expect(formatImportRunStatus('completed')).toBe('Завершен')
     expect(formatImportRunStatus('blocked')).toBe('Заблокирован')
+    expect(formatImportRunStatus('rollback_requested')).toBe('Rollback запрошен')
     expect(formatImportCheckStatus('passed')).toBe('Пройдено')
     expect(formatImportCheckStatus('warning')).toBe('Предупреждение')
     expect(formatImportCheckStatus('error')).toBe('Ошибка')

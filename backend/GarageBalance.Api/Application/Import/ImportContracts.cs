@@ -18,6 +18,13 @@ public sealed record AccessImportRunLogListRequest
     public int Limit { get; init; } = 100;
 }
 
+public sealed record AccessImportRollbackRequest
+{
+    [Required]
+    [MaxLength(1000)]
+    public string Reason { get; init; } = string.Empty;
+}
+
 public sealed record AccessImportCheckDto(
     string Code,
     string Title,

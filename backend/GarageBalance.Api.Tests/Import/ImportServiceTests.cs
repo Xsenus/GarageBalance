@@ -120,6 +120,75 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task RequestAccessImportRollbackAsync_MarksRunAndWritesAuditWithReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.RequestAccessImportRollbackAsync(
+            dryRun.Value!.Id,
+            new AccessImportRollbackRequest { Reason = "Выбран неверный файл старой базы" },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("rollback_requested", result.Value!.Status);
+        Assert.Contains("Rollback запрошен", result.Value.Summary, StringComparison.Ordinal);
+        Assert.Contains(database.Context.AccessImportRunLogEntries, item => item.AccessImportRunId == dryRun.Value.Id && item.StepCode == "rollback_requested");
+        var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "import.rollback_requested");
+        Assert.Equal(actorUserId, auditEvent.ActorUserId);
+        Assert.Equal("import", auditEvent.Section);
+        Assert.Equal("cancel", auditEvent.ActionKind);
+        Assert.Equal(dryRun.Value.Id.ToString(), auditEvent.EntityId);
+        Assert.Equal("GSK archive.accdb", auditEvent.EntityDisplayName);
+        Assert.Equal(dryRun.Value.Id.ToString(), auditEvent.RelatedDocumentId);
+        Assert.Equal("GSK archive.accdb", auditEvent.RelatedDocumentNumber);
+        using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("Выбран неверный файл старой базы", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("dry_run", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal("rollback_requested", metadata.RootElement.GetProperty("status").GetString());
+        Assert.Equal("dry_run_no_created_records", metadata.RootElement.GetProperty("rollbackState").GetString());
+    }
+
+    [Fact]
+    public async Task RequestAccessImportRollbackAsync_RequiresReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+
+        var result = await service.RequestAccessImportRollbackAsync(
+            dryRun.Value!.Id,
+            new AccessImportRollbackRequest { Reason = " " },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_rollback_reason_required", result.ErrorCode);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "import.rollback_requested");
+        Assert.DoesNotContain(database.Context.AccessImportRunLogEntries, item => item.StepCode == "rollback_requested");
+    }
+
+    [Fact]
+    public async Task RequestAccessImportRollbackAsync_ReturnsNotFoundForMissingRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.RequestAccessImportRollbackAsync(
+            Guid.NewGuid(),
+            new AccessImportRollbackRequest { Reason = "Ошибочный запуск" },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_not_found", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task GetAccessImportRunLogEntriesAsync_ReturnsRunLogInChronologicalOrderWithoutDetails()
     {
         await using var database = await TestDatabase.CreateAsync();

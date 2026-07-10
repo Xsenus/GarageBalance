@@ -6,4 +6,5 @@ public interface IImportService
     Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken);
     Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<ImportResult<AccessImportRunDto>> RequestAccessImportRollbackAsync(Guid runId, AccessImportRollbackRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 }

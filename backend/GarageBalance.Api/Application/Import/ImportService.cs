@@ -142,6 +142,69 @@ public sealed class ImportService(
             content));
     }
 
+    public async Task<ImportResult<AccessImportRunDto>> RequestAccessImportRollbackAsync(
+        Guid runId,
+        AccessImportRollbackRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var reason = request.Reason.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_rollback_reason_required", "Укажите причину rollback импорта.");
+        }
+
+        if (reason.Length > 1000)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_rollback_reason_too_long", "Причина rollback импорта превышает допустимую длину.");
+        }
+
+        var run = await dbContext.AccessImportRuns.SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        if (run is null)
+        {
+            return ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
+        }
+
+        if (run.Status == "rollback_requested")
+        {
+            return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+        }
+
+        run.Status = "rollback_requested";
+        run.Summary = "Rollback запрошен: фактических данных для отката нет, пока запуск импорта находится в режиме dry-run.";
+
+        AddRunLog(run, "warning", "rollback_requested", "Запрошен rollback импорта Access. Фактический откат данных не выполнялся: запуск был dry-run.", new
+        {
+            reason,
+            mode = run.Mode,
+            status = run.Status
+        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "import.rollback_requested",
+            "access_import_run",
+            run.Id.ToString(),
+            Summary: $"Запрошен rollback импорта Access: {run.OriginalFileName}.",
+            ActionKind: "cancel",
+            EntityDisplayName: run.OriginalFileName,
+            Reason: reason,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: run.OriginalFileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["mode"] = run.Mode,
+                ["status"] = run.Status,
+                ["originalFileName"] = run.OriginalFileName,
+                ["fileExtension"] = run.FileExtension,
+                ["contentSha256"] = run.ContentSha256,
+                ["rollbackExecuted"] = false,
+                ["rollbackState"] = "dry_run_no_created_records"
+            }));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
     public async Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.FileName))

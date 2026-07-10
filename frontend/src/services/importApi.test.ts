@@ -22,4 +22,21 @@ describe('importApi', () => {
       },
     })
   })
+
+  it('requests Access import rollback with a required reason', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'run-42', status: 'rollback_requested' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await importApi.requestAccessImportRollback('token', 'run-42', 'Выбран неверный файл')
+
+    expect(result.status).toBe('rollback_requested')
+    expect(fetchMock).toHaveBeenCalledWith('/api/import/access/runs/run-42/rollback', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason: 'Выбран неверный файл' }),
+    })
+  })
 })

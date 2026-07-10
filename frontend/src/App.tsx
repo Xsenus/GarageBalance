@@ -7759,6 +7759,10 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
+  const [rollbackingRunId, setRollbackingRunId] = useState<string | null>(null)
+  const [rollbackTarget, setRollbackTarget] = useState<AccessImportRunDto | null>(null)
+  const [rollbackReason, setRollbackReason] = useState('')
+  const [rollbackError, setRollbackError] = useState<string | null>(null)
   const [quarantineResolveTarget, setQuarantineResolveTarget] = useState<AccessImportQuarantineItemDto | null>(null)
   const [quarantineResolveComment, setQuarantineResolveComment] = useState('')
   const [quarantineResolveError, setQuarantineResolveError] = useState<string | null>(null)
@@ -7767,9 +7771,14 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
   const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
+  const rollbackActionLabel = currentRun ? `Запросить rollback импорта ${currentRun.originalFileName}` : 'Запросить rollback импорта'
+  const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || rollbackingRunId !== null
   useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
+  useRestoreFocusOnClose(Boolean(rollbackTarget))
   const quarantineResolveCommentRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(quarantineResolveTarget))
   const quarantineResolveDialogRef = useFocusTrap<HTMLElement>(Boolean(quarantineResolveTarget))
+  const rollbackReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(rollbackTarget))
+  const rollbackDialogRef = useFocusTrap<HTMLElement>(Boolean(rollbackTarget))
   const visibleRunLogEntries = runLogEntries.slice(0, 10)
   const visibleRuns = runs.slice(0, 8)
   const visibleQuarantineItems = quarantineItems.slice(0, 8)
@@ -7781,6 +7790,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
   ]
 
   useEscapeKey(Boolean(quarantineResolveTarget) && resolvingQuarantineId === null, () => closeQuarantineResolveDialog())
+  useEscapeKey(Boolean(rollbackTarget) && rollbackingRunId === null, () => closeRollbackDialog())
 
   useEffect(() => {
     let ignore = false
@@ -7891,6 +7901,49 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
     }
   }
 
+  function openRollbackDialog(run: AccessImportRunDto) {
+    setRollbackTarget(run)
+    setRollbackReason('')
+    setRollbackError(null)
+    setError(null)
+    setExportMessage(null)
+  }
+
+  function closeRollbackDialog() {
+    setRollbackTarget(null)
+    setRollbackReason('')
+    setRollbackError(null)
+  }
+
+  async function submitRollbackRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!rollbackTarget) {
+      return
+    }
+
+    const reason = rollbackReason.trim()
+    if (!reason) {
+      setRollbackError('Укажите причину rollback импорта.')
+      return
+    }
+
+    setRollbackingRunId(rollbackTarget.id)
+    setError(null)
+    setExportMessage(null)
+    try {
+      const updatedRun = await importClient.requestAccessImportRollback(auth.accessToken, rollbackTarget.id, reason)
+      setCurrentRun(updatedRun)
+      setRuns((items) => items.map((item) => item.id === updatedRun.id ? updatedRun : item))
+      setRunLogEntries(await importClient.getAccessRunLog(auth.accessToken, updatedRun.id))
+      setExportMessage('Rollback импорта запрошен. Фактический откат данных не выполнялся для dry-run запуска.')
+      closeRollbackDialog()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось запросить rollback импорта.')
+    } finally {
+      setRollbackingRunId(null)
+    }
+  }
+
   function openQuarantineResolveDialog(item: AccessImportQuarantineItemDto) {
     setQuarantineResolveTarget(item)
     setQuarantineResolveComment('')
@@ -7972,6 +8025,10 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
           <button className="secondary-button" type="button" aria-label={reportDownloadActionLabel} title={reportDownloadActionLabel} data-tooltip={reportDownloadActionLabel} disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
             <FileText size={16} aria-hidden="true" />
             <span>Скачать отчет JSON</span>
+          </button>
+          <button className="secondary-button" type="button" aria-label={rollbackActionLabel} title={rollbackActionLabel} data-tooltip={rollbackActionLabel} disabled={rollbackDisabled} onClick={() => currentRun ? openRollbackDialog(currentRun) : undefined}>
+            <RotateCcw size={16} aria-hidden="true" />
+            <span>Запросить rollback</span>
           </button>
           {currentRun ? (
             <>
@@ -8079,7 +8136,7 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
                 <strong>{run.originalFileName}</strong>
                 <small>{run.summary}</small>
               </span>
-              <span role="cell" className={run.status === 'completed' ? 'status-active' : 'status-disabled'}>
+              <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' ? 'warning-text' : 'status-disabled'}>
                 {formatImportRunStatus(run.status)}
               </span>
               <span role="cell">
@@ -8121,6 +8178,66 @@ function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient:
         </div>
         ) : null}
       </div>
+      {rollbackTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (rollbackingRunId === null) {
+            closeRollbackDialog()
+          }
+        }}>
+          <section ref={rollbackDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="import-rollback-title" aria-describedby="import-rollback-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Rollback импорта</p>
+                <h3 id="import-rollback-title">Запросить rollback импорта?</h3>
+                <p>{rollbackTarget.originalFileName} · {formatImportRunStatus(rollbackTarget.status)}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={closeRollbackDialog} aria-label="Закрыть подтверждение rollback импорта" title="Закрыть подтверждение rollback импорта" data-tooltip="Закрыть" disabled={rollbackingRunId !== null}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="import-rollback-description">Rollback будет записан в историю импорта с причиной. Для dry-run запуска фактический откат данных не выполняется, потому что данные еще не переносились в рабочую базу.</p>
+            <form className="dictionary-modal-form" onSubmit={submitRollbackRequest}>
+              <FormField label="Причина rollback">
+                <textarea
+                  ref={rollbackReasonRef}
+                  aria-label="Причина rollback импорта"
+                  aria-invalid={Boolean(rollbackError)}
+                  aria-describedby={rollbackError ? 'import-rollback-error' : undefined}
+                  rows={3}
+                  maxLength={1000}
+                  value={rollbackReason}
+                  onChange={(event) => {
+                    setRollbackReason(event.target.value)
+                    if (rollbackError && event.target.value.trim()) {
+                      setRollbackError(null)
+                    }
+                  }}
+                  placeholder="Например: выбран неверный файл старой базы"
+                  disabled={rollbackingRunId !== null}
+                />
+              </FormField>
+              <dl className="fund-operation-preview">
+                <div>
+                  <dt>Запуск</dt>
+                  <dd>{rollbackTarget.originalFileName}</dd>
+                </div>
+                <div>
+                  <dt>Проверки</dt>
+                  <dd>{formatImportRunCheckSummary(rollbackTarget)}</dd>
+                </div>
+              </dl>
+              {rollbackError ? <p className="form-error" id="import-rollback-error" role="alert">{rollbackError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" onClick={closeRollbackDialog} disabled={rollbackingRunId !== null}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={rollbackingRunId !== null}>
+                  <RotateCcw size={16} aria-hidden="true" />
+                  <span>{rollbackingRunId === rollbackTarget.id ? 'Запрашиваем...' : 'Запросить rollback'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
       {quarantineResolveTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
           if (resolvingQuarantineId === null) {

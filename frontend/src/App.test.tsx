@@ -8271,6 +8271,57 @@ describe('App', () => {
     expect(exportReadyMessage).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('requests Access import rollback through confirmation with reason', async () => {
+    const user = userEvent.setup()
+    let rollbackReason: string | undefined
+    const run = createAccessImportRun()
+    const importClient = createImportClient({
+      getAccessRuns: async () => [run],
+      getAccessRunLog: async () => [
+        createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'dry_run_finished', message: run.summary }),
+      ],
+      requestAccessImportRollback: async (_token, runId, reason) => {
+        rollbackReason = reason
+        return createAccessImportRun({
+          ...run,
+          id: runId,
+          status: 'rollback_requested',
+          summary: 'Rollback запрошен: фактический откат данных не выполнялся для dry-run запуска.',
+        })
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+
+    const rollbackButton = within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })
+    expect(rollbackButton).toHaveAttribute('title', 'Запросить rollback импорта ГСК.accdb')
+    expect(rollbackButton).toHaveAttribute('data-tooltip', 'Запросить rollback импорта ГСК.accdb')
+    await user.click(rollbackButton)
+
+    const rollbackDialog = await screen.findByRole('dialog', { name: 'Запросить rollback импорта?' })
+    await waitFor(() => expect(within(rollbackDialog).getByLabelText('Причина rollback импорта')).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запросить rollback импорта?' })).not.toBeInTheDocument())
+    expect(rollbackReason).toBeUndefined()
+    expect(rollbackButton).toHaveFocus()
+
+    await user.click(rollbackButton)
+    const reopenedDialog = await screen.findByRole('dialog', { name: 'Запросить rollback импорта?' })
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Запросить rollback' }))
+    expect(within(reopenedDialog).getByRole('alert')).toHaveTextContent('Укажите причину rollback импорта.')
+    await user.type(within(reopenedDialog).getByLabelText('Причина rollback импорта'), 'Выбран неверный файл старой базы')
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Запросить rollback' }))
+
+    expect(await within(importPanel).findByText('Rollback импорта запрошен. Фактический откат данных не выполнялся для dry-run запуска.')).toHaveAttribute('role', 'status')
+    expect(rollbackReason).toBe('Выбран неверный файл старой базы')
+    expect(within(importPanel).getAllByText('Rollback запрошен').length).toBeGreaterThan(0)
+    expect(within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })).toBeDisabled()
+  })
+
   it('shows visible counters for long Access import lists', async () => {
     const user = userEvent.setup()
     const runs = Array.from({ length: 9 }, (_, index) => createAccessImportRun({
@@ -10492,6 +10543,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
     getOpenQuarantineItems: async () => [],
     dryRunAccess: async () => run,
     downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
+    requestAccessImportRollback: async (_token, runId) => createAccessImportRun({ id: runId, status: 'rollback_requested' }),
     resolveQuarantineItem: async (_token, itemId) => createAccessImportQuarantineItem({ id: itemId, status: 'resolved' }),
     ...overrides,
   }
@@ -10630,6 +10682,20 @@ function createStatefulImportClient(): ImportClient {
     downloadAccessRunReport: async (_token, runId) => {
       const run = runs.find((item) => item.id === runId)
       return new Blob([JSON.stringify(run ?? {})], { type: 'application/json' })
+    },
+    requestAccessImportRollback: async (_token, runId, reason) => {
+      const run = runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId })
+      const updatedRun = {
+        ...run,
+        status: 'rollback_requested' as const,
+        summary: 'Rollback запрошен: фактический откат данных не выполнялся для dry-run запуска.',
+      }
+      runs = runs.map((item) => item.id === runId ? updatedRun : item)
+      logsByRunId = new Map(logsByRunId).set(runId, [
+        ...(logsByRunId.get(runId) ?? []),
+        createAccessImportRunLogEntry({ accessImportRunId: runId, stepCode: 'rollback_requested', level: 'warning', message: `Rollback запрошен: ${reason}` }),
+      ])
+      return updatedRun
     },
     resolveQuarantineItem: async (_token, itemId) => createAccessImportQuarantineItem({ id: itemId, status: 'resolved' }),
   }

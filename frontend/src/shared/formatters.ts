@@ -91,7 +91,15 @@ export function formatMissingMeterReadings(items: MissingMeterReadingDto[]): str
 }
 
 export function formatImportRunStatus(status: AccessImportRunDto['status']): string {
-  return status === 'completed' ? 'Завершен' : 'Заблокирован'
+  if (status === 'completed') {
+    return 'Завершен'
+  }
+
+  if (status === 'rollback_requested') {
+    return 'Rollback запрошен'
+  }
+
+  return 'Заблокирован'
 }
 
 export function formatImportCheckStatus(status: AccessImportCheckDto['status']): string {
