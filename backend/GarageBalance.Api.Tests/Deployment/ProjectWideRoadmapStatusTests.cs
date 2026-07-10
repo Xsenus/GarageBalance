@@ -875,6 +875,39 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ConfirmationDeleteCloseFrontendCoverageIsMarkedCompleteWhenCurrentFlowsAreCovered()
+    {
+        const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
+            .ToArray();
+
+        var confirmationCoverageLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Frontend tests", StringComparison.Ordinal) &&
+            line.Contains("confirmation delete/close", StringComparison.Ordinal));
+
+        Assert.Contains("App.test.tsx", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendDialogPolicyTests", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("FormWorkflowCoverageDocumentationTests", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerThinnessTests", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("window.confirm", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("window.prompt", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("window.alert", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("payments", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("users", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("contractors", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("tariffs/services/fees", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("Access import", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("1C Fresh", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("receipt", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("future", confirmationCoverageLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(ConfirmationDeleteCloseFrontendCoverageIsMarkedCompleteWhenCurrentFlowsAreCovered), confirmationCoverageLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChangeHistoryControllerTestCoverageIsMarkedCompleteWhenAuditControllerContractIsCovered()
     {
         var controllerTestsLine = File
