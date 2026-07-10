@@ -1383,6 +1383,64 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void UiStatesPrototypeIsMarkedCompleteWhenEmptyErrorForbiddenAndLoadingStatesAreTested()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var statesLine = activeRoadmapLines.Single(line =>
+            line.Contains("Показать состояния без данных", StringComparison.Ordinal));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var accessibleStatusTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "accessibleStatus.test.ts"));
+        var formFeedbackText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "formFeedback.tsx"));
+        var formFeedbackTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "formFeedback.test.tsx"));
+
+        Assert.StartsWith("- `[x]`", statesLine, StringComparison.Ordinal);
+        Assert.Contains("AccessNotice", statesLine, StringComparison.Ordinal);
+        Assert.Contains("role=\"alert\"", statesLine, StringComparison.Ordinal);
+        Assert.Contains("empty-state", statesLine, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\"", statesLine, StringComparison.Ordinal);
+        Assert.Contains("aria-live=\"polite\"", statesLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", statesLine, StringComparison.Ordinal);
+        Assert.Contains("accessibleStatus.test.ts", statesLine, StringComparison.Ordinal);
+        Assert.Contains("formFeedback.test.tsx", statesLine, StringComparison.Ordinal);
+
+        Assert.Contains("function AccessNotice", appText, StringComparison.Ordinal);
+        Assert.Contains("Раздел недоступен", appText, StringComparison.Ordinal);
+        Assert.Contains("Требуется право:", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"alert\"", appText, StringComparison.Ordinal);
+        Assert.Contains("className=\"empty-state\"", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\" aria-live=\"polite\"", appText, StringComparison.Ordinal);
+        Assert.Contains("Загружаем историю обновлений", appText, StringComparison.Ordinal);
+        Assert.Contains("Пока нет опубликованных изменений", appText, StringComparison.Ordinal);
+        Assert.Contains("Пользователей пока нет", appText, StringComparison.Ordinal);
+        Assert.Contains("В этом справочнике пока нет записей", appText, StringComparison.Ordinal);
+        Assert.Contains("Проверок пока нет", appText, StringComparison.Ordinal);
+
+        Assert.Contains("shows login errors without opening protected workspace", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows auth validation summary before calling backend", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("announces empty release notes for authenticated users", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("announces release notes loading status for authenticated users", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows workspace loading errors inside the related panel", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("announces empty user and role lists for administrators", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("announces empty dictionary lists", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows accessible empty states for Access import lists", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Отчеты недоступны", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Нет доступа к платежам.", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("expect(appCss).toContain('.empty-state')", accessibleStatusTestsText, StringComparison.Ordinal);
+        Assert.Contains("expect(appSource).toContain('role=\"status\" aria-live=\"polite\"')", accessibleStatusTestsText, StringComparison.Ordinal);
+        Assert.Contains("export function FormError", formFeedbackText, StringComparison.Ordinal);
+        Assert.Contains("role=\"alert\"", formFeedbackText, StringComparison.Ordinal);
+        Assert.Contains("renders form errors as alerts", formFeedbackTestsText, StringComparison.Ordinal);
+        Assert.Contains("renders validation summary as a named alert", formFeedbackTestsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
