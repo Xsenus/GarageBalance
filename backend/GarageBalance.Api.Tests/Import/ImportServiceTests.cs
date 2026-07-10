@@ -149,9 +149,10 @@ public sealed class ImportServiceTests
         var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+        await AddImportCreatedRecordsAsync(database.Context, dryRun.Value!.Id);
 
         var result = await service.RequestAccessImportRollbackAsync(
-            dryRun.Value!.Id,
+            dryRun.Value.Id,
             new AccessImportRollbackRequest { Reason = "Выбран неверный файл старой базы" },
             actorUserId,
             CancellationToken.None);
@@ -171,8 +172,16 @@ public sealed class ImportServiceTests
         using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
         Assert.Equal("Выбран неверный файл старой базы", metadata.RootElement.GetProperty("reason").GetString());
         Assert.Equal("dry_run", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(AuditTextMasker.Mask(dryRun.Value.Id.ToString()), metadata.RootElement.GetProperty("accessImportRunId").GetString());
         Assert.Equal("rollback_requested", metadata.RootElement.GetProperty("status").GetString());
         Assert.Equal("dry_run_no_created_records", metadata.RootElement.GetProperty("rollbackState").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("importCreatedRecordCount").GetString());
+        Assert.Equal("1", metadata.RootElement.GetProperty("importPendingRollbackRecordCount").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("sourceRowFingerprintCount").GetString());
+        Assert.Equal("financial_operation, garage", metadata.RootElement.GetProperty("targetEntityTypes").GetString());
+        var sourceRowFingerprints = metadata.RootElement.GetProperty("sourceRowFingerprints").GetString();
+        Assert.Contains(new string('a', 64), sourceRowFingerprints, StringComparison.Ordinal);
+        Assert.Contains(new string('b', 64), sourceRowFingerprints, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -241,9 +250,10 @@ public sealed class ImportServiceTests
         var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+        await AddImportCreatedRecordsAsync(database.Context, dryRun.Value!.Id);
 
         var result = await service.RequestAccessImportApplyAsync(
-            dryRun.Value!.Id,
+            dryRun.Value.Id,
             new AccessImportApplyRequest { Reason = "Dry-run проверен, backup создан", BackupConfirmed = true },
             actorUserId,
             CancellationToken.None);
@@ -263,10 +273,15 @@ public sealed class ImportServiceTests
         using var metadata = JsonDocument.Parse(auditEvent.MetadataJson!);
         Assert.Equal("Dry-run проверен, backup создан", metadata.RootElement.GetProperty("reason").GetString());
         Assert.Equal("dry_run", metadata.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(AuditTextMasker.Mask(dryRun.Value.Id.ToString()), metadata.RootElement.GetProperty("accessImportRunId").GetString());
         Assert.Equal("import_requested", metadata.RootElement.GetProperty("status").GetString());
         Assert.Equal("True", metadata.RootElement.GetProperty("backupConfirmed").GetString());
         Assert.Equal("False", metadata.RootElement.GetProperty("importExecuted").GetString());
         Assert.Equal("pending_access_reader", metadata.RootElement.GetProperty("importState").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("importCreatedRecordCount").GetString());
+        Assert.Equal("1", metadata.RootElement.GetProperty("importPendingRollbackRecordCount").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("sourceRowFingerprintCount").GetString());
+        Assert.Equal("financial_operation, garage", metadata.RootElement.GetProperty("targetEntityTypes").GetString());
     }
 
     [Fact]
@@ -543,6 +558,36 @@ public sealed class ImportServiceTests
     private static ImportService CreateService(GarageBalanceDbContext context, IAccessImportReader? reader = null)
     {
         return new ImportService(context, reader ?? new FakeAccessImportReader(), new AuditEventWriter(context));
+    }
+
+    private static async Task AddImportCreatedRecordsAsync(GarageBalanceDbContext context, Guid runId)
+    {
+        context.AccessImportCreatedRecords.AddRange(
+            new AccessImportCreatedRecord
+            {
+                AccessImportRunId = runId,
+                SourceEntityType = "Garage",
+                SourceExternalId = "12",
+                SourceRowHash = new string('a', 64),
+                TargetEntityType = "garage",
+                TargetEntityId = "garage-12",
+                TargetDisplayName = "Garage 12",
+                RollbackStatus = "created",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-2)
+            },
+            new AccessImportCreatedRecord
+            {
+                AccessImportRunId = runId,
+                SourceEntityType = "FinancialOperation",
+                SourceExternalId = "PAY-12",
+                SourceRowHash = new string('b', 64),
+                TargetEntityType = "financial_operation",
+                TargetEntityId = "operation-12",
+                TargetDisplayName = "Payment PAY-12",
+                RollbackStatus = "rolled_back",
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            });
+        await context.SaveChangesAsync();
     }
 
     private sealed class FakeAccessImportReader(AccessImportReaderStatusDto? status = null) : IAccessImportReader

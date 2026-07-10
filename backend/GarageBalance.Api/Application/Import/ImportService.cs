@@ -226,6 +226,11 @@ public sealed class ImportService(
             mode = run.Mode,
             status = run.Status
         });
+        var auditMetadata = await BuildAccessImportRunAuditMetadataAsync(run, cancellationToken, new Dictionary<string, object?>
+        {
+            ["rollbackExecuted"] = false,
+            ["rollbackState"] = "dry_run_no_created_records"
+        });
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "import.rollback_requested",
@@ -237,16 +242,7 @@ public sealed class ImportService(
             Reason: reason,
             RelatedDocumentId: run.Id.ToString(),
             RelatedDocumentNumber: run.OriginalFileName,
-            Metadata: new Dictionary<string, object?>
-            {
-                ["mode"] = run.Mode,
-                ["status"] = run.Status,
-                ["originalFileName"] = run.OriginalFileName,
-                ["fileExtension"] = run.FileExtension,
-                ["contentSha256"] = run.ContentSha256,
-                ["rollbackExecuted"] = false,
-                ["rollbackState"] = "dry_run_no_created_records"
-            }));
+            Metadata: auditMetadata));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
@@ -310,6 +306,12 @@ public sealed class ImportService(
             mode = run.Mode,
             status = run.Status
         });
+        var auditMetadata = await BuildAccessImportRunAuditMetadataAsync(run, cancellationToken, new Dictionary<string, object?>
+        {
+            ["backupConfirmed"] = request.BackupConfirmed,
+            ["importExecuted"] = false,
+            ["importState"] = "pending_access_reader"
+        });
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "import.apply_requested",
@@ -321,17 +323,7 @@ public sealed class ImportService(
             Reason: reason,
             RelatedDocumentId: run.Id.ToString(),
             RelatedDocumentNumber: run.OriginalFileName,
-            Metadata: new Dictionary<string, object?>
-            {
-                ["mode"] = run.Mode,
-                ["status"] = run.Status,
-                ["originalFileName"] = run.OriginalFileName,
-                ["fileExtension"] = run.FileExtension,
-                ["contentSha256"] = run.ContentSha256,
-                ["backupConfirmed"] = request.BackupConfirmed,
-                ["importExecuted"] = false,
-                ["importState"] = "pending_access_reader"
-            }));
+            Metadata: auditMetadata));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
@@ -379,6 +371,11 @@ public sealed class ImportService(
             mode = run.Mode,
             status = run.Status
         });
+        var auditMetadata = await BuildAccessImportRunAuditMetadataAsync(run, cancellationToken, new Dictionary<string, object?>
+        {
+            ["importExecuted"] = false,
+            ["importState"] = "apply_request_cancelled"
+        });
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "import.apply_request_cancelled",
@@ -390,16 +387,7 @@ public sealed class ImportService(
             Reason: reason,
             RelatedDocumentId: run.Id.ToString(),
             RelatedDocumentNumber: run.OriginalFileName,
-            Metadata: new Dictionary<string, object?>
-            {
-                ["mode"] = run.Mode,
-                ["status"] = run.Status,
-                ["originalFileName"] = run.OriginalFileName,
-                ["fileExtension"] = run.FileExtension,
-                ["contentSha256"] = run.ContentSha256,
-                ["importExecuted"] = false,
-                ["importState"] = "apply_request_cancelled"
-            }));
+            Metadata: auditMetadata));
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
@@ -550,6 +538,74 @@ public sealed class ImportService(
             }));
         await dbContext.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
+    private async Task<Dictionary<string, object?>> BuildAccessImportRunAuditMetadataAsync(
+        AccessImportRun run,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, object?>? additionalMetadata = null)
+    {
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["accessImportRunId"] = run.Id,
+            ["mode"] = run.Mode,
+            ["status"] = run.Status,
+            ["originalFileName"] = run.OriginalFileName,
+            ["fileExtension"] = run.FileExtension,
+            ["contentSha256"] = run.ContentSha256
+        };
+
+        if (additionalMetadata is not null)
+        {
+            foreach (var (key, value) in additionalMetadata)
+            {
+                metadata[key] = value;
+            }
+        }
+
+        var createdRecordsQuery = dbContext.AccessImportCreatedRecords
+            .AsNoTracking()
+            .Where(record => record.AccessImportRunId == run.Id);
+        var createdRecordCount = await createdRecordsQuery.CountAsync(cancellationToken);
+        var pendingRollbackRecordCount = await createdRecordsQuery
+            .CountAsync(record => record.RollbackStatus == "created", cancellationToken);
+        var sourceRowFingerprintCount = await createdRecordsQuery
+            .Select(record => record.SourceRowHash)
+            .Where(rowHash => rowHash != string.Empty)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        var targetEntityTypes = await createdRecordsQuery
+            .Select(record => record.TargetEntityType)
+            .Where(targetEntityType => targetEntityType != string.Empty)
+            .Distinct()
+            .OrderBy(targetEntityType => targetEntityType)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+        var sourceRowFingerprints = (await createdRecordsQuery
+                .OrderBy(record => record.TargetEntityType)
+                .ThenBy(record => record.TargetEntityId)
+                .Select(record => record.SourceRowHash)
+                .Where(rowHash => rowHash != string.Empty)
+                .Take(20)
+                .ToListAsync(cancellationToken))
+            .Distinct(StringComparer.Ordinal)
+            .Take(5)
+            .ToList();
+
+        metadata["importCreatedRecordCount"] = createdRecordCount;
+        metadata["importPendingRollbackRecordCount"] = pendingRollbackRecordCount;
+        metadata["sourceRowFingerprintCount"] = sourceRowFingerprintCount;
+        if (targetEntityTypes.Count > 0)
+        {
+            metadata["targetEntityTypes"] = string.Join(", ", targetEntityTypes);
+        }
+
+        if (sourceRowFingerprints.Count > 0)
+        {
+            metadata["sourceRowFingerprints"] = string.Join(", ", sourceRowFingerprints);
+        }
+
+        return metadata;
     }
 
     private void AddRunLog(AccessImportRun run, string level, string stepCode, string message, object details)
