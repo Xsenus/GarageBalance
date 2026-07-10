@@ -848,6 +848,33 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryReactCoverageIsMarkedCompleteWhenAuditPanelHasErrorAndRetryTests()
+    {
+        const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
+            .ToArray();
+
+        var reactCoverageLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("React tests", StringComparison.Ordinal) &&
+            line.Contains("retry загрузки журнала", StringComparison.Ordinal));
+
+        Assert.Contains("App.test.tsx", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("audit.read", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("CSV/XLSX", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("detail view", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("deep links", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("pagination", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("empty state", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("validation", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("retry загрузки карточки события", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("retry ошибок CSV/XLSX export", reactCoverageLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(ChangeHistoryReactCoverageIsMarkedCompleteWhenAuditPanelHasErrorAndRetryTests), reactCoverageLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChangeHistoryControllerTestCoverageIsMarkedCompleteWhenAuditControllerContractIsCovered()
     {
         var controllerTestsLine = File
