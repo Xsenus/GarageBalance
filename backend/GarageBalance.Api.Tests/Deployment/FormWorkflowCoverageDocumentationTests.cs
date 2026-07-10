@@ -76,6 +76,7 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "ResolveQuarantineItem",
             "StartOneCFreshSync",
             "RetryOneCFreshSync",
+            "RegisterReceiptPrintingAction",
             "ExportAccessImportRunReport",
             "ExportEventsXlsx"
         };
@@ -94,6 +95,7 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "Импорт Access",
             "rollback-заявка dry-run",
             "запуск и повтор 1C Fresh",
+            "печать, отмена и повтор квитанции",
             "Отчеты",
             "История изменений",
             "Тарифы-прототип",

@@ -36,6 +36,7 @@
 | Funds: operations | `CreateFundOperation` | `UpdateFundOperation` | Нет | `RestoreFundOperation` | `CancelFundOperation` | Нет | reverse via opposite `CreateFundOperation` |
 | Import Access | Нет | `ResolveQuarantineItem`, `CancelAccessImportApplyRequest` | Нет | Нет | `RequestAccessImportRollback` | `DryRunAccessImport`, `RequestAccessImportApply` | `ExportAccessImportRunReport` |
 | Integrations: 1C Fresh | Нет | `StartOneCFreshSync`, `RetryOneCFreshSync` | Нет | Нет | Нет | Нет | Нет |
+| Integrations: receipt printing | Нет | `RegisterReceiptPrintingAction` | Нет | Нет | `RegisterReceiptPrintingAction` | Нет | `RegisterReceiptPrintingAction` |
 | Reports | Нет | Нет | Нет | Нет | Нет | Нет | `Get*Report`, `Export*ReportXlsx`, `Export*ReportPdf` |
 | Audit | Нет | Нет | Нет | Нет | Нет | Нет | `ExportEvents`, `ExportEventsXlsx` |
 
@@ -64,6 +65,7 @@
 | Импорт Access | закрытие карантина | edit/resolve | Backend API | button action с audit; отдельного confirmation пока нет |
 | Импорт Access | JSON-отчет dry-run | export | Backend API | POST export, пишет audit |
 | Настройки | запуск и повтор 1C Fresh | edit | Backend API | confirmation с optional comment; `pending_adapter`, без plaintext refresh token |
+| История платежей гаража | печать, отмена и повтор квитанции | export/cancel | Backend API | icon-actions с confirmation; cancel/reprint требуют reason, `pending_adapter` до устройства |
 | Отчеты | фильтры и просмотр | generated/read | Backend API | generate/read, пишет audit для формирования |
 | Отчеты | XLSX/PDF export | export | Backend API | POST export, пишет audit |
 | История изменений | CSV/XLSX export | export | Backend API | export текущей выборки |

@@ -258,6 +258,21 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("conflict resolution остаются будущими срезами", integrationLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReceiptPrintingCoverageKeepsPartialStatusUntilRealDeviceAndAcceptanceAreImplemented()
+    {
+        var receiptLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Печать чеков/квитанций:", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[~]` Печать чеков/квитанций:", receiptLine, StringComparison.Ordinal);
+        Assert.Contains("печати, отмены и повторной печати квитанций", receiptLine, StringComparison.Ordinal);
+        Assert.Contains("pending_adapter", receiptLine, StringComparison.Ordinal);
+        Assert.Contains("device_error", receiptLine, StringComparison.Ordinal);
+        Assert.Contains("Фактический адаптер конкретного устройства", receiptLine, StringComparison.Ordinal);
+        Assert.Contains("ручная приемка на шаблоне квитанции остаются будущими срезами", receiptLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
