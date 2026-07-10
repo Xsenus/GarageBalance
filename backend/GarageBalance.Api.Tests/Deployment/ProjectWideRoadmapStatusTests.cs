@@ -85,6 +85,38 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void UpdateRequestDiffCoverageIsMarkedCompleteWhenCurrentServicesWriteOldAndNewValues()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var updateDiffLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Для update requests сохранять diff старого и нового состояния", StringComparison.Ordinal));
+
+        Assert.Contains("владельцы", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("гаражи", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("поставщики", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("тарифы", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("пользователи/назначенные роли", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("права роли", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("отделы персонала", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("сотрудники", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("операции фондов", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("OldValues/NewValues", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.staff_department_updated", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("dictionary.staff_member_updated", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_updated", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("users.role_permissions_updated", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryServiceTests", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("FundServiceTests", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("UserManagementServiceTests", updateDiffLine, StringComparison.Ordinal);
+        Assert.Contains("future update-модели", updateDiffLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultDeletionRuleIsMarkedCompleteWhenSoftArchiveCancelAndPolicyCoverageExist()
     {
         var deletionRuleLine = File
