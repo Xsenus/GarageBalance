@@ -33,6 +33,7 @@
 | Finance: owner accruals | `CreateAccrual` | `UpdateAccrual` | Нет | `RestoreAccrual` | `CancelAccrual` | Нет | `GenerateRegularAccruals`, `GenerateRegularCatalogAccruals` |
 | Finance: supplier accruals | `CreateSupplierAccrual` | `UpdateSupplierAccrual` | Нет | `RestoreSupplierAccrual` | `CancelSupplierAccrual` | Нет | `GenerateSupplierGroupSalaryAccruals` |
 | Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `RestoreMeterReading` | `CancelMeterReading` | Нет | Нет |
+| Funds: operations | `CreateFundOperation` | `UpdateFundOperation` | Нет | `RestoreFundOperation` | `CancelFundOperation` | Нет | reverse via opposite `CreateFundOperation` |
 | Import Access | Нет | `ResolveQuarantineItem` | Нет | Нет | Нет | `DryRunAccessImport` | `ExportAccessImportRunReport` |
 | Reports | Нет | Нет | Нет | Нет | Нет | Нет | `Get*Report`, `Export*ReportXlsx`, `Export*ReportPdf` |
 | Audit | Нет | Нет | Нет | Нет | Нет | Нет | `ExportEvents`, `ExportEventsXlsx` |
@@ -53,7 +54,7 @@
 | Платежи/финансы | финансовый редактор | create/edit | Backend API | закрытие с несохраненными изменениями требует confirmation; create/edit сохраняют через API |
 | Платежи/финансы | отмена записи | cancel | Backend API | confirmation с обязательной причиной |
 | Платежи-прототип | банк, выплата, начисление, полная оплата | create | React-state прототип | modal forms, без backend |
-| Управление фондами-прототип | пополнить/изъять фонд | create | React-state прототип | modal form с причиной |
+| Управление фондами | пополнить/изъять, изменить, отменить, восстановить, создать обратную операцию | create/edit/cancel/restore | Backend API | modal forms/dialogs с причиной, confirmation, restore и reverse |
 | Импорт Access | dry-run загрузка файла | import | Backend API | file validation, progress/status |
 | Импорт Access | закрытие карантина | edit/resolve | Backend API | button action с audit; отдельного confirmation пока нет |
 | Импорт Access | JSON-отчет dry-run | export | Backend API | POST export, пишет audit |

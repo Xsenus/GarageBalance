@@ -132,6 +132,16 @@
 | `finance.meter_reading_canceled` | `meter_reading` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
 | `finance.meter_reading_restored` | `meter_reading` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененного показания с проверкой активного дубля |
 
+## Funds
+
+| Action | Объект | Было/стало | Причина | Actor | Тесты | Примечание |
+|---|---|---|---|---|---|---|
+| `fund.operation_deposited` | `fund_operation` | Нет | Да | Да | `FundServiceTests` | пополнение фонда пересчитывает остаток фонда и доступную сумму распределения |
+| `fund.operation_withdrawn` | `fund_operation` | Нет | Да | Да | `FundServiceTests` | изъятие из фонда проверяет достаточность остатка |
+| `fund.operation_updated` | `fund_operation` | Да | Да | Да | `FundServiceTests`, `FundsControllerTests` | diff суммы и основания, no-op не создает событие |
+| `fund.operation_canceled` | `fund_operation` | Нет | Да | Да | `FundServiceTests`, `FundsControllerTests` | отмена требует reason и пересчитывает остаток |
+| `fund.operation_restored` | `fund_operation` | Нет | Нет | Да | `FundServiceTests`, `FundsControllerTests` | восстановление отмененной операции с проверкой активной последовательности и лимитов |
+
 ## Import
 
 | Action | Объект | Было/стало | Причина | Actor | Тесты | Примечание |

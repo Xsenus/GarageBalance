@@ -187,6 +187,25 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GenerateSupplierGroupSalaryAccruals", supplierAccrualsLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void FundsObjectCoverageIsMarkedCompleteWhenFundOperationsAuditCancelRestoreAndLimitsAreCovered()
+    {
+        var fundsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Фонды: пополнение", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Фонды:", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("FundService.CreateOperationAsync", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_deposited", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_withdrawn", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_updated", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_canceled", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("fund.operation_restored", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("обратная операция", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("Управление фондами", fundsLine, StringComparison.Ordinal);
+        Assert.Contains("доступный лимит", fundsLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

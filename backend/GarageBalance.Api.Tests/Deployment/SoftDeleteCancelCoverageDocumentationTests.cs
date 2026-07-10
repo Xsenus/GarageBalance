@@ -44,6 +44,8 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "IsActive = false",
             "ResolvedAtUtc",
             "причина обязательна",
+            "fund.operation_canceled",
+            "fund.operation_restored",
             "ControllerThinnessTests",
             "frontend/src/App.test.tsx",
             "React-state прототип"
