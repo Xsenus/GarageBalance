@@ -23,6 +23,7 @@ public sealed class SoftDeleteCancelCoverageDocumentationTests
             "ArchiveChargeServiceSettingAsync",
             "RestoreChargeServiceSettingAsync",
             "CancelOperationAsync",
+            "RestoreOperationAsync",
             "CancelAccrualAsync",
             "CancelSupplierAccrualAsync",
             "CancelMeterReadingAsync",

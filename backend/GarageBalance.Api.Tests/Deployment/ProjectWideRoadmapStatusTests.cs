@@ -111,6 +111,25 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("missing readings", meterReadingsLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OwnerPaymentsObjectCoverageIsMarkedCompleteWhenIncomeDebtRestoreAndFullPaymentFlowsAreCovered()
+    {
+        var ownerPaymentsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Платежи владельцев: создание", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Платежи владельцев:", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.income_created", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.income_updated", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.operation_canceled", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.operation_restored", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("CreateGarageDebtPayment", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.debt_transfer_created", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("finance.debt_transfer_updated", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("Полная оплата", ownerPaymentsLine, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheet", ownerPaymentsLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

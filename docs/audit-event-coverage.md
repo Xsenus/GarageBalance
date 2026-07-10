@@ -38,7 +38,7 @@
 | Auth | 7 | actor для известных пользователей, metadata без паролей, rate-limit audit | у неизвестного email actor отсутствует по природе сценария; нет `было/стало` |
 | Users | 3 | create/update/restore, diff и причина отключения | отдельной матрицы прав пока нет |
 | Dictionaries | 32 | create/update/archive/restore для текущих справочников, diff на update, причина archive | начисление участников сборов и полная UI-связка сборов остаются следующим срезом |
-| Finance | 16 | create/update/cancel/generate, diff на update, связанные месяц/гараж/контрагент/документ | restore финансовых операций зависит от бизнес-решения |
+| Finance | 21 | create/update/cancel/restore/generate, diff на update, связанные месяц/гараж/контрагент/документ, перенос задолженности | следующие объектные строки начислений и выплат синхронизируются отдельными срезами |
 | Import | 5 | dry-run, отчет, карантин, fingerprints, безопасная metadata | фактический импорт/rollback еще не завершены |
 | Integrations | 1 | secret upsert без plaintext-секретов, diff состояния секрета | запуск синхронизации и конфликты будущих интеграций впереди |
 | Reports | 6 | формирование/выгрузка, период, строка, формат, audit-writing export через POST | тест прямо закрепляет income export; остальные report actions покрыты общими report-service и endpoint тестами |
@@ -113,9 +113,12 @@
 | `finance.expense_created` | `financial_operation` | Нет | Нет | Да | `FinanceServiceTests` | поставщик, месяц, документ и сумма в structured metadata |
 | `finance.expense_updated` | `financial_operation` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, даты, месяца, документа, комментария |
 | `finance.operation_canceled` | `financial_operation` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason; audit reason пока нормализован как отмена записи, а текстовая причина остается в summary |
+| `finance.operation_restored` | `financial_operation` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененной операции с проверкой активного документа и кассово-банковских лимитов |
 | `finance.accrual_created` | `accrual` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, вид начисления |
 | `finance.accrual_updated` | `accrual` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, месяца, источника, комментария |
 | `finance.accrual_canceled` | `accrual` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
+| `finance.debt_transfer_created` | `accrual` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | перенос задолженности владельца в целевой месяц |
+| `finance.debt_transfer_updated` | `accrual` | Да | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | дозапись суммы переноса задолженности в существующее системное начисление |
 | `finance.supplier_accrual_created` | `supplier_accrual` | Нет | Нет | Да | `FinanceServiceTests` | поставщик, месяц, документ |
 | `finance.supplier_accrual_updated` | `supplier_accrual` | Да | Нет | Да | `FinanceServiceTests` | diff суммы, месяца, документа, комментария |
 | `finance.supplier_accrual_canceled` | `supplier_accrual` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |

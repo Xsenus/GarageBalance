@@ -29,7 +29,7 @@
 | Dictionaries: income types | `CreateIncomeType` | `UpdateIncomeType` | `ArchiveIncomeType` | `RestoreIncomeType` | Нет | Нет | Нет |
 | Dictionaries: expense types | `CreateExpenseType` | `UpdateExpenseType` | `ArchiveExpenseType` | `RestoreExpenseType` | Нет | Нет | Нет |
 | Dictionaries: tariffs | `CreateTariff` | `UpdateTariff` | `ArchiveTariff` | `RestoreTariff` | Нет | Нет | Нет |
-| Finance: operations | `CreateIncome`, `CreateExpense` | `UpdateOperation` | Нет | `[decision]` | `CancelOperation` | Нет | Нет |
+| Finance: operations | `CreateIncome`, `CreateExpense`, `CreateGarageDebtPayment` | `UpdateOperation` | Нет | `RestoreOperation` | `CancelOperation` | Нет | Нет |
 | Finance: owner accruals | `CreateAccrual` | `UpdateAccrual` | Нет | `[decision]` | `CancelAccrual` | Нет | `GenerateRegularAccruals` |
 | Finance: supplier accruals | `CreateSupplierAccrual` | `UpdateSupplierAccrual` | Нет | `[decision]` | `CancelSupplierAccrual` | Нет | `GenerateSupplierGroupSalaryAccruals` |
 | Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `RestoreMeterReading` | `CancelMeterReading` | Нет | Нет |
