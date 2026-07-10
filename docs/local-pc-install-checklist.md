@@ -52,7 +52,9 @@ Cors__AllowedOrigins__0=http://127.0.0.1:5173
 
 - [ ] Скопировать `.env.example` в `.env`.
 - [ ] Заменить `POSTGRES_PASSWORD` и `JWT_SIGNING_KEY` на реальные значения.
-- [ ] Оставить локальные порты без публикации наружу: `POSTGRES_PORT=5432`, `API_PORT=5080`, `FRONTEND_PORT=5173`.
+- [ ] Оставить локальные bind-адреса без публикации наружу: `POSTGRES_BIND_ADDRESS=127.0.0.1`, `API_BIND_ADDRESS=127.0.0.1`, `FRONTEND_BIND_ADDRESS=127.0.0.1`.
+- [ ] Оставить локальные порты: `POSTGRES_PORT=5432`, `API_PORT=5080`, `FRONTEND_PORT=5173`, `FRONTEND_ORIGIN=http://127.0.0.1:5173`.
+- [ ] Проверить путь для backup mount: `BACKUP_HOST_PATH=./backups` или отдельная локальная папка вне Git.
 - [ ] Запустить:
 
 ```powershell

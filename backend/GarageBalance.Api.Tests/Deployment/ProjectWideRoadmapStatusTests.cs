@@ -2239,6 +2239,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("dockerfile: backend/GarageBalance.Api/Dockerfile", dockerComposeText, StringComparison.Ordinal);
         Assert.Contains("dockerfile: frontend/Dockerfile", dockerComposeText, StringComparison.Ordinal);
         Assert.Contains("postgres:17-alpine", dockerComposeText, StringComparison.Ordinal);
+        Assert.Contains("\"${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080\"", dockerComposeText, StringComparison.Ordinal);
+        Assert.Contains("\"${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80\"", dockerComposeText, StringComparison.Ordinal);
         Assert.Contains("dotnet publish", backendDockerfileText, StringComparison.Ordinal);
         Assert.Contains("nginx", frontendDockerfileText, StringComparison.OrdinalIgnoreCase);
 
@@ -2297,6 +2299,49 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("пункт Stage 11 \"Актуализировать Dockerfile API и frontend\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
         Assert.Contains("FrontendDockerfileTests.DockerfileUsesNodeBuildStageNginxRuntimeAndSpaCachePolicy", historyText, StringComparison.Ordinal);
         Assert.Contains("live `docker build`, `docker compose up --build`, container healthchecks", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StageElevenDockerComposeRemainsBlockedWithoutDockerCliButHasFinalLocalStructure()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var composeText = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
+        var envExampleText = File.ReadAllText(Path.Combine(repositoryRoot, ".env.example"));
+        var gitIgnoreText = File.ReadAllText(Path.Combine(repositoryRoot, ".gitignore"));
+
+        var composeLine = activeRoadmapLines.Single(line =>
+            line.Contains("Актуализировать `docker-compose.yml` под финальную структуру", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", composeLine, StringComparison.Ordinal);
+        Assert.Contains("DockerComposeTests", composeLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", composeLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenDockerComposeRemainsBlockedWithoutDockerCliButHasFinalLocalStructure", composeLine, StringComparison.Ordinal);
+
+        Assert.Contains("POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before running docker compose}", composeText, StringComparison.Ordinal);
+        Assert.Contains("Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env before running docker compose}", composeText, StringComparison.Ordinal);
+        Assert.Contains("ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}", composeText, StringComparison.Ordinal);
+        Assert.Contains("\"${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432\"", composeText, StringComparison.Ordinal);
+        Assert.Contains("\"${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080\"", composeText, StringComparison.Ordinal);
+        Assert.Contains("\"${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80\"", composeText, StringComparison.Ordinal);
+        Assert.Contains("${BACKUP_HOST_PATH:-./backups}:/backups", composeText, StringComparison.Ordinal);
+        Assert.Contains("condition: service_healthy", composeText, StringComparison.Ordinal);
+
+        Assert.Contains("POSTGRES_BIND_ADDRESS=127.0.0.1", envExampleText, StringComparison.Ordinal);
+        Assert.Contains("API_BIND_ADDRESS=127.0.0.1", envExampleText, StringComparison.Ordinal);
+        Assert.Contains("FRONTEND_BIND_ADDRESS=127.0.0.1", envExampleText, StringComparison.Ordinal);
+        Assert.Contains("FRONTEND_ORIGIN=http://127.0.0.1:5173", envExampleText, StringComparison.Ordinal);
+        Assert.Contains("BACKUP_HOST_PATH=./backups", envExampleText, StringComparison.Ordinal);
+        Assert.Contains("backups/", gitIgnoreText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Актуализировать `docker-compose.yml` под финальную структуру\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("DockerComposeTests.ComposeDefinesServiceHealthChecksAndStartupOrder", historyText, StringComparison.Ordinal);
+        Assert.Contains("live `docker compose up --build`, container healthchecks", historyText, StringComparison.Ordinal);
         Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
     }
 

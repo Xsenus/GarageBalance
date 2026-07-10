@@ -6,11 +6,12 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-garagebalance}
       POSTGRES_USER: ${POSTGRES_USER:-garagebalance}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-garagebalance_dev_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before running docker compose}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ${BACKUP_HOST_PATH:-./backups}:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-garagebalance} -d ${POSTGRES_DB:-garagebalance}"]
       interval: 10s
@@ -26,13 +27,13 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-garagebalance};Username=${POSTGRES_USER:-garagebalance};Password=${POSTGRES_PASSWORD:-garagebalance_dev_password}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY:-change-this-development-key-before-real-data-32}
-      Cors__AllowedOrigins__0: http://localhost:${FRONTEND_PORT:-5173}
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-garagebalance};Username=${POSTGRES_USER:-garagebalance};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before running docker compose}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env before running docker compose}
+      Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-http://127.0.0.1:5173}
     ports:
-      - "${API_PORT:-5080}:8080"
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health > /dev/null"]
       interval: 10s
@@ -48,7 +49,7 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/"]
       interval: 10s

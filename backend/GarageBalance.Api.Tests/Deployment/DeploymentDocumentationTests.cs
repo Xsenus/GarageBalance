@@ -33,6 +33,10 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("ConnectionStrings__DefaultConnection", document, StringComparison.Ordinal);
         Assert.Contains("JWT_SIGNING_KEY", document, StringComparison.Ordinal);
         Assert.Contains("docker compose up --build -d", document, StringComparison.Ordinal);
+        Assert.Contains("POSTGRES_BIND_ADDRESS=127.0.0.1", document, StringComparison.Ordinal);
+        Assert.Contains("API_BIND_ADDRESS=127.0.0.1", document, StringComparison.Ordinal);
+        Assert.Contains("FRONTEND_BIND_ADDRESS=127.0.0.1", document, StringComparison.Ordinal);
+        Assert.Contains("BACKUP_HOST_PATH=./backups", document, StringComparison.Ordinal);
         Assert.Contains("check-local-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("dotnet tool run dotnet-ef database update", document, StringComparison.Ordinal);
         Assert.Contains("VITE_API_BASE_URL=\"http://127.0.0.1:5080\"", document, StringComparison.Ordinal);
