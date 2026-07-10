@@ -8,6 +8,8 @@ namespace GarageBalance.Api.Controllers;
 [ApiController]
 [Authorize(Policy = SystemPermissions.AuditRead)]
 [Route("api/audit")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public sealed class AuditController(IAuditService auditService) : ControllerBase
 {
     private const string InvalidDateRangeTitle = "Проверьте период истории";

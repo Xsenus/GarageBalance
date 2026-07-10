@@ -19,6 +19,12 @@ public sealed class AuditControllerTests
             .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.AuditRead);
         Assert.NotNull(controllerPolicy);
 
+        var responseTypes = typeof(AuditController)
+            .GetCustomAttributes<ProducesResponseTypeAttribute>(inherit: true)
+            .ToList();
+        Assert.Contains(responseTypes, attribute => attribute.StatusCode == StatusCodes.Status401Unauthorized && attribute.Type == typeof(ProblemDetails));
+        Assert.Contains(responseTypes, attribute => attribute.StatusCode == StatusCodes.Status403Forbidden && attribute.Type == typeof(ProblemDetails));
+
         var route = typeof(AuditController)
             .GetCustomAttributes<RouteAttribute>(inherit: true)
             .Single();
@@ -29,6 +35,16 @@ public sealed class AuditControllerTests
         Assert.Equal("events/{id:guid}", GetSingleHttpGetTemplate(nameof(AuditController.GetEvent)));
         Assert.Equal("events/export", GetSingleHttpGetTemplate(nameof(AuditController.ExportEvents)));
         Assert.Equal("events/export/xlsx", GetSingleHttpGetTemplate(nameof(AuditController.ExportEventsXlsx)));
+
+        var auditActions = typeof(AuditController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<HttpGetAttribute>(inherit: true).Any())
+            .ToList();
+        Assert.All(auditActions, action =>
+        {
+            Assert.Empty(action.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true));
+            Assert.DoesNotContain(action.GetCustomAttributes<AuthorizeAttribute>(inherit: true), attribute => attribute.Policy != SystemPermissions.AuditRead);
+        });
     }
 
     [Fact]
