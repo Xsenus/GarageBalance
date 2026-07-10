@@ -827,6 +827,47 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessWorkingCopyRoadmapItemRemainsBlockedUntilPrivateCopyChecksumAndPrivacyCheckExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-working-copy-checklist.md"));
+        var gitignore = File.ReadAllText(Path.Combine(repositoryRoot, ".gitignore"));
+        var privacyScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "verify-package-privacy.ps1"));
+        var securityPolicy = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "security-data-protection.md"));
+
+        var copyLine = activeRoadmapLines.Single(line =>
+            line.Contains("Создать копию исходной Access-БД для экспериментов", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Создать копию исходной Access-БД", copyLine, StringComparison.Ordinal);
+        Assert.Contains("Реальный `.accdb/.mdb` файл отсутствует", copyLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-working-copy-checklist.md", copyLine, StringComparison.Ordinal);
+        Assert.Contains("SHA-256/размера", copyLine, StringComparison.Ordinal);
+        Assert.Contains("оригинал не изменялся", copyLine, StringComparison.Ordinal);
+        Assert.Contains("AccessWorkingCopyRoadmapItemRemainsBlockedUntilPrivateCopyChecksumAndPrivacyCheckExist", copyLine, StringComparison.Ordinal);
+
+        Assert.Contains("C:\\GarageBalance\\Imports", checklist, StringComparison.Ordinal);
+        Assert.Contains("private-imports/", checklist, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash -Algorithm SHA256", checklist, StringComparison.Ordinal);
+        Assert.Contains("Copy-Item -LiteralPath", checklist, StringComparison.Ordinal);
+        Assert.Contains("Оригинальный `.accdb` или `.mdb` файл не изменяется", checklist, StringComparison.Ordinal);
+        Assert.Contains("infrastructure/scripts/verify-package-privacy.ps1", checklist, StringComparison.Ordinal);
+        Assert.Contains("private-imports/", gitignore, StringComparison.Ordinal);
+        Assert.Contains("imports/private/", gitignore, StringComparison.Ordinal);
+        Assert.Contains("imports/raw/", gitignore, StringComparison.Ordinal);
+        Assert.Contains(@"\.(accdb|mdb|pgdump|dump|backup|bak|db|sqlite|sqlite3)$", privacyScript, StringComparison.Ordinal);
+        Assert.Contains("Оригинал Access-БД не изменять", securityPolicy, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Создать копию исходной Access-БД", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessWorkingCopyRoadmapItemRemainsBlockedUntilPrivateCopyChecksumAndPrivacyCheckExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
