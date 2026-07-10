@@ -734,6 +734,36 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryControllerTestCoverageIsMarkedCompleteWhenAuditControllerContractIsCovered()
+    {
+        var controllerTestsLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("controller tests: success", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditController", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditControllerTests", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AuditServiceTests", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerAuthorizationCoverageTests", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ApiAuthorizationMiddlewareResultHandlerTests", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("success/list/detail/page", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("CSV/XLSX export", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("filters", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("pagination", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("validation", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("limit", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("offset", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("masking", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("audit.read", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AllowAnonymous", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("401/403 problem details", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ProducesResponseType", controllerTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ChangeHistoryController", controllerTestsLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
