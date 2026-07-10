@@ -2529,6 +2529,51 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenMigrationVerificationRemainsBlockedWithoutLocalPostgresButHasChecklistAndScript()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "migration-verification-checklist.md"));
+        var script = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "generate-migration-script.ps1"));
+
+        var migrationLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить миграции на чистой базе и на базе после импорта", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("generate-migration-script.ps1", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("migration-verification-checklist.md", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_migration_clean_check", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_migration_import_check", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("post-import базы", migrationLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenMigrationVerificationRemainsBlockedWithoutLocalPostgresButHasChecklistAndScript", migrationLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Проверить миграции", migrationLine, StringComparison.Ordinal);
+
+        Assert.Contains("--idempotent", script, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptPath=", script, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptBytes=", script, StringComparison.Ordinal);
+        Assert.Contains("Migration script is empty", script, StringComparison.Ordinal);
+
+        Assert.Contains("Условия финального закрытия проверки миграций", checklist, StringComparison.Ordinal);
+        Assert.Contains("check-local-postgres.ps1 -RequirePsql", checklist, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef database update", checklist, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef migrations list", checklist, StringComparison.Ordinal);
+        Assert.Contains("import run, quarantine, audit", checklist, StringComparison.Ordinal);
+        Assert.Contains("без персональных, финансовых и импортных данных", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Проверить миграции на чистой базе и на базе после импорта\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("live `dotnet-ef database update` на чистой PostgreSQL", historyText, StringComparison.Ordinal);
+        Assert.Contains("post-import базы", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();

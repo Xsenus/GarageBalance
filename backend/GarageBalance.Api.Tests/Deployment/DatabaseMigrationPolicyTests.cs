@@ -203,11 +203,13 @@ public sealed class DatabaseMigrationPolicyTests
     [Fact]
     public void MigrationScriptGeneratorCreatesIdempotentSqlArtifact()
     {
+        var repositoryRoot = FindRepositoryRoot();
         var script = File.ReadAllText(Path.Combine(
-            FindRepositoryRoot(),
+            repositoryRoot,
             "infrastructure",
             "scripts",
             "generate-migration-script.ps1"));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "migration-verification-checklist.md"));
 
         Assert.Contains("[CmdletBinding()]", script, StringComparison.Ordinal);
         Assert.Contains("artifacts\\deploy-migrations.sql", script, StringComparison.Ordinal);
@@ -221,6 +223,18 @@ public sealed class DatabaseMigrationPolicyTests
         Assert.Contains("Migration script is empty", script, StringComparison.Ordinal);
         Assert.Contains("migrationScriptPath=", script, StringComparison.Ordinal);
         Assert.Contains("migrationScriptBytes=", script, StringComparison.Ordinal);
+
+        Assert.Contains("garagebalance_migration_clean_check", checklist, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_migration_import_check", checklist, StringComparison.Ordinal);
+        Assert.Contains("check-local-postgres.ps1 -RequirePsql", checklist, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=OK", checklist, StringComparison.Ordinal);
+        Assert.Contains("generate-migration-script.ps1", checklist, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptPath=...", checklist, StringComparison.Ordinal);
+        Assert.Contains("migrationScriptBytes=...", checklist, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef database update", checklist, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef migrations list", checklist, StringComparison.Ordinal);
+        Assert.Contains("Условия финального закрытия проверки миграций", checklist, StringComparison.Ordinal);
+        Assert.Contains("без персональных, финансовых и импортных данных", checklist, StringComparison.Ordinal);
     }
 
     [Fact]
