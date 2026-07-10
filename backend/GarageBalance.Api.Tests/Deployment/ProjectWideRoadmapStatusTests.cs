@@ -42,6 +42,31 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void CurrentRestoreConflictChecksAreMarkedCompleteWhenBusinessRulesAreCovered()
+    {
+        var restoreConflictLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+                line.Contains("Восстановление проверяет конфликты уникальности", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("номер гаража", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("активную группу/поставщика/контакт", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("активный отдел сотрудника", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("название активного тарифа/услуги/нерегулярного платежа/сбора", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("активные финансовые документы", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("кассу/банк", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("лимит сотрудника", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("дубли начислений и показаний", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryServiceTests", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceServiceTests", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("FundsControllerTests", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("SoftDeleteCancelCoverageDocumentationTests", restoreConflictLine, StringComparison.Ordinal);
+        Assert.Contains("будущие restore-модели", restoreConflictLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File
