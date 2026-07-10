@@ -1542,6 +1542,49 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageEightInfrastructureChecksRemainBlockedWithoutRequiredLocalTools()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var dockerComposeText = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
+        var backendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Dockerfile"));
+        var frontendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "Dockerfile"));
+        var localInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+
+        var dockerBuildLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить Docker Compose build", StringComparison.Ordinal));
+        var localInstallLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить локальный сценарий установки без Docker", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", dockerBuildLine, StringComparison.Ordinal);
+        Assert.Contains("docker=missing", dockerBuildLine, StringComparison.Ordinal);
+        Assert.Contains("docker compose build", dockerBuildLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Проверить Docker Compose build", dockerBuildLine, StringComparison.Ordinal);
+        Assert.Contains("dockerfile: backend/GarageBalance.Api/Dockerfile", dockerComposeText, StringComparison.Ordinal);
+        Assert.Contains("dockerfile: frontend/Dockerfile", dockerComposeText, StringComparison.Ordinal);
+        Assert.Contains("postgres:17-alpine", dockerComposeText, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish", backendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("nginx", frontendDockerfileText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.StartsWith("- `[!]`", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("psql/createuser/createdb", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("VITE_API_BASE_URL=http://127.0.0.1:5080", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("Проверить локальную PostgreSQL перед миграциями", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("dotnet tool run dotnet-ef database update", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS http://127.0.0.1:5080/health", localInstallText, StringComparison.Ordinal);
+
+        Assert.Contains("StageEightInfrastructureChecksRemainBlockedWithoutRequiredLocalTools", historyText, StringComparison.Ordinal);
+        Assert.Contains("docker` CLI отсутствует", historyText, StringComparison.Ordinal);
+        Assert.Contains("psql/createuser/createdb", historyText, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish backend/GarageBalance.Api/GarageBalance.Api.csproj -c Release --no-restore", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
