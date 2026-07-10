@@ -1540,6 +1540,67 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshBackendCoverageIsMarkedCompleteWhenClientMappingRetryErrorsAndPermissionsAreTested()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var backendCoverageLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты клиента, маппинга, ошибок, retry и прав", StringComparison.Ordinal));
+        var adapterTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncAdapterTests.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "OneCFreshSyncServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Integrations",
+            "IntegrationsControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Auth",
+            "ControllerAuthorizationCoverageTests.cs"));
+
+        Assert.StartsWith("- `[x]`", backendCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncAdapterTests", backendCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncServiceTests", backendCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("IntegrationsControllerTests", backendCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerAuthorizationCoverageTests", backendCoverageLine, StringComparison.Ordinal);
+        Assert.Contains("без изменений пользовательского поведения", backendCoverageLine, StringComparison.Ordinal);
+
+        Assert.Contains("DisabledAdapter_ReturnsPendingStatusWithoutLeakingRequestData", adapterTestsText, StringComparison.Ordinal);
+        Assert.Contains("AdapterResultFactories_PreserveExternalRunConflictAndErrorMappingData", adapterTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_ForwardsTrimmedCommentRetryFlagAndCancellationTokenToAdapter", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_MapsStartedStatusToWatchStatusWithoutRetry", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_MapsRetryableAdapterStatusesAndErrorCodes", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartSyncAsync_MapsConflictStatusFamiliesToResolutionRequired", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("PreviewSyncAsync_CreatesAuditEventWithoutCallingAdapterOrPlaintextToken", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetrySyncAsync_CreatesSeparateAuditEventWithoutPlaintextToken", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetryOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("PreviewOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("StartOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("RetryOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("PreviewOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshBackendCoverageIsMarkedCompleteWhenClientMappingRetryErrorsAndPermissionsAreTested", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1862,8 +1923,10 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("one_c_fresh.sync_retry_requested", integrationLine, StringComparison.Ordinal);
         Assert.Contains("pending_adapter", integrationLine, StringComparison.Ordinal);
         Assert.Contains("без plaintext-токена", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("backend regression coverage", integrationLine, StringComparison.Ordinal);
         Assert.Contains("Реальный обмен с 1C Fresh", integrationLine, StringComparison.Ordinal);
-        Assert.Contains("conflict resolution остаются будущими срезами", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("React coverage финального среза", integrationLine, StringComparison.Ordinal);
+        Assert.Contains("conflict resolution остаются будущими задачами", integrationLine, StringComparison.Ordinal);
     }
 
     [Fact]
