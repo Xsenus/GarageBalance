@@ -34,7 +34,7 @@
 | Finance: supplier accruals | `CreateSupplierAccrual` | `UpdateSupplierAccrual` | Нет | `RestoreSupplierAccrual` | `CancelSupplierAccrual` | Нет | `GenerateSupplierGroupSalaryAccruals` |
 | Finance: meter readings | `CreateMeterReading` | `UpdateMeterReading` | Нет | `RestoreMeterReading` | `CancelMeterReading` | Нет | Нет |
 | Funds: operations | `CreateFundOperation` | `UpdateFundOperation` | Нет | `RestoreFundOperation` | `CancelFundOperation` | Нет | reverse via opposite `CreateFundOperation` |
-| Import Access | Нет | `ResolveQuarantineItem` | Нет | Нет | Нет | `DryRunAccessImport` | `ExportAccessImportRunReport` |
+| Import Access | Нет | `ResolveQuarantineItem`, `CancelAccessImportApplyRequest` | Нет | Нет | `RequestAccessImportRollback` | `DryRunAccessImport`, `RequestAccessImportApply` | `ExportAccessImportRunReport` |
 | Reports | Нет | Нет | Нет | Нет | Нет | Нет | `Get*Report`, `Export*ReportXlsx`, `Export*ReportPdf` |
 | Audit | Нет | Нет | Нет | Нет | Нет | Нет | `ExportEvents`, `ExportEventsXlsx` |
 
@@ -57,6 +57,9 @@
 | Платежи-прототип | выплата, начисление, полная оплата | create | React-state прототип | modal forms, без backend |
 | Управление фондами | пополнить/изъять, изменить, отменить, восстановить, создать обратную операцию | create/edit/cancel/restore | Backend API | modal forms/dialogs с причиной, confirmation, restore и reverse |
 | Импорт Access | dry-run загрузка файла | import | Backend API | file validation, progress/status |
+| Импорт Access | заявка на фактический импорт | import | Backend API | confirmation с причиной и подтверждением backup; статус `import_requested` |
+| Импорт Access | отмена заявки на импорт | cancel | Backend API | confirmation с обязательной причиной; статус `import_request_cancelled` |
+| Импорт Access | rollback-заявка dry-run | cancel | Backend API | confirmation с обязательной причиной; фактический rollback не выполняется |
 | Импорт Access | закрытие карантина | edit/resolve | Backend API | button action с audit; отдельного confirmation пока нет |
 | Импорт Access | JSON-отчет dry-run | export | Backend API | POST export, пишет audit |
 | Отчеты | фильтры и просмотр | generated/read | Backend API | generate/read, пишет audit для формирования |

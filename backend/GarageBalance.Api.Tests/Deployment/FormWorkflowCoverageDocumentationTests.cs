@@ -70,6 +70,9 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "RestoreFundOperation",
             "FundsClient.createOperation",
             "DryRunAccessImport",
+            "RequestAccessImportApply",
+            "CancelAccessImportApplyRequest",
+            "RequestAccessImportRollback",
             "ResolveQuarantineItem",
             "ExportAccessImportRunReport",
             "ExportEventsXlsx"
@@ -87,6 +90,7 @@ public sealed class FormWorkflowCoverageDocumentationTests
             "Платежи-прототип",
             "Управление фондами",
             "Импорт Access",
+            "rollback-заявка dry-run",
             "Отчеты",
             "История изменений",
             "Тарифы-прототип",

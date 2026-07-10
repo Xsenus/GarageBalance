@@ -226,6 +226,23 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("reports.bank_deposits_exported", cashAndBankLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
+    {
+        var importLine = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .Single(line => line.Contains("Импорт Access: dry-run", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[~]` Импорт Access:", importLine, StringComparison.Ordinal);
+        Assert.Contains("Reader Access", importLine, StringComparison.Ordinal);
+        Assert.Contains("import.apply_requested", importLine, StringComparison.Ordinal);
+        Assert.Contains("import.apply_request_cancelled", importLine, StringComparison.Ordinal);
+        Assert.Contains("import.rollback_requested", importLine, StringComparison.Ordinal);
+        Assert.Contains("backup confirmation", importLine, StringComparison.Ordinal);
+        Assert.Contains("Фактический перенос строк Access", importLine, StringComparison.Ordinal);
+        Assert.Contains("настоящий rollback созданных записей остаются следующими срезами", importLine, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

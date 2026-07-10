@@ -148,6 +148,9 @@
 |---|---|---|---|---|---|---|
 | `import.access_dry_run` | `access_import_run` | Нет | Нет | Да | `ImportServiceTests` | file name, run id и безопасная metadata |
 | `import.access_dry_run_report_exported` | `access_import_run` | Нет | Нет | Да | `ImportServiceTests`, `ImportControllerTests` | export endpoint использует POST, потому пишет audit |
+| `import.apply_requested` | `access_import_run` | Нет | Да | Да | `ImportServiceTests`, `ImportControllerTests` | заявка на фактический импорт требует reason и backup confirmation; данные еще не переносятся |
+| `import.apply_request_cancelled` | `access_import_run` | Нет | Да | Да | `ImportServiceTests`, `ImportControllerTests` | отмена активной заявки на импорт требует reason и не трогает данные |
+| `import.rollback_requested` | `access_import_run` | Нет | Да | Да | `ImportServiceTests`, `ImportControllerTests` | rollback-заявка для dry-run фиксирует, что фактический откат данных не выполнялся |
 | `import.quarantine_registered` | `access_import_quarantine_item` | Нет | Да | Да | `ImportQuarantineServiceTests` | reason code хранится как причина/metadata |
 | `import.quarantine_resolved` | `access_import_quarantine_item` | Нет | Да | Да | `ImportQuarantineServiceTests`, `ImportControllerTests` | resolution comment пишется как reason |
 | `import.row_fingerprint_registered` | `access_import_row_fingerprint` | Нет | Нет | Да | `ImportFingerprintServiceTests` | защищает idempotency импортных строк |
