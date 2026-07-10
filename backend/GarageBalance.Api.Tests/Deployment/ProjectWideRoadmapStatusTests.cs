@@ -1641,6 +1641,75 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingDesignIsMarkedCompleteWhenFormsAdapterAuditPermissionsAndTestsAreDocumented()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var designLine = activeRoadmapLines.Single(line =>
+            line.Contains("Спроектировать печатные формы и интеграционный слой", StringComparison.Ordinal));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-design.md"));
+        var adapterText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "ReceiptPrintingAdapter.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "ReceiptPrintingService.cs"));
+        var projectWideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"));
+
+        Assert.StartsWith("- `[x]`", designLine, StringComparison.Ordinal);
+        Assert.Contains("docs/receipt-printing-design.md", designLine, StringComparison.Ordinal);
+        Assert.Contains("внутреннюю квитанцию", designLine, StringComparison.Ordinal);
+        Assert.Contains("фискальный чек", designLine, StringComparison.Ordinal);
+        Assert.Contains("IReceiptPrintingAdapter", designLine, StringComparison.Ordinal);
+        Assert.Contains("[decision]", designLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Receipt Printing Design", designText, StringComparison.Ordinal);
+        Assert.Contains("Internal Receipt", designText, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Receipt", designText, StringComparison.Ordinal);
+        Assert.Contains("IntegrationsController", designText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingService", designText, StringComparison.Ordinal);
+        Assert.Contains("IReceiptPrintingAdapter", designText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingAdapterRequest", designText, StringComparison.Ordinal);
+        Assert.Contains("pending_adapter", designText, StringComparison.Ordinal);
+        Assert.Contains("printed", designText, StringComparison.Ordinal);
+        Assert.Contains("device_error", designText, StringComparison.Ordinal);
+        Assert.Contains("template_error", designText, StringComparison.Ordinal);
+        Assert.Contains("fiscalization_error", designText, StringComparison.Ordinal);
+        Assert.Contains("receipt.print_requested", designText, StringComparison.Ordinal);
+        Assert.Contains("receipt.print_canceled", designText, StringComparison.Ordinal);
+        Assert.Contains("receipt.reprint_requested", designText, StringComparison.Ordinal);
+        Assert.Contains("payments.write", designText, StringComparison.Ordinal);
+        Assert.Contains("Plaintext-секреты", designText, StringComparison.Ordinal);
+        Assert.Contains("Test Plan", designText, StringComparison.Ordinal);
+        Assert.Contains("Definition Of Done", designText, StringComparison.Ordinal);
+        Assert.Contains("`[decision]` Legal scenario", designText, StringComparison.Ordinal);
+        Assert.Contains("`[acceptance]` Real print", designText, StringComparison.Ordinal);
+
+        Assert.Contains("public interface IReceiptPrintingAdapter", adapterText, StringComparison.Ordinal);
+        Assert.Contains("public sealed record ReceiptPrintingAdapterRequest", adapterText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingAdapterResult.Pending", adapterText, StringComparison.Ordinal);
+        Assert.Contains("\"receipt.print_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"receipt.print_canceled\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("\"receipt.reprint_requested\"", serviceText, StringComparison.Ordinal);
+        Assert.Contains("payments.write", designText, StringComparison.Ordinal);
+        Assert.Contains("docs/receipt-printing-design.md", projectWideText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingDesignIsMarkedCompleteWhenFormsAdapterAuditPermissionsAndTestsAreDocumented", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InteractiveShellPrototypeIsMarkedCompleteWhenNavigationSearchDialogsTablesAndResponsiveTestsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
