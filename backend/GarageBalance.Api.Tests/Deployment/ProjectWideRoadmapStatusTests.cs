@@ -2257,6 +2257,50 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenDockerfilesRemainBlockedWithoutDockerCliButHaveStaticCoverage()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var backendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Dockerfile"));
+        var frontendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "Dockerfile"));
+        var nginxConfigText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "nginx.conf"));
+        var composeText = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
+
+        var dockerfileLine = activeRoadmapLines.Single(line =>
+            line.Contains("Актуализировать Dockerfile API и frontend", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", dockerfileLine, StringComparison.Ordinal);
+        Assert.Contains("BackendDockerfileTests", dockerfileLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendDockerfileTests", dockerfileLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", dockerfileLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenDockerfilesRemainBlockedWithoutDockerCliButHaveStaticCoverage", dockerfileLine, StringComparison.Ordinal);
+
+        Assert.Contains("FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build", backendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("RUN dotnet publish backend/GarageBalance.Api/GarageBalance.Api.csproj -c Release -o /app/publish --no-restore", backendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime", backendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("ENV ASPNETCORE_URLS=http://+:8080", backendDockerfileText, StringComparison.Ordinal);
+
+        Assert.Contains("FROM node:22-alpine AS build", frontendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("RUN npm ci", frontendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("RUN npm run build", frontendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("FROM nginx:1.27-alpine AS runtime", frontendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf", frontendDockerfileText, StringComparison.Ordinal);
+        Assert.Contains("Cache-Control \"public, max-age=2592000, immutable\"", nginxConfigText, StringComparison.Ordinal);
+        Assert.Contains("Cache-Control \"no-store, no-cache, must-revalidate, max-age=0\" always", nginxConfigText, StringComparison.Ordinal);
+        Assert.Contains("dockerfile: backend/GarageBalance.Api/Dockerfile", composeText, StringComparison.Ordinal);
+        Assert.Contains("dockerfile: frontend/Dockerfile", composeText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 11 \"Актуализировать Dockerfile API и frontend\" доведен до проверяемого blocked-состояния", historyText, StringComparison.Ordinal);
+        Assert.Contains("FrontendDockerfileTests.DockerfileUsesNodeBuildStageNginxRuntimeAndSpaCachePolicy", historyText, StringComparison.Ordinal);
+        Assert.Contains("live `docker build`, `docker compose up --build`, container healthchecks", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();
