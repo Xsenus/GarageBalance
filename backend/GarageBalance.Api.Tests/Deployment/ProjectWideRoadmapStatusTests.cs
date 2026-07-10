@@ -419,6 +419,42 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ChangeHistoryBackendStorageRuleIsMarkedCompleteWhenAuditEventsArePersistedInPostgreSql()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var storageLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("История должна храниться на backend и в PostgreSQL", StringComparison.Ordinal));
+        var allActionsAuditRuleLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[ ]`", StringComparison.Ordinal) &&
+            line.Contains("Любое создание, изменение, архивирование", StringComparison.Ordinal));
+
+        Assert.Contains("AuditEvent", storageLine, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext.AuditEvents", storageLine, StringComparison.Ordinal);
+        Assert.Contains("audit_events", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventWriter", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditService", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditController", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventDto", storageLine, StringComparison.Ordinal);
+        Assert.Contains("InitialAuthSchema", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventRelatedFields", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventSectionActionKind", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventLookupIndexes", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditServiceTests", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditEventWriterTests", storageLine, StringComparison.Ordinal);
+        Assert.Contains("AuditControllerTests", storageLine, StringComparison.Ordinal);
+        Assert.Contains("DatabaseMigrationPolicyTests", storageLine, StringComparison.Ordinal);
+        Assert.Contains("ProjectWideRoadmapStatusTests", storageLine, StringComparison.Ordinal);
+        Assert.Contains("каждое действие во всех разделах", storageLine, StringComparison.Ordinal);
+        Assert.Contains("открытым правилом", storageLine, StringComparison.Ordinal);
+        Assert.Contains("историю изменения", allActionsAuditRuleLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChangeHistoryContractCoverageIsMarkedCompleteWhenStructuredFieldsAndIndexesAreCovered()
     {
         var changeHistoryLine = File
