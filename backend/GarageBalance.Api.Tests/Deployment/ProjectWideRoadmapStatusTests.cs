@@ -1029,6 +1029,67 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ExternalIntegrationAdaptersAreMarkedCompleteWhenInterfacesDisabledAdaptersAndDiArePresent()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var adaptersLine = activeRoadmapLines.Single(line =>
+            line.Contains("Все будущие внешние интеграции изолировать адаптерами", StringComparison.Ordinal));
+        var programText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var accessReaderContract = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Import",
+            "IAccessImportReader.cs"));
+        var accessReaderAdapter = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Import",
+            "DisabledAccessImportReader.cs"));
+        var oneCFreshAdapter = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncAdapter.cs"));
+        var receiptPrintingAdapter = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "ReceiptPrintingAdapter.cs"));
+
+        Assert.StartsWith("- `[x]`", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("IAccessImportReader", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("DisabledAccessImportReader", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("IOneCFreshSyncAdapter", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("DisabledOneCFreshSyncAdapter", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("IReceiptPrintingAdapter", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("DisabledReceiptPrintingAdapter", adaptersLine, StringComparison.Ordinal);
+        Assert.Contains("DI-регистрации", adaptersLine, StringComparison.Ordinal);
+
+        Assert.Contains("public interface IAccessImportReader", accessReaderContract, StringComparison.Ordinal);
+        Assert.Contains("public sealed class DisabledAccessImportReader : IAccessImportReader", accessReaderAdapter, StringComparison.Ordinal);
+        Assert.Contains("public interface IOneCFreshSyncAdapter", oneCFreshAdapter, StringComparison.Ordinal);
+        Assert.Contains("public sealed class DisabledOneCFreshSyncAdapter : IOneCFreshSyncAdapter", oneCFreshAdapter, StringComparison.Ordinal);
+        Assert.Contains("public interface IReceiptPrintingAdapter", receiptPrintingAdapter, StringComparison.Ordinal);
+        Assert.Contains("public sealed class DisabledReceiptPrintingAdapter : IReceiptPrintingAdapter", receiptPrintingAdapter, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IAccessImportReader, DisabledAccessImportReader>", programText, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IOneCFreshSyncAdapter, DisabledOneCFreshSyncAdapter>", programText, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IReceiptPrintingAdapter, DisabledReceiptPrintingAdapter>", programText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
