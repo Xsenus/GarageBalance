@@ -304,6 +304,47 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DangerousBackendReasonRulesAreMarkedCompleteWhenCurrentRequestsAreProtected()
+    {
+        var activeRoadmapLines = File
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+
+        var backendRuleLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("На backend не полагаться только на frontend confirmation", StringComparison.Ordinal));
+        var reasonRuleLine = activeRoadmapLines.Single(line =>
+            line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
+            line.Contains("Для delete/archive/cancel requests сделать обязательную причину", StringComparison.Ordinal));
+
+        Assert.Contains("finance cancel endpoints", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("funds cancel endpoint", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("import rollback/apply/apply-cancel", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("cancel/reprint квитанций", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("backup confirmation", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerThinnessTests", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("[FromBody]", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("Reason", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("1000", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceControllerTests", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("FundServiceTests", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ImportServiceTests", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingServiceTests", backendRuleLine, StringComparison.Ordinal);
+        Assert.Contains("Future dangerous endpoints", backendRuleLine, StringComparison.Ordinal);
+
+        Assert.Contains("операций фондов", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("контактов", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("отделов", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("сотрудников", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("сборов", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("import rollback/apply-cancel", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("receipt cancel/reprint", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("reason и backup confirmation", reasonRuleLine, StringComparison.Ordinal);
+        Assert.Contains("future `Archive*`/`Cancel*`/`Delete*` endpoints", reasonRuleLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConfirmationInventoryIsMarkedCompleteWhenCurrentFlowsAndDialogPolicyAreCovered()
     {
         var activeRoadmapLines = File
