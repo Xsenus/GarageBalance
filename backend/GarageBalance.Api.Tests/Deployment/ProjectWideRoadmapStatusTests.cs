@@ -2297,6 +2297,40 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenRecoveryCheckRemainsBlockedWithoutLocalPostgresAndHasRunbook()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var recoveryChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "disaster-recovery-checklist.md"));
+
+        var recoveryLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить восстановление после сбоя импорта и после неудачного обновления", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", recoveryLine, StringComparison.Ordinal);
+        Assert.Contains("disaster-recovery-checklist.md", recoveryLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", recoveryLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", recoveryLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", recoveryLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenRecoveryCheckRemainsBlockedWithoutLocalPostgresAndHasRunbook", recoveryLine, StringComparison.Ordinal);
+
+        Assert.Contains("restore-postgres.ps1", recoveryChecklist, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check", recoveryChecklist, StringComparison.Ordinal);
+        Assert.Contains("Failed Access import", recoveryChecklist, StringComparison.Ordinal);
+        Assert.Contains("Failed update or migration", recoveryChecklist, StringComparison.Ordinal);
+        Assert.Contains("Production restore gate", recoveryChecklist, StringComparison.Ordinal);
+        Assert.Contains("-AllowProductionTarget", recoveryChecklist, StringComparison.Ordinal);
+
+        Assert.Contains("подготовлен checklist восстановления после сбоя импорта и неудачного обновления", historyText, StringComparison.Ordinal);
+        Assert.Contains("BackupScriptTests.DisasterRecoveryChecklistCoversFailedImportUpdateRestoreCheckAndProductionGuard", historyText, StringComparison.Ordinal);
+        Assert.Contains("StageElevenRecoveryCheckRemainsBlockedWithoutLocalPostgresAndHasRunbook", historyText, StringComparison.Ordinal);
+        Assert.Contains("Запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
