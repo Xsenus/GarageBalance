@@ -1131,6 +1131,71 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void PaymentAllocationOpenQuestionRemainsDecisionUntilDebtOverpaymentAndCarryForwardRulesAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var balanceChecklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "balance-model-decision-checklist.md"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openQuestionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Нужно подтвердить правила распределения платежа по долгам и переплатам.", StringComparison.Ordinal));
+        var backendFinanceTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты расчетов, долгов, ручных корректировок, прав и audit", StringComparison.Ordinal));
+        var incomeExcelLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать Excel-сценарий поступлений", StringComparison.Ordinal));
+        var expenseExcelLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать Excel-сценарий выплат", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/balance-model-decision-checklist.md", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("старейшего долга", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("переплаты", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("carry-forward", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("возврата/списания", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("смены владельца", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("PaymentAllocationOpenQuestionRemainsDecisionUntilDebtOverpaymentAndCarryForwardRulesAreApproved", openQuestionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Нужно подтвердить правила распределения платежа", openQuestionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceServiceTests", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("IncomeExcelScenarioRoadmapItemIsCompleteWhenWorksheetPaymentCellCashAndHistoryAreCovered", incomeExcelLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("docs/expense-excel-scenario-decision-checklist.md", expenseExcelLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Balance Model Decision Checklist", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("Платежи распределяются по старейшим долгам владельца и поставщика", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("Переплата переносится на будущие месяцы автоматически", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("вручную списывать/возвращать переплату", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("отрицательное начисление", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("Как показывать переплату в отчетах", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("смене владельца гаража", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("Business rules for overpayment carry-forward", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("BalanceModelRoadmapItemRequiresBusinessDecisionForManualCorrectionsAndOverpaymentClosure", balanceChecklistText, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", balanceChecklistText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", balanceChecklistText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateGarageDebtPaymentAsync_CreatesSystemIncomeAndReducesOpeningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("PaymentAllocations", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("BuildPaymentAllocations", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("\"overpayment\"", financeServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("PaymentAllocationOpenQuestionRemainsDecisionUntilDebtOverpaymentAndCarryForwardRulesAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("код уже закрепляет распределение поступлений и выплат по старейшим долгам", historyText, StringComparison.Ordinal);
+        Assert.Contains("получить бизнес-решение по переплатам и переносам", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("PaymentAllocationOpenQuestionRemainsDecisionUntilDebtOverpaymentAndCarryForwardRulesAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
