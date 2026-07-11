@@ -1131,6 +1131,59 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "frontend-payment-tests-verification.md"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        var frontendPaymentTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить React-тесты таблиц, модалок, платежей, подсветок, предупреждений и ошибок", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Добавить React-тесты таблиц, модалок, платежей, подсветок, предупреждений и ошибок", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("App.test.tsx", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("server-side ведомости", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("context menu", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("read-only permissions", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("warning разрыва электроэнергии", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("подсветку гаражей без показаний", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/frontend-payment-tests-verification.md", frontendPaymentTestsLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered", frontendPaymentTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("Таблицы платежного раздела", verification, StringComparison.Ordinal);
+        Assert.Contains("Платежные dialogs покрыты", verification, StringComparison.Ordinal);
+        Assert.Contains("Read-only/permission state покрыт", verification, StringComparison.Ordinal);
+        Assert.Contains("Предупреждения покрыты", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("shows payments prototype and opens payment form modals", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("loads selected garage income worksheet from finance backend", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("loads expense worksheet from finance backend", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("does not show prototype expense rows when expense worksheet is unavailable", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("edits income operation from payments table", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("edits expense operation from payments table with confirmation", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("opens new income dialog from payment context menu", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("opens create dialogs from every payment table context menu", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("does not call finance APIs when payment forms fail client validation", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels income operation with required reason from payments workspace", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels expense operation with required reason from payments table context menu", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels accruals and meter readings with required reasons from payments workspace", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("warns before closing changed payment editor", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows electricity gap warning returned by API", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("highlights garages without meter readings for selected month", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps dictionary and payment actions read-only without write permissions", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 6 \"Добавить React-тесты таблиц", historyText, StringComparison.Ordinal);
+        Assert.Contains("FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
