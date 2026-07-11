@@ -1251,6 +1251,72 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ExpenseReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "expense-report-verification.md"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var reportFiltersTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "reportFilters.test.ts"));
+        var validationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "validation.test.ts"));
+
+        var expenseReportLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать отчет по выплатам с фильтрами по датам", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать отчет по выплатам", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("GET /api/reports/expense", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("мультивыбор поставщиков/видов выплат", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("режим строк", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("начисления поставщикам", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("XLSX-экспорт", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("PDF-экспорт", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("docs/expense-report-verification.md", expenseReportLine, StringComparison.Ordinal);
+        Assert.Contains("ExpenseReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered", expenseReportLine, StringComparison.Ordinal);
+
+        Assert.Contains("Backend endpoint `GET /api/reports/expense`", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/expense/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/expense/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("SupplierStartingBalanceAsObligation", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("GetExpenseReportAsync_ReturnsPaymentRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_IncludesSupplierStartingBalanceAsObligation", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_FiltersBySupplierExpenseTypeAndSearch", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_ReturnsSupplierAccrualRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportExpenseReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportExpenseReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("GetExpenseReport_ReturnsOk", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReport_ReturnsBadRequestForInvalidPeriod", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportExpenseReportXlsx_ReturnsFile", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportExpenseReportPdf_ReturnsFile", controllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("exportExpenseReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportExpenseReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("supplierIds=supplier-1&expenseTypeIds=expense-1", reportsApiTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Отчёт по выплатам", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Поставщики или сотрудники", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Отчет по выплатам", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("supplierIds: ['s1']", reportFiltersTestsText, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeIds: ['e1']", reportFiltersTestsText, StringComparison.Ordinal);
+        Assert.Contains("getExpenseReportValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("Укажите начало отчета по выплатам", validationTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 7 \"Реализовать отчет по выплатам", historyText, StringComparison.Ordinal);
+        Assert.Contains("ExpenseReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
