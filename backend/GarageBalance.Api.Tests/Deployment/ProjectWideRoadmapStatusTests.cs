@@ -4265,6 +4265,74 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingDeviceAcceptanceRemainsAcceptanceUntilRealDeviceOrApprovedMethodIsVerified()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var acceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить печать на реальном или тестовом устройстве", StringComparison.Ordinal));
+        var scenarioDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать сценарий: фискальный чек по 54-ФЗ или внутренняя квитанция/чек", StringComparison.Ordinal));
+        var equipmentDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать оборудование: ориентир АТОЛ 30Ф/30Ф+ для фискального сценария", StringComparison.Ordinal));
+        var internalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать печать внутренней квитанции, если выбран нефискальный сценарий", StringComparison.Ordinal));
+        var fiscalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать интеграцию с выбранным фискальным оборудованием", StringComparison.Ordinal));
+        var selectedScenarioTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend/frontend тесты выбранного сценария", StringComparison.Ordinal));
+        var acceptanceChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-device-acceptance-checklist.md"));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-design.md"));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        Assert.StartsWith("- `[acceptance]`", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("receipt-printing-device-acceptance-checklist.md", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingDeviceAcceptanceRemainsAcceptanceUntilRealDeviceOrApprovedMethodIsVerified", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("primary print", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("copy/reprint", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("UI console", acceptanceLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Проверить печать на реальном или тестовом устройстве", acceptanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Receipt Printing Device Acceptance Checklist", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Preconditions", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Safe Test Data", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Device Or Method Setup", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Internal Receipt Smoke", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Receipt Smoke", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Frontend Acceptance", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Backend Acceptance", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Evidence To Record In Roadmap", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Close Conditions", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("primary print", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Copy/reprint", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("permission denied", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Audit history records", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("Browser console has no new errors", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("No schema migration is required unless the selected adapter needs durable new fields", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.Contains("selected real device, emulator, local printer, browser/PDF flow, or approved external test service", acceptanceChecklist, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", acceptanceChecklist, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", acceptanceChecklist, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal-token-", acceptanceChecklist, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passport number", acceptanceChecklist, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("raw Access import rows", releaseText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("реального тестового устройства", designText, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingDeviceAcceptanceRemainsAcceptanceUntilRealDeviceOrApprovedMethodIsVerified", historyText, StringComparison.Ordinal);
+        Assert.Contains("нет выбранного сценария печати", historyText, StringComparison.Ordinal);
+        Assert.Contains("реального принтера, фискального устройства, эмулятора или внешнего тестового сервиса", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
