@@ -2093,6 +2093,65 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void RolesFirstAdminOpenQuestionRemainsDecisionUntilCustomerRoleMatrixAndAdminOwnerAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var template = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "roles-first-admin-decision-template.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openQuestionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Нужно подтвердить реальные роли пользователей и кто будет первым администратором.", StringComparison.Ordinal));
+        var designUsersLine = activeRoadmapLines.Single(line =>
+            line.Contains("Спроектировать пользователей: администратор, бухгалтер/оператор", StringComparison.Ordinal));
+        var bootstrapAdminLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать регистрацию первого администратора или seed первого администратора", StringComparison.Ordinal));
+        var rolesPermissionsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать роли и granular permissions", StringComparison.Ordinal));
+        var acceptanceMatrixLine = activeRoadmapLines.Single(line =>
+            line.Contains("Acceptance checks: реальные данные Access, реальные роли", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/roles-first-admin-decision-template.md", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("первого администратора", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("backup-администратора", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("RolesFirstAdminOpenQuestionRemainsDecisionUntilCustomerRoleMatrixAndAdminOwnerAreApproved", openQuestionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Нужно подтвердить реальные роли", openQuestionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", designUsersLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", bootstrapAdminLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[~]`", rolesPermissionsLine, StringComparison.Ordinal);
+        Assert.Contains("матрица ролей", rolesPermissionsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[acceptance]`", acceptanceMatrixLine, StringComparison.Ordinal);
+        Assert.Contains("сверки ролей заказчика", acceptanceMatrixLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Roles And First Administrator Decision Template", template, StringComparison.Ordinal);
+        Assert.Contains("## Decision Owner", template, StringComparison.Ordinal);
+        Assert.Contains("## First Administrator", template, StringComparison.Ordinal);
+        Assert.Contains("## Backup Administrator", template, StringComparison.Ordinal);
+        Assert.Contains("## Role Matrix", template, StringComparison.Ordinal);
+        Assert.Contains("## Permissions Acceptance", template, StringComparison.Ordinal);
+        Assert.Contains("## Do Not Store", template, StringComparison.Ordinal);
+        Assert.Contains("## Close Conditions", template, StringComparison.Ordinal);
+        Assert.Contains("Первый администратор определен заказчиком", template, StringComparison.Ordinal);
+        Assert.Contains("Матрица ролей подтверждена", template, StringComparison.Ordinal);
+        Assert.Contains("пароли, временные коды", template, StringComparison.Ordinal);
+        Assert.Contains("дампы БД, `.accdb`, `.mdb`", template, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", template, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", template, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("jwt-", template, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("RolesFirstAdminOpenQuestionRemainsDecisionUntilCustomerRoleMatrixAndAdminOwnerAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может сам назначить первого администратора", historyText, StringComparison.Ordinal);
+        Assert.Contains("получить безопасно записанный decision record", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("RolesFirstAdminOpenQuestionRemainsDecisionUntilCustomerRoleMatrixAndAdminOwnerAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessWorkingCopyRoadmapItemRemainsBlockedUntilPrivateCopyChecksumAndPrivacyCheckExist()
     {
         var repositoryRoot = FindRepositoryRoot();
