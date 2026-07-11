@@ -1534,6 +1534,145 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReportExportFiltersAndPermissionsRoadmapItemIsCompleteWhenExportsShareScreenContracts()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "export-filter-permission-verification.md"));
+        var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "ReportsController.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var reportsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.ts"));
+        var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        var filterPermissionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить, что экспорт учитывает те же фильтры и права", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Проверить, что экспорт учитывает те же фильтры и права", filterPermissionLine, StringComparison.Ordinal);
+        Assert.Contains("reports.read", filterPermissionLine, StringComparison.Ordinal);
+        Assert.Contains("frontend query builders", filterPermissionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/export-filter-permission-verification.md", filterPermissionLine, StringComparison.Ordinal);
+        Assert.Contains("ReportExportFiltersAndPermissionsRoadmapItemIsCompleteWhenExportsShareScreenContracts", filterPermissionLine, StringComparison.Ordinal);
+
+        Assert.Contains("[Authorize(Policy = SystemPermissions.ReportsRead)]", controllerText, StringComparison.Ordinal);
+        Assert.DoesNotContain("[AllowAnonymous]", controllerText, StringComparison.Ordinal);
+
+        foreach (var expectedRoute in new[]
+        {
+            "[HttpGet(\"consolidated\")]",
+            "[HttpPost(\"consolidated/export/xlsx\")]",
+            "[HttpPost(\"consolidated/export/pdf\")]",
+            "[HttpGet(\"income\")]",
+            "[HttpPost(\"income/export/xlsx\")]",
+            "[HttpPost(\"income/export/pdf\")]",
+            "[HttpGet(\"expense\")]",
+            "[HttpPost(\"expense/export/xlsx\")]",
+            "[HttpPost(\"expense/export/pdf\")]",
+            "[HttpGet(\"fund-changes\")]",
+            "[HttpPost(\"fund-changes/export/xlsx\")]",
+            "[HttpPost(\"fund-changes/export/pdf\")]",
+            "[HttpGet(\"cash-payments\")]",
+            "[HttpPost(\"cash-payments/export/xlsx\")]",
+            "[HttpPost(\"cash-payments/export/pdf\")]",
+            "[HttpGet(\"bank-deposits\")]",
+            "[HttpPost(\"bank-deposits/export/xlsx\")]",
+            "[HttpPost(\"bank-deposits/export/pdf\")]",
+            "[HttpGet(\"fees\")]",
+            "[HttpPost(\"fees/export/xlsx\")]",
+            "[HttpPost(\"fees/export/pdf\")]"
+        })
+        {
+            Assert.Contains(expectedRoute, controllerText, StringComparison.Ordinal);
+        }
+
+        foreach (var expectedRequest in new[]
+        {
+            "new ConsolidatedReportRequest(monthFrom, monthTo, search",
+            "new IncomeReportRequest(",
+            "garageIds ?? []",
+            "ownerIds ?? []",
+            "incomeTypeIds ?? []",
+            "new ExpenseReportRequest(",
+            "supplierIds ?? []",
+            "expenseTypeIds ?? []",
+            "new FundChangeReportRequest(dateFrom, dateTo, search",
+            "new CashPaymentReportRequest(dateFrom, dateTo, search",
+            "new BankDepositReportRequest(dateFrom, dateTo, search",
+            "new FeeReportRequest(variation"
+        })
+        {
+            Assert.Contains(expectedRequest, controllerText, StringComparison.Ordinal);
+        }
+
+        foreach (var queryBuilder in new[]
+        {
+            "const query = buildConsolidatedReportQuery(params)",
+            "const query = buildIncomeReportQuery(params)",
+            "const query = buildExpenseReportQuery(params)",
+            "const query = buildFundChangeReportQuery(params)",
+            "const query = buildCashPaymentReportQuery(params)",
+            "const query = buildBankDepositReportQuery(params)",
+            "const query = buildFeeReportQuery(params)"
+        })
+        {
+            Assert.Contains(queryBuilder, reportsApiText, StringComparison.Ordinal);
+        }
+
+        foreach (var expectedQueryPart in new[]
+        {
+            "monthFrom=2026-06-01&monthTo=2026-06-01&search=12",
+            "dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1",
+            "dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&supplierIds=supplier-1&expenseTypeIds=expense-1",
+            "cash-payments/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&search=",
+            "bank-deposits/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search=",
+            "fees/export/xlsx?variation=",
+            "fund-changes/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search="
+        })
+        {
+            Assert.Contains(expectedQueryPart, reportsApiTestsText, StringComparison.Ordinal);
+        }
+
+        foreach (var expectedServiceTest in new[]
+        {
+            "ExportConsolidatedReportXlsxAsync_AppliesGarageSearchFilter",
+            "ExportConsolidatedReportPdfAsync_AppliesGarageSearchFilter",
+            "ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportIncomeReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportExpenseReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportExpenseReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportCashPaymentReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportCashPaymentReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportBankDepositReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportBankDepositReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportFeeReportXlsxAsync_ReturnsWorkbookWithSummaryGaragesAndDebtors",
+            "ExportFeeReportPdfAsync_ReturnsDocumentWithTotals",
+            "ExportFundChangeReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportFundChangeReportPdfAsync_ReturnsDocumentWithFilteredRows"
+        })
+        {
+            Assert.Contains(expectedServiceTest, reportServiceTestsText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ExportReportActions_UsePostBecauseExportsWriteAuditEvents", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal(export.FileName, file.FileDownloadName)", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportConsolidatedReportXlsx:", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportIncomeReportXlsx:", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportExpenseReportXlsx:", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("downloadCashOrBankReport", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")), StringComparison.Ordinal);
+
+        Assert.Contains("reports.read", verification, StringComparison.Ordinal);
+        Assert.Contains("общий frontend query builder", verification, StringComparison.Ordinal);
+        Assert.Contains("пункт Stage 7 \"Проверить, что экспорт учитывает", historyText, StringComparison.Ordinal);
+        Assert.Contains("ReportExportFiltersAndPermissionsRoadmapItemIsCompleteWhenExportsShareScreenContracts", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
