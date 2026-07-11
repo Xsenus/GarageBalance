@@ -1915,6 +1915,71 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AdditionalReportsOpenQuestionRemainsDecisionUntilCustomerConfirmsThreeReportSlotsAndAcceptanceCriteria()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var additionalReportsText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "additional-report-slots.md"));
+        var newReportChecklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "new-report-checklist.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openQuestionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Нужно подтвердить, какие 3 дополнительных отчета нужны после базовой версии.", StringComparison.Ordinal));
+        var reserveReportsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Заложить до 3 дополнительных отчетов", StringComparison.Ordinal));
+        var newReportChecklistLine = activeRoadmapLines.Single(line =>
+            line.Contains("Описать порядок добавления новых отчетов после первых трех дополнительных отчетов", StringComparison.Ordinal));
+        var reportAcceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Заказчик проверяет отчеты на месячном цикле", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/additional-report-slots.md", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("трех слотов", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("приоритетов", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("acceptance-критериев", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("XLSX/PDF", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("AdditionalReportsOpenQuestionRemainsDecisionUntilCustomerConfirmsThreeReportSlotsAndAcceptanceCriteria", openQuestionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Нужно подтвердить, какие 3 дополнительных отчета", openQuestionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", reserveReportsLine, StringComparison.Ordinal);
+        Assert.Contains("Задолженность и переплаты", reserveReportsLine, StringComparison.Ordinal);
+        Assert.Contains("Счетчики и расход", reserveReportsLine, StringComparison.Ordinal);
+        Assert.Contains("Поставщики и обязательства", reserveReportsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", newReportChecklistLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[acceptance]`", reportAcceptanceLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Реестр дополнительных отчетов", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("Задолженность И Переплаты", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("Счетчики И Расход", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("Поставщики И Обязательства", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("docs/new-report-checklist.md", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("docs/monthly-cycle-checklist.md", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("backend/GarageBalance.Api/AppReleases/releases.json", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("reports.read", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL aggregation", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("server pagination", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("UTF-8/no BOM", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("Request DTO", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("Response DTO", additionalReportsText, StringComparison.Ordinal);
+        Assert.Contains("loading, error, empty state", additionalReportsText, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", additionalReportsText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", additionalReportsText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passport", additionalReportsText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("# Порядок добавления новых отчетов", newReportChecklistText, StringComparison.Ordinal);
+        Assert.Contains("reports.read", newReportChecklistText, StringComparison.Ordinal);
+        Assert.Contains("XLSX/PDF", newReportChecklistText, StringComparison.Ordinal);
+        Assert.Contains("AdditionalReportsOpenQuestionRemainsDecisionUntilCustomerConfirmsThreeReportSlotsAndAcceptanceCriteria", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не должен закрывать этот decision", historyText, StringComparison.Ordinal);
+        Assert.Contains("получить подтверждение трех отчетов или замену слотов", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("AdditionalReportsOpenQuestionRemainsDecisionUntilCustomerConfirmsThreeReportSlotsAndAcceptanceCriteria", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageSevenReportExtendedAcceptanceRuleIsMarkedCompleteWhenSourceMonthlyChecklistAndRoadmapSeparateManualAcceptance()
     {
         var repositoryRoot = FindRepositoryRoot();
