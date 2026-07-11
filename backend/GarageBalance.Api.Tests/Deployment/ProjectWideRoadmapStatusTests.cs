@@ -3842,6 +3842,58 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshContourAcceptanceRemainsAcceptanceUntilRealContourChecklistIsCompleted()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var acceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить на тестовом или реальном контуре 1C Fresh", StringComparison.Ordinal));
+        var apiDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Получить параметры и формат обмена 1C Fresh", StringComparison.Ordinal));
+        var directionDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить направление обмена", StringComparison.Ordinal));
+        var documentsDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить справочники и документы обмена", StringComparison.Ordinal));
+        var checklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "one-c-fresh-contour-acceptance-checklist.md"));
+
+        Assert.StartsWith("- `[acceptance]`", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("one-c-fresh-contour-acceptance-checklist.md", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("параметры API", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("направление обмена", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("состав документов", acceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshContourAcceptanceRemainsAcceptanceUntilRealContourChecklistIsCompleted", acceptanceLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Проверить на тестовом или реальном контуре 1C Fresh", acceptanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", apiDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", directionDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", documentsDecisionLine, StringComparison.Ordinal);
+
+        Assert.Contains("# 1C Fresh Contour Acceptance Checklist", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Preconditions", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Safe Data Rules", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Подготовить предпросмотр", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Preview status", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Apply status", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Retry/conflict status", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Audit checked", checklistText, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL migrations checked", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Browser console/logs checked", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Проверка заблокирована: нет контура", checklistText, StringComparison.Ordinal);
+        Assert.Contains("можно закрыть как `[x]` только после заполненного результата проверки на контуре", checklistText, StringComparison.Ordinal);
+        Assert.Contains("Не переносить в Git реальные токены", checklistText, StringComparison.Ordinal);
+        Assert.DoesNotContain("refresh-token-", checklistText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", checklistText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("password=", checklistText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("OneCFreshContourAcceptanceRemainsAcceptanceUntilRealContourChecklistIsCompleted", historyText, StringComparison.Ordinal);
+        Assert.Contains("нет тестового/реального контура 1C Fresh", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingDesignIsMarkedCompleteWhenFormsAdapterAuditPermissionsAndTestsAreDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
