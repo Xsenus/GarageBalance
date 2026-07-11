@@ -790,6 +790,75 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void MonthlyAccrualRowsRoadmapItemIsCompleteWhenAccrualTablesTransferIndexesAndUiTestsExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "monthly-accrual-rows-verification.md"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var financeControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceControllerTests.cs"));
+        var dbContextText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+        var activeAccrualMigrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260624070738_ActiveAccrualUniqueness.cs"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var monthlyAccrualsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать помесячные строки начислений", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать помесячные строки начислений", monthlyAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("partial unique indexes", monthlyAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("отмена/восстановление с audit", monthlyAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("createDebtTransfer", monthlyAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/monthly-accrual-rows-verification.md", monthlyAccrualsLine, StringComparison.Ordinal);
+        Assert.Contains("MonthlyAccrualRowsRoadmapItemIsCompleteWhenAccrualTablesTransferIndexesAndUiTestsExist", monthlyAccrualsLine, StringComparison.Ordinal);
+
+        Assert.Contains("Backend хранит начисления владельцев", verification, StringComparison.Ordinal);
+        Assert.Contains("Повторный запуск регулярных начислений за тот же месяц не создает дубли", verification, StringComparison.Ordinal);
+        Assert.Contains("UI поддерживает перенос задолженности владельца на следующий месяц", verification, StringComparison.Ordinal);
+        Assert.Contains("FinanceServiceTests", verification, StringComparison.Ordinal);
+        Assert.Contains("FinanceControllerTests", verification, StringComparison.Ordinal);
+        Assert.Contains("ActiveAccrualUniqueness", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("CreateAccrualAsync_CreatesManualAccrualAndWritesAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateAccrualAsync_RejectsDuplicateGarageTypeMonthAndSource", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateAccrualAsync_AllowsReplacementAfterCancel", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CancelAccrualAsync_CancelsAccrualAndRemovesItFromSummary", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreAccrualAsync_RestoresCanceledAccrualAndWritesAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreAccrualAsync_RejectsDuplicateActiveAccrual", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateDebtTransferAsync_CreatesAndAccumulatesSystemAccrualWithAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_RejectsSecondRunForSameMonth", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateSupplierAccrualAsync_AllowsReplacementAfterCancel", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreSupplierAccrualAsync_RejectsDuplicateActiveAccrual", financeServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("CreateDebtTransfer_PassesActorUserIdAndRequestToService", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CancelAccrual_ReturnsBadRequestForBlankCancelReason", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreAccrual_ReturnsConflictForActiveAccrual", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccruals_PassesActorUserIdToService", financeControllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("HasFilter(\"\\\"IsCanceled\\\" = false\")", dbContextText, StringComparison.Ordinal);
+        Assert.Contains("IX_accruals_GarageId_IncomeTypeId_AccountingMonth_Source", activeAccrualMigrationText, StringComparison.Ordinal);
+        Assert.Contains("IX_supplier_accruals_SupplierId_ExpenseTypeId_AccountingMonth_~", activeAccrualMigrationText, StringComparison.Ordinal);
+
+        Assert.Contains("moves garage debt to the next month and saves the transfer in form history", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("createDebtTransfer", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Последние начисления", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Разбивка начисления", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Месяц регулярных начислений", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("createDebtTransfer(accessToken", financeApiText, StringComparison.Ordinal);
+
+        Assert.Contains("Задолженность можно перенести на следующий месяц", releaseText, StringComparison.Ordinal);
+        Assert.Contains("пункт Stage 6 \"Реализовать помесячные строки начислений\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("MonthlyAccrualRowsRoadmapItemIsCompleteWhenAccrualTablesTransferIndexesAndUiTestsExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
