@@ -3963,6 +3963,64 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingScenarioDecisionRemainsDecisionUntilOwnerSelectsInternalOrFiscalReceipt()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var scenarioDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать сценарий: фискальный чек по 54-ФЗ или внутренняя квитанция/чек", StringComparison.Ordinal));
+        var equipmentDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать оборудование: ориентир АТОЛ", StringComparison.Ordinal));
+        var internalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать печать внутренней квитанции, если выбран нефискальный сценарий", StringComparison.Ordinal));
+        var fiscalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать интеграцию с выбранным фискальным оборудованием", StringComparison.Ordinal));
+        var selectedScenarioTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend/frontend тесты выбранного сценария", StringComparison.Ordinal));
+        var decisionTemplate = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-scenario-decision-template.md"));
+        var sourceAnalysis = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-design.md"));
+
+        Assert.StartsWith("- `[decision]`", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("receipt-printing-scenario-decision-template.md", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("заказчиком/бухгалтером/юристом", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingScenarioDecisionRemainsDecisionUntilOwnerSelectsInternalOrFiscalReceipt", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Выбрать сценарий", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Receipt Printing Scenario Decision Template", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Option A: Internal Receipt", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Option B: Fiscal Receipt", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Internal receipt now, fiscal receipt later", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Fiscal receipt plus internal copy/reporting form", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Нужна ли консультация бухгалтера/юриста по 54-ФЗ", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("АТОЛ 30Ф/30Ф+", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Эвотор 5i", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("можно закрыть как `[x]` только после заполненного decision record", decisionTemplate, StringComparison.Ordinal);
+        Assert.Contains("Секреты оборудования хранить только через protected settings", decisionTemplate, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", decisionTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", decisionTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal-token-", decisionTemplate, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("требуется ли фискальный чек по 54-ФЗ или внутренняя квитанция/чек", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("АТОЛ 30Ф / 30Ф+", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("Эвотор 5i", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("`[decision]` Нужно выбрать юридический сценарий", designText, StringComparison.Ordinal);
+        Assert.Contains("До решений выше production-код остается в режиме безопасной регистрации действий", designText, StringComparison.Ordinal);
+
+        Assert.Contains("ReceiptPrintingScenarioDecisionRemainsDecisionUntilOwnerSelectsInternalOrFiscalReceipt", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может сам решить юридический сценарий печати", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
