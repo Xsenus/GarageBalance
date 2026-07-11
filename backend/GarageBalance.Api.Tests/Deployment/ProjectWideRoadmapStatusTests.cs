@@ -3991,9 +3991,17 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("ReceiptPrintingScenarioDecisionRemainsDecisionUntilOwnerSelectsInternalOrFiscalReceipt", scenarioDecisionLine, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[x]` Выбрать сценарий", scenarioDecisionLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[decision]`", equipmentDecisionLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", internalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("Заблокировано", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("нефискального сценария", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("утверждения обязательных реквизитов", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("Заблокировано", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("фискального сценария", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("выбранного оборудования", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("Заблокировано", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("выбранного и реализованного сценария", selectedScenarioTestsLine, StringComparison.Ordinal);
 
         Assert.Contains("# Receipt Printing Scenario Decision Template", decisionTemplate, StringComparison.Ordinal);
         Assert.Contains("Option A: Internal Receipt", decisionTemplate, StringComparison.Ordinal);
@@ -4049,8 +4057,10 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("ReceiptPrintingEquipmentDecisionRemainsDecisionUntilDeviceConnectionAndAcceptanceEvidenceAreSelected", equipmentDecisionLine, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[x]` Выбрать оборудование", equipmentDecisionLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[decision]`", scenarioDecisionLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("выбранного оборудования", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("выбранного и реализованного сценария", selectedScenarioTestsLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[acceptance]`", deviceAcceptanceLine, StringComparison.Ordinal);
 
         Assert.Contains("# Receipt Printing Equipment Decision Template", equipmentTemplate, StringComparison.Ordinal);
@@ -4111,9 +4121,12 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("ReceiptPrintingObligationDecisionRemainsDecisionUntilResponsiblePartyAndOperationScopeAreSelected", obligationDecisionLine, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[x]` Уточнить, кто юридически обязан", obligationDecisionLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[decision]`", scenarioDecisionLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", internalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("нефискального сценария", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("обязанного лица/операций", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("adapter path", selectedScenarioTestsLine, StringComparison.Ordinal);
 
         Assert.Contains("# Receipt Printing Obligation Decision Template", obligationTemplate, StringComparison.Ordinal);
         Assert.Contains("Responsible Party", obligationTemplate, StringComparison.Ordinal);
@@ -4167,9 +4180,13 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("минимизации данных", requisitesDecisionLine, StringComparison.Ordinal);
         Assert.Contains("ReceiptPrintingRequisitesDecisionRemainsDecisionUntilMandatoryFieldsAndDataMinimizationAreApproved", requisitesDecisionLine, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[x]` Уточнить обязательные реквизиты", requisitesDecisionLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", internalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("утверждения обязательных реквизитов", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("минимизации данных", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("реквизитов", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("audit", selectedScenarioTestsLine, StringComparison.Ordinal);
 
         Assert.Contains("# Receipt Printing Requisites Decision Template", requisitesTemplate, StringComparison.Ordinal);
         Assert.Contains("Internal Receipt Requisites", requisitesTemplate, StringComparison.Ordinal);
@@ -4198,6 +4215,53 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("ReceiptPrintingRequisitesDecisionRemainsDecisionUntilMandatoryFieldsAndDataMinimizationAreApproved", historyText, StringComparison.Ordinal);
         Assert.Contains("агент не может сам утвердить реквизиты ГСК", historyText, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReceiptPrintingScenarioImplementationRemainsBlockedUntilBusinessDecisionsAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var openDecisionLines = activeRoadmapLines
+            .Where(line => line.StartsWith("- `[decision]`", StringComparison.Ordinal) &&
+                           (line.Contains("сценарий", StringComparison.Ordinal) ||
+                            line.Contains("оборудование", StringComparison.Ordinal) ||
+                            line.Contains("обязан", StringComparison.Ordinal) ||
+                            line.Contains("обязательные реквизиты", StringComparison.Ordinal)))
+            .ToArray();
+        var internalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать печать внутренней квитанции, если выбран нефискальный сценарий", StringComparison.Ordinal));
+        var fiscalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать интеграцию с выбранным фискальным оборудованием", StringComparison.Ordinal));
+        var selectedScenarioTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend/frontend тесты выбранного сценария", StringComparison.Ordinal));
+        var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        Assert.True(openDecisionLines.Length >= 4);
+        Assert.StartsWith("- `[!]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("Заблокировано до подтверждения нефискального сценария", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("утверждения обязательных реквизитов", internalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("приемочного контура", internalReceiptLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Реализовать печать внутренней квитанции", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("Заблокировано до подтверждения фискального сценария", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("обязанного лица/операций", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.Contains("тестового устройства/эмулятора", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Реализовать интеграцию с выбранным фискальным оборудованием", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("Заблокировано до выбранного и реализованного сценария печати", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("adapter path", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.Contains("UI-состояний", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Добавить backend/frontend тесты выбранного сценария", selectedScenarioTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("ReceiptPrintingScenarioImplementationRemainsBlockedUntilBusinessDecisionsAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не должен угадывать, нужен ли нефискальный или фискальный путь", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Заблокировано до подтверждения нефискального сценария", releaseText, StringComparison.Ordinal);
     }
 
     [Fact]
