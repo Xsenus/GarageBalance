@@ -31,4 +31,30 @@ public sealed class PermissionAuthorizationHandlerTests
 
         Assert.False(context.HasSucceeded);
     }
+
+    [Fact]
+    public async Task HandleAsync_SucceedsForReportsReadPermission()
+    {
+        var requirement = new PermissionRequirement("reports.read");
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("permission", "reports.read")], "Test"));
+        var context = new AuthorizationHandlerContext([requirement], principal, resource: null);
+        var handler = new PermissionAuthorizationHandler();
+
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task HandleAsync_DoesNotSucceedForReportsReadWhenPermissionClaimIsMissing()
+    {
+        var requirement = new PermissionRequirement("reports.read");
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("permission", "dictionaries.read")], "Test"));
+        var context = new AuthorizationHandlerContext([requirement], principal, resource: null);
+        var handler = new PermissionAuthorizationHandler();
+
+        await handler.HandleAsync(context);
+
+        Assert.False(context.HasSucceeded);
+    }
 }

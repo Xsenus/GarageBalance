@@ -1673,6 +1673,108 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void BackendReportTestsRoadmapItemIsCompleteWhenRequestsFiltersTotalsAndPermissionsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "backend-report-tests-verification.md"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var reportsControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "ControllerAuthorizationCoverageTests.cs"));
+        var permissionHandlerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "PermissionAuthorizationHandlerTests.cs"));
+
+        var backendReportTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты отчетных запросов, фильтров, итогов и прав", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Добавить backend-тесты отчетных запросов", backendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("reports.read", backendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("permission-handler", backendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/backend-report-tests-verification.md", backendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("BackendReportTestsRoadmapItemIsCompleteWhenRequestsFiltersTotalsAndPermissionsAreCovered", backendReportTestsLine, StringComparison.Ordinal);
+
+        foreach (var expectedServiceTest in new[]
+        {
+            "GetConsolidatedReportAsync_ReturnsMonthlyTotalsAndGarageRows",
+            "GetConsolidatedReportAsync_AppliesGarageRowLimitWithoutChangingTotals",
+            "GetConsolidatedReportAsync_FiltersGarageRowsByOwnerOrGarage",
+            "GetConsolidatedReportAsync_NormalizesReportPeriodToMonthStarts",
+            "GetConsolidatedReportAsync_ReturnsErrorForInvalidPeriod",
+            "GetIncomeReportAsync_ReturnsAccrualAndPaymentRows",
+            "GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals",
+            "GetIncomeReportAsync_ReturnsDebtAfterEachPayment",
+            "GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt",
+            "GetIncomeReportAsync_FiltersByOwnerIncomeTypeAndRowMode",
+            "GetIncomeReportAsync_ReturnsErrorForInvalidPeriod",
+            "GetExpenseReportAsync_ReturnsPaymentRows",
+            "GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals",
+            "GetExpenseReportAsync_IncludesSupplierStartingBalanceAsObligation",
+            "GetExpenseReportAsync_FiltersBySupplierExpenseTypeAndSearch",
+            "GetExpenseReportAsync_ReturnsSupplierAccrualRows",
+            "GetExpenseReportAsync_ReturnsErrorForInvalidPeriod",
+            "GetFundChangeReportAsync_ReturnsFundOperationsAndWritesAudit",
+            "GetCashPaymentReportAsync_ReturnsExpenseRowsAndWritesAudit",
+            "GetBankDepositReportAsync_ReturnsDepositRowsAndWritesAudit",
+            "GetFeeReportAsync_ReturnsSummaryDebtorsAndWritesAudit",
+            "GetFeeReportAsync_UsesFeeCampaignGoalAndTargetAmountWhenCampaignExists",
+            "ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportIncomeReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportExpenseReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportExpenseReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportCashPaymentReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportCashPaymentReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportBankDepositReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportBankDepositReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportFeeReportXlsxAsync_ReturnsWorkbookWithSummaryGaragesAndDebtors",
+            "ExportFeeReportPdfAsync_ReturnsDocumentWithTotals",
+            "ExportFundChangeReportXlsxAsync_ReturnsWorkbookWithFilteredRows",
+            "ExportFundChangeReportPdfAsync_ReturnsDocumentWithFilteredRows",
+            "ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch"
+        })
+        {
+            Assert.Contains(expectedServiceTest, reportServiceTestsText, StringComparison.Ordinal);
+        }
+
+        foreach (var expectedControllerTest in new[]
+        {
+            "ExportReportActions_UsePostBecauseExportsWriteAuditEvents",
+            "GetConsolidatedReport_ReturnsOk",
+            "GetConsolidatedReport_ReturnsBadRequestForInvalidPeriod",
+            "GetIncomeReport_ReturnsOk",
+            "GetIncomeReport_ReturnsBadRequestForInvalidPeriod",
+            "GetExpenseReport_ReturnsOk",
+            "GetExpenseReport_ReturnsBadRequestForInvalidPeriod",
+            "GetFundChangeReport_ReturnsOk",
+            "GetFundChangeReport_ReturnsBadRequestForInvalidPeriod",
+            "GetCashPaymentReport_ReturnsOk",
+            "GetCashPaymentReport_ReturnsBadRequestForInvalidPeriod",
+            "GetBankDepositReport_ReturnsOk",
+            "GetBankDepositReport_ReturnsBadRequestForInvalidPeriod",
+            "GetFeeReport_ReturnsOk",
+            "ExportFeeReportXlsx_ReturnsFile",
+            "ExportFeeReportPdf_ReturnsFile",
+            "Assert.Equal(export.FileName, file.FileDownloadName)"
+        })
+        {
+            Assert.Contains(expectedControllerTest, reportsControllerTestsText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ReportActionsRequireReportsReadPermission", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("SystemPermissions.ReportsRead", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("HandleAsync_SucceedsForReportsReadPermission", permissionHandlerTestsText, StringComparison.Ordinal);
+        Assert.Contains("HandleAsync_DoesNotSucceedForReportsReadWhenPermissionClaimIsMissing", permissionHandlerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Runtime 401/403 через полный HTTP pipeline можно расширить", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+        Assert.Contains("пункт Stage 7 \"Добавить backend-тесты отчетных запросов", historyText, StringComparison.Ordinal);
+        Assert.Contains("BackendReportTestsRoadmapItemIsCompleteWhenRequestsFiltersTotalsAndPermissionsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
