@@ -1184,6 +1184,73 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void IncomeReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "income-report-verification.md"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var reportFiltersTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "reportFilters.test.ts"));
+        var validationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "validation.test.ts"));
+
+        var incomeReportLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать отчет по поступлениям с фильтрами по датам", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать отчет по поступлениям", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("GET /api/reports/income", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("мультивыбор гаражей/владельцев/видов поступлений", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("режим строк", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("XLSX-экспорт", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("PDF-экспорт", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("docs/income-report-verification.md", incomeReportLine, StringComparison.Ordinal);
+        Assert.Contains("IncomeReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered", incomeReportLine, StringComparison.Ordinal);
+
+        Assert.Contains("Backend endpoint `GET /api/reports/income`", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/income/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/income/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("rowMode", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("GetIncomeReportAsync_ReturnsAccrualAndPaymentRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_ReturnsDebtAfterEachPayment", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_FiltersByOwnerIncomeTypeAndRowMode", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("GetIncomeReport_ReturnsOk", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReport_ReturnsBadRequestForInvalidPeriod", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportXlsx_ReturnsFile", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportPdf_ReturnsFile", controllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("exportIncomeReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportIncomeReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1", reportsApiTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Отчет по поступлениям", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Остаток долга после платежа", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("not.toHaveTextContent('Начисление за июнь')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("garageIds: ['g1']", reportFiltersTestsText, StringComparison.Ordinal);
+        Assert.Contains("ownerIds: ['o1']", reportFiltersTestsText, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeIds: ['i1']", reportFiltersTestsText, StringComparison.Ordinal);
+        Assert.Contains("getIncomeReportValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("Начало отчета по поступлениям не может быть позже конца", validationTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 7 \"Реализовать отчет по поступлениям", historyText, StringComparison.Ordinal);
+        Assert.Contains("IncomeReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
