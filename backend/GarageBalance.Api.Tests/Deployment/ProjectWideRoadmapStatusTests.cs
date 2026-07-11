@@ -1915,6 +1915,44 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageSevenReportExtendedAcceptanceRuleIsMarkedCompleteWhenSourceMonthlyChecklistAndRoadmapSeparateManualAcceptance()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var sourceAnalysis = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+        var monthlyChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "monthly-cycle-checklist.md"));
+        var extendedAcceptance = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "report-extended-acceptance.md"));
+        var monthlyChecklistTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "MonthlyCycleChecklistTests.cs"));
+
+        var extendedAcceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Для отчетов учесть расширенную приемку до одного месяца", StringComparison.Ordinal));
+        var reportManualAcceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Заказчик проверяет отчеты на месячном цикле", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", extendedAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("docs/source-analysis.md", extendedAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("docs/monthly-cycle-checklist.md", extendedAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("docs/report-extended-acceptance.md", extendedAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("StageSevenReportExtendedAcceptanceRuleIsMarkedCompleteWhenSourceMonthlyChecklistAndRoadmapSeparateManualAcceptance", extendedAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("отдельным `[acceptance]`-условием", extendedAcceptanceLine, StringComparison.Ordinal);
+
+        Assert.StartsWith("- `[acceptance]`", reportManualAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("для отчетов допускается расширенная приемка до одного месяца", reportManualAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("Договоренность по отчетам", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("расширенная приемка до одного месяца", monthlyChecklist, StringComparison.Ordinal);
+        Assert.Contains("MonthlyCycleChecklistCoversRequiredOperationalSteps", monthlyChecklistTests, StringComparison.Ordinal);
+        Assert.Contains("расширенная приемка до одного месяца", monthlyChecklistTests, StringComparison.Ordinal);
+        Assert.Contains("замечания по отчетам могут приниматься", extendedAcceptance, StringComparison.Ordinal);
+        Assert.Contains("обезличенное описание проблемы", extendedAcceptance, StringComparison.Ordinal);
+        Assert.Contains("закрыт пункт Stage 7 \"Для отчетов учесть расширенную приемку", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
