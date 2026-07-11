@@ -1178,6 +1178,64 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessImportIdempotencyRoadmapItemRemainsBlockedUntilTransferUsesFingerprintRegistry()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-import-idempotency-checklist.md"));
+        var transferChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-transfer-implementation-checklist.md"));
+        var fingerprintService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportFingerprintService.cs"));
+        var fingerprintContracts = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportFingerprintContracts.cs"));
+        var fingerprintTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportFingerprintServiceTests.cs"));
+        var dbContext = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+        var erd = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "data-model-erd.md"));
+
+        var idempotencyLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать идемпотентность: повторный импорт не должен плодить дубли", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Реализовать идемпотентность", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("access_import_row_fingerprints", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("IImportFingerprintService", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("field-level mapping", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("canonical row hash", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("transfer flow", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("reconciliation report", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-import-idempotency-checklist.md", idempotencyLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportIdempotencyRoadmapItemRemainsBlockedUntilTransferUsesFingerprintRegistry", idempotencyLine, StringComparison.Ordinal);
+
+        Assert.Contains("end-to-end гарантия \"повторный импорт не создает дубли\"", checklist, StringComparison.Ordinal);
+        Assert.Contains("AccessImportRowFingerprint.FingerprintKey", checklist, StringComparison.Ordinal);
+        Assert.Contains("IImportFingerprintService.RegisterAsync", checklist, StringComparison.Ordinal);
+        Assert.Contains("Created=false", checklist, StringComparison.Ordinal);
+        Assert.Contains("IImportFingerprintService.ExistsAsync", checklist, StringComparison.Ordinal);
+        Assert.Contains("import.row_fingerprint_registered", checklist, StringComparison.Ordinal);
+        Assert.Contains("canonical SHA-256 row hash", checklist, StringComparison.Ordinal);
+        Assert.Contains("conflict policy", checklist, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL unique constraint violations", checklist, StringComparison.Ordinal);
+        Assert.Contains("Second transfer run on the same working copy creates zero duplicates", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessImportIdempotencyRoadmapItemRemainsBlockedUntilTransferUsesFingerprintRegistry`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("Каждая переносимая строка получает deterministic idempotency key", transferChecklist, StringComparison.Ordinal);
+        Assert.Contains("Повторный запуск не создает дубли", transferChecklist, StringComparison.Ordinal);
+        Assert.Contains("BuildFingerprintKey", fingerprintService, StringComparison.Ordinal);
+        Assert.Contains("RegisterImportRowFingerprintDto(false", fingerprintService, StringComparison.Ordinal);
+        Assert.Contains("import.row_fingerprint_registered", fingerprintService, StringComparison.Ordinal);
+        Assert.Contains("RegisterImportRowFingerprintRequest", fingerprintContracts, StringComparison.Ordinal);
+        Assert.Contains("RegisterAsync_ReturnsExistingForDuplicateExternalIdWithoutSecondAudit", fingerprintTests, StringComparison.Ordinal);
+        Assert.Contains("RegisterAsync_UsesRowHashWhenExternalIdIsMissing", fingerprintTests, StringComparison.Ordinal);
+        Assert.Contains("DbSet<AccessImportRowFingerprint>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("FingerprintKey", erd, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Реализовать идемпотентность", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessImportIdempotencyRoadmapItemRemainsBlockedUntilTransferUsesFingerprintRegistry", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
