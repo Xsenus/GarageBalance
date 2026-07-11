@@ -3997,6 +3997,79 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void OneCFreshDataScopeOpenQuestionRemainsDecisionUntilDirectionDictionariesDocumentsAndConflictRulesAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "one-c-fresh-data-scope-decision-template.md"));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "one-c-fresh-sync-design.md"));
+        var acceptanceChecklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "one-c-fresh-contour-acceptance-checklist.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openQuestionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Нужно подтвердить, какие именно данные 1C Fresh должны синхронизироваться.", StringComparison.Ordinal));
+        var apiDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Получить параметры и формат обмена 1C Fresh", StringComparison.Ordinal));
+        var directionDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить направление обмена", StringComparison.Ordinal));
+        var documentsDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить справочники и документы обмена", StringComparison.Ordinal));
+        var previewLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать режим предпросмотра синхронизации", StringComparison.Ordinal));
+        var contourAcceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить на тестовом или реальном контуре 1C Fresh", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/one-c-fresh-data-scope-decision-template.md", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("направления обмена", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("справочников", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("документов", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("правил конфликтов", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("preview/apply gates", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshDataScopeOpenQuestionRemainsDecisionUntilDirectionDictionariesDocumentsAndConflictRulesAreApproved", openQuestionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Нужно подтвердить, какие именно данные 1C Fresh", openQuestionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", apiDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", directionDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", documentsDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", previewLine, StringComparison.Ordinal);
+        Assert.Contains("direction=pending_decision", previewLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[acceptance]`", contourAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("состав документов", contourAcceptanceLine, StringComparison.Ordinal);
+
+        Assert.Contains("# 1C Fresh Data Scope Decision Template", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Direction", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Dictionaries", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Documents And Operations", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Preview And Apply Gates", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Safe Data Rules", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Close Conditions", templateText, StringComparison.Ordinal);
+        Assert.Contains("Только выгрузка из GarageBalance в 1C Fresh", templateText, StringComparison.Ordinal);
+        Assert.Contains("Двусторонняя синхронизация", templateText, StringComparison.Ordinal);
+        Assert.Contains("Владельцы/контрагенты", templateText, StringComparison.Ordinal);
+        Assert.Contains("Платежи членов ГСК", templateText, StringComparison.Ordinal);
+        Assert.Contains("conflict rule: skip, update, create correction, manual review", templateText, StringComparison.Ordinal);
+        Assert.Contains("Preview обязателен перед apply", templateText, StringComparison.Ordinal);
+        Assert.Contains("raw API responses", templateText, StringComparison.Ordinal);
+        Assert.DoesNotContain("refresh-token-", templateText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", templateText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("password=", templateText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("connection string=", templateText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("Preview is mandatory before applying changes", designText, StringComparison.Ordinal);
+        Assert.Contains("Conflicts block apply until resolved or skipped", designText, StringComparison.Ordinal);
+        Assert.Contains("направлению обмена и составу документов", acceptanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshDataScopeOpenQuestionRemainsDecisionUntilDirectionDictionariesDocumentsAndConflictRulesAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может сам выбрать направление обмена", historyText, StringComparison.Ordinal);
+        Assert.Contains("получить безопасно записанный decision record", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("OneCFreshDataScopeOpenQuestionRemainsDecisionUntilDirectionDictionariesDocumentsAndConflictRulesAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingDesignIsMarkedCompleteWhenFormsAdapterAuditPermissionsAndTestsAreDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
