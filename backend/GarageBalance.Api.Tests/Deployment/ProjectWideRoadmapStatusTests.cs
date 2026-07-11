@@ -4373,6 +4373,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var backendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Dockerfile"));
         var frontendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "Dockerfile"));
         var localInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+        var dockerPreflightScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "check-docker-compose.ps1"));
 
         var dockerBuildLine = activeRoadmapLines.Single(line =>
             line.Contains("Проверить Docker Compose build", StringComparison.Ordinal));
@@ -4382,6 +4383,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[!]`", dockerBuildLine, StringComparison.Ordinal);
         Assert.Contains("docker=missing", dockerBuildLine, StringComparison.Ordinal);
         Assert.Contains("docker compose build", dockerBuildLine, StringComparison.Ordinal);
+        Assert.Contains("check-docker-compose.ps1", dockerBuildLine, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[x]` Проверить Docker Compose build", dockerBuildLine, StringComparison.Ordinal);
         Assert.Contains("dockerfile: backend/GarageBalance.Api/Dockerfile", dockerComposeText, StringComparison.Ordinal);
         Assert.Contains("dockerfile: frontend/Dockerfile", dockerComposeText, StringComparison.Ordinal);
@@ -4390,6 +4392,12 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("\"${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80\"", dockerComposeText, StringComparison.Ordinal);
         Assert.Contains("dotnet publish", backendDockerfileText, StringComparison.Ordinal);
         Assert.Contains("nginx", frontendDockerfileText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Get-Command docker", dockerPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("dockerComposeConfig=Skipped", dockerPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("dockerComposeBuild=Skipped", dockerPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("docker compose config", dockerPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("docker compose build", dockerPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("-RequireBuild", dockerPreflightScriptText, StringComparison.Ordinal);
 
         Assert.StartsWith("- `[!]`", localInstallLine, StringComparison.Ordinal);
         Assert.Contains("psql/createuser/createdb", localInstallLine, StringComparison.Ordinal);
@@ -4401,6 +4409,7 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("StageEightInfrastructureChecksRemainBlockedWithoutRequiredLocalTools", historyText, StringComparison.Ordinal);
         Assert.Contains("docker` CLI отсутствует", historyText, StringComparison.Ordinal);
+        Assert.Contains("check-docker-compose.ps1", historyText, StringComparison.Ordinal);
         Assert.Contains("psql/createuser/createdb", historyText, StringComparison.Ordinal);
         Assert.Contains("dotnet publish backend/GarageBalance.Api/GarageBalance.Api.csproj -c Release --no-restore", historyText, StringComparison.Ordinal);
     }
