@@ -9980,6 +9980,37 @@ describe('App', () => {
     await user.click(fundXlsxButton)
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
   })
+
+  it('keeps report export errors visible without announcing a ready file', async () => {
+    const user = userEvent.setup()
+    const exportCashPaymentReportXlsx = vi.fn()
+      .mockRejectedValueOnce(new Error('XLSX отчета временно недоступен'))
+      .mockResolvedValueOnce(new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const reportClient = createReportClient({
+      exportCashPaymentReportXlsx,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    await openReportTab(user, reportsPanel, 'Оплаты из кассы')
+    const cashXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
+    await user.click(cashXlsxButton)
+
+    expect(await within(reportsPanel).findByText('XLSX отчета временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('Отчет XLSX готов.')).not.toBeInTheDocument()
+    expect(exportCashPaymentReportXlsx).toHaveBeenCalledTimes(1)
+
+    await user.click(cashXlsxButton)
+
+    expect(await within(reportsPanel).findByText('Отчет XLSX готов.')).toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('XLSX отчета временно недоступен')).not.toBeInTheDocument()
+    expect(exportCashPaymentReportXlsx).toHaveBeenCalledTimes(2)
+  })
+
   it('shows login errors without opening protected workspace', async () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({

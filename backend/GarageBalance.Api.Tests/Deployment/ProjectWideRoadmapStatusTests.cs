@@ -1775,6 +1775,98 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void FrontendReportTestsRoadmapItemIsCompleteWhenFiltersStatesExportsAndErrorsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "frontend-report-tests-verification.md"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
+        var reportFiltersTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "reportFilters.test.ts"));
+
+        var frontendReportTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить React-тесты фильтров, мультивыбора, итоговых строк", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Добавить React-тесты фильтров", frontendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/frontend-report-tests-verification.md", frontendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("FrontendReportTestsRoadmapItemIsCompleteWhenFiltersStatesExportsAndErrorsAreCovered", frontendReportTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ошибки XLSX/PDF-выгрузки без ложного статуса готовности", frontendReportTestsLine, StringComparison.Ordinal);
+
+        foreach (var expectedAppCoverage in new[]
+        {
+            "shows report workbook tabs with Excel-like filters and tables",
+            "shows daily, fee and fund report filters with quick period buttons",
+            "keeps report export errors visible without announcing a ready file",
+            "keeps reports closed without dictionary read permission for filters",
+            "Консолидированный отчёт",
+            "Отчет по гаражам",
+            "Отчет по выплатам",
+            "Отчет по поступлениям",
+            "Отчет по оплатам из кассы",
+            "Отчет по сдаче кассы в банк",
+            "Отчет по сборам",
+            "Отчет по изменению фондов",
+            "Сгруппировать начисления",
+            "Показать должников",
+            "Только должники",
+            "Скачать XLSX",
+            "Скачать PDF",
+            "XLSX отчета временно недоступен",
+            "queryByText('Отчет XLSX готов.')",
+            "exportCashPaymentReportXlsx",
+            "exportBankDepositReportPdf",
+            "exportFeeReportXlsx",
+            "exportFundChangeReportXlsx"
+        })
+        {
+            Assert.Contains(expectedAppCoverage, appTestsText, StringComparison.Ordinal);
+        }
+
+        foreach (var expectedApiCoverage in new[]
+        {
+            "downloads report exports through POST because the backend records audit events",
+            "loads cash, bank and fee reports through dedicated filtered endpoints",
+            "monthFrom=2026-06-01&monthTo=2026-06-01&search=12",
+            "garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1",
+            "supplierIds=supplier-1&expenseTypeIds=expense-1",
+            "cash-payments/export/xlsx",
+            "bank-deposits/export/pdf",
+            "fees/export/xlsx",
+            "fund-changes/export/pdf"
+        })
+        {
+            Assert.Contains(expectedApiCoverage, reportsApiTestsText, StringComparison.Ordinal);
+        }
+
+        foreach (var expectedFilterCoverage in new[]
+        {
+            "creates default filters for all report tabs",
+            "loads saved report filters and normalizes unsafe values",
+            "falls back to defaults for missing or malformed saved filters",
+            "saves report filters under stable session storage keys",
+            "garageIds: ['g1']",
+            "ownerIds: ['o1']",
+            "incomeTypeIds: ['i1']",
+            "supplierIds: ['s1']",
+            "expenseTypeIds: ['e1']",
+            "rowMode: 'payments'"
+        })
+        {
+            Assert.Contains(expectedFilterCoverage, reportFiltersTestsText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("negative-сценарий", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+        Assert.Contains("пункт Stage 7 \"Добавить React-тесты фильтров", historyText, StringComparison.Ordinal);
+        Assert.Contains("FrontendReportTestsRoadmapItemIsCompleteWhenFiltersStatesExportsAndErrorsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
