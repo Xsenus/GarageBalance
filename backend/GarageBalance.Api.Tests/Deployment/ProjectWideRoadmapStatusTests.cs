@@ -658,7 +658,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[!]`", dryRunLine, StringComparison.Ordinal);
         Assert.Contains("AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist", dryRunLine, StringComparison.Ordinal);
         Assert.Contains("реальные row counts/checksums", dryRunLine, StringComparison.Ordinal);
-        Assert.StartsWith("- `[~]`", quarantineLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportQuarantineRoadmapItemRemainsBlockedUntilTransferRegistersMalformedRows", quarantineLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[!]`", transferLine, StringComparison.Ordinal);
         Assert.Contains("AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist", transferLine, StringComparison.Ordinal);
         Assert.Contains("pending_access_reader", transferLine, StringComparison.Ordinal);
@@ -1232,6 +1233,71 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("пункт Stage 5 \"Реализовать идемпотентность", historyText, StringComparison.Ordinal);
         Assert.Contains("AccessImportIdempotencyRoadmapItemRemainsBlockedUntilTransferUsesFingerprintRegistry", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AccessImportQuarantineRoadmapItemRemainsBlockedUntilTransferRegistersMalformedRows()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-import-quarantine-checklist.md"));
+        var transferChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-transfer-implementation-checklist.md"));
+        var quarantineService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportQuarantineService.cs"));
+        var quarantineContracts = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportQuarantineContracts.cs"));
+        var quarantineTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportQuarantineServiceTests.cs"));
+        var importControllerTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportControllerTests.cs"));
+        var appTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var dbContext = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+        var erd = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "data-model-erd.md"));
+
+        var quarantineLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать quarantine/error bucket для строк", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Реализовать quarantine/error bucket", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("access_import_quarantine_items", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("IImportQuarantineService", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("audit без raw snapshot", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("field-level mapping", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("reason-code policy", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("safe snapshot policy", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("transfer flow", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("reconciliation report", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-import-quarantine-checklist.md", quarantineLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportQuarantineRoadmapItemRemainsBlockedUntilTransferRegistersMalformedRows", quarantineLine, StringComparison.Ordinal);
+
+        Assert.Contains("quarantine/error bucket", checklist, StringComparison.Ordinal);
+        Assert.Contains("access_import_quarantine_items", checklist, StringComparison.Ordinal);
+        Assert.Contains("IImportQuarantineService.RegisterAsync", checklist, StringComparison.Ordinal);
+        Assert.Contains("IImportQuarantineService.ResolveAsync", checklist, StringComparison.Ordinal);
+        Assert.Contains("DTO не возвращает raw `RowSnapshotJson`", checklist, StringComparison.Ordinal);
+        Assert.Contains("import.quarantine_registered", checklist, StringComparison.Ordinal);
+        Assert.Contains("missing owner", checklist, StringComparison.Ordinal);
+        Assert.Contains("safe snapshot policy", checklist, StringComparison.Ordinal);
+        Assert.Contains("Idempotency policy", checklist, StringComparison.Ordinal);
+        Assert.Contains("Second transfer run", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessImportQuarantineRoadmapItemRemainsBlockedUntilTransferRegistersMalformedRows`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("Ошибочные/неоднозначные строки уходят в quarantine", transferChecklist, StringComparison.Ordinal);
+        Assert.Contains("RegisterAsync_CreatesQuarantineItemAndAuditWithoutRawSnapshot", quarantineTests, StringComparison.Ordinal);
+        Assert.Contains("GetOpenItemsAsync_AppliesExplicitLimit", quarantineTests, StringComparison.Ordinal);
+        Assert.Contains("ResolveAsync_MarksItemResolvedAndWritesAudit", quarantineTests, StringComparison.Ordinal);
+        Assert.Contains("GetOpenQuarantineItems_ReturnsItemsFromService", importControllerTests, StringComparison.Ordinal);
+        Assert.Contains("ResolveQuarantineItem_ReturnsResolvedItemAndPassesActor", importControllerTests, StringComparison.Ordinal);
+        Assert.Contains("RowSnapshotJson", quarantineService, StringComparison.Ordinal);
+        Assert.Contains("import.quarantine_registered", quarantineService, StringComparison.Ordinal);
+        Assert.Contains("import.quarantine_resolved", quarantineService, StringComparison.Ordinal);
+        Assert.Contains("AccessImportQuarantineItemDto", quarantineContracts, StringComparison.Ordinal);
+        Assert.Contains("quarantine", appTests, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DbSet<AccessImportQuarantineItem>", dbContext, StringComparison.Ordinal);
+        Assert.Contains("публичные DTO не возвращают raw snapshot", erd, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Реализовать quarantine/error bucket", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessImportQuarantineRoadmapItemRemainsBlockedUntilTransferRegistersMalformedRows", historyText, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
     }
 
