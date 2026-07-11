@@ -2049,6 +2049,50 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessReaderOpenRiskRemainsBlockedUntilPrivateSmokeReadOrConversionIsRecorded()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-reader-verification.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openRiskLine = activeRoadmapLines.Single(line =>
+            line.Contains("На текущей машине старый Access-файл `.accdb` не открылся", StringComparison.Ordinal));
+        var readerLine = activeRoadmapLines.Single(line =>
+            line.Contains("Получить рабочий способ чтения `.accdb`", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("ACE-драйвер", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("Microsoft Access", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("конвертация/repair", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-reader-verification.md", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("AccessReaderOpenRiskRemainsBlockedUntilPrivateSmokeReadOrConversionIsRecorded", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("приватной working copy", openRiskLine, StringComparison.Ordinal);
+        Assert.Contains("safe smoke-read", openRiskLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` На текущей машине старый Access-файл", openRiskLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]` Получить рабочий способ чтения `.accdb`:", readerLine, StringComparison.Ordinal);
+        Assert.Contains("AccessReaderRoadmapItemRemainsBlockedUntilAceOrConversionSmokeReadExists", readerLine, StringComparison.Ordinal);
+
+        Assert.Contains("Условия разблокировки roadmap-пункта", checklist, StringComparison.Ordinal);
+        Assert.Contains("ACE OLE DB/ODBC provider", checklist, StringComparison.Ordinal);
+        Assert.Contains("Создана приватная копия исходной Access-БД", checklist, StringComparison.Ordinal);
+        Assert.Contains("Smoke-read открывает копию", checklist, StringComparison.Ordinal);
+        Assert.Contains("без содержимого персональных/финансовых строк", checklist, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", checklist, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", checklist, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".accdb\" :", checklist, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("открытый риск \"старый Access-файл `.accdb` не открылся", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessReaderOpenRiskRemainsBlockedUntilPrivateSmokeReadOrConversionIsRecorded", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("AccessReaderOpenRiskRemainsBlockedUntilPrivateSmokeReadOrConversionIsRecorded", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccessWorkingCopyRoadmapItemRemainsBlockedUntilPrivateCopyChecksumAndPrivacyCheckExist()
     {
         var repositoryRoot = FindRepositoryRoot();
