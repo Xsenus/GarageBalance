@@ -4374,6 +4374,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var frontendDockerfileText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "Dockerfile"));
         var localInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
         var dockerPreflightScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "check-docker-compose.ps1"));
+        var localInstallPreflightScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "check-local-install-without-docker.ps1"));
 
         var dockerBuildLine = activeRoadmapLines.Single(line =>
             line.Contains("Проверить Docker Compose build", StringComparison.Ordinal));
@@ -4403,14 +4404,27 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("psql/createuser/createdb", localInstallLine, StringComparison.Ordinal);
         Assert.Contains("dotnet publish", localInstallLine, StringComparison.Ordinal);
         Assert.Contains("VITE_API_BASE_URL=http://127.0.0.1:5080", localInstallLine, StringComparison.Ordinal);
+        Assert.Contains("check-local-install-without-docker.ps1", localInstallLine, StringComparison.Ordinal);
         Assert.Contains("Проверить локальную PostgreSQL перед миграциями", localInstallText, StringComparison.Ordinal);
         Assert.Contains("dotnet tool run dotnet-ef database update", localInstallText, StringComparison.Ordinal);
         Assert.Contains("curl -fsS http://127.0.0.1:5080/health", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("VITE_API_BASE_URL", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("npm run build", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("check-local-postgres.ps1", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("Test-NetConnection", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("Get-Command psql", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("RequirePostgres", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=Blocked", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("localPostgresPreflight=Checked", localInstallPreflightScriptText, StringComparison.Ordinal);
+        Assert.Contains("local-install-migrations.sql", localInstallPreflightScriptText, StringComparison.Ordinal);
 
         Assert.Contains("StageEightInfrastructureChecksRemainBlockedWithoutRequiredLocalTools", historyText, StringComparison.Ordinal);
         Assert.Contains("docker` CLI отсутствует", historyText, StringComparison.Ordinal);
         Assert.Contains("check-docker-compose.ps1", historyText, StringComparison.Ordinal);
         Assert.Contains("psql/createuser/createdb", historyText, StringComparison.Ordinal);
+        Assert.Contains("check-local-install-without-docker.ps1", historyText, StringComparison.Ordinal);
         Assert.Contains("dotnet publish backend/GarageBalance.Api/GarageBalance.Api.csproj -c Release --no-restore", historyText, StringComparison.Ordinal);
     }
 
