@@ -999,6 +999,70 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ExpenseExcelScenarioRoadmapItemRequiresBusinessDecisionForRolloverZeroingAndManualCostEntry()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "expense-excel-scenario-decision-checklist.md"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
+
+        var expenseExcelLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать Excel-сценарий выплат", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]` Реализовать Excel-сценарий выплат", expenseExcelLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Реализовать Excel-сценарий выплат", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("серверная месячная ведомость выплат", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("ручное начисление поставщику по счету", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("переноса остатков/долгов", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("обнулению полностью оплаченных услуг", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("audit-документу закрытия месяца", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("docs/expense-excel-scenario-decision-checklist.md", expenseExcelLine, StringComparison.Ordinal);
+        Assert.Contains("ExpenseExcelScenarioRoadmapItemRequiresBusinessDecisionForRolloverZeroingAndManualCostEntry", expenseExcelLine, StringComparison.Ordinal);
+
+        Assert.Contains("Backend строит месячную ведомость выплат", checklist, StringComparison.Ordinal);
+        Assert.Contains("UI позволяет добавить начисление поставщику по счету", checklist, StringComparison.Ordinal);
+        Assert.Contains("источник ручного ввода стоимости услуг по счетам", checklist, StringComparison.Ordinal);
+        Assert.Contains("что переносится в следующий месяц", checklist, StringComparison.Ordinal);
+        Assert.Contains("правило обнуления полностью оплаченных услуг", checklist, StringComparison.Ordinal);
+        Assert.Contains("audit-событие и документ", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `ExpenseExcelScenarioRoadmapItemRequiresBusinessDecisionForRolloverZeroingAndManualCostEntry`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("GetExpenseWorksheetAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TryGetCollectedAmount", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("CalculateAvailableBankAmountAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("CalculateAvailableCashAmountAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseWorksheetAsync_BuildsRowsFromSupplierAccrualsExpensesStaffAndCollections", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseWorksheetAsync_KeepsCashAndBankEqualCollectedFundsAfterMixedExpenses", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts", financeServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("createExpenseRowsFromWorksheet", appText, StringComparison.Ordinal);
+        Assert.Contains(".getExpenseWorksheet(auth.accessToken", appText, StringComparison.Ordinal);
+        Assert.Contains("Оплатить", appText, StringComparison.Ordinal);
+        Assert.Contains("Добавить начисление", appText, StringComparison.Ordinal);
+        Assert.Contains("Добавить выплату", appText, StringComparison.Ordinal);
+        Assert.Contains("loads expense worksheet from finance backend", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("does not show prototype expense rows when expense worksheet is unavailable", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("savedExpenseRequests[0]", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("savedStaffPaymentRequests[0]", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("getExpenseWorksheet(accessToken", financeApiText, StringComparison.Ordinal);
+        Assert.Contains("createSupplierAccrual(accessToken", financeApiText, StringComparison.Ordinal);
+        Assert.Contains("createExpense(accessToken", financeApiText, StringComparison.Ordinal);
+        Assert.Contains("createStaffPayment(accessToken", financeApiText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 6 \"Реализовать Excel-сценарий выплат\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("ExpenseExcelScenarioRoadmapItemRequiresBusinessDecisionForRolloverZeroingAndManualCostEntry", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
