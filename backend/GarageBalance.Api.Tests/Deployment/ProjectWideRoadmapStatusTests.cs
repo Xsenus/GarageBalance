@@ -736,6 +736,60 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void BalanceModelRoadmapItemRequiresBusinessDecisionForManualCorrectionsAndOverpaymentClosure()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "balance-model-decision-checklist.md"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var formattersTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "formatters.test.ts"));
+        var dictionaryWorkbenchText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "dictionaryWorkbench.ts"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        var balanceModelLine = activeRoadmapLines.Single(line =>
+            line.Contains("Зафиксировать модель баланса", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]` Зафиксировать модель баланса", balanceModelLine, StringComparison.Ordinal);
+        Assert.Contains("отрицательного долга как переплаты", balanceModelLine, StringComparison.Ordinal);
+        Assert.Contains("распределение платежа по долгам", balanceModelLine, StringComparison.Ordinal);
+        Assert.Contains("ручных корректировок", balanceModelLine, StringComparison.Ordinal);
+        Assert.Contains("списания/возврата переплат", balanceModelLine, StringComparison.Ordinal);
+        Assert.Contains("docs/balance-model-decision-checklist.md", balanceModelLine, StringComparison.Ordinal);
+        Assert.Contains("BalanceModelRoadmapItemRequiresBusinessDecisionForManualCorrectionsAndOverpaymentClosure", balanceModelLine, StringComparison.Ordinal);
+
+        Assert.Contains("Отрицательный долг отображается как переплата", checklist, StringComparison.Ordinal);
+        Assert.Contains("Платежи распределяются по старейшим долгам", checklist, StringComparison.Ordinal);
+        Assert.Contains("Переплата переносится на будущие месяцы автоматически", checklist, StringComparison.Ordinal);
+        Assert.Contains("возвращать переплату", checklist, StringComparison.Ordinal);
+        Assert.Contains("отрицательное начисление", checklist, StringComparison.Ordinal);
+        Assert.Contains("смене владельца гаража", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `BalanceModelRoadmapItemRequiresBusinessDecisionForManualCorrectionsAndOverpaymentClosure`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("CreateGarageDebtPaymentAsync_CreatesSystemIncomeAndReducesOpeningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageBalanceHistoryAsync_ReturnsMonthlyRunningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateAccrualAsync_RequiresCommentForManualAccrual", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateSupplierAccrualAsync_RequiresCommentForManualAccrual", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateSupplierAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection", financeServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("getDebtClassName(-1)", formattersTestsText, StringComparison.Ordinal);
+        Assert.Contains("formatPaymentAllocations", formattersTestsText, StringComparison.Ordinal);
+        Assert.Contains("Долг положительным числом, переплата отрицательным.", dictionaryWorkbenchText, StringComparison.Ordinal);
+        Assert.Contains("paymentAllocations", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 6 \"Зафиксировать модель баланса\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("BalanceModelRoadmapItemRequiresBusinessDecisionForManualCorrectionsAndOverpaymentClosure", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
