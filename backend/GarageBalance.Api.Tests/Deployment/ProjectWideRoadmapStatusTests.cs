@@ -5291,6 +5291,68 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageElevenFinalAcceptanceRemainsAcceptanceUntilCustomerSignoffAndLiveGatesAreRecorded()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var signoffTemplate = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "stage-11-final-acceptance-signoff-template.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var finalAcceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Получить финальную приемку и закрыть этап актом/автоматической приемкой", StringComparison.Ordinal));
+        var fullTestRunLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести полные backend/frontend тесты", StringComparison.Ordinal));
+        var performanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Провести финальную проверку производительности", StringComparison.Ordinal));
+        var finalReleaseLine = activeRoadmapLines.Single(line =>
+            line.Contains("Подготовить финальную запись \"Что нового\"", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[acceptance]`", finalAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("stage-11-final-acceptance-signoff-template.md", finalAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("StageElevenFinalAcceptanceRemainsAcceptanceUntilCustomerSignoffAndLiveGatesAreRecorded", finalAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("живых evidence-gates", finalAcceptanceLine, StringComparison.Ordinal);
+        Assert.Contains("мотивированных замечаний", finalAcceptanceLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Получить финальную приемку", finalAcceptanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", fullTestRunLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[!]`", performanceLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", finalReleaseLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Stage 11 Final Acceptance Signoff Template", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Signoff Metadata", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Decision", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Accepted without motivated remarks", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Not accepted; motivated remarks are listed below", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Required Live Evidence", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Migrations apply on a clean database", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Backup is created and restore-check succeeds", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("VPS workflow, service, nginx, TLS, `/health`, and frontend smoke", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Final performance checklist is completed on realistic cooperative data", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Access import acceptance is completed or explicitly deferred with reason", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("1C Fresh acceptance is completed or explicitly deferred with reason", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Receipt printing acceptance is completed or explicitly deferred with reason", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Motivated Remarks", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Deferrals", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Safe Evidence Rules", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("Close Conditions", signoffTemplate, StringComparison.Ordinal);
+        Assert.Contains("no secrets or sensitive personal, financial, Access import, fiscal, or deployment data are committed", signoffTemplate, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", signoffTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", signoffTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("BEGIN OPENSSH PRIVATE KEY", signoffTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal-token-", signoffTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("JWT_SIGNING_KEY=", signoffTemplate, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("0.538.0", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Перед финальной приемкой остаются ручные проверки", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("StageElevenFinalAcceptanceRemainsAcceptanceUntilCustomerSignoffAndLiveGatesAreRecorded", historyText, StringComparison.Ordinal);
+        Assert.Contains("финальную приемку или мотивированный отказ может дать только заказчик", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StageElevenRecoveryCheckRemainsBlockedWithoutLocalPostgresAndHasRunbook()
     {
         var repositoryRoot = FindRepositoryRoot();
