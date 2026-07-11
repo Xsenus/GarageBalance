@@ -4310,6 +4310,7 @@ public sealed class ProjectWideRoadmapStatusTests
             .ToArray();
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var demoScript = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "stage-8-demo-script.md"));
+        var feedbackTemplate = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "stage-8-feedback-template.md"));
 
         var demoLine = activeRoadmapLines.Single(line =>
             line.Contains("Провести демонстрацию на тестовых данных", StringComparison.Ordinal));
@@ -4328,6 +4329,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[acceptance]`", feedbackLine, StringComparison.Ordinal);
         Assert.Contains("список замечаний", feedbackLine, StringComparison.Ordinal);
         Assert.Contains("подтверждение, что замечаний нет", feedbackLine, StringComparison.Ordinal);
+        Assert.Contains("stage-8-feedback-template.md", feedbackLine, StringComparison.Ordinal);
+        Assert.Contains("StageEightAcceptanceAndFullTestRunStatusesAreConsistent", feedbackLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Собрать замечания", feedbackLine, StringComparison.Ordinal);
 
         Assert.Contains("гараж 12: есть долг", demoScript, StringComparison.Ordinal);
         Assert.Contains("гараж 27: есть переплата", demoScript, StringComparison.Ordinal);
@@ -4335,6 +4339,11 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Список замечаний", demoScript, StringComparison.Ordinal);
         Assert.Contains("обезличенном виде", demoScript, StringComparison.Ordinal);
         Assert.Contains("можно закрыть как `[x]` только после фактического показа", demoScript, StringComparison.Ordinal);
+        Assert.Contains("Таблица Замечаний", feedbackTemplate, StringComparison.Ordinal);
+        Assert.Contains("ST8-FB-001", feedbackTemplate, StringComparison.Ordinal);
+        Assert.Contains("Не переносить в Git реальные паспортные данные", feedbackTemplate, StringComparison.Ordinal);
+        Assert.Contains("Каждое подтвержденное замечание переносить в roadmap", feedbackTemplate, StringComparison.Ordinal);
+        Assert.Contains("можно закрыть как `[x]` только после заполненного списка замечаний", feedbackTemplate, StringComparison.Ordinal);
 
         Assert.StartsWith("- `[x]`", backendRunLine, StringComparison.Ordinal);
         Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", backendRunLine, StringComparison.Ordinal);
@@ -4346,6 +4355,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("StageEightAcceptanceAndFullTestRunStatusesAreConsistent", historyText, StringComparison.Ordinal);
         Assert.Contains("Демонстрация на тестовых данных и сбор замечаний переведены в `[acceptance]`", historyText, StringComparison.Ordinal);
         Assert.Contains("Провести демонстрацию на тестовых данных\" дополнительно подготовлен к ручному показу", historyText, StringComparison.Ordinal);
+        Assert.Contains("Собрать замечания и внести их в roadmap\" подготовлен к ручной фиксации", historyText, StringComparison.Ordinal);
         Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", historyText, StringComparison.Ordinal);
         Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", historyText, StringComparison.Ordinal);
     }
