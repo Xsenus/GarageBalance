@@ -4083,6 +4083,65 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingObligationDecisionRemainsDecisionUntilResponsiblePartyAndOperationScopeAreSelected()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var obligationDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить, кто юридически обязан выдавать чек и какие операции подлежат печати", StringComparison.Ordinal));
+        var scenarioDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать сценарий: фискальный чек по 54-ФЗ или внутренняя квитанция/чек", StringComparison.Ordinal));
+        var internalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать печать внутренней квитанции, если выбран нефискальный сценарий", StringComparison.Ordinal));
+        var fiscalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать интеграцию с выбранным фискальным оборудованием", StringComparison.Ordinal));
+        var selectedScenarioTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend/frontend тесты выбранного сценария", StringComparison.Ordinal));
+        var obligationTemplate = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-obligation-decision-template.md"));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-design.md"));
+
+        Assert.StartsWith("- `[decision]`", obligationDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("receipt-printing-obligation-decision-template.md", obligationDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("обязанного лица", obligationDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("перечня операций", obligationDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingObligationDecisionRemainsDecisionUntilResponsiblePartyAndOperationScopeAreSelected", obligationDecisionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Уточнить, кто юридически обязан", obligationDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Receipt Printing Obligation Decision Template", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Responsible Party", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Operation Scope", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("ГСК/кооператив выдает чек или квитанцию", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Самозанятый/исполнитель выдает чек", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Поступление от владельца гаража наличными", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Оплата целевого сбора", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Аванс или переплата", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Повторная печать копии с отметкой `КОПИЯ`", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Выплата поставщику/сотруднику", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Сдача кассы в банк", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("Exclusions", obligationTemplate, StringComparison.Ordinal);
+        Assert.Contains("можно закрыть как `[x]` только после заполненного responsible party", obligationTemplate, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", obligationTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", obligationTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal-token-", obligationTemplate, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("`[decision]` Нужно подтвердить, кто обязан выдавать чек", designText, StringComparison.Ordinal);
+        Assert.Contains("Для финансовых операций печать разрешается только для поступлений владельцев", designText, StringComparison.Ordinal);
+        Assert.Contains("выплаты и отмененные поступления не печатаются как первичные квитанции", designText, StringComparison.Ordinal);
+
+        Assert.Contains("ReceiptPrintingObligationDecisionRemainsDecisionUntilResponsiblePartyAndOperationScopeAreSelected", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может сам определить обязанное лицо", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
