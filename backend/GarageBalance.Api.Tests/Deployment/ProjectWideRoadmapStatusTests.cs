@@ -1427,6 +1427,64 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessImportFrontendTestsRoadmapItemRemainsBlockedUntilTransferWizardAndReconciliationUiExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-import-frontend-tests-checklist.md"));
+        var appTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var importApiTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "importApi.test.ts"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+
+        var frontendTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("React-", StringComparison.Ordinal)
+            && line.Contains(".accdb", StringComparison.Ordinal)
+            && line.Contains("live transfer wizard", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]`", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("dry-run", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("apply/cancel request", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("created records", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("quarantine UI", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("reconciliation UI", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("repeat-run/idempotency UX", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("privacy", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-import-frontend-tests-checklist.md", frontendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportFrontendTestsRoadmapItemRemainsBlockedUntilTransferWizardAndReconciliationUiExist", frontendTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("Расширенный мастер фактического переноса", checklist, StringComparison.Ordinal);
+        Assert.Contains("`App.test.tsx` covers choosing `.accdb`", checklist, StringComparison.Ordinal);
+        Assert.Contains("`importApi.test.ts` covers dry-run", checklist, StringComparison.Ordinal);
+        Assert.Contains("Transfer wizard confirmation", checklist, StringComparison.Ordinal);
+        Assert.Contains("Reconciliation summary", checklist, StringComparison.Ordinal);
+        Assert.Contains("raw sensitive Access rows are not rendered", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessImportFrontendTestsRoadmapItemRemainsBlockedUntilTransferWizardAndReconciliationUiExist`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("runs Access import dry-run and shows checks history", appTests, StringComparison.Ordinal);
+        Assert.Contains("requestAccessImportApply", appTests, StringComparison.Ordinal);
+        Assert.Contains("cancelAccessImportApplyRequest", appTests, StringComparison.Ordinal);
+        Assert.Contains("getAccessCreatedRecords", appTests, StringComparison.Ordinal);
+        Assert.Contains("quarantine", appTests, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Созданные записи появятся после фактического переноса Access", appTests, StringComparison.Ordinal);
+
+        Assert.Contains("downloads dry-run report through POST", importApiTests, StringComparison.Ordinal);
+        Assert.Contains("requests Access import apply with reason and backup confirmation", importApiTests, StringComparison.Ordinal);
+        Assert.Contains("cancels Access import apply request with a required reason", importApiTests, StringComparison.Ordinal);
+        Assert.Contains("getAccessCreatedRecords", importApiTests, StringComparison.Ordinal);
+
+        Assert.Contains("importCreatedRecordsScreenRequestLimit", appText, StringComparison.Ordinal);
+        Assert.Contains("loadingCreatedRecords", appText, StringComparison.Ordinal);
+        Assert.Contains("quarantine", appText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("AccessImportFrontendTestsRoadmapItemRemainsBlockedUntilTransferWizardAndReconciliationUiExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
