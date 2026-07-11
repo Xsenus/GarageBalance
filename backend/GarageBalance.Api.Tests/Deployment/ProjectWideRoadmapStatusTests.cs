@@ -1063,6 +1063,74 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void BackendFinanceTestCoverageRoadmapItemIsCompleteWhenCalculationsDebtsPermissionsAndAuditAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "backend-finance-tests-verification.md"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var financeControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "ControllerAuthorizationCoverageTests.cs"));
+        var permissionHandlerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "PermissionAuthorizationHandlerTests.cs"));
+
+        var backendFinanceTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты расчетов, долгов, ручных корректировок, прав и audit", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Добавить backend-тесты расчетов, долгов, ручных корректировок, прав и audit", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceServiceTests", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceControllerTests", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("ControllerAuthorizationCoverageTests", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("PermissionAuthorizationHandlerTests", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/backend-finance-tests-verification.md", backendFinanceTestsLine, StringComparison.Ordinal);
+        Assert.Contains("BackendFinanceTestCoverageRoadmapItemIsCompleteWhenCalculationsDebtsPermissionsAndAuditAreCovered", backendFinanceTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("Долги владельцев и поставщиков", verification, StringComparison.Ordinal);
+        Assert.Contains("Ручные корректировки начислений", verification, StringComparison.Ordinal);
+        Assert.Contains("Backend-права проверяются", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("CreateIncomeAsync_CreatesOperationAndWritesAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateIncomeAsync_UpdatesOperationAndWritesBeforeAfterAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync_CreatesOperationAndWritesAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateExpenseAsync_UpdatesOperationAndWritesBeforeAfterAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateGarageDebtPaymentAsync_CreatesSystemIncomeAndReducesOpeningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateAccrualAsync_RequiresCommentForManualAccrual", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateSupplierAccrualAsync_RequiresCommentForManualAccrual", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateSupplierAccrualAsync_WritesBeforeAndAfterAuditForManualCorrection", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CancelOperationAsync_CancelsOperationAndRemovesItFromSummary", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreOperationAsync_RestoresCanceledIncomeAndWritesAudit", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheetAsync_CarriesOpeningDebtIntoPeriodTotals", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseWorksheetAsync_KeepsCashAndBankEqualCollectedFundsAfterMixedExpenses", financeServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("CreateIncome_PassesActorUserIdToService", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateExpense_ReturnsConflictWhenBankAmountIsInsufficient", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CancelOperation_ReturnsBadRequestForMissingCancelBody", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateDebtTransfer_PassesActorUserIdAndRequestToService", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateSupplierAccrual_ReturnsConflictForDuplicateAccrual", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CancelSupplierAccrual_ReturnsBadRequestForBlankCancelReason", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateMeterReading_ReturnsConflictForDuplicateReading", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreMeterReading_ReturnsConflictForActiveReading", financeControllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("FinanceActionsRequireExpectedPaymentPermissions", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("FundsActionsRequireReportsReadAndPaymentsWritePermissions", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("SystemPermissions.PaymentsRead", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("SystemPermissions.PaymentsWrite", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("HandleAsync_SucceedsWhenPermissionClaimExists", permissionHandlerTestsText, StringComparison.Ordinal);
+        Assert.Contains("HandleAsync_DoesNotSucceedWhenPermissionClaimIsMissing", permissionHandlerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 6 \"Добавить backend-тесты расчетов, долгов", historyText, StringComparison.Ordinal);
+        Assert.Contains("BackendFinanceTestCoverageRoadmapItemIsCompleteWhenCalculationsDebtsPermissionsAndAuditAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
