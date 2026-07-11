@@ -1395,6 +1395,82 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void PdfExportRoadmapItemIsCompleteWhenCurrentReportDocumentsRoutesAndUiClientsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "pdf-export-verification.md"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var pdfBuilderText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Reports", "PdfReportDocumentBuilder.cs"));
+
+        var pdfLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать экспорт PDF", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать экспорт PDF", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("сводного отчета", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("поступлениям", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("выплатам", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("оплатам из кассы", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("сдаче кассы в банк", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("сборам", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("изменению фондов", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("docs/pdf-export-verification.md", pdfLine, StringComparison.Ordinal);
+        Assert.Contains("PdfExportRoadmapItemIsCompleteWhenCurrentReportDocumentsRoutesAndUiClientsAreCovered", pdfLine, StringComparison.Ordinal);
+
+        Assert.Contains("POST /api/reports/consolidated/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/income/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/expense/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/cash-payments/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/bank-deposits/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/fees/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/fund-changes/export/pdf", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("BuildPdf", pdfBuilderText, StringComparison.Ordinal);
+        Assert.Contains("ExportConsolidatedReportPdfAsync_ReturnsDocumentWithMonthlyAndGarageRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportConsolidatedReportPdfAsync_AppliesGarageSearchFilter", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportExpenseReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportCashPaymentReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportBankDepositReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportFeeReportPdfAsync_ReturnsDocumentWithTotals", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportFundChangeReportPdfAsync_ReturnsDocumentWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("AssertPdfContains", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("AssertPdfDoesNotContain", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("ExportReportActions_UsePostBecauseExportsWriteAuditEvents", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("consolidated/export/pdf", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("income/export/pdf", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("expense/export/pdf", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("fund-changes/export/pdf", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("cash-payments/export/pdf", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("bank-deposits/export/pdf", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("fees/export/pdf", controllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("exportConsolidatedReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportIncomeReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportExpenseReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportCashPaymentReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportBankDepositReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportFeeReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportFundChangeReportPdf('token'", reportsApiTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Скачать PDF", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportBankDepositReportPdf", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 7 \"Реализовать экспорт PDF", historyText, StringComparison.Ordinal);
+        Assert.Contains("PdfExportRoadmapItemIsCompleteWhenCurrentReportDocumentsRoutesAndUiClientsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
