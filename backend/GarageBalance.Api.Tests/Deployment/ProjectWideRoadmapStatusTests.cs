@@ -859,6 +859,80 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void IncomeExcelScenarioRoadmapItemIsCompleteWhenWorksheetPaymentCellCashAndHistoryAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "income-excel-scenario-verification.md"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var financeControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceControllerTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
+
+        var incomeExcelLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать Excel-сценарий поступлений", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать Excel-сценарий поступлений", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("getGarageIncomeWorksheet", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("createIncome", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("Платёж", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("Оплачено", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("Задолженность", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("кассы", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("истории платежей", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("docs/income-excel-scenario-verification.md", incomeExcelLine, StringComparison.Ordinal);
+        Assert.Contains("IncomeExcelScenarioRoadmapItemIsCompleteWhenWorksheetPaymentCellCashAndHistoryAreCovered", incomeExcelLine, StringComparison.Ordinal);
+
+        Assert.Contains("Выбор гаража выполняется через поиск", verification, StringComparison.Ordinal);
+        Assert.Contains("backend-ведомости `getGarageIncomeWorksheet`", verification, StringComparison.Ordinal);
+        Assert.Contains("После Enter ячейка платежа очищается", verification, StringComparison.Ordinal);
+        Assert.Contains("История платежей гаража пополняется новой операцией", verification, StringComparison.Ordinal);
+        Assert.Contains("Итоги кассы и банка", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("GetGarageIncomeWorksheetAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("OrderByDescending(bucket => bucket.AccountingMonth)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheetAsync_BuildsRowsFromAccrualsPaymentsAndMeters", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheetAsync_CarriesOpeningDebtIntoPeriodTotals", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheet_PassesGarageAndPeriodToService", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheet_ReturnsNotFoundForMissingGarage", financeControllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheet_ReturnsBadRequestForInvalidPeriod", financeControllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("createGarageIncomeRowsFromWorksheet", appText, StringComparison.Ordinal);
+        Assert.Contains("loadGarageIncomeWorksheet", appText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.createIncome", appText, StringComparison.Ordinal);
+        Assert.Contains("paymentDraft: ''", appText, StringComparison.Ordinal);
+        Assert.Contains("setHistoryRows", appText, StringComparison.Ordinal);
+        Assert.Contains("loadGaragePaymentHistory(selectedGarage)", appText, StringComparison.Ordinal);
+        Assert.Contains("Выбранный гараж", appText, StringComparison.Ordinal);
+        Assert.Contains("Платёж", appText, StringComparison.Ordinal);
+        Assert.Contains("Оплачено", appText, StringComparison.Ordinal);
+        Assert.Contains("Задолженность", appText, StringComparison.Ordinal);
+        Assert.Contains("История платежей гаража", appText, StringComparison.Ordinal);
+        Assert.Contains("Итоги кассы и банка", appText, StringComparison.Ordinal);
+
+        Assert.Contains("loads selected garage income worksheet from finance backend", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("does not restore stale saved payment rows for a real garage before backend worksheet loads", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("does not show prototype income rows while selected real garage worksheet is unavailable", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Платеж Серверная электроэнергия июн.26", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Платеж Электроэнергия июн.26", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("toHaveValue('')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("savedIncomeRequests[0]", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("getGarageIncomeWorksheet", financeApiText, StringComparison.Ordinal);
+        Assert.Contains("createIncome(accessToken", financeApiText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 6 \"Реализовать Excel-сценарий поступлений\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("IncomeExcelScenarioRoadmapItemIsCompleteWhenWorksheetPaymentCellCashAndHistoryAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
