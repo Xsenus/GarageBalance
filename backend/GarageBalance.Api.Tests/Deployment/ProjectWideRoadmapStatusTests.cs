@@ -4021,6 +4021,68 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingEquipmentDecisionRemainsDecisionUntilDeviceConnectionAndAcceptanceEvidenceAreSelected()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var equipmentDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать оборудование: ориентир АТОЛ 30Ф/30Ф+ для фискального сценария", StringComparison.Ordinal));
+        var scenarioDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Выбрать сценарий: фискальный чек по 54-ФЗ или внутренняя квитанция/чек", StringComparison.Ordinal));
+        var fiscalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать интеграцию с выбранным фискальным оборудованием", StringComparison.Ordinal));
+        var selectedScenarioTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend/frontend тесты выбранного сценария", StringComparison.Ordinal));
+        var deviceAcceptanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить печать на реальном или тестовом устройстве", StringComparison.Ordinal));
+        var equipmentTemplate = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-equipment-decision-template.md"));
+        var sourceAnalysis = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-design.md"));
+
+        Assert.StartsWith("- `[decision]`", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("receipt-printing-equipment-decision-template.md", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("тестового устройства/эмулятора", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingEquipmentDecisionRemainsDecisionUntilDeviceConnectionAndAcceptanceEvidenceAreSelected", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Выбрать оборудование", equipmentDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[decision]`", scenarioDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[acceptance]`", deviceAcceptanceLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Receipt Printing Equipment Decision Template", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("АТОЛ 30Ф/30Ф+", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Эвотор 5i", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Другое фискальное устройство", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Локальный принтер без фискализации", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("PDF/печать через браузер", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Внешний HTTP/облачный сервис", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Connection Details", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Requirements", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Internal Receipt Requirements", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Acceptance Evidence", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Ошибка недоступности проверена", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Печать копии с `КОПИЯ` проверена", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("можно закрыть как `[x]` только после заполненного выбранного варианта", equipmentTemplate, StringComparison.Ordinal);
+        Assert.Contains("Секреты оборудования хранить только в environment/deployment secrets", equipmentTemplate, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", equipmentTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", equipmentTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal-token-", equipmentTemplate, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("АТОЛ 30Ф / 30Ф+", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("Эвотор 5i", sourceAnalysis, StringComparison.Ordinal);
+        Assert.Contains("`[decision]` Нужно выбрать оборудование", designText, StringComparison.Ordinal);
+        Assert.Contains("IReceiptPrintingAdapter", designText, StringComparison.Ordinal);
+
+        Assert.Contains("ReceiptPrintingEquipmentDecisionRemainsDecisionUntilDeviceConnectionAndAcceptanceEvidenceAreSelected", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не должен выбирать оборудование за заказчика", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
