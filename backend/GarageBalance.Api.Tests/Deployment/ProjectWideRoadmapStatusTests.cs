@@ -933,6 +933,72 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "income-service-rules-decision-checklist.md"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        var serviceRulesLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать уточненную логику поступлений по услугам", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]` Реализовать уточненную логику поступлений по услугам", serviceRulesLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Реализовать уточненную логику поступлений по услугам", serviceRulesLine, StringComparison.Ordinal);
+        Assert.Contains("электросчетчик только за текущий месяц", serviceRulesLine, StringComparison.Ordinal);
+        Assert.Contains("подтверждению платежа по электроэнергии раньше 30-го дня", serviceRulesLine, StringComparison.Ordinal);
+        Assert.Contains("подсветки ручного водоснабжения", serviceRulesLine, StringComparison.Ordinal);
+        Assert.Contains("годовых взносов и наружного освещения", serviceRulesLine, StringComparison.Ordinal);
+        Assert.Contains("docs/income-service-rules-decision-checklist.md", serviceRulesLine, StringComparison.Ordinal);
+        Assert.Contains("IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules", serviceRulesLine, StringComparison.Ordinal);
+
+        Assert.Contains("Backend проверяет совместимость вида поступления и тарифа", checklist, StringComparison.Ordinal);
+        Assert.Contains("мусор использует `people`", checklist, StringComparison.Ordinal);
+        Assert.Contains("Форма поступлений подсвечивает пустую ячейку счетчика", checklist, StringComparison.Ordinal);
+        Assert.Contains("Правка электросчетчика только за текущий месяц", checklist, StringComparison.Ordinal);
+        Assert.Contains("Подтверждение платежа по электроэнергии раньше 30 дней", checklist, StringComparison.Ordinal);
+        Assert.Contains("Годовые взносы и наружное освещение", checklist, StringComparison.Ordinal);
+        Assert.Contains("Roadmap-пункт нельзя закрывать как `[x]`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("\"water\" => calculationBase == TariffCalculationBases.MeterWater", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("\"trash\" => calculationBase == TariffCalculationBases.People", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("\"electricity\" => calculationBase == TariffCalculationBases.MeterElectricity", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount))", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffCalculationBases.MeterWater => await CalculateMeterAmountAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffCalculationBases.MeterElectricity => await CalculateElectricityMeterAmountAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("HasGapWarning", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("IsChargeServiceDueForMonth", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("periodicity >= 12", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("FeeCampaign", financeServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("\"trash\" => calculationBase == TariffCalculationBases.People", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("paymentDueDay", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("paymentDueMonth", dictionaryServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("payments-prototype-required-cell", appText, StringComparison.Ordinal);
+        Assert.Contains("row.meterRequired && row.meter === null", appText, StringComparison.Ordinal);
+        Assert.Contains("meterRequired: row.meterKind !== null && row.meterValue === null", appText, StringComparison.Ordinal);
+        Assert.Contains("meter_reading", appText, StringComparison.Ordinal);
+        Assert.Contains("Подтвердить показание?", appText, StringComparison.Ordinal);
+
+        Assert.Contains("calculationBase: 'meter_water'", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("calculationBase: 'meter_electricity'", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("paymentDueDay", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("createFeeCampaign", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 6 \"Реализовать уточненную логику поступлений по услугам\"", historyText, StringComparison.Ordinal);
+        Assert.Contains("IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
