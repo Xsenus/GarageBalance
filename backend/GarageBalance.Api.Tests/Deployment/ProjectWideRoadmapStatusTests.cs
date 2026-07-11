@@ -4142,6 +4142,65 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ReceiptPrintingRequisitesDecisionRemainsDecisionUntilMandatoryFieldsAndDataMinimizationAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var requisitesDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить обязательные реквизиты печатной квитанции/чека для внутреннего учета", StringComparison.Ordinal));
+        var internalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать печать внутренней квитанции, если выбран нефискальный сценарий", StringComparison.Ordinal));
+        var fiscalReceiptLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать интеграцию с выбранным фискальным оборудованием", StringComparison.Ordinal));
+        var selectedScenarioTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend/frontend тесты выбранного сценария", StringComparison.Ordinal));
+        var requisitesTemplate = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-requisites-decision-template.md"));
+        var designText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "receipt-printing-design.md"));
+
+        Assert.StartsWith("- `[decision]`", requisitesDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("receipt-printing-requisites-decision-template.md", requisitesDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("обязательных полей", requisitesDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("минимизации данных", requisitesDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrintingRequisitesDecisionRemainsDecisionUntilMandatoryFieldsAndDataMinimizationAreApproved", requisitesDecisionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Уточнить обязательные реквизиты", requisitesDecisionLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", internalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", fiscalReceiptLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[ ]`", selectedScenarioTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Receipt Printing Requisites Decision Template", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Internal Receipt Requisites", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Receipt Requisites", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Название ГСК/кооператива", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("ИНН или иные реквизиты ГСК", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Номер квитанции или номер финансового документа", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Учетный месяц или период", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Назначение платежа", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Сумма прописью", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Отметка `КОПИЯ` для повторной печати", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Фискальные реквизиты", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Data Minimization", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Паспортные данные", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("Layout And Copies", requisitesTemplate, StringComparison.Ordinal);
+        Assert.Contains("можно закрыть как `[x]` только после заполненного списка обязательных реквизитов", requisitesTemplate, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", requisitesTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", requisitesTemplate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal-token-", requisitesTemplate, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("`[decision]` Нужно утвердить обязательные реквизиты внутренней квитанции", designText, StringComparison.Ordinal);
+        Assert.Contains("номер квитанции или номер финансового документа", designText, StringComparison.Ordinal);
+        Assert.Contains("сумма цифрами и при необходимости прописью", designText, StringComparison.Ordinal);
+        Assert.Contains("фискальные реквизиты, QR-код и ФН/ФД/ФПД", designText, StringComparison.Ordinal);
+
+        Assert.Contains("ReceiptPrintingRequisitesDecisionRemainsDecisionUntilMandatoryFieldsAndDataMinimizationAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может сам утвердить реквизиты ГСК", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
