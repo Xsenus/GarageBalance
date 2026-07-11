@@ -1302,6 +1302,69 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessImportReconciliationReportRoadmapItemRemainsBlockedUntilLiveTransferBaselineAndReportExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-import-reconciliation-checklist.md"));
+        var transferChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-transfer-implementation-checklist.md"));
+        var baselineChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-preimport-baseline-checklist.md"));
+        var importService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportService.cs"));
+        var importContracts = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportContracts.cs"));
+        var importServiceTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
+        var importControllerTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportControllerTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var importApiTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "importApi.test.ts"));
+        var dbContext = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+
+        var reconciliationLine = activeRoadmapLines.Single(line =>
+            line.Contains("После импорта сформировать сверочный отчет", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` После импорта сформировать сверочный отчет", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("created-records registry", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("pre-import baseline", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("access_import_created_records", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("quarantine/duplicate counts", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("financial/balance totals", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("without raw sensitive rows", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-import-reconciliation-checklist.md", reconciliationLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportReconciliationReportRoadmapItemRemainsBlockedUntilLiveTransferBaselineAndReportExist", reconciliationLine, StringComparison.Ordinal);
+
+        Assert.Contains("run history, created-records registry, quarantine and fingerprint infrastructure", checklist, StringComparison.Ordinal);
+        Assert.Contains("AccessImportCreatedRecordDto", checklist, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecordsAsync", checklist, StringComparison.Ordinal);
+        Assert.Contains("Frontend import panel показывает вкладку созданных записей", checklist, StringComparison.Ordinal);
+        Assert.Contains("Reconciliation report compares Access baseline counts", checklist, StringComparison.Ordinal);
+        Assert.Contains("Report separates imported, skipped duplicate, quarantined", checklist, StringComparison.Ordinal);
+        Assert.Contains("Report excludes raw personal, payment, address, phone, passport, bank and raw Access row data", checklist, StringComparison.Ordinal);
+        Assert.Contains("Financial summary", checklist, StringComparison.Ordinal);
+        Assert.Contains("Duplicate summary", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessImportReconciliationReportRoadmapItemRemainsBlockedUntilLiveTransferBaselineAndReportExist`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("Export final reconciliation report without raw personal/payment rows", transferChecklist, StringComparison.Ordinal);
+        Assert.Contains("row counts", baselineChecklist, StringComparison.Ordinal);
+        Assert.Contains("AccessImportCreatedRecords", importService, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecordsAsync", importService, StringComparison.Ordinal);
+        Assert.Contains("AccessImportCreatedRecordDto", importContracts, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecordsAsync_ReturnsRunRecordsWithLimit", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecords_ReturnsRecords", importControllerTests, StringComparison.Ordinal);
+        Assert.Contains("importCreatedRecordsScreenRequestLimit", appText, StringComparison.Ordinal);
+        Assert.Contains("Созданные записи появятся после фактического переноса Access", appText, StringComparison.Ordinal);
+        Assert.Contains("getAccessCreatedRecords", appTests, StringComparison.Ordinal);
+        Assert.Contains("getAccessCreatedRecords", importApiTests, StringComparison.Ordinal);
+        Assert.Contains("DbSet<AccessImportCreatedRecord>", dbContext, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"После импорта сформировать сверочный отчет", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessImportReconciliationReportRoadmapItemRemainsBlockedUntilLiveTransferBaselineAndReportExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
