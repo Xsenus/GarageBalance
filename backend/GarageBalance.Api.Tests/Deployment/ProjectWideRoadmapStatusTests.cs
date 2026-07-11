@@ -1867,6 +1867,54 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StageSevenReportPerformanceCheckRequiresRealPostgresAcceptance()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "report-performance-verification.md"));
+        var reportService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Reports", "ReportService.cs"));
+        var performanceGuards = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "BackendPerformanceGuardTests.cs"));
+
+        var performanceLine = activeRoadmapLines.Single(line =>
+            line.Contains("Проверить производительность отчетов на периодах в несколько месяцев", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[acceptance]`", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("docs/report-performance-verification.md", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("BackendPerformanceGuardTests", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("ApplyReportRowLimit", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("Take(NormalizeReportLimit(...))", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("CountAsync", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("SumAsync", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("psql=False", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("docker=False", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("StageSevenReportPerformanceCheckRequiresRealPostgresAcceptance", performanceLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Проверить производительность отчетов", performanceLine, StringComparison.Ordinal);
+
+        Assert.Contains("GetIncomeReportWithoutSearchAsync", reportService, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportWithoutSearchAsync", reportService, StringComparison.Ordinal);
+        Assert.Contains("ApplyReportRowLimit", reportService, StringComparison.Ordinal);
+        Assert.Contains(".Take(NormalizeReportLimit(limit.Value))", reportService, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", reportService, StringComparison.Ordinal);
+        Assert.Contains("SumAsync(", reportService, StringComparison.Ordinal);
+        Assert.Contains("ScreenReportQueries_UseDatabaseLimitsForVisibleRows", performanceGuards, StringComparison.Ordinal);
+
+        Assert.Contains("живого PostgreSQL-прогона", verification, StringComparison.Ordinal);
+        Assert.Contains("EXPLAIN (ANALYZE, BUFFERS)", verification, StringComparison.Ordinal);
+        Assert.Contains("browser console", verification, StringComparison.Ordinal);
+        Assert.Contains("postgresTcp=False", verification, StringComparison.Ordinal);
+        Assert.Contains("psql=False", verification, StringComparison.Ordinal);
+        Assert.Contains("docker=False", verification, StringComparison.Ordinal);
+        Assert.Contains("пункт Stage 7 \"Проверить производительность отчетов", historyText, StringComparison.Ordinal);
+        Assert.Contains("StageSevenReportPerformanceCheckRequiresRealPostgresAcceptance", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
