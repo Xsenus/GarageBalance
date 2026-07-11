@@ -1317,6 +1317,84 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void XlsxExportRoadmapItemIsCompleteWhenCurrentReportWorkbooksRoutesAndUiClientsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "xlsx-export-verification.md"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var xlsxBuilderText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Reports", "XlsxWorkbookBuilder.cs"));
+
+        var xlsxLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать экспорт XLSX", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать экспорт XLSX", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("сводного отчета", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("поступлениям", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("выплатам", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("оплатам из кассы", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("сдаче кассы в банк", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("сборам", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("изменению фондов", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("docs/xlsx-export-verification.md", xlsxLine, StringComparison.Ordinal);
+        Assert.Contains("XlsxExportRoadmapItemIsCompleteWhenCurrentReportWorkbooksRoutesAndUiClientsAreCovered", xlsxLine, StringComparison.Ordinal);
+
+        Assert.Contains("POST /api/reports/consolidated/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/income/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/expense/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/cash-payments/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/bank-deposits/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/fees/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/fund-changes/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsxBuilderText, StringComparison.Ordinal);
+        Assert.Contains("ExportConsolidatedReportXlsxAsync_ReturnsWorkbookWithMonthlyAndGarageRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportConsolidatedReportXlsxAsync_AppliesGarageSearchFilter", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportExpenseReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportCashPaymentReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportBankDepositReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportFeeReportXlsxAsync_ReturnsWorkbookWithSummaryGaragesAndDebtors", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportFundChangeReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("AssertWorkbookContains", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("AssertWorkbookDoesNotContain", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("ExportReportActions_UsePostBecauseExportsWriteAuditEvents", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("consolidated/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("income/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("expense/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("fund-changes/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("cash-payments/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("bank-deposits/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("fees/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("exportConsolidatedReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportIncomeReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportExpenseReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportCashPaymentReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportBankDepositReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportFeeReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportFundChangeReportXlsx('token'", reportsApiTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Скачать XLSX", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportCashPaymentReportXlsx", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportFeeReportXlsx", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("exportFundChangeReportXlsx", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 7 \"Реализовать экспорт XLSX", historyText, StringComparison.Ordinal);
+        Assert.Contains("XlsxExportRoadmapItemIsCompleteWhenCurrentReportWorkbooksRoutesAndUiClientsAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
