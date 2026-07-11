@@ -1471,6 +1471,69 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ExportFileNameRoadmapItemIsCompleteWhenPeriodAndSnapshotReportsUseStableNames()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "export-file-name-verification.md"));
+        var reportServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Reports", "ReportService.cs"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportsControllerTests.cs"));
+        var xlsxVerification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "xlsx-export-verification.md"));
+        var pdfVerification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "pdf-export-verification.md"));
+
+        var fileNameLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать единый формат имени экспортируемых файлов", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]` Реализовать единый формат имени экспортируемых файлов", fileNameLine, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-{type}-{yyyyMMdd}-{yyyyMMdd}.{xlsx|pdf}", fileNameLine, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-fees.{xlsx|pdf}", fileNameLine, StringComparison.Ordinal);
+        Assert.Contains("docs/export-file-name-verification.md", fileNameLine, StringComparison.Ordinal);
+        Assert.Contains("ExportFileNameRoadmapItemIsCompleteWhenPeriodAndSnapshotReportsUseStableNames", fileNameLine, StringComparison.Ordinal);
+
+        Assert.Contains("BuildExportFileName", reportServiceText, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.{extension}", reportServiceText, StringComparison.Ordinal);
+        Assert.Contains("BuildSnapshotExportFileName", reportServiceText, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-{reportType}.{extension}", reportServiceText, StringComparison.Ordinal);
+
+        foreach (var expectedFileName in new[]
+        {
+            "garagebalance-consolidated-20260601-20260601.xlsx",
+            "garagebalance-consolidated-20260601-20260601.pdf",
+            "garagebalance-income-20260601-20260630.xlsx",
+            "garagebalance-income-20260601-20260630.pdf",
+            "garagebalance-expense-20260601-20260630.xlsx",
+            "garagebalance-expense-20260601-20260630.pdf",
+            "garagebalance-cash-payments-20260601-20260630.xlsx",
+            "garagebalance-cash-payments-20260601-20260630.pdf",
+            "garagebalance-bank-deposits-20260601-20260630.xlsx",
+            "garagebalance-bank-deposits-20260601-20260630.pdf",
+            "garagebalance-fund-changes-20260601-20260630.xlsx",
+            "garagebalance-fund-changes-20260601-20260630.pdf",
+            "garagebalance-fees.xlsx",
+            "garagebalance-fees.pdf"
+        })
+        {
+            Assert.Contains(expectedFileName, reportServiceTestsText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("FileDownloadName", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal(export.FileName, file.FileDownloadName)", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("Period exports", verification, StringComparison.Ordinal);
+        Assert.Contains("Snapshot exports", verification, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-income-{yyyyMMdd}-{yyyyMMdd}.xlsx", xlsxVerification, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-income-{yyyyMMdd}-{yyyyMMdd}.pdf", pdfVerification, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 7 \"Реализовать единый формат имени", historyText, StringComparison.Ordinal);
+        Assert.Contains("ExportFileNameRoadmapItemIsCompleteWhenPeriodAndSnapshotReportsUseStableNames", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
