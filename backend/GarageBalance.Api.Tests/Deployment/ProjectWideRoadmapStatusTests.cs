@@ -1365,6 +1365,68 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AccessImportBackendTestsRoadmapItemRemainsBlockedUntilMappingTransferAndPostgresCoverageExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-import-backend-tests-checklist.md"));
+        var transferChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-transfer-implementation-checklist.md"));
+        var mappingChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-postgresql-mapping-checklist.md"));
+        var importServiceTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
+        var importControllerTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportControllerTests.cs"));
+        var fingerprintTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportFingerprintServiceTests.cs"));
+        var quarantineTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportQuarantineServiceTests.cs"));
+
+        var backendTestsLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты маппинга, дублей, ошибок и повторного запуска", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[!]` Добавить backend-тесты маппинга", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("duplicate content warning", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("created-records list", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("fingerprint/idempotency service", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("quarantine service", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("final field-level mapping", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL integration coverage", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("repeat-run tests", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("transaction/rollback/status tracking tests", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("docs/access-import-backend-tests-checklist.md", backendTestsLine, StringComparison.Ordinal);
+        Assert.Contains("AccessImportBackendTestsRoadmapItemRemainsBlockedUntilMappingTransferAndPostgresCoverageExist", backendTestsLine, StringComparison.Ordinal);
+
+        Assert.Contains("Сейчас покрыта инфраструктура вокруг импорта", checklist, StringComparison.Ordinal);
+        Assert.Contains("ImportServiceTests", checklist, StringComparison.Ordinal);
+        Assert.Contains("ImportControllerTests", checklist, StringComparison.Ordinal);
+        Assert.Contains("ImportFingerprintServiceTests", checklist, StringComparison.Ordinal);
+        Assert.Contains("ImportQuarantineServiceTests", checklist, StringComparison.Ordinal);
+        Assert.Contains("Final field-level Access -> PostgreSQL mapping", checklist, StringComparison.Ordinal);
+        Assert.Contains("Transfer service exists", checklist, StringComparison.Ordinal);
+        Assert.Contains("Mapping tests validate required fields", checklist, StringComparison.Ordinal);
+        Assert.Contains("Duplicate tests cover external id duplicates", checklist, StringComparison.Ordinal);
+        Assert.Contains("Repeat-run tests prove idempotent second import", checklist, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL integration tests verify indexes", checklist, StringComparison.Ordinal);
+        Assert.Contains("Guard `AccessImportBackendTestsRoadmapItemRemainsBlockedUntilMappingTransferAndPostgresCoverageExist`", checklist, StringComparison.Ordinal);
+
+        Assert.Contains("Backend tests cover mapping, duplicates, malformed rows", transferChecklist, StringComparison.Ordinal);
+        Assert.Contains("не считается финальной field-level mapping", mappingChecklist, StringComparison.Ordinal);
+        Assert.Contains("duplicate_content_detected", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("RequestAccessImportApplyAsync_MarksRunAndWritesAuditWithBackupConfirmation", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("RequestAccessImportRollbackAsync_MarksRunAndWritesAudit", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecordsAsync_ReturnsRunRecordsWithLimit", importServiceTests, StringComparison.Ordinal);
+        Assert.Contains("GetAccessImportCreatedRecords_ReturnsRecords", importControllerTests, StringComparison.Ordinal);
+        Assert.Contains("RegisterAsync_ReturnsExistingForDuplicateExternalIdWithoutSecondAudit", fingerprintTests, StringComparison.Ordinal);
+        Assert.Contains("RegisterAsync_UsesRowHashWhenExternalIdIsMissing", fingerprintTests, StringComparison.Ordinal);
+        Assert.Contains("RegisterAsync_CreatesQuarantineItemAndAuditWithoutRawSnapshot", quarantineTests, StringComparison.Ordinal);
+        Assert.Contains("ResolveAsync_MarksItemResolvedAndWritesAudit", quarantineTests, StringComparison.Ordinal);
+
+        Assert.Contains("пункт Stage 5 \"Добавить backend-тесты маппинга", historyText, StringComparison.Ordinal);
+        Assert.Contains("AccessImportBackendTestsRoadmapItemRemainsBlockedUntilMappingTransferAndPostgresCoverageExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
