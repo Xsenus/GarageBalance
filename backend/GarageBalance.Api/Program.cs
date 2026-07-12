@@ -51,6 +51,7 @@ builder.Services.AddScoped<ISupplierContactRepository, EfSupplierContactReposito
 builder.Services.AddScoped<IStaffDepartmentRepository, EfStaffDepartmentRepository>();
 builder.Services.AddScoped<IStaffMemberRepository, EfStaffMemberRepository>();
 builder.Services.AddScoped<IIncomeTypeRepository, EfIncomeTypeRepository>();
+builder.Services.AddScoped<IExpenseTypeRepository, EfExpenseTypeRepository>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IFundService, FundService>();

@@ -1109,6 +1109,35 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void ExpenseTypeDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        Assert.Contains("IExpenseTypeRepository expenseTypeRepository", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.Add", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.ExpenseTypes", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExpenseTypeRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "IExpenseTypeRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfExpenseTypeRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        Assert.Contains("interface IExpenseTypeRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IExpenseTypeRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IExpenseTypeRepository, EfExpenseTypeRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1153,6 +1182,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfStaffMemberRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -1174,6 +1205,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);

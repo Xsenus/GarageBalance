@@ -17,6 +17,7 @@ public sealed class DictionaryService(
     IStaffDepartmentRepository staffDepartmentRepository,
     IStaffMemberRepository staffMemberRepository,
     IIncomeTypeRepository incomeTypeRepository,
+    IExpenseTypeRepository expenseTypeRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -80,7 +81,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -330,13 +331,10 @@ public sealed class DictionaryService(
             (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    private static bool AccountingTypeMatchesSearch(string name, string? code, string normalizedSearch)
-    {
-        return name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-            (code?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
-    }
-
     private static AccountingTypeDto ToAccountingTypeDto(IncomeType item) =>
+        new(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived);
+
+    private static AccountingTypeDto ToAccountingTypeDto(ExpenseType item) =>
         new(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived);
 
     private bool IsSqliteProvider()
@@ -1226,73 +1224,23 @@ public sealed class DictionaryService(
     public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var query = dbContext.ExpenseTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
-        var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            return (await query
-                    .OrderBy(item => item.Name)
-                    .ToListAsync(cancellationToken))
-                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
-                .Take(normalizedLimit)
-                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-                .ToList();
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
-        }
-
-        return await query
-            .OrderBy(item => item.Name)
-            .Take(normalizedLimit)
-            .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-            .ToListAsync(cancellationToken);
+        var expenseTypes = await expenseTypeRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return expenseTypes.Select(ToAccountingTypeDto).ToList();
     }
 
     public async Task<PagedResult<AccountingTypeDto>> GetExpenseTypesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var query = dbContext.ExpenseTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            var filteredTypes = (await query
-                    .OrderBy(item => item.Name)
-                    .ToListAsync(cancellationToken))
-                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
-                .ToList();
-            var sqliteItems = filteredTypes
-                .Skip(normalizedOffset)
-                .Take(normalizedLimit)
-                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-                .ToList();
-
-            return new PagedResult<AccountingTypeDto>(sqliteItems, filteredTypes.Count, normalizedOffset, normalizedLimit);
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(item => item.Name)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<AccountingTypeDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await expenseTypeRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<AccountingTypeDto>(page.Items.Select(ToAccountingTypeDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.ExpenseTypes.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        if (await expenseTypeRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
         }
@@ -1303,7 +1251,7 @@ public sealed class DictionaryService(
             Code = NormalizeOptional(request.Code)
         };
 
-        dbContext.ExpenseTypes.Add(expenseType);
+        expenseTypeRepository.Add(expenseType);
         AddAudit(actorUserId, "dictionary.expense_type_created", "expense_type", expenseType.Id, $"Создан вид выплаты {expenseType.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
@@ -1311,7 +1259,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<AccountingTypeDto>> UpdateExpenseTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindActiveAsync(id, cancellationToken);
         if (expenseType is null)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
@@ -1323,7 +1271,7 @@ public sealed class DictionaryService(
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        if (await expenseTypeRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
         }
@@ -1361,7 +1309,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindActiveAsync(id, cancellationToken);
         if (expenseType is null)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
@@ -1382,13 +1330,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<AccountingTypeDto>> RestoreExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindArchivedAsync(id, cancellationToken);
         if (expenseType is null)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден в архиве.");
         }
 
-        if (await dbContext.ExpenseTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == expenseType.Name, cancellationToken))
+        if (await expenseTypeRepository.ActiveDuplicateExistsAsync(id, expenseType.Name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Активный вид выплаты с таким названием уже существует.");
         }
