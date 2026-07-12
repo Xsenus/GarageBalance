@@ -61,16 +61,39 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         return new FinancialOperationPageData(items, totalCount);
     }
 
+    public Task<FinancialOperation?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
+        Aggregate(dbContext.FinancialOperations)
+            .SingleOrDefaultAsync(operation => operation.Id == id, cancellationToken);
+
+    public Task<bool> ActiveDocumentDuplicateExistsAsync(
+        Guid? ignoredId,
+        string operationKind,
+        DateOnly operationDate,
+        string documentNumber,
+        CancellationToken cancellationToken) =>
+        dbContext.FinancialOperations.AsNoTracking().AnyAsync(operation =>
+            !operation.IsCanceled &&
+            (!ignoredId.HasValue || operation.Id != ignoredId.Value) &&
+            operation.OperationKind == operationKind &&
+            operation.OperationDate == operationDate &&
+            operation.DocumentNumber == documentNumber,
+            cancellationToken);
+
+    public void Add(FinancialOperation operation) => dbContext.FinancialOperations.Add(operation);
+
     private IQueryable<FinancialOperation> QueryActive() =>
-        dbContext.FinancialOperations.AsNoTracking()
+        Aggregate(dbContext.FinancialOperations.AsNoTracking())
+            .Where(operation => !operation.IsCanceled);
+
+    private static IQueryable<FinancialOperation> Aggregate(IQueryable<FinancialOperation> query) =>
+        query
             .Include(operation => operation.Garage)
             .ThenInclude(garage => garage!.Owner)
             .Include(operation => operation.IncomeType)
             .Include(operation => operation.Supplier)
             .Include(operation => operation.StaffMember)
             .ThenInclude(staffMember => staffMember!.Department)
-            .Include(operation => operation.ExpenseType)
-            .Where(operation => !operation.IsCanceled);
+            .Include(operation => operation.ExpenseType);
 
     private static IQueryable<FinancialOperation> ApplyFilters(
         IQueryable<FinancialOperation> query,

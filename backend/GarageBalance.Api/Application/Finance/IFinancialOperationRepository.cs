@@ -26,6 +26,10 @@ public interface IFinancialOperationRepository
         int offset,
         int limit,
         CancellationToken cancellationToken);
+
+    Task<FinancialOperation?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> ActiveDocumentDuplicateExistsAsync(Guid? ignoredId, string operationKind, DateOnly operationDate, string documentNumber, CancellationToken cancellationToken);
+    void Add(FinancialOperation operation);
 }
 
 public sealed record FinancialOperationPageData(IReadOnlyList<FinancialOperation> Items, int TotalCount);

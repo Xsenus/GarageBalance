@@ -51,6 +51,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("supplierId.HasValue", source, StringComparison.Ordinal);
         Assert.Contains("staffMemberId.HasValue", source, StringComparison.Ordinal);
         Assert.Contains(".ThenBy(operation => operation.DocumentNumber)", source, StringComparison.Ordinal);
+        Assert.Contains("FindForUpdateAsync", source, StringComparison.Ordinal);
+        Assert.Contains("Aggregate(dbContext.FinancialOperations)", source, StringComparison.Ordinal);
+        Assert.Contains("ActiveDocumentDuplicateExistsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("AnyAsync(operation =>", source, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1047,6 +1047,11 @@ public sealed class BackendLayeringTests
         Assert.Contains("IFinancialOperationRepository financialOperationRepository", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetListAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.ActiveDocumentDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.Add(operation)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.FinancialOperations.Add", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("var operation = await dbContext.FinancialOperations", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<FinancialOperation> QueryOperations", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>()", program, StringComparison.Ordinal);
     }

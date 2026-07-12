@@ -598,7 +598,7 @@ public sealed class FinanceService(
             IncomeType = incomeType
         };
 
-        dbContext.FinancialOperations.Add(operation);
+        financialOperationRepository.Add(operation);
         AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -759,7 +759,7 @@ public sealed class FinanceService(
             ExpenseType = expenseType
         };
 
-        dbContext.FinancialOperations.Add(operation);
+        financialOperationRepository.Add(operation);
         AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -822,7 +822,7 @@ public sealed class FinanceService(
             ExpenseType = salaryExpenseType
         };
 
-        dbContext.FinancialOperations.Add(operation);
+        financialOperationRepository.Add(operation);
         AddAudit(actorUserId, "finance.staff_payment_created", operation, FormatStaffPaymentCreatedAuditSummary(operation, availableAmount));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -830,11 +830,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var operation = await dbContext.FinancialOperations
-            .Include(item => item.Garage)
-            .ThenInclude(garage => garage!.Owner)
-            .Include(item => item.IncomeType)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
@@ -914,10 +910,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> UpdateExpenseAsync(Guid operationId, CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var operation = await dbContext.FinancialOperations
-            .Include(item => item.Supplier)
-            .Include(item => item.ExpenseType)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
@@ -1031,15 +1024,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_cancel_reason_required", "Для отмены операции нужна причина.");
         }
 
-        var operation = await dbContext.FinancialOperations
-            .Include(item => item.Garage)
-            .ThenInclude(garage => garage!.Owner)
-            .Include(item => item.IncomeType)
-            .Include(item => item.Supplier)
-            .Include(item => item.StaffMember)
-            .ThenInclude(staffMember => staffMember!.Department)
-            .Include(item => item.ExpenseType)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
@@ -1060,15 +1045,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> RestoreOperationAsync(Guid operationId, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var operation = await dbContext.FinancialOperations
-            .Include(item => item.Garage)
-            .ThenInclude(garage => garage!.Owner)
-            .Include(item => item.IncomeType)
-            .Include(item => item.Supplier)
-            .Include(item => item.StaffMember)
-            .ThenInclude(staffMember => staffMember!.Department)
-            .Include(item => item.ExpenseType)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
@@ -2691,13 +2668,11 @@ public sealed class FinanceService(
     private async Task<bool> HasDocumentDuplicateAsync(string operationKind, string? documentNumber, DateOnly operationDate, Guid? excludeOperationId, CancellationToken cancellationToken)
     {
         var normalized = NormalizeOptional(documentNumber);
-        return normalized is not null && await dbContext.FinancialOperations.AnyAsync(
-            operation =>
-                !operation.IsCanceled &&
-                operation.Id != excludeOperationId &&
-                operation.OperationKind == operationKind &&
-                operation.OperationDate == operationDate &&
-                operation.DocumentNumber == normalized,
+        return normalized is not null && await financialOperationRepository.ActiveDocumentDuplicateExistsAsync(
+            excludeOperationId,
+            operationKind,
+            operationDate,
+            normalized,
             cancellationToken);
     }
 
