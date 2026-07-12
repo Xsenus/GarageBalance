@@ -144,6 +144,52 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void AuditApplicationService_DependsOnRepositoryAbstractionInsteadOfEfInfrastructure()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Audit",
+            "AuditService.cs"));
+
+        Assert.Contains("IAuditEventRepository repository", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalanceDbContext", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalance.Api.Infrastructure", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AuditEventRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Audit",
+            "IAuditEventRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Data",
+            "EfAuditEventRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+
+        Assert.Contains("interface IAuditEventRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains("class EfAuditEventRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains(": IAuditEventRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IAuditEventRepository, EfAuditEventRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportFingerprintApplicationService_DependsOnRepositoryAbstractionInsteadOfEfInfrastructure()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -451,7 +497,10 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfUserManagementRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfAuditEventRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен одиннадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен десятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);

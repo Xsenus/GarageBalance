@@ -5,7 +5,7 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class BackendPerformanceGuardTests
 {
     [Theory]
-    [InlineData("Application/Audit/AuditService.cs", @"OrderByDescending[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfAuditEventRepository.cs", @"OrderByDescending[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfUserManagementRepository.cs", @"OrderBy\(user => user\.[^)]+\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Finance/FinanceService.cs", @"\.Take\(NormalizeListLimit\(request\.Limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Import/ImportService.cs", @"else[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
@@ -119,7 +119,7 @@ public sealed class BackendPerformanceGuardTests
     [Fact]
     public void AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization()
     {
-        var source = ReadApiSource("Application/Audit/AuditService.cs");
+        var source = ReadApiSource("Infrastructure/Data/EfAuditEventRepository.cs");
         var requiredFilters = new[]
         {
             "auditEvent.CreatedAtUtc >= request.DateFrom.Value",

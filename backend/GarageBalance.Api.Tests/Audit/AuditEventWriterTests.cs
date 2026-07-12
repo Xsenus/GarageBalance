@@ -65,7 +65,7 @@ public sealed class AuditEventWriterTests
 
         await database.Context.SaveChangesAsync();
 
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         var dto = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
         Assert.Equal("finance", dto.Section);
         Assert.Equal("update", dto.ActionKind);

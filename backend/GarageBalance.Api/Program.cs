@@ -68,6 +68,7 @@ builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IFormStateRepository, EfFormStateRepository>();
 builder.Services.AddScoped<IFormStateService, FormStateService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IAuditEventRepository, EfAuditEventRepository>();
 builder.Services.AddScoped<IAuditEventStore>(services => services.GetRequiredService<GarageBalanceDbContext>());
 builder.Services.AddScoped<IAuditEventWriter, AuditEventWriter>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();

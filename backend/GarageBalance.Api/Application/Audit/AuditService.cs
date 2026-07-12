@@ -1,7 +1,5 @@
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Application.Reports;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -9,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace GarageBalance.Api.Application.Audit;
 
-public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditService
+public sealed class AuditService(IAuditEventRepository repository) : IAuditService
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
@@ -41,64 +39,16 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     public async Task<IReadOnlyList<AuditEventDto>> GetEventsAsync(AuditEventListRequest request, CancellationToken cancellationToken)
     {
         var limit = NormalizeLimit(request.Limit);
-        var query = dbContext.AuditEvents.AsNoTracking();
-
-        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
-        {
-            return await GetEventsForSqliteAsync(query, request, limit, cancellationToken);
-        }
-
-        if (request.DateFrom is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value);
-        }
-
-        if (request.DateTo is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value);
-        }
-
-        query = ApplyNonDateFilters(query, request);
-
-        return await query
-            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Take(limit)
-            .Select(auditEvent => ToDto(auditEvent))
-            .ToListAsync(cancellationToken);
+        var events = await repository.GetEventsAsync(request, limit, cancellationToken);
+        return events.Select(ToDto).ToList();
     }
 
     public async Task<AuditEventPageDto> GetEventsPageAsync(AuditEventListRequest request, CancellationToken cancellationToken)
     {
         var limit = NormalizeLimit(request.Limit);
         var offset = NormalizeOffset(request.Offset);
-        var query = dbContext.AuditEvents.AsNoTracking();
-
-        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
-        {
-            return await GetEventsPageForSqliteAsync(query, request, offset, limit, cancellationToken);
-        }
-
-        if (request.DateFrom is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value);
-        }
-
-        if (request.DateTo is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value);
-        }
-
-        query = ApplyNonDateFilters(query, request);
-
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Skip(offset)
-            .Take(limit)
-            .Select(auditEvent => ToDto(auditEvent))
-            .ToListAsync(cancellationToken);
-
-        return new AuditEventPageDto(items, totalCount, offset, limit);
+        var page = await repository.GetEventsPageAsync(request, offset, limit, cancellationToken);
+        return new AuditEventPageDto(page.Items.Select(ToDto).ToList(), page.TotalCount, offset, limit);
     }
 
     private static AuditEventDto ToDto(AuditEvent auditEvent)
@@ -132,64 +82,6 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             MaskStoredValue(auditEvent.RelatedDocumentNumber) ?? ExtractMetadataValue(metadata, "relatedDocumentNumber", "operationNumber", "documentNumber", "paymentNumber", "invoiceNumber", "receiptNumber"));
     }
 
-    private static async Task<IReadOnlyList<AuditEventDto>> GetEventsForSqliteAsync(
-        IQueryable<AuditEvent> query,
-        AuditEventListRequest request,
-        int limit,
-        CancellationToken cancellationToken)
-    {
-        query = ApplyNonDateFilters(query, request);
-
-        var events = await query.ToListAsync(cancellationToken);
-
-        if (request.DateFrom is not null)
-        {
-            events = events.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value).ToList();
-        }
-
-        if (request.DateTo is not null)
-        {
-            events = events.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value).ToList();
-        }
-
-        return events
-            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Take(limit)
-            .Select(ToDto)
-            .ToList();
-    }
-
-    private static async Task<AuditEventPageDto> GetEventsPageForSqliteAsync(
-        IQueryable<AuditEvent> query,
-        AuditEventListRequest request,
-        int offset,
-        int limit,
-        CancellationToken cancellationToken)
-    {
-        query = ApplyNonDateFilters(query, request);
-        var events = await query.ToListAsync(cancellationToken);
-
-        if (request.DateFrom is not null)
-        {
-            events = events.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value).ToList();
-        }
-
-        if (request.DateTo is not null)
-        {
-            events = events.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value).ToList();
-        }
-
-        var totalCount = events.Count;
-        var items = events
-            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Skip(offset)
-            .Take(limit)
-            .Select(ToDto)
-            .ToList();
-
-        return new AuditEventPageDto(items, totalCount, offset, limit);
-    }
-
     public async Task<AuditEventExportDto> ExportEventsCsvAsync(AuditEventListRequest request, CancellationToken cancellationToken)
     {
         var events = await GetEventsAsync(request, cancellationToken);
@@ -216,9 +108,7 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
 
     public async Task<AuditEventDto?> GetEventAsync(Guid id, CancellationToken cancellationToken)
     {
-        var auditEvent = await dbContext.AuditEvents
-            .AsNoTracking()
-            .FirstOrDefaultAsync(auditEvent => auditEvent.Id == id, cancellationToken);
+        var auditEvent = await repository.FindEventAsync(id, cancellationToken);
 
         return auditEvent is null ? null : ToDto(auditEvent);
     }
@@ -292,128 +182,6 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
     private static int NormalizeOffset(int? offset)
     {
         return offset is null or < 0 ? 0 : offset.Value;
-    }
-
-    private static IQueryable<AuditEvent> ApplyNonDateFilters(IQueryable<AuditEvent> query, AuditEventListRequest request)
-    {
-        if (!string.IsNullOrWhiteSpace(request.Action))
-        {
-            var action = request.Action.Trim();
-            query = query.Where(auditEvent => auditEvent.Action == action);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Section))
-        {
-            query = ApplySectionFilter(query, request.Section);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.ActionKind))
-        {
-            query = ApplyActionKindFilter(query, request.ActionKind);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.EntityType))
-        {
-            var entityType = request.EntityType.Trim();
-            query = query.Where(auditEvent => auditEvent.EntityType == entityType);
-        }
-
-        if (request.ActorUserId is not null)
-        {
-            query = query.Where(auditEvent => auditEvent.ActorUserId == request.ActorUserId.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.QuickFilter))
-        {
-            query = ApplyQuickFilter(query, request.QuickFilter);
-        }
-
-        query = ApplyRelatedFilters(query, request);
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                auditEvent.Action.ToLower().Contains(search) ||
-                auditEvent.EntityType.ToLower().Contains(search) ||
-                (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
-                (auditEvent.EntityDisplayName != null && auditEvent.EntityDisplayName.ToLower().Contains(search)) ||
-                (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(search)) ||
-                (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(search)) ||
-                (auditEvent.RelatedAccountingMonth != null && auditEvent.RelatedAccountingMonth.ToLower().Contains(search)) ||
-                (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(search)) ||
-                (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(search)) ||
-                (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(search)) ||
-                (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(search)) ||
-                auditEvent.Summary.ToLower().Contains(search));
-        }
-
-        return query;
-    }
-
-    private static IQueryable<AuditEvent> ApplyRelatedFilters(IQueryable<AuditEvent> query, AuditEventListRequest request)
-    {
-        if (!string.IsNullOrWhiteSpace(request.RelatedGarage))
-        {
-            var garage = request.RelatedGarage.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(garage)) ||
-                (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(garage)));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.RelatedAccountingMonth))
-        {
-            var accountingMonth = request.RelatedAccountingMonth.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                auditEvent.RelatedAccountingMonth != null &&
-                auditEvent.RelatedAccountingMonth.ToLower() == accountingMonth);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.RelatedCounterparty))
-        {
-            var counterparty = request.RelatedCounterparty.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(counterparty)) ||
-                (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(counterparty)));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.RelatedDocument))
-        {
-            var document = request.RelatedDocument.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(document)) ||
-                (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(document)));
-        }
-
-        return query;
-    }
-
-    private static IReadOnlyList<string> GetActionKindNeedles(string actionKind)
-    {
-        return actionKind.Trim().ToLowerInvariant() switch
-        {
-            "create" => ["_created"],
-            "update" => ["_updated", "password_changed"],
-            "archive" => ["_archived"],
-            "restore" => ["_restored"],
-            "cancel" => ["_canceled", "_cancelled"],
-            "delete" => ["_deleted"],
-            "login" => ["login_"],
-            "fail" => ["_failed", "_rate_limited", "_inactive"],
-            "generate" => ["_generated"],
-            "import" => ["import."],
-            "export" => ["_exported", ".export"],
-            _ => []
-        };
-    }
-
-    private static IQueryable<AuditEvent> ApplySectionFilter(IQueryable<AuditEvent> query, string section)
-    {
-        var normalizedSection = section.Trim().ToLowerInvariant();
-        var sectionPrefix = normalizedSection + ".";
-        return query.Where(auditEvent =>
-            (auditEvent.Section != null && auditEvent.Section.ToLower() == normalizedSection) ||
-            (auditEvent.Section == null && auditEvent.Action.ToLower().StartsWith(sectionPrefix)));
     }
 
     private static string GetSection(string action)
@@ -650,53 +418,4 @@ public sealed class AuditService(GarageBalanceDbContext dbContext) : IAuditServi
             : value;
     }
 
-    private static IQueryable<AuditEvent> ApplyActionKindFilter(IQueryable<AuditEvent> query, string actionKind)
-    {
-        var normalizedActionKind = actionKind.Trim().ToLowerInvariant();
-        var needles = GetActionKindNeedles(actionKind);
-        return needles.Count switch
-        {
-            1 => query.Where(auditEvent =>
-                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
-                (auditEvent.ActionKind == null && auditEvent.Action.ToLower().Contains(needles[0]))),
-            2 => query.Where(auditEvent =>
-                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
-                (auditEvent.ActionKind == null && (auditEvent.Action.ToLower().Contains(needles[0]) || auditEvent.Action.ToLower().Contains(needles[1])))),
-            3 => query.Where(auditEvent =>
-                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
-                (auditEvent.ActionKind == null && (
-                    auditEvent.Action.ToLower().Contains(needles[0]) ||
-                    auditEvent.Action.ToLower().Contains(needles[1]) ||
-                    auditEvent.Action.ToLower().Contains(needles[2])))),
-            _ => query
-        };
-    }
-
-    private static IQueryable<AuditEvent> ApplyQuickFilter(IQueryable<AuditEvent> query, string quickFilter)
-    {
-        return quickFilter.Trim().ToLowerInvariant() switch
-        {
-            "deletions" => query.Where(auditEvent =>
-                auditEvent.ActionKind == "archive" ||
-                auditEvent.ActionKind == "delete" ||
-                auditEvent.ActionKind == "cancel" ||
-                (auditEvent.ActionKind == null && (
-                    auditEvent.Action.ToLower().Contains("_archived") ||
-                    auditEvent.Action.ToLower().Contains("_deleted") ||
-                    auditEvent.Action.ToLower().Contains("_canceled") ||
-                    auditEvent.Action.ToLower().Contains("_cancelled")))),
-            "restores" => query.Where(auditEvent =>
-                auditEvent.ActionKind == "restore" ||
-                (auditEvent.ActionKind == null && auditEvent.Action.ToLower().Contains("_restored"))),
-            "financial" => query.Where(auditEvent =>
-                auditEvent.Section == "finance" ||
-                (auditEvent.Section == null && auditEvent.Action.ToLower().StartsWith("finance.")) ||
-                auditEvent.Action.ToLower().Contains("fund") ||
-                auditEvent.EntityType == "financial_operation" ||
-                auditEvent.EntityType == "accrual" ||
-                auditEvent.EntityType == "supplier_accrual" ||
-                auditEvent.EntityType == "fund_operation"),
-            _ => query
-        };
-    }
 }

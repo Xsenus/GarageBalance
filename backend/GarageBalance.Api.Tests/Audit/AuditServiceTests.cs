@@ -15,7 +15,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_ReturnsLatestEventsFirstAndFiltersBySearch()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.AddRange(
             new AuditEvent
             {
@@ -46,7 +46,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_FiltersByDateAndAction()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.AddRange(
             new AuditEvent
             {
@@ -82,7 +82,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_FiltersBySectionActionKindAndEntityType()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.AddRange(
             new AuditEvent
             {
@@ -123,7 +123,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_FiltersByActorAndQuickFilter()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         var targetActorId = Guid.NewGuid();
         var anotherActorId = Guid.NewGuid();
         database.Context.AuditEvents.AddRange(
@@ -175,7 +175,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_AppliesLimit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         for (var index = 0; index < 4; index++)
         {
             database.Context.AuditEvents.Add(new AuditEvent
@@ -201,7 +201,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsPageAsync_ReturnsTotalCountAndRequestedPage()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         for (var index = 0; index < 5; index++)
         {
             database.Context.AuditEvents.Add(new AuditEvent
@@ -230,7 +230,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_MasksSensitiveValuesInSummaryAndEntityId()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.Add(new AuditEvent
         {
             CreatedAtUtc = new DateTimeOffset(2026, 6, 23, 10, 0, 0, TimeSpan.Zero),
@@ -259,7 +259,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_ReturnsStructuredAuditFieldsFromMaskedSummary()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.Add(new AuditEvent
         {
             CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 10, 0, 0, TimeSpan.Zero),
@@ -289,7 +289,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_ReturnsMaskedMetadata()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.Add(new AuditEvent
         {
             CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 11, 0, 0, TimeSpan.Zero),
@@ -350,7 +350,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_PrefersStoredRelatedFieldsOverMetadataFallback()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.Add(new AuditEvent
         {
             CreatedAtUtc = new DateTimeOffset(2026, 6, 24, 12, 0, 0, TimeSpan.Zero),
@@ -402,7 +402,7 @@ public sealed class AuditServiceTests
     public async Task GetEventsAsync_FiltersByRelatedContext()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.AddRange(
             new AuditEvent
             {
@@ -453,7 +453,7 @@ public sealed class AuditServiceTests
     public async Task GetEventAsync_ReturnsMaskedEventById()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         var id = Guid.NewGuid();
         database.Context.AuditEvents.Add(new AuditEvent
         {
@@ -480,7 +480,7 @@ public sealed class AuditServiceTests
     public async Task GetEventAsync_ReturnsNullWhenEventDoesNotExist()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
 
         var auditEvent = await service.GetEventAsync(Guid.NewGuid(), CancellationToken.None);
 
@@ -491,7 +491,7 @@ public sealed class AuditServiceTests
     public async Task ExportEventsCsvAsync_UsesFiltersAndMaskedCsvValues()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.AddRange(
             new AuditEvent
             {
@@ -530,7 +530,7 @@ public sealed class AuditServiceTests
     public async Task ExportEventsXlsxAsync_UsesFiltersAndMaskedWorksheetValues()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AuditService(database.Context);
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
         database.Context.AuditEvents.AddRange(
             new AuditEvent
             {
