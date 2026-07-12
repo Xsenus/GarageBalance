@@ -1,12 +1,10 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Import;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Import;
 
 public sealed class ImportFingerprintService(
-    GarageBalanceDbContext dbContext,
+    IImportFingerprintRepository repository,
     IAuditEventWriter auditEventWriter) : IImportFingerprintService
 {
     public async Task<ImportResult<RegisterImportRowFingerprintDto>> RegisterAsync(
@@ -26,9 +24,7 @@ public sealed class ImportFingerprintService(
         var rowHash = request.RowHash.Trim().ToLowerInvariant();
         var fingerprintKey = BuildFingerprintKey(sourceSystem, entityType, externalId, rowHash);
 
-        var existing = await dbContext.AccessImportRowFingerprints
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.FingerprintKey == fingerprintKey, cancellationToken);
+        var existing = await repository.FindByKeyAsync(fingerprintKey, cancellationToken);
 
         if (existing is not null)
         {
@@ -48,7 +44,7 @@ public sealed class ImportFingerprintService(
             CreatedByUserId = actorUserId
         };
 
-        dbContext.AccessImportRowFingerprints.Add(fingerprint);
+        repository.Add(fingerprint);
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "import.row_fingerprint_registered",
@@ -70,7 +66,7 @@ public sealed class ImportFingerprintService(
                 ["targetEntityId"] = fingerprint.TargetEntityId
             }));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<RegisterImportRowFingerprintDto>.Success(new RegisterImportRowFingerprintDto(true, ToDto(fingerprint)));
     }
 
@@ -82,7 +78,7 @@ public sealed class ImportFingerprintService(
         CancellationToken cancellationToken)
     {
         var key = BuildFingerprintKey(sourceSystem, entityType, NormalizeOptional(externalId), rowHash.Trim().ToLowerInvariant());
-        return dbContext.AccessImportRowFingerprints.AnyAsync(item => item.FingerprintKey == key, cancellationToken);
+        return repository.ExistsAsync(key, cancellationToken);
     }
 
     private static (string Code, string Message)? ValidateRequest(RegisterImportRowFingerprintRequest request)

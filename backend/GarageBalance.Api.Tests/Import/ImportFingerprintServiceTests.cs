@@ -120,7 +120,7 @@ public sealed class ImportFingerprintServiceTests
 
     private static ImportFingerprintService CreateService(GarageBalanceDbContext context)
     {
-        return new ImportFingerprintService(context, new AuditEventWriter(context));
+        return new ImportFingerprintService(new EfImportFingerprintRepository(context), new AuditEventWriter(context));
     }
 
 }
