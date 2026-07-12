@@ -1385,6 +1385,82 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void SystemDictionariesRoadmapItemRemainsDecisionUntilClassificationOperationsCodesAndImportRulesAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "system-dictionaries-decision-template.md"));
+        var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var migrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260623152000_DefaultAccountingTypes.cs"));
+        var supplierGroupText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "SupplierGroup.cs"));
+        var incomeTypeText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "IncomeType.cs"));
+        var expenseTypeText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "ExpenseType.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Согласовать, какие справочники являются системными и не удаляются", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("docs/system-dictionaries-decision-template.md", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("классификации", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("stable-code", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("Access mapping", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("permissions/audit", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("UI expectations", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("SystemDictionariesRoadmapItemRemainsDecisionUntilClassificationOperationsCodesAndImportRulesAreApproved", roadmapLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Согласовать, какие справочники являются системными", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("# System Dictionaries Decision Template", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Source Materials", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Current Behavior", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Classification Matrix", templateText, StringComparison.Ordinal);
+        Assert.Contains("system_immutable", templateText, StringComparison.Ordinal);
+        Assert.Contains("system_named", templateText, StringComparison.Ordinal);
+        Assert.Contains("user_managed", templateText, StringComparison.Ordinal);
+        Assert.Contains("historical_only", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Allowed Operations Matrix", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Stable Code Rules", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Access Import Rules", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Permissions And Audit", templateText, StringComparison.Ordinal);
+        Assert.Contains("## UI Expectations", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Implementation Impact", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Safe Data Rules", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Decision Record", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Close Conditions", templateText, StringComparison.Ordinal);
+
+        var incomeCodes = new[] { "water", "trash", "electricity", "membership", "target", "entry", "connection", "penalty", "notice" };
+        var expenseCodes = new[] { "electricity", "trash_removal", "water_supply", "bank", "legal", "salary", "other", "penalty" };
+        foreach (var code in incomeCodes.Concat(expenseCodes).Distinct(StringComparer.Ordinal))
+        {
+            Assert.Contains($"`{code}`", templateText, StringComparison.Ordinal);
+            Assert.Contains($"\"{code}\"", migrationText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("TRUE, FALSE", migrationText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsSystem", supplierGroupText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsSystem", incomeTypeText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsSystem", expenseTypeText, StringComparison.Ordinal);
+        Assert.Contains("Системную группу поставщиков нельзя изменять", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("Системную группу поставщиков нельзя архивировать", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("Системный вид поступления нельзя изменять", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("Системный вид поступления нельзя архивировать", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("Системный вид выплаты нельзя изменять", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("Системный вид выплаты нельзя архивировать", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("item.Code == \"salary\"", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("\"membership\" or \"target\" or \"entry\" or \"connection\"", dictionaryServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("SystemDictionariesRoadmapItemRemainsDecisionUntilClassificationOperationsCodesAndImportRulesAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("решение должен подтвердить заказчик", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("SystemDictionariesRoadmapItemRemainsDecisionUntilClassificationOperationsCodesAndImportRulesAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
