@@ -2075,6 +2075,59 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void TariffBackendTestsAreCompleteWhenAllBasesVersionsSnapshotsValidationDuplicatesAndAuditAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verificationText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "tariff-backend-tests-verification.md"));
+        var dictionaryTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionariesControllerTests.cs"));
+        var financeTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты всех расчетов и историчности тарифов", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        foreach (var calculationBase in new[] { "fixed", "people", "meter_water", "meter_electricity" })
+        {
+            Assert.Contains($"`{calculationBase}`", roadmapLine, StringComparison.Ordinal);
+            Assert.Contains($"`{calculationBase}`", verificationText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("TariffBackendTestsAreCompleteWhenAllBasesVersionsSnapshotsValidationDuplicatesAndAuditAreCovered", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_AllowsSameNameWithDifferentEffectiveDateAsNewVersion", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_RejectsDuplicateNameAndDate", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_RejectsUnsupportedCalculationBase", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_WritesAuditWithBaseAndRate", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateTariff_ReturnsConflictWhenEffectiveDateMovesAfterAccruals", controllerTestsText, StringComparison.Ordinal);
+
+        foreach (var scenario in new[]
+        {
+            "GenerateRegularAccrualsAsync_CreatesFixedAccrualsForActiveGarages",
+            "GenerateRegularAccrualsAsync_CalculatesPeopleAmountForEachActiveGarage",
+            "GenerateRegularAccrualsAsync_CalculatesMeterAmountFromReading",
+            "GenerateRegularAccrualsAsync_CalculatesTieredElectricityAmountFromReading",
+            "GenerateRegularAccrualsAsync_AppliesTariffOnlyFromEffectiveMonth",
+            "GenerateRegularAccrualsAsync_KeepsExistingAccrualAmountAfterTariffUpdate",
+            "GenerateRegularAccrualsAsync_RejectsSecondRunForSameMonth"
+        })
+        {
+            Assert.Contains(scenario, financeTestsText, StringComparison.Ordinal);
+            Assert.Contains(scenario, verificationText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("TariffBackendTestsAreCompleteWhenAllBasesVersionsSnapshotsValidationDuplicatesAndAuditAreCovered", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("TariffBackendTestsAreCompleteWhenAllBasesVersionsSnapshotsValidationDuplicatesAndAuditAreCovered", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();

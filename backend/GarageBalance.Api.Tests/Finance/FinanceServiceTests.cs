@@ -1945,6 +1945,37 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_CalculatesPeopleAmountForEachActiveGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "trash";
+        fixtures.Garage.PeopleCount = 2;
+        var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
+        var secondGarage = new Garage { Number = "22", PeopleCount = 3, FloorCount = 1, Owner = secondOwner };
+        var archivedGarage = new Garage { Number = "99", PeopleCount = 4, FloorCount = 1, Owner = secondOwner, IsArchived = true };
+        var tariff = new Tariff { Name = "Вывоз мусора", CalculationBase = "people", Rate = 125m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.AddRange(secondOwner, secondGarage, archivedGarage, tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.CreatedCount);
+        Assert.Equal(0, result.Value.SkippedCount);
+        Assert.Equal(625m, result.Value.TotalAmount);
+        Assert.Equal("people", result.Value.CalculationBase);
+        Assert.Contains(result.Value.CreatedAccruals, item => item.GarageNumber == fixtures.Garage.Number && item.Amount == 250m);
+        Assert.Contains(result.Value.CreatedAccruals, item => item.GarageNumber == secondGarage.Number && item.Amount == 375m);
+        Assert.DoesNotContain(result.Value.CreatedAccruals, item => item.GarageNumber == archivedGarage.Number);
+        Assert.All(database.Context.Accruals, item => Assert.Equal(tariff.Id, item.TariffId));
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_AppliesTariffOnlyFromEffectiveMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
