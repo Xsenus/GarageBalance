@@ -742,6 +742,23 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void ReportAuditPersistence_UsesApplicationUnitOfWorkInsteadOfSavingDbContextDirectly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Reports",
+            "ReportService.cs"));
+
+        Assert.Contains("IApplicationUnitOfWork unitOfWork", service, StringComparison.Ordinal);
+        Assert.Contains("await unitOfWork.SaveChangesAsync(cancellationToken)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.SaveChangesAsync", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -787,6 +804,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IFeeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFeeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен восемнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен семнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен шестнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен пятнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);

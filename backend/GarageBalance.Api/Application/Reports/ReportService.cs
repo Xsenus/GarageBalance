@@ -14,6 +14,7 @@ public sealed class ReportService(
     IConsolidatedMonthlyReportQuery consolidatedMonthlyReportQuery,
     IConsolidatedGarageReportQuery consolidatedGarageReportQuery,
     IFeeReportQuery feeReportQuery,
+    IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IReportService
 {
     private const string IncomeReportAllRows = "all";
@@ -1939,7 +1940,7 @@ public sealed class ReportService(
                 ? dateFrom.ToString("yyyy-MM", CultureInfo.InvariantCulture)
                 : null,
             Metadata: allMetadata));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private static Dictionary<string, object?> BuildIncomeReportMetadata(IncomeReportRequest request, string rowMode, int visibleRowCount)
