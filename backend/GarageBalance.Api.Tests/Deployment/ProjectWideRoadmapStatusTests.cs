@@ -3114,6 +3114,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var reportsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.ts"));
         var reportsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "reportsApi.test.ts"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var reportPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "reports", "ReportPanel.tsx"));
 
         var filterPermissionLine = activeRoadmapLines.Single(line =>
             line.Contains("Проверить, что экспорт учитывает те же фильтры и права", StringComparison.Ordinal));
@@ -3228,7 +3229,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("exportConsolidatedReportXlsx:", appTestsText, StringComparison.Ordinal);
         Assert.Contains("exportIncomeReportXlsx:", appTestsText, StringComparison.Ordinal);
         Assert.Contains("exportExpenseReportXlsx:", appTestsText, StringComparison.Ordinal);
-        Assert.Contains("downloadCashOrBankReport", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")), StringComparison.Ordinal);
+        Assert.Contains("downloadCashOrBankReport", reportPanelText, StringComparison.Ordinal);
 
         Assert.Contains("reports.read", verification, StringComparison.Ordinal);
         Assert.Contains("общий frontend query builder", verification, StringComparison.Ordinal);
@@ -6346,6 +6347,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var shellLine = activeRoadmapLines.Single(line =>
             line.Contains("Подготовить кликабельный shell", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var reportPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "reports", "ReportPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var accessibleStatusTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "accessibleStatus.test.ts"));
         var responsiveLayoutTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "responsiveLayout.test.ts"));
@@ -6369,7 +6371,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("role=\"dialog\"", appText, StringComparison.Ordinal);
         Assert.Contains("role=\"table\"", appText, StringComparison.Ordinal);
         Assert.Contains("dictionary-data-table", appText, StringComparison.Ordinal);
-        Assert.Contains("report-workbook-table", appText, StringComparison.Ordinal);
+        Assert.Contains("report-workbook-table", reportPanelText, StringComparison.Ordinal);
         Assert.Contains("opens the workspace with users and dictionaries", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Главное меню", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Справочники", appTestsText, StringComparison.Ordinal);

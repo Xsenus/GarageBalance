@@ -15,7 +15,8 @@ describe('accessible dynamic messages', () => {
   const importPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'import', 'ImportPanel.tsx'), 'utf8')
   const meterReadingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'meterReadings', 'MeterReadingsPanel.tsx'), 'utf8')
   const auditPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'audit', 'AuditPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource].join('\n')
+  const reportPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -60,11 +61,11 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps report workbook period filters typed and quickly adjustable', () => {
-    expect(appSource).toContain('type="month"')
-    expect(appSource).toContain('type="date"')
-    expect(appSource).toContain('applyPreviousMonth')
-    expect(appSource).toContain('applyToday')
-    expect(appSource).toContain('report-period-button')
+    expect(reportPanelSource).toContain('type="month"')
+    expect(reportPanelSource).toContain('type="date"')
+    expect(reportPanelSource).toContain('applyPreviousMonth')
+    expect(reportPanelSource).toContain('applyToday')
+    expect(reportPanelSource).toContain('report-period-button')
     expect(appCss).toContain('.report-workbook-filter')
     expect(appCss).toContain('.report-period-button')
   })
@@ -351,11 +352,11 @@ describe('accessible dynamic messages', () => {
     ]
 
     for (const label of removedReportExportButtons) {
-      expect(appSource).not.toContain(label)
+      expect(reportPanelSource).not.toContain(label)
     }
 
-    expect(appSource).toContain('reportWorkbookTabs')
-    expect(appSource).toContain('reports-workbook-panel')
+    expect(reportPanelSource).toContain('reportWorkbookTabs')
+    expect(reportPanelSource).toContain('reports-workbook-panel')
   })
   it('keeps icon-only buttons named and explicitly typed', () => {
     const iconButtonIndexes = [

@@ -190,6 +190,29 @@ export function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
+export function getCurrentMonthInputValue(dateValue = getLocalDateInputValue()): string {
+  return dateValue.slice(0, 7)
+}
+
+export function getPreviousMonthInputValue(monthValue: string): string {
+  const [yearText, monthText] = monthValue.split('-')
+  const date = new Date(Number(yearText), Number(monthText) - 2, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+export function formatOperationTime(value: string | null | undefined): string {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+}
+
 export function formatReleaseDate(value: string): string {
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))
 }

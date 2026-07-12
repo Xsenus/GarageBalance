@@ -3,6 +3,37 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void ReportPanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var reportPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "reports",
+            "ReportPanel.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { ReportPanel } from './features/reports/ReportPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<ReportPanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function ReportPanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type ReportWorkbookTab", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("aggregateGarageIncomeReportRows", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function ReportPanel(", reportPanelText, StringComparison.Ordinal);
+        Assert.Contains("reportClient.getConsolidatedReport", reportPanelText, StringComparison.Ordinal);
+        Assert.Contains("reportClient.getIncomeReport", reportPanelText, StringComparison.Ordinal);
+        Assert.Contains("reportClient.exportFeeReport", reportPanelText, StringComparison.Ordinal);
+        Assert.Contains("reportClient.getFundChangeReport", reportPanelText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/reports/ReportPanel.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AuditPanelRemainsInItsFeatureModuleWithSharedNavigationContracts()
     {
         var repositoryRoot = FindRepositoryRoot();

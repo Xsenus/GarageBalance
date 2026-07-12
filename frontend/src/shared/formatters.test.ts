@@ -18,11 +18,14 @@ import {
   formatMonth,
   formatMonthInputValue,
   formatNullableNumber,
+  formatOperationTime,
   formatPaymentAllocations,
   formatReleaseDate,
   formatTariffRateSummary,
   getDebtClassName,
+  getCurrentMonthInputValue,
   getLocalDateInputValue,
+  getPreviousMonthInputValue,
 } from './formatters'
 
 describe('shared formatters', () => {
@@ -44,6 +47,14 @@ describe('shared formatters', () => {
     expect(formatMonth('2026-06-01')).toBe('06.2026')
     expect(formatMonth('2026-06')).toBe('06.2026')
     expect(formatDateOnly('not-a-date')).toBe('not-a-date')
+  })
+
+  it('provides shared month inputs and operation time for payments and reports', () => {
+    expect(getCurrentMonthInputValue('2026-07-13')).toBe('2026-07')
+    expect(getPreviousMonthInputValue('2026-01')).toBe('2025-12')
+    expect(formatOperationTime('2026-07-13T14:05:00')).toMatch(/14:05/)
+    expect(formatOperationTime(null)).toBe('')
+    expect(formatOperationTime('not-a-date')).toBe('')
   })
 
   it('formats tariff rates with and without electricity tiers', () => {
