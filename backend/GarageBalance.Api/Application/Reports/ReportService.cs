@@ -12,6 +12,7 @@ public sealed class ReportService(
     ICashMovementReportQuery cashMovementReportQuery,
     IFundChangeReportQuery fundChangeReportQuery,
     IConsolidatedMonthlyReportQuery consolidatedMonthlyReportQuery,
+    IConsolidatedGarageReportQuery consolidatedGarageReportQuery,
     IAuditEventWriter auditEventWriter) : IReportService
 {
     private const string IncomeReportAllRows = "all";
@@ -55,7 +56,22 @@ public sealed class ReportService(
             })
             .ToList();
 
-        var garageRows = await BuildGarageRowsPageAsync(request.Search, periodFrom, periodTo, request.Limit, cancellationToken);
+        int? garageRowLimit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var garageData = await consolidatedGarageReportQuery.GetGarageRowsAsync(
+            request.Search,
+            periodFrom,
+            periodTo,
+            garageRowLimit,
+            cancellationToken);
+        var garageRows = garageData.Rows.Select(row => new GarageReportRowDto(
+                row.GarageId,
+                row.GarageNumber,
+                FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
+                row.IncomeTotal,
+                row.AccrualTotal,
+                row.AccrualTotal - row.IncomeTotal,
+                row.MeterReadingCount))
+            .ToList();
         var report = new ConsolidatedReportDto(
             periodFrom,
             periodTo,
@@ -68,8 +84,8 @@ public sealed class ReportService(
             monthlyRows.Sum(row => row.AccrualCount),
             monthlyRows.Sum(row => row.MeterReadingCount),
             monthlyRows,
-            garageRows.RowCount,
-            garageRows.Rows);
+            garageData.RowCount,
+            garageRows);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -1573,135 +1589,6 @@ public sealed class ReportService(
         return ReportResult<ReportExportFileDto>.Success(file);
     }
 
-    private async Task<GarageReportRowsPage> BuildGarageRowsPageAsync(string? search, DateOnly periodFrom, DateOnly periodTo, int? limit, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return await BuildGarageRowsWithoutSearchAsync(periodFrom, periodTo, limit, cancellationToken);
-        }
-
-        var rows = await BuildGarageRowsAsync(search, periodFrom, periodTo, cancellationToken);
-        return new GarageReportRowsPage(rows.Count, ApplyRowLimit(rows, limit));
-    }
-
-    private async Task<GarageReportRowsPage> BuildGarageRowsWithoutSearchAsync(DateOnly periodFrom, DateOnly periodTo, int? limit, CancellationToken cancellationToken)
-    {
-        var garageRowsQuery = dbContext.Garages.AsNoTracking()
-            .Where(garage => !garage.IsArchived)
-            .Select(garage => new
-            {
-                GarageId = garage.Id,
-                GarageNumber = garage.Number,
-                OwnerLastName = garage.Owner == null ? null : garage.Owner.LastName,
-                OwnerFirstName = garage.Owner == null ? null : garage.Owner.FirstName,
-                OwnerMiddleName = garage.Owner == null ? null : garage.Owner.MiddleName,
-                IncomeTotal = dbContext.FinancialOperations.AsNoTracking()
-                    .Where(operation =>
-                        !operation.IsCanceled &&
-                        operation.OperationKind == FinancialOperationKinds.Income &&
-                        operation.GarageId == garage.Id &&
-                        operation.AccountingMonth >= periodFrom &&
-                        operation.AccountingMonth <= periodTo)
-                    .Sum(operation => (decimal?)operation.Amount) ?? 0m,
-                AccrualTotal = garage.StartingBalance + (dbContext.Accruals.AsNoTracking()
-                    .Where(accrual =>
-                        !accrual.IsCanceled &&
-                        accrual.GarageId == garage.Id &&
-                        accrual.AccountingMonth >= periodFrom &&
-                        accrual.AccountingMonth <= periodTo)
-                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m),
-                MeterReadingCount = dbContext.MeterReadings.AsNoTracking()
-                    .Count(reading =>
-                        !reading.IsCanceled &&
-                        reading.GarageId == garage.Id &&
-                        reading.AccountingMonth >= periodFrom &&
-                        reading.AccountingMonth <= periodTo)
-            })
-            .Where(row => row.IncomeTotal != 0 || row.AccrualTotal != 0 || row.MeterReadingCount != 0)
-            .OrderBy(row => row.GarageNumber);
-
-        var rowCount = await garageRowsQuery.CountAsync(cancellationToken);
-        var visibleRows = await ApplyReportRowLimit(garageRowsQuery, limit)
-            .ToListAsync(cancellationToken);
-
-        return new GarageReportRowsPage(
-            rowCount,
-            visibleRows
-                .Select(row => new GarageReportRowDto(
-                    row.GarageId,
-                    row.GarageNumber,
-                    FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
-                    row.IncomeTotal,
-                    row.AccrualTotal,
-                    row.AccrualTotal - row.IncomeTotal,
-                    row.MeterReadingCount))
-                .ToList());
-    }
-
-    private async Task<IReadOnlyList<GarageReportRowDto>> BuildGarageRowsAsync(string? search, DateOnly periodFrom, DateOnly periodTo, CancellationToken cancellationToken)
-    {
-        var garagesQuery = dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
-            .Where(garage => !garage.IsArchived);
-
-        var garages = await garagesQuery
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var normalized = search.Trim();
-            garages = garages
-                .Where(garage =>
-                    garage.Number.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
-                    (garage.Owner?.FullName.Contains(normalized, StringComparison.OrdinalIgnoreCase) ?? false))
-                .ToList();
-        }
-
-        var garageIds = garages.Select(garage => garage.Id).ToList();
-
-        var incomeByGarage = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId != null &&
-                garageIds.Contains(operation.GarageId.Value) &&
-                operation.AccountingMonth >= periodFrom &&
-                operation.AccountingMonth <= periodTo)
-            .GroupBy(operation => operation.GarageId!.Value)
-            .Select(group => new AmountByGarage(group.Key, group.Sum(item => item.Amount)))
-            .ToListAsync(cancellationToken);
-        var accrualByGarage = await dbContext.Accruals.AsNoTracking()
-            .Where(accrual =>
-                !accrual.IsCanceled &&
-                garageIds.Contains(accrual.GarageId) &&
-                accrual.AccountingMonth >= periodFrom &&
-                accrual.AccountingMonth <= periodTo)
-            .GroupBy(accrual => accrual.GarageId)
-            .Select(group => new AmountByGarage(group.Key, group.Sum(item => item.Amount)))
-            .ToListAsync(cancellationToken);
-        var readingsByGarage = await dbContext.MeterReadings.AsNoTracking()
-            .Where(reading =>
-                !reading.IsCanceled &&
-                garageIds.Contains(reading.GarageId) &&
-                reading.AccountingMonth >= periodFrom &&
-                reading.AccountingMonth <= periodTo)
-            .GroupBy(reading => reading.GarageId)
-            .Select(group => new CountByGarage(group.Key, group.Count()))
-            .ToListAsync(cancellationToken);
-
-        return garages
-            .Select(garage =>
-            {
-                var income = incomeByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Amount;
-                var accrual = accrualByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Amount;
-                var readings = readingsByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Count;
-                var accrualWithStartingBalance = accrual + garage.StartingBalance;
-                return new GarageReportRowDto(garage.Id, garage.Number, garage.Owner?.FullName, income, accrualWithStartingBalance, accrualWithStartingBalance - income, readings);
-            })
-            .Where(row => row.IncomeTotal != 0 || row.AccrualTotal != 0 || row.MeterReadingCount != 0)
-            .ToList();
-    }
-
     private async Task<ReportResult<IncomeReportDto>> GetIncomeReportWithoutSearchAsync(
         IncomeReportRequest request,
         DateOnly dateFrom,
@@ -2342,9 +2229,6 @@ public sealed class ReportService(
         };
     }
 
-    private readonly record struct AmountByGarage(Guid GarageId, decimal Amount);
-    private readonly record struct CountByGarage(Guid GarageId, int Count);
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
     private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
-    private sealed record GarageReportRowsPage(int RowCount, IReadOnlyList<GarageReportRowDto> Rows);
 }

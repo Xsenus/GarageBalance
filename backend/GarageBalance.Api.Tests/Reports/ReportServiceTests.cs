@@ -1253,6 +1253,7 @@ public sealed class ReportServiceTests
             new EfCashMovementReportQuery(context),
             new EfFundChangeReportQuery(context),
             new EfConsolidatedMonthlyReportQuery(context),
+            new EfConsolidatedGarageReportQuery(context),
             new AuditEventWriter(context));
     }
 

@@ -51,13 +51,14 @@ public sealed class BackendPerformanceGuardTests
     public void ScreenReportQueries_UseDatabaseLimitsForVisibleRows()
     {
         var source = ReadApiSource("Application/Reports/ReportService.cs");
+        var garageSource = ReadApiSource("Infrastructure/Data/EfConsolidatedGarageReportQuery.cs");
 
         Assert.Contains("GetIncomeReportWithoutSearchAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetExpenseReportWithoutSearchAsync", source, StringComparison.Ordinal);
-        Assert.Contains("BuildGarageRowsWithoutSearchAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetRowsWithoutSearchAsync", garageSource, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(source, "ApplyReportRowLimit(") >= 7,
-            "Screen report visible rows must be bounded before materialization for consolidated garage, income, expense, accrual and starting-balance segments.");
+            CountOccurrences(source, "ApplyReportRowLimit(") >= 6,
+            "Remaining report visible rows must be bounded before materialization for income, expense, accrual and starting-balance segments.");
         Assert.True(
             CountOccurrences(source, ".Take(NormalizeReportLimit(limit.Value))") >= 1,
             "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
@@ -67,6 +68,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(
             CountOccurrences(source, "SumAsync(") >= 6,
             "Report totals must be aggregated in the database instead of being derived only from materialized rows.");
+        Assert.Matches(
+            BoundedQueryRegex(@"GetRowsWithoutSearchAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ApplyLimit\(query, limit\)\.ToListAsync\(cancellationToken\)"),
+            garageSource);
+        Assert.True(
+            CountOccurrences(garageSource, ".GroupBy(") >= 3,
+            "Search-compatible consolidated garage fallback must aggregate income, accrual and readings by garage.");
     }
 
     [Fact]
