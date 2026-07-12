@@ -107,6 +107,23 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ConsolidatedMonthlyQuery_AggregatesMonthlyTotalsAndCountsInDatabase()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfConsolidatedMonthlyReportQuery.cs");
+
+        Assert.True(
+            CountOccurrences(source, ".GroupBy(") >= 4,
+            "Consolidated monthly query must group income, expense, accrual and meter rows in the database.");
+        Assert.True(
+            CountOccurrences(source, "group.Sum(") >= 3,
+            "Consolidated monetary totals must be aggregated before materialization.");
+        Assert.True(
+            CountOccurrences(source, "group.Count()") >= 4,
+            "Consolidated monthly row counts must be aggregated before materialization.");
+        Assert.Contains("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportSqliteFallbacks_AreExplicitlyScopedToTestProviderAndStillApplyLimit()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");

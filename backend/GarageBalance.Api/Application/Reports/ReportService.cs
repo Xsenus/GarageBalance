@@ -11,6 +11,7 @@ public sealed class ReportService(
     GarageBalanceDbContext dbContext,
     ICashMovementReportQuery cashMovementReportQuery,
     IFundChangeReportQuery fundChangeReportQuery,
+    IConsolidatedMonthlyReportQuery consolidatedMonthlyReportQuery,
     IAuditEventWriter auditEventWriter) : IReportService
 {
     private const string IncomeReportAllRows = "all";
@@ -30,44 +31,17 @@ public sealed class ReportService(
             return ReportResult<ConsolidatedReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
-        var operations = dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.AccountingMonth >= periodFrom && operation.AccountingMonth <= periodTo);
-        var accruals = dbContext.Accruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= periodFrom && accrual.AccountingMonth <= periodTo);
-        var meterReadings = dbContext.MeterReadings.AsNoTracking()
-            .Where(reading => !reading.IsCanceled && reading.AccountingMonth >= periodFrom && reading.AccountingMonth <= periodTo);
-
-        var incomeByMonth = await operations
-            .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
-            .GroupBy(operation => operation.AccountingMonth)
-            .Select(group => new AmountCountByMonth(group.Key, group.Sum(item => item.Amount), group.Count()))
-            .ToListAsync(cancellationToken);
-        var expenseByMonth = await operations
-            .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense)
-            .GroupBy(operation => operation.AccountingMonth)
-            .Select(group => new AmountCountByMonth(group.Key, group.Sum(item => item.Amount), group.Count()))
-            .ToListAsync(cancellationToken);
-        var accrualByMonth = await accruals
-            .GroupBy(accrual => accrual.AccountingMonth)
-            .Select(group => new AmountCountByMonth(group.Key, group.Sum(item => item.Amount), group.Count()))
-            .ToListAsync(cancellationToken);
-        var readingsByMonth = await meterReadings
-            .GroupBy(reading => reading.AccountingMonth)
-            .Select(group => new CountByMonth(group.Key, group.Count()))
-            .ToListAsync(cancellationToken);
-        var garageStartingBalanceTotal = await dbContext.Garages.AsNoTracking()
-            .Where(garage => !garage.IsArchived && garage.StartingBalance != 0)
-            .SumAsync(garage => garage.StartingBalance, cancellationToken);
+        var monthlyData = await consolidatedMonthlyReportQuery.GetMonthlyDataAsync(periodFrom, periodTo, cancellationToken);
 
         var months = MonthPeriod.Enumerate(periodFrom, periodTo).ToList();
         var monthlyRows = months
             .Select(month =>
             {
-                var income = incomeByMonth.SingleOrDefault(row => row.Month == month);
-                var expense = expenseByMonth.SingleOrDefault(row => row.Month == month);
-                var accrual = accrualByMonth.SingleOrDefault(row => row.Month == month);
-                var readings = readingsByMonth.SingleOrDefault(row => row.Month == month);
-                var startingBalance = month == periodFrom ? garageStartingBalanceTotal : 0m;
+                var income = monthlyData.IncomeByMonth.SingleOrDefault(row => row.Month == month);
+                var expense = monthlyData.ExpenseByMonth.SingleOrDefault(row => row.Month == month);
+                var accrual = monthlyData.AccrualByMonth.SingleOrDefault(row => row.Month == month);
+                var readings = monthlyData.MeterReadingsByMonth.SingleOrDefault(row => row.Month == month);
+                var startingBalance = month == periodFrom ? monthlyData.GarageStartingBalanceTotal : 0m;
                 return new MonthlyReportRowDto(
                     month,
                     income.Amount,
@@ -2368,8 +2342,6 @@ public sealed class ReportService(
         };
     }
 
-    private readonly record struct AmountCountByMonth(DateOnly Month, decimal Amount, int Count);
-    private readonly record struct CountByMonth(DateOnly Month, int Count);
     private readonly record struct AmountByGarage(Guid GarageId, decimal Amount);
     private readonly record struct CountByGarage(Guid GarageId, int Count);
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
