@@ -55,6 +55,102 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         return new MeterReadingPageData(items, totalCount);
     }
 
+    public async Task<IReadOnlyList<MeterReading>> GetForGaragePeriodAsync(
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken) =>
+        await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading =>
+                !reading.IsCanceled &&
+                reading.GarageId == garageId &&
+                reading.AccountingMonth >= monthFrom &&
+                reading.AccountingMonth <= monthTo)
+            .ToListAsync(cancellationToken);
+
+    public async Task<int> CountActiveAsync(
+        DateOnly? monthFrom,
+        DateOnly? monthTo,
+        string? normalizedSearch,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplyFilters(QueryActive(), monthFrom, monthTo, null);
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            return (await query.ToListAsync(cancellationToken))
+                .Count(reading => ReadingMatchesSearch(reading, normalizedSearch));
+        }
+
+        return await ApplySearch(query, normalizedSearch).CountAsync(cancellationToken);
+    }
+
+    public Task<bool> ActiveDuplicateExistsAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        string meterKind,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterReadings.AsNoTracking().AnyAsync(reading =>
+            !reading.IsCanceled &&
+            (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
+            reading.GarageId == garageId &&
+            reading.MeterKind == meterKind &&
+            reading.AccountingMonth == accountingMonth,
+            cancellationToken);
+
+    public Task<MeterReading?> GetPreviousActiveAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        string meterKind,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterReadings.AsNoTracking()
+            .Where(reading =>
+                !reading.IsCanceled &&
+                (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
+                reading.GarageId == garageId &&
+                reading.MeterKind == meterKind &&
+                reading.AccountingMonth < accountingMonth)
+            .OrderByDescending(reading => reading.AccountingMonth)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<MeterReading?> GetNextActiveAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        string meterKind,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterReadings.AsNoTracking()
+            .Where(reading =>
+                !reading.IsCanceled &&
+                (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
+                reading.GarageId == garageId &&
+                reading.MeterKind == meterKind &&
+                reading.AccountingMonth > accountingMonth)
+            .OrderBy(reading => reading.AccountingMonth)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<MeterReading?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.MeterReadings
+            .Include(reading => reading.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .SingleOrDefaultAsync(reading => reading.Id == id, cancellationToken);
+
+    public Task<MeterReading?> GetActiveAsync(
+        Guid garageId,
+        string meterKind,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterReadings.AsNoTracking().SingleOrDefaultAsync(
+            reading =>
+                !reading.IsCanceled &&
+                reading.GarageId == garageId &&
+                reading.MeterKind == meterKind &&
+                reading.AccountingMonth == accountingMonth,
+            cancellationToken);
+
+    public void Add(MeterReading reading) => dbContext.MeterReadings.Add(reading);
+
     private IQueryable<MeterReading> QueryActive() =>
         dbContext.MeterReadings.AsNoTracking()
             .Include(reading => reading.Garage)

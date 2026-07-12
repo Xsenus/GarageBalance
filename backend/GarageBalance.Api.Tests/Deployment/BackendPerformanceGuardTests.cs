@@ -77,6 +77,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
         Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("ReadingMatchesSearch", source, StringComparison.Ordinal);
+        Assert.Contains("GetForGaragePeriodAsync", source, StringComparison.Ordinal);
+        Assert.Contains("ActiveDuplicateExistsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetPreviousActiveAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".OrderByDescending(reading => reading.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains("GetNextActiveAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".OrderBy(reading => reading.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains("GetActiveAsync", source, StringComparison.Ordinal);
     }
 
     [Fact]

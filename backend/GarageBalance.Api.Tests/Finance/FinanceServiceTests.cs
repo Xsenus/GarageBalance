@@ -2684,11 +2684,13 @@ public sealed class FinanceServiceTests
         await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "Ежемесячное электричество"), null, CancellationToken.None);
 
         var result = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", "ежемесячное"), CancellationToken.None);
+        var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, "ежемесячное"), CancellationToken.None);
 
         var reading = Assert.Single(result);
         Assert.Equal("electricity", reading.MeterKind);
         Assert.Equal(new DateOnly(2026, 6, 1), reading.AccountingMonth);
         Assert.Equal(20m, reading.Consumption);
+        Assert.Equal(1, summary.MeterReadingCount);
     }
 
     [Fact]

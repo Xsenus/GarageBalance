@@ -1018,7 +1018,17 @@ public sealed class BackendLayeringTests
         Assert.Contains("IMeterReadingRepository meterReadingRepository", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetListAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetForGaragePeriodAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.CountActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetPreviousActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetNextActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.Add(reading)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.MeterReadings", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<MeterReading> QueryMeterReadings", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyMeterReadingFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IMeterReadingRepository, EfMeterReadingRepository>()", program, StringComparison.Ordinal);
     }
 

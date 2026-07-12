@@ -359,13 +359,7 @@ public sealed class FinanceService(
                 group.Sum(operation => operation.Amount)))
             .ToListAsync(cancellationToken);
 
-        var meterReadings = await dbContext.MeterReadings.AsNoTracking()
-            .Where(reading =>
-                !reading.IsCanceled &&
-                reading.GarageId == garageId &&
-                reading.AccountingMonth >= monthFrom &&
-                reading.AccountingMonth <= monthTo)
-            .ToListAsync(cancellationToken);
+        var meterReadings = await meterReadingRepository.GetForGaragePeriodAsync(garageId, monthFrom, monthTo, cancellationToken);
         var meterReadingByMonthKind = meterReadings
             .GroupBy(reading => (reading.AccountingMonth, reading.MeterKind))
             .ToDictionary(
@@ -566,7 +560,11 @@ public sealed class FinanceService(
     {
         var operations = ApplyFilters(dbContext.FinancialOperations.AsNoTracking().Where(operation => !operation.IsCanceled), request);
         var accruals = ApplyAccrualFilters(dbContext.Accruals.AsNoTracking().Where(accrual => !accrual.IsCanceled), new AccrualListRequest(request.DateFrom, request.DateTo, request.Search));
-        var meterReadings = ApplyMeterReadingFilters(dbContext.MeterReadings.AsNoTracking().Where(reading => !reading.IsCanceled), new MeterReadingListRequest(request.DateFrom, request.DateTo, null, request.Search));
+        var meterReadingCount = await meterReadingRepository.CountActiveAsync(
+            request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
+            request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
+            NormalizeSearch(request.Search),
+            cancellationToken);
         var incomeTotal = await operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
             .SumAsync(operation => operation.Amount, cancellationToken);
@@ -576,8 +574,6 @@ public sealed class FinanceService(
         var accrualTotal = await accruals.SumAsync(accrual => accrual.Amount, cancellationToken);
         var operationCount = await operations.CountAsync(cancellationToken);
         var accrualCount = await accruals.CountAsync(cancellationToken);
-        var meterReadingCount = await meterReadings.CountAsync(cancellationToken);
-
         return new FinanceSummaryDto(incomeTotal, expenseTotal, accrualTotal, incomeTotal - expenseTotal, accrualTotal - incomeTotal, operationCount, accrualCount, meterReadingCount);
     }
 
@@ -2149,17 +2145,12 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        if (await dbContext.MeterReadings.AnyAsync(
-            reading => !reading.IsCanceled && reading.GarageId == garage.Id && reading.MeterKind == meterKind && reading.AccountingMonth == month,
-            cancellationToken))
+        if (await meterReadingRepository.ActiveDuplicateExistsAsync(null, garage.Id, meterKind, month, cancellationToken))
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
         }
 
-        var previousReading = await dbContext.MeterReadings.AsNoTracking()
-            .Where(reading => !reading.IsCanceled && reading.GarageId == garage.Id && reading.MeterKind == meterKind && reading.AccountingMonth < month)
-            .OrderByDescending(reading => reading.AccountingMonth)
-            .FirstOrDefaultAsync(cancellationToken);
+        var previousReading = await meterReadingRepository.GetPreviousActiveAsync(null, garage.Id, meterKind, month, cancellationToken);
         var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue);
         var previousValue = MoneyMath.RoundMeterValue(previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m);
         var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
@@ -2183,7 +2174,7 @@ public sealed class FinanceService(
             Comment = NormalizeOptional(request.Comment)
         };
 
-        dbContext.MeterReadings.Add(reading);
+        meterReadingRepository.Add(reading);
         AddAudit(actorUserId, "finance.meter_reading_created", reading, FormatMeterReadingCreatedAuditSummary(reading));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
@@ -2197,10 +2188,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
         }
 
-        var reading = await dbContext.MeterReadings
-            .Include(item => item.Garage)
-            .ThenInclude(garage => garage.Owner)
-            .SingleOrDefaultAsync(item => item.Id == meterReadingId, cancellationToken);
+        var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);
         if (reading is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
@@ -2218,21 +2206,12 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        if (await dbContext.MeterReadings.AnyAsync(item =>
-            !item.IsCanceled &&
-            item.Id != reading.Id &&
-            item.GarageId == garage.Id &&
-            item.MeterKind == meterKind &&
-            item.AccountingMonth == month,
-            cancellationToken))
+        if (await meterReadingRepository.ActiveDuplicateExistsAsync(reading.Id, garage.Id, meterKind, month, cancellationToken))
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
         }
 
-        var previousReading = await dbContext.MeterReadings.AsNoTracking()
-            .Where(item => !item.IsCanceled && item.Id != reading.Id && item.GarageId == garage.Id && item.MeterKind == meterKind && item.AccountingMonth < month)
-            .OrderByDescending(item => item.AccountingMonth)
-            .FirstOrDefaultAsync(cancellationToken);
+        var previousReading = await meterReadingRepository.GetPreviousActiveAsync(reading.Id, garage.Id, meterKind, month, cancellationToken);
         var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue);
         var previousValue = MoneyMath.RoundMeterValue(previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m);
         var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
@@ -2241,10 +2220,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
         }
 
-        var nextReading = await dbContext.MeterReadings.AsNoTracking()
-            .Where(item => !item.IsCanceled && item.Id != reading.Id && item.GarageId == garage.Id && item.MeterKind == meterKind && item.AccountingMonth > month)
-            .OrderBy(item => item.AccountingMonth)
-            .FirstOrDefaultAsync(cancellationToken);
+        var nextReading = await meterReadingRepository.GetNextActiveAsync(reading.Id, garage.Id, meterKind, month, cancellationToken);
         if (nextReading is not null && currentValue > nextReading.CurrentValue)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_sequence_invalid", "Показание не может быть больше следующего внесенного месяца.");
@@ -2306,10 +2282,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_cancel_reason_required", "Для отмены показания счетчика нужна причина.");
         }
 
-        var reading = await dbContext.MeterReadings
-            .Include(item => item.Garage)
-            .ThenInclude(garage => garage.Owner)
-            .SingleOrDefaultAsync(item => item.Id == meterReadingId, cancellationToken);
+        var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);
         if (reading is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
@@ -2329,10 +2302,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<MeterReadingDto>> RestoreMeterReadingAsync(Guid meterReadingId, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reading = await dbContext.MeterReadings
-            .Include(item => item.Garage)
-            .ThenInclude(garage => garage.Owner)
-            .SingleOrDefaultAsync(item => item.Id == meterReadingId, cancellationToken);
+        var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);
         if (reading is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
@@ -2343,12 +2313,11 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_canceled", "Показание счетчика уже активно.");
         }
 
-        if (await dbContext.MeterReadings.AnyAsync(item =>
-            !item.IsCanceled &&
-            item.Id != reading.Id &&
-            item.GarageId == reading.GarageId &&
-            item.MeterKind == reading.MeterKind &&
-            item.AccountingMonth == reading.AccountingMonth,
+        if (await meterReadingRepository.ActiveDuplicateExistsAsync(
+            reading.Id,
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth,
             cancellationToken))
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "За этот гараж, месяц и счетчик уже есть активное показание.");
@@ -2674,9 +2643,7 @@ public sealed class FinanceService(
 
     private async Task<AmountCalculationResult> CalculateMeterAmountAsync(Guid garageId, string meterKind, decimal rate, DateOnly month, CancellationToken cancellationToken)
     {
-        var reading = await dbContext.MeterReadings.AsNoTracking().SingleOrDefaultAsync(
-            item => !item.IsCanceled && item.GarageId == garageId && item.MeterKind == meterKind && item.AccountingMonth == month,
-            cancellationToken);
+        var reading = await meterReadingRepository.GetActiveAsync(garageId, meterKind, month, cancellationToken);
         return reading is null
             ? AmountCalculationResult.Failure("нет показания счетчика за месяц.")
             : AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * rate));
@@ -2684,9 +2651,7 @@ public sealed class FinanceService(
 
     private async Task<AmountCalculationResult> CalculateElectricityMeterAmountAsync(Guid garageId, Tariff tariff, DateOnly month, CancellationToken cancellationToken)
     {
-        var reading = await dbContext.MeterReadings.AsNoTracking().SingleOrDefaultAsync(
-            item => !item.IsCanceled && item.GarageId == garageId && item.MeterKind == MeterKinds.Electricity && item.AccountingMonth == month,
-            cancellationToken);
+        var reading = await meterReadingRepository.GetActiveAsync(garageId, MeterKinds.Electricity, month, cancellationToken);
         if (reading is null)
         {
             return AmountCalculationResult.Failure("нет показания счетчика за месяц.");
@@ -2801,35 +2766,6 @@ public sealed class FinanceService(
                 (operation.Garage != null && operation.Garage.Number.ToLower().Contains(search)) ||
                 (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(search)) ||
                 (operation.StaffMember != null && operation.StaffMember.FullName.ToLower().Contains(search)));
-        }
-
-        return query;
-    }
-
-    private static IQueryable<MeterReading> ApplyMeterReadingFilters(IQueryable<MeterReading> query, MeterReadingListRequest request)
-    {
-        if (request.MonthFrom is not null)
-        {
-            query = query.Where(reading => reading.AccountingMonth >= MonthPeriod.Normalize(request.MonthFrom.Value));
-        }
-
-        if (request.MonthTo is not null)
-        {
-            query = query.Where(reading => reading.AccountingMonth <= MonthPeriod.Normalize(request.MonthTo.Value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.MeterKind))
-        {
-            var meterKind = request.MeterKind.Trim();
-            query = query.Where(reading => reading.MeterKind == meterKind);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(reading =>
-                reading.Garage.Number.ToLower().Contains(search) ||
-                (reading.Comment != null && reading.Comment.ToLower().Contains(search)));
         }
 
         return query;
