@@ -186,7 +186,7 @@ public sealed class ImportQuarantineServiceTests
 
     private static ImportQuarantineService CreateService(GarageBalanceDbContext context)
     {
-        return new ImportQuarantineService(context, new AuditEventWriter(context));
+        return new ImportQuarantineService(new EfImportQuarantineRepository(context), new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

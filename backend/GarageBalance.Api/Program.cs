@@ -50,6 +50,7 @@ builder.Services.AddScoped<IImportService, ImportService>();
 builder.Services.AddScoped<IAccessImportReader, DisabledAccessImportReader>();
 builder.Services.AddScoped<IImportFingerprintRepository, EfImportFingerprintRepository>();
 builder.Services.AddScoped<IImportFingerprintService, ImportFingerprintService>();
+builder.Services.AddScoped<IImportQuarantineRepository, EfImportQuarantineRepository>();
 builder.Services.AddScoped<IImportQuarantineService, ImportQuarantineService>();
 builder.Services.AddScoped<IIntegrationSecretSettingsService, IntegrationSecretSettingsService>();
 builder.Services.AddScoped<IIntegrationStatusService, IntegrationStatusService>();

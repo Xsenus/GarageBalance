@@ -1,13 +1,11 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Import;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Import;
 
 public sealed class ImportQuarantineService(
-    GarageBalanceDbContext dbContext,
+    IImportQuarantineRepository repository,
     IAuditEventWriter auditEventWriter) : IImportQuarantineService
 {
     private const int DefaultListLimit = 50;
@@ -22,32 +20,7 @@ public sealed class ImportQuarantineService(
     public async Task<IReadOnlyList<AccessImportQuarantineItemDto>> GetOpenItemsAsync(Guid? accessImportRunId, CancellationToken cancellationToken, int? limit = null)
     {
         var normalizedLimit = NormalizeListLimit(limit);
-        var query = dbContext.AccessImportQuarantineItems
-            .AsNoTracking()
-            .Where(item => item.Status == "open");
-
-        if (accessImportRunId.HasValue)
-        {
-            query = query.Where(item => item.AccessImportRunId == accessImportRunId.Value);
-        }
-
-        List<AccessImportQuarantineItem> items;
-        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
-        {
-            items = (await query.ToListAsync(cancellationToken))
-                .OrderByDescending(item => item.CreatedAtUtc)
-                .ThenByDescending(item => item.Id)
-                .Take(normalizedLimit)
-                .ToList();
-        }
-        else
-        {
-            items = await query
-                .OrderByDescending(item => item.CreatedAtUtc)
-                .ThenByDescending(item => item.Id)
-                .Take(normalizedLimit)
-                .ToListAsync(cancellationToken);
-        }
+        var items = await repository.GetOpenItemsAsync(accessImportRunId, normalizedLimit, cancellationToken);
 
         return items.Select(ToDto).ToList();
     }
@@ -95,7 +68,7 @@ public sealed class ImportQuarantineService(
             CreatedByUserId = actorUserId
         };
 
-        dbContext.AccessImportQuarantineItems.Add(item);
+        repository.Add(item);
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "import.quarantine_registered",
@@ -118,7 +91,7 @@ public sealed class ImportQuarantineService(
                 ["severity"] = severity
             }));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportQuarantineItemDto>.Success(ToDto(item));
     }
 
@@ -128,7 +101,7 @@ public sealed class ImportQuarantineService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        var item = await dbContext.AccessImportQuarantineItems.SingleOrDefaultAsync(entity => entity.Id == id, cancellationToken);
+        var item = await repository.FindForUpdateAsync(id, cancellationToken);
         if (item is null)
         {
             return ImportResult<AccessImportQuarantineItemDto>.Failure("import_quarantine_item_not_found", "Строка карантина импорта не найдена.");
@@ -173,7 +146,7 @@ public sealed class ImportQuarantineService(
                 ["resolutionComment"] = resolutionComment
             }));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportQuarantineItemDto>.Success(ToDto(item));
     }
 

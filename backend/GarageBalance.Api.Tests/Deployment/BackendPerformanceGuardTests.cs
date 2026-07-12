@@ -9,9 +9,9 @@ public sealed class BackendPerformanceGuardTests
     [InlineData("Application/Users/UserManagementService.cs", @"OrderBy\(user => user\.[^)]+\)[\s\S]*?\.Take\(NormalizeListLimit\(limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Finance/FinanceService.cs", @"\.Take\(NormalizeListLimit\(request\.Limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Import/ImportService.cs", @"else[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    [InlineData("Application/Import/ImportQuarantineService.cs", @"else[\s\S]*?\.Take\(normalizedLimit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfImportQuarantineRepository.cs", @"return await query[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Dictionaries/DictionaryService.cs", @"\.Take\(NormalizeListLimit\(limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    public void ApplicationListQueries_MaterializeBoundedResultSets(string relativePath, string boundedQueryPattern)
+    public void ProductionListQueries_MaterializeBoundedResultSets(string relativePath, string boundedQueryPattern)
     {
         var source = ReadApiSource(relativePath);
 
