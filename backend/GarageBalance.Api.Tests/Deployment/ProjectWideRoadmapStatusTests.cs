@@ -1765,6 +1765,80 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DictionaryBackendCrudTestsAreCompleteWhenServicesControllersValidationDuplicatesPoliciesAndForbiddenExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var serviceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionariesControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "ControllerAuthorizationCoverageTests.cs"));
+        var handlerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "PermissionAuthorizationHandlerTests.cs"));
+        var middlewareTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Controllers", "ApiAuthorizationMiddlewareResultHandlerTests.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить backend-тесты всех CRUD-методов, валидации, дублей и прав", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("success/error HTTP mapping", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.read", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.write", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("tariffs.manage", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.254.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryBackendCrudTestsAreCompleteWhenServicesControllersValidationDuplicatesPoliciesAndForbiddenExist", roadmapLine, StringComparison.Ordinal);
+
+        var serviceScenarios = new[]
+        {
+            "CreateOwnerAsync_TrimsFieldsAndWritesAudit",
+            "ArchiveOwnerAsync_RejectsEmptyReason",
+            "CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner",
+            "CreateSupplierGroupAsync_RejectsDuplicateName",
+            "CreateSupplierAsync_RejectsMissingGroup",
+            "CreateSupplierAsync_RejectsDuplicateNameInActiveGroup",
+            "RestoreSupplierContactAsync_RestoresSupplierAndWritesAudit",
+            "StaffDepartmentAndMemberAsync_WriteAuditAndBlockUsedDepartmentArchive",
+            "RestoreSupplierGroupAsync_RejectsDuplicateActiveName",
+            "RestoreSupplierAsync_RejectsArchivedSupplierGroup"
+        };
+        foreach (var scenario in serviceScenarios)
+        {
+            Assert.Contains(scenario, serviceTestsText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ListEndpoints_PassLimitToService", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreEndpoints_ReturnOkActiveRecordAndPassActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("CoreDictionaryMutationEndpoints_ReturnSuccessAndPassActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"updateOwner\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"archiveSupplierGroup\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"archiveIncomeType\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"archiveExpenseType\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"archiveTariff\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"createSupplierContact\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"createStaffDepartment\")]", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"createStaffMember\")]", controllerTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("DictionaryActionsRequireExpectedDictionaryPermissions", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("SystemPermissions.DictionariesWrite", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("SystemPermissions.TariffsManage", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("HandleAsync_DoesNotSucceedForDictionaryPolicyWhenRequiredClaimIsMissing", handlerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"dictionaries.read\", \"reports.read\")]", handlerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"dictionaries.write\", \"dictionaries.read\")]", handlerTestsText, StringComparison.Ordinal);
+        Assert.Contains("[InlineData(\"tariffs.manage\", \"dictionaries.write\")]", handlerTestsText, StringComparison.Ordinal);
+        Assert.Contains("HandleAsync_ReturnsProblemDetailsForForbidden", middlewareTestsText, StringComparison.Ordinal);
+        Assert.Contains("StatusCodes.Status403Forbidden", middlewareTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("\"version\": \"0.254.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Права справочников закреплены тестом", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("DictionaryBackendCrudTestsAreCompleteWhenServicesControllersValidationDuplicatesPoliciesAndForbiddenExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("DictionaryBackendCrudTestsAreCompleteWhenServicesControllersValidationDuplicatesPoliciesAndForbiddenExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();

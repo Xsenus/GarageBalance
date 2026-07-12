@@ -57,4 +57,20 @@ public sealed class PermissionAuthorizationHandlerTests
 
         Assert.False(context.HasSucceeded);
     }
+
+    [Theory]
+    [InlineData("dictionaries.read", "reports.read")]
+    [InlineData("dictionaries.write", "dictionaries.read")]
+    [InlineData("tariffs.manage", "dictionaries.write")]
+    public async Task HandleAsync_DoesNotSucceedForDictionaryPolicyWhenRequiredClaimIsMissing(string requiredPermission, string grantedPermission)
+    {
+        var requirement = new PermissionRequirement(requiredPermission);
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("permission", grantedPermission)], "Test"));
+        var context = new AuthorizationHandlerContext([requirement], principal, resource: null);
+        var handler = new PermissionAuthorizationHandler();
+
+        await handler.HandleAsync(context);
+
+        Assert.False(context.HasSucceeded);
+    }
 }

@@ -574,6 +574,49 @@ public sealed class DictionariesControllerTests
         Assert.Equal(actorUserId, service.LastActorUserId);
     }
 
+    [Theory]
+    [InlineData("updateOwner")]
+    [InlineData("createSupplierGroup")]
+    [InlineData("updateSupplierGroup")]
+    [InlineData("archiveSupplierGroup")]
+    [InlineData("createIncomeType")]
+    [InlineData("updateIncomeType")]
+    [InlineData("archiveIncomeType")]
+    [InlineData("createExpenseType")]
+    [InlineData("updateExpenseType")]
+    [InlineData("archiveExpenseType")]
+    [InlineData("createTariff")]
+    [InlineData("updateTariff")]
+    [InlineData("archiveTariff")]
+    [InlineData("createSupplierContact")]
+    [InlineData("createStaffDepartment")]
+    [InlineData("createStaffMember")]
+    public async Task CoreDictionaryMutationEndpoints_ReturnSuccessAndPassActorUserId(string operation)
+    {
+        var actorUserId = Guid.NewGuid();
+        var recordId = Guid.NewGuid();
+        var service = CreateCoreMutationSuccessService(operation, recordId);
+        var controller = CreateController(service, actorUserId);
+
+        var result = await InvokeCoreMutation(controller, operation, recordId);
+
+        if (operation.StartsWith("create", StringComparison.Ordinal))
+        {
+            Assert.IsType<CreatedAtActionResult>(result);
+        }
+        else if (operation.StartsWith("update", StringComparison.Ordinal))
+        {
+            Assert.IsType<OkObjectResult>(result);
+        }
+        else
+        {
+            Assert.IsType<NoContentResult>(result);
+            Assert.Equal("Проверка архивирования", service.LastArchiveReason);
+        }
+
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
     [Fact]
     public async Task ArchiveOwner_ReturnsNoContentAndPassesActorUserId()
     {
@@ -1287,6 +1330,72 @@ public sealed class DictionariesControllerTests
         return controller;
     }
 
+    private static FakeDictionaryService CreateCoreMutationSuccessService(string operation, Guid recordId)
+    {
+        var groupId = Guid.NewGuid();
+        var departmentId = Guid.NewGuid();
+        return operation switch
+        {
+            "updateOwner" => new FakeDictionaryService
+            {
+                UpdateOwnerResult = DictionaryResult<OwnerDto>.Success(new OwnerDto(recordId, "Иванов", "Иван", null, "Иванов Иван", null, null, null, false))
+            },
+            "createSupplierGroup" or "updateSupplierGroup" or "archiveSupplierGroup" => new FakeDictionaryService
+            {
+                SupplierGroupMutationResult = DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(recordId, "Коммунальные услуги", false, false))
+            },
+            "createIncomeType" or "updateIncomeType" or "archiveIncomeType" => new FakeDictionaryService
+            {
+                IncomeTypeMutationResult = DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(recordId, "Членский взнос", "membership", false, false))
+            },
+            "createExpenseType" or "updateExpenseType" or "archiveExpenseType" => new FakeDictionaryService
+            {
+                ExpenseTypeMutationResult = DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(recordId, "Электроэнергия", "electricity", false, false))
+            },
+            "createTariff" or "updateTariff" or "archiveTariff" => new FakeDictionaryService
+            {
+                TariffMutationResult = DictionaryResult<TariffDto>.Success(new TariffDto(recordId, "Вода", "meter_water", 25m, new DateOnly(2026, 1, 1), null, false))
+            },
+            "createSupplierContact" => new FakeDictionaryService
+            {
+                CreateSupplierContactResult = DictionaryResult<SupplierContactDto>.Success(new SupplierContactDto(recordId, groupId, "Водоканал", "Петров", null, null, null, "Работает", null, false))
+            },
+            "createStaffDepartment" => new FakeDictionaryService
+            {
+                CreateStaffDepartmentResult = DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(recordId, "Бухгалтерия", false))
+            },
+            "createStaffMember" => new FakeDictionaryService
+            {
+                CreateStaffMemberResult = DictionaryResult<StaffMemberDto>.Success(new StaffMemberDto(recordId, "Петрова Ольга", departmentId, "Бухгалтерия", 40000m, false))
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unsupported dictionary mutation.")
+        };
+    }
+
+    private static async Task<IActionResult> InvokeCoreMutation(DictionariesController controller, string operation, Guid recordId)
+    {
+        return operation switch
+        {
+            "updateOwner" => (await controller.UpdateOwner(recordId, new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), CancellationToken.None)).Result!,
+            "createSupplierGroup" => (await controller.CreateSupplierGroup(new UpsertSupplierGroupRequest("Коммунальные услуги"), CancellationToken.None)).Result!,
+            "updateSupplierGroup" => (await controller.UpdateSupplierGroup(recordId, new UpsertSupplierGroupRequest("Коммунальные услуги"), CancellationToken.None)).Result!,
+            "archiveSupplierGroup" => await controller.ArchiveSupplierGroup(recordId, new ArchiveDictionaryEntryRequest("Проверка архивирования"), CancellationToken.None),
+            "createIncomeType" => (await controller.CreateIncomeType(new UpsertAccountingTypeRequest("Членский взнос", "membership"), CancellationToken.None)).Result!,
+            "updateIncomeType" => (await controller.UpdateIncomeType(recordId, new UpsertAccountingTypeRequest("Членский взнос", "membership"), CancellationToken.None)).Result!,
+            "archiveIncomeType" => await controller.ArchiveIncomeType(recordId, new ArchiveDictionaryEntryRequest("Проверка архивирования"), CancellationToken.None),
+            "createExpenseType" => (await controller.CreateExpenseType(new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), CancellationToken.None)).Result!,
+            "updateExpenseType" => (await controller.UpdateExpenseType(recordId, new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), CancellationToken.None)).Result!,
+            "archiveExpenseType" => await controller.ArchiveExpenseType(recordId, new ArchiveDictionaryEntryRequest("Проверка архивирования"), CancellationToken.None),
+            "createTariff" => (await controller.CreateTariff(new UpsertTariffRequest("Вода", "meter_water", 25m, new DateOnly(2026, 1, 1), null), CancellationToken.None)).Result!,
+            "updateTariff" => (await controller.UpdateTariff(recordId, new UpsertTariffRequest("Вода", "meter_water", 25m, new DateOnly(2026, 1, 1), null), CancellationToken.None)).Result!,
+            "archiveTariff" => await controller.ArchiveTariff(recordId, new ArchiveDictionaryEntryRequest("Проверка архивирования"), CancellationToken.None),
+            "createSupplierContact" => (await controller.CreateSupplierContact(new UpsertSupplierContactRequest(recordId, "Петров", null, null, null, "Работает", null), CancellationToken.None)).Result!,
+            "createStaffDepartment" => (await controller.CreateStaffDepartment(new UpsertStaffDepartmentRequest("Бухгалтерия"), CancellationToken.None)).Result!,
+            "createStaffMember" => (await controller.CreateStaffMember(new UpsertStaffMemberRequest("Петрова Ольга", recordId, 40000m), CancellationToken.None)).Result!,
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unsupported dictionary mutation.")
+        };
+    }
+
     private static async Task<IActionResult> RestoreRecentDictionaryRecord(DictionariesController controller, string dictionaryKind, Guid id)
     {
         return dictionaryKind switch
@@ -1434,12 +1543,14 @@ public sealed class DictionariesControllerTests
         public Guid? LastStaffDepartmentId { get; private set; }
         public Guid? LastStaffMemberId { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<OwnerDto> UpdateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("owner_not_found", "Not found.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> RestoreOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> CreateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> UpdateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> ArchiveGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> RestoreGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<SupplierGroupDto> SupplierGroupMutationResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found.");
         public DictionaryResult<SupplierGroupDto> RestoreSupplierGroupResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> CreateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> UpdateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
@@ -1457,12 +1568,15 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<StaffMemberDto> UpdateStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffMemberDto> ArchiveStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<StaffMemberDto> RestoreStaffMemberResult { get; init; } = DictionaryResult<StaffMemberDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<AccountingTypeDto> IncomeTypeMutationResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Not found.");
+        public DictionaryResult<AccountingTypeDto> ExpenseTypeMutationResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found.");
         public DictionaryResult<AccountingTypeDto> ArchiveIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> RestoreIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> RestoreExpenseTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> RestoreTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<TariffDto> TariffMutationResult { get; init; } = DictionaryResult<TariffDto>.Failure("tariff_not_found", "Not found.");
         public DictionaryResult<ChargeServiceSettingDto> CreateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> UpdateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> ArchiveChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
@@ -1496,7 +1610,8 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<OwnerDto>> UpdateOwnerAsync(Guid id, UpsertOwnerRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<OwnerDto>.Failure("owner_not_found", "Not found."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateOwnerResult);
         }
 
         public Task<DictionaryResult<OwnerDto>> ArchiveOwnerAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1565,18 +1680,21 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<SupplierGroupDto>> CreateSupplierGroupAsync(UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Duplicate."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(SupplierGroupMutationResult);
         }
 
         public Task<DictionaryResult<SupplierGroupDto>> UpdateSupplierGroupAsync(Guid id, UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(SupplierGroupMutationResult);
         }
 
         public Task<DictionaryResult<SupplierGroupDto>> ArchiveSupplierGroupAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastActorUserId = actorUserId;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found."));
+            return Task.FromResult(SupplierGroupMutationResult);
         }
 
         public Task<DictionaryResult<SupplierGroupDto>> RestoreSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1740,18 +1858,21 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Duplicate."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(IncomeTypeMutationResult);
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> UpdateIncomeTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Not found."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(IncomeTypeMutationResult);
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastActorUserId = actorUserId;
             LastArchiveReason = reason;
-            return Task.FromResult(ArchiveIncomeTypeResult);
+            return Task.FromResult(IncomeTypeMutationResult.Succeeded ? IncomeTypeMutationResult : ArchiveIncomeTypeResult);
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> RestoreIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1774,18 +1895,21 @@ public sealed class DictionariesControllerTests
 
         public Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Duplicate."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(ExpenseTypeMutationResult);
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> UpdateExpenseTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
+            LastActorUserId = actorUserId;
+            return Task.FromResult(ExpenseTypeMutationResult);
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastActorUserId = actorUserId;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Not found."));
+            return Task.FromResult(ExpenseTypeMutationResult);
         }
 
         public Task<DictionaryResult<AccountingTypeDto>> RestoreExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1809,19 +1933,20 @@ public sealed class DictionariesControllerTests
         public Task<DictionaryResult<TariffDto>> CreateTariffAsync(UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
-            return Task.FromResult(CreateTariffResult);
+            return Task.FromResult(TariffMutationResult.Succeeded ? TariffMutationResult : CreateTariffResult);
         }
 
         public Task<DictionaryResult<TariffDto>> UpdateTariffAsync(Guid id, UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
-            return Task.FromResult(UpdateTariffResult);
+            return Task.FromResult(TariffMutationResult.Succeeded ? TariffMutationResult : UpdateTariffResult);
         }
 
         public Task<DictionaryResult<TariffDto>> ArchiveTariffAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            LastActorUserId = actorUserId;
             LastArchiveReason = reason;
-            return Task.FromResult(DictionaryResult<TariffDto>.Failure("tariff_not_found", "Not found."));
+            return Task.FromResult(TariffMutationResult);
         }
 
         public Task<DictionaryResult<TariffDto>> RestoreTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
