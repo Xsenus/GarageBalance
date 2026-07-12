@@ -1134,6 +1134,8 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.CreatedAtUtc < toExclusiveUtc);
 
         List<FundOperation> operations;
+        int rowCount;
+        decimal total;
         if (dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
         {
             operations = await dbContext.FundOperations.AsNoTracking()
@@ -1146,32 +1148,48 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                     operation.CreatedAtUtc >= fromUtc &&
                     operation.CreatedAtUtc < toExclusiveUtc)
                 .ToList();
+
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var normalizedSearch = request.Search.Trim();
+                operations = operations
+                    .Where(operation =>
+                        operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                        operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            operations = operations
+                .OrderBy(operation => operation.CreatedAtUtc)
+                .ThenBy(operation => operation.Fund.Name)
+                .ToList();
+            rowCount = operations.Count;
+            total = operations.Sum(operation => operation.Amount);
+            operations = ApplyEnumerableReportRowLimit(operations, request.Limit).ToList();
         }
         else
         {
-            operations = await operationsQuery
-                .OrderBy(operation => operation.CreatedAtUtc)
-                .ThenBy(operation => operation.Fund.Name)
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var normalizedSearch = request.Search.Trim().ToLower();
+                operationsQuery = operationsQuery.Where(operation =>
+                    operation.Fund.Name.ToLower().Contains(normalizedSearch) ||
+                    operation.Reason.ToLower().Contains(normalizedSearch));
+            }
+
+            rowCount = await operationsQuery.CountAsync(cancellationToken);
+            total = rowCount == 0
+                ? 0m
+                : await operationsQuery.SumAsync(operation => operation.Amount, cancellationToken);
+            operations = await ApplyReportRowLimit(
+                    operationsQuery
+                        .OrderBy(operation => operation.CreatedAtUtc)
+                        .ThenBy(operation => operation.Fund.Name),
+                    request.Limit)
                 .ToListAsync(cancellationToken);
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var normalizedSearch = request.Search.Trim();
-            operations = operations
-                .Where(operation =>
-                    operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        operations = operations
-            .OrderBy(operation => operation.CreatedAtUtc)
-            .ThenBy(operation => operation.Fund.Name)
-            .ToList();
-
-        var rowCount = operations.Count;
-        var rows = ApplyEnumerableReportRowLimit(operations, request.Limit)
+        var rows = operations
             .Select(operation => new BankDepositReportRowDto(
                 operation.Id,
                 DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
@@ -1179,7 +1197,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.Fund.Name,
                 operation.Reason))
             .ToList();
-        var report = new BankDepositReportDto(dateFrom, dateTo, operations.Sum(operation => operation.Amount), rowCount, rows);
+        var report = new BankDepositReportDto(dateFrom, dateTo, total, rowCount, rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,

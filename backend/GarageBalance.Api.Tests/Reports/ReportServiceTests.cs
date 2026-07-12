@@ -798,6 +798,58 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetBankDepositReportAsync_AppliesRowLimitWithoutChangingTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new ReportService(database.Context);
+        var fund = new Fund { Name = "Банк", NormalizedName = "БАНК", SortOrder = 10 };
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 100m,
+                BalanceBefore = 0m,
+                BalanceAfter = 100m,
+                Reason = "Сдача 1",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 200m,
+                BalanceBefore = 100m,
+                BalanceAfter = 300m,
+                Reason = "Сдача 2",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 11, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 300m,
+                BalanceBefore = 300m,
+                BalanceAfter = 600m,
+                Reason = "Сдача 3",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 12, 9, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetBankDepositReportAsync(
+            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Search: null, Limit: 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(600m, result.Value!.Total);
+        Assert.Equal(3, result.Value.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal(new DateOnly(2026, 6, 10), row.Date);
+        Assert.Equal("Сдача 1", row.Comment);
+    }
+
+    [Fact]
     public async Task GetFeeReportAsync_ReturnsSummaryDebtorsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
