@@ -1593,6 +1593,95 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void SupplierAndPersonnelGroupsAreCompleteWhenEditableCrudAuditUiTestsAndReleaseExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var supplierGroupText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "SupplierGroup.cs"));
+        var supplierText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "Supplier.cs"));
+        var departmentText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "StaffDepartment.cs"));
+        var memberText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "StaffMember.cs"));
+        var contractsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryContracts.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "DictionariesController.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var frontendServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "dictionariesApi.ts"));
+        var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать поставщиков и персонал с редактируемыми группами", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("SupplierGroup", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("StaffDepartment", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.write", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.408.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("SupplierAndPersonnelGroupsAreCompleteWhenEditableCrudAuditUiTestsAndReleaseExist", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed class SupplierGroup", supplierGroupText, StringComparison.Ordinal);
+        Assert.Contains("List<Supplier> Suppliers", supplierGroupText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsArchived", supplierGroupText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class Supplier", supplierText, StringComparison.Ordinal);
+        Assert.Contains("public Guid GroupId", supplierText, StringComparison.Ordinal);
+        Assert.Contains("public SupplierGroup Group", supplierText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class StaffDepartment", departmentText, StringComparison.Ordinal);
+        Assert.Contains("ICollection<StaffMember> StaffMembers", departmentText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class StaffMember", memberText, StringComparison.Ordinal);
+        Assert.Contains("public Guid DepartmentId", memberText, StringComparison.Ordinal);
+        Assert.Contains("public StaffDepartment Department", memberText, StringComparison.Ordinal);
+
+        Assert.Contains("record UpsertSupplierGroupRequest", contractsText, StringComparison.Ordinal);
+        Assert.Contains("record UpsertSupplierRequest", contractsText, StringComparison.Ordinal);
+        Assert.Contains("record UpsertStaffDepartmentRequest", contractsText, StringComparison.Ordinal);
+        Assert.Contains("record UpsertStaffMemberRequest", contractsText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"supplier-groups\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPut(\"supplier-groups/{id:guid}\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"suppliers\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"staff-departments\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"staff-members\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[Authorize(Policy = SystemPermissions.DictionariesWrite)]", controllerText, StringComparison.Ordinal);
+
+        var auditActions = new[]
+        {
+            "dictionary.supplier_group_created",
+            "dictionary.supplier_group_archived",
+            "dictionary.supplier_created",
+            "dictionary.supplier_archived",
+            "dictionary.staff_department_created",
+            "dictionary.staff_department_archived",
+            "dictionary.staff_member_created",
+            "dictionary.staff_member_archived"
+        };
+        foreach (var action in auditActions)
+        {
+            Assert.Contains(action, serviceText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("CreateSupplierGroupAsync_RejectsDuplicateName", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateSupplierAsync_RejectsMissingGroup", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreSupplierAsync_RejectsArchivedSupplierGroup", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("StaffDepartmentAndMemberAsync_WriteAuditAndBlockUsedDepartmentArchive", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("/api/dictionaries/supplier-groups", frontendServiceText, StringComparison.Ordinal);
+        Assert.Contains("/api/dictionaries/staff-departments", frontendServiceText, StringComparison.Ordinal);
+        Assert.Contains("Добавить поставщика", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Добавить отдел", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Восстановить поставщика", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Восстановить сотрудника", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.408.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Отделы и сотрудники персонала сохраняются в отдельных справочниках", releaseNotesText, StringComparison.Ordinal);
+
+        Assert.Contains("SupplierAndPersonnelGroupsAreCompleteWhenEditableCrudAuditUiTestsAndReleaseExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("SupplierAndPersonnelGroupsAreCompleteWhenEditableCrudAuditUiTestsAndReleaseExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
