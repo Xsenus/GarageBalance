@@ -10,6 +10,7 @@ namespace GarageBalance.Api.Application.Finance;
 
 public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
+    IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
     private const int DefaultListLimit = 100;
@@ -65,7 +66,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new AuditEventWriter(dbContext))
+        : this(dbContext, new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -643,7 +644,7 @@ public sealed class FinanceService(
 
         dbContext.FinancialOperations.Add(operation);
         AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -674,7 +675,7 @@ public sealed class FinanceService(
         }
 
         var incomeType = await GetOrCreateDebtTransferIncomeTypeAsync(cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var comment = NormalizeOptional(request.Comment);
         return await CreateIncomeAsync(
@@ -813,7 +814,7 @@ public sealed class FinanceService(
 
         dbContext.FinancialOperations.Add(operation);
         AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -879,7 +880,7 @@ public sealed class FinanceService(
 
         dbContext.FinancialOperations.Add(operation);
         AddAudit(actorUserId, "finance.staff_payment_created", operation, FormatStaffPaymentCreatedAuditSummary(operation, availableAmount));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -963,7 +964,7 @@ public sealed class FinanceService(
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.income_updated", operation, FormatIncomeUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -1074,7 +1075,7 @@ public sealed class FinanceService(
         operation.ExpenseType = expenseType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -1109,7 +1110,7 @@ public sealed class FinanceService(
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         operation.Comment = AppendCancelReason(operation.Comment, reason);
         AddAudit(actorUserId, "finance.operation_canceled", operation, FormatOperationCanceledAuditSummary(operation, reason));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -1182,7 +1183,7 @@ public sealed class FinanceService(
         operation.IsCanceled = false;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.operation_restored", operation, FormatOperationRestoredAuditSummary(operation));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
@@ -1212,7 +1213,7 @@ public sealed class FinanceService(
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
         AddAudit(actorUserId, "finance.accrual_canceled", accrual, FormatAccrualCanceledAuditSummary(accrual, reason));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1248,7 +1249,7 @@ public sealed class FinanceService(
         accrual.IsCanceled = false;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.accrual_restored", accrual, FormatAccrualRestoredAuditSummary(accrual));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1304,7 +1305,7 @@ public sealed class FinanceService(
 
         dbContext.Accruals.Add(accrual);
         AddAudit(actorUserId, "finance.accrual_created", accrual, FormatAccrualCreatedAuditSummary(accrual));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1359,7 +1360,7 @@ public sealed class FinanceService(
             };
             dbContext.Accruals.Add(accrual);
             AddAudit(actorUserId, "finance.debt_transfer_created", accrual, FormatDebtTransferCreatedAuditSummary(accrual, sourceMonth, targetMonth));
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return FinanceResult<AccrualDto>.Success(ToDto(accrual));
         }
 
@@ -1388,7 +1389,7 @@ public sealed class FinanceService(
             ["comment"] = accrual.Comment
         };
         AddAudit(actorUserId, "finance.debt_transfer_updated", accrual, FormatDebtTransferUpdatedAuditSummary(before, accrual, sourceMonth, targetMonth, amount), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1487,7 +1488,7 @@ public sealed class FinanceService(
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.accrual_updated", accrual, FormatAccrualUpdatedAuditSummary(before, accrual), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1546,7 +1547,7 @@ public sealed class FinanceService(
 
         dbContext.SupplierAccruals.Add(accrual);
         AddAudit(actorUserId, "finance.supplier_accrual_created", accrual, FormatSupplierAccrualCreatedAuditSummary(accrual));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1649,7 +1650,7 @@ public sealed class FinanceService(
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.supplier_accrual_updated", accrual, FormatSupplierAccrualUpdatedAuditSummary(before, accrual), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1678,7 +1679,7 @@ public sealed class FinanceService(
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
         AddAudit(actorUserId, "finance.supplier_accrual_canceled", accrual, FormatSupplierAccrualCanceledAuditSummary(accrual, reason));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1714,7 +1715,7 @@ public sealed class FinanceService(
         accrual.IsCanceled = false;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.supplier_accrual_restored", accrual, FormatSupplierAccrualRestoredAuditSummary(accrual));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
 
@@ -1824,7 +1825,7 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var result = new RegularAccrualGenerationResultDto(
             month,
@@ -1908,7 +1909,7 @@ public sealed class FinanceService(
                 ["skippedCount"] = skippedCount,
                 ["totalAmount"] = totalAmount
             });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var result = new RegularCatalogAccrualGenerationResultDto(
             month,
@@ -2029,7 +2030,7 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var result = new FeeCampaignAccrualGenerationResultDto(
             month,
@@ -2137,7 +2138,7 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var result = new SupplierGroupSalaryAccrualGenerationResultDto(
             month,
@@ -2240,7 +2241,7 @@ public sealed class FinanceService(
 
         dbContext.MeterReadings.Add(reading);
         AddAudit(actorUserId, "finance.meter_reading_created", reading, FormatMeterReadingCreatedAuditSummary(reading));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
@@ -2349,7 +2350,7 @@ public sealed class FinanceService(
         reading.Comment = comment;
         reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.meter_reading_updated", reading, FormatMeterReadingUpdatedAuditSummary(reading), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
@@ -2378,7 +2379,7 @@ public sealed class FinanceService(
         reading.IsCanceled = true;
         reading.Comment = AppendCancelReason(reading.Comment, reason);
         AddAudit(actorUserId, "finance.meter_reading_canceled", reading, FormatMeterReadingCanceledAuditSummary(reading, reason));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
@@ -2412,7 +2413,7 @@ public sealed class FinanceService(
         reading.IsCanceled = false;
         reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "finance.meter_reading_restored", reading, FormatMeterReadingRestoredAuditSummary(reading));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
