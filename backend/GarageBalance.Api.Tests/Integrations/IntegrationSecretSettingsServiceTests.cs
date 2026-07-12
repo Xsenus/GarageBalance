@@ -162,7 +162,10 @@ public sealed class IntegrationSecretSettingsServiceTests
     {
         var provider = new EphemeralDataProtectionProvider();
         var protector = new DataProtectionSensitiveDataProtector(provider);
-        return new IntegrationSecretSettingsService(context, protector, new AuditEventWriter(context));
+        return new IntegrationSecretSettingsService(
+            new EfIntegrationSecretSettingsRepository(context),
+            protector,
+            new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

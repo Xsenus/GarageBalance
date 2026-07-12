@@ -1,13 +1,11 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Security;
 using GarageBalance.Api.Domain.Integrations;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Integrations;
 
 public sealed class IntegrationSecretSettingsService(
-    GarageBalanceDbContext dbContext,
+    IIntegrationSecretSettingsRepository repository,
     ISensitiveDataProtector sensitiveDataProtector,
     IAuditEventWriter auditEventWriter) : IIntegrationSecretSettingsService
 {
@@ -36,11 +34,7 @@ public sealed class IntegrationSecretSettingsService(
         var purpose = BuildPurpose(provider, settingKey);
         var plaintextValue = request.PlaintextValue.Trim();
 
-        var setting = await dbContext.IntegrationSecretSettings
-            .FirstOrDefaultAsync(item =>
-                item.NormalizedProvider == normalizedProvider &&
-                item.NormalizedSettingKey == normalizedSettingKey,
-                cancellationToken);
+        var setting = await repository.FindForUpdateAsync(normalizedProvider, normalizedSettingKey, cancellationToken);
 
         var isNew = setting is null;
         var oldProvider = setting?.Provider;
@@ -72,7 +66,7 @@ public sealed class IntegrationSecretSettingsService(
                 NormalizedProvider = normalizedProvider,
                 NormalizedSettingKey = normalizedSettingKey
             };
-            dbContext.IntegrationSecretSettings.Add(setting);
+            repository.Add(setting);
         }
         else
         {
@@ -119,7 +113,7 @@ public sealed class IntegrationSecretSettingsService(
                 ["protectedValueState"] = protectedValueState
             }));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Success(ToDto(setting));
     }
 
@@ -136,12 +130,7 @@ public sealed class IntegrationSecretSettingsService(
         var normalizedProvider = Normalize(provider);
         var normalizedSettingKey = Normalize(settingKey);
 
-        var setting = await dbContext.IntegrationSecretSettings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item =>
-                item.NormalizedProvider == normalizedProvider &&
-                item.NormalizedSettingKey == normalizedSettingKey,
-                cancellationToken);
+        var setting = await repository.FindAsync(normalizedProvider, normalizedSettingKey, cancellationToken);
 
         if (setting is null)
         {
@@ -156,19 +145,9 @@ public sealed class IntegrationSecretSettingsService(
         string? provider,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.IntegrationSecretSettings.AsNoTracking();
-
-        if (!string.IsNullOrWhiteSpace(provider))
-        {
-            var normalizedProvider = Normalize(provider);
-            query = query.Where(item => item.NormalizedProvider == normalizedProvider);
-        }
-
-        return await query
-            .OrderBy(item => item.Provider)
-            .ThenBy(item => item.SettingKey)
-            .Select(item => ToDto(item))
-            .ToListAsync(cancellationToken);
+        var normalizedProvider = string.IsNullOrWhiteSpace(provider) ? null : Normalize(provider);
+        var settings = await repository.GetSettingsAsync(normalizedProvider, cancellationToken);
+        return settings.Select(ToDto).ToList();
     }
 
     private static IntegrationSecretSettingResult<IntegrationSecretSettingDto>? ValidateRequest(UpsertIntegrationSecretRequest request)
