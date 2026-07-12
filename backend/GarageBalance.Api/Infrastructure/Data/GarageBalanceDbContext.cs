@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -11,7 +12,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
-public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbContext> options) : DbContext(options)
+public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbContext> options) : DbContext(options), IAuditEventStore
 {
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<AppRole> Roles => Set<AppRole>();
@@ -44,6 +45,11 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AccessImportQuarantineItem> AccessImportQuarantineItems => Set<AccessImportQuarantineItem>();
     public DbSet<AccessImportCreatedRecord> AccessImportCreatedRecords => Set<AccessImportCreatedRecord>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
+
+    void IAuditEventStore.Add(AuditEvent auditEvent)
+    {
+        Set<AuditEvent>().Add(auditEvent);
+    }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

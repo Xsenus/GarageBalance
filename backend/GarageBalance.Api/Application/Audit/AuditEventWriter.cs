@@ -1,11 +1,10 @@
 using GarageBalance.Api.Domain.Audit;
-using GarageBalance.Api.Infrastructure.Data;
 using System.Globalization;
 using System.Text.Json;
 
 namespace GarageBalance.Api.Application.Audit;
 
-public sealed class AuditEventWriter(GarageBalanceDbContext dbContext) : IAuditEventWriter
+public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -48,7 +47,7 @@ public sealed class AuditEventWriter(GarageBalanceDbContext dbContext) : IAuditE
             MetadataJson = metadata.Count == 0 ? null : JsonSerializer.Serialize(metadata, JsonOptions)
         };
 
-        dbContext.AuditEvents.Add(auditEvent);
+        store.Add(auditEvent);
         return auditEvent;
     }
 
