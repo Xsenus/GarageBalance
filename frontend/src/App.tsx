@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authApi'
+import { AuthGate } from './features/auth/AuthGate'
 import { auditApi } from './services/auditApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import { dictionariesApi, DictionaryApiError } from './services/dictionariesApi'
@@ -87,7 +88,7 @@ import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } 
 import type { UserEditChange, UserFormState } from './shared/userManagement'
 import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from './shared/userManagement'
 import type { OwnerGarageLinkForm } from './shared/validation'
-import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getAuthValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getGarageValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
+import { chooseRegularTariffId, createTariffFormFromDto, getAccountingTypeValidationErrors, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getGarageValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getPasswordChangeValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from './shared/validation'
 import './App.css'
 
 type AppProps = {
@@ -403,64 +404,6 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
         <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={handleUserChanged} onLogout={handleLogout} />
       </section>
     </main>
-  )
-}
-
-function AuthGate({ authClient, onAuthenticated }: { authClient: AuthClient; onAuthenticated: (auth: AuthResponse) => void }) {
-  const [email, setEmail] = useState('admin@example.com')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
-    const errors = getAuthValidationErrors('login', email, '', password)
-    if (errors.length > 0) {
-      setValidationErrors(errors)
-      return
-    }
-
-    setValidationErrors([])
-    setLoading(true)
-
-    try {
-      const response = await authClient.login({ email, password })
-      setPassword('')
-      onAuthenticated(response)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось выполнить вход.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <section className="auth-layout" aria-label="Вход в систему">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="auth-card-header">
-          <h1>Авторизация</h1>
-        </div>
-
-        <label>
-          Email
-          <input aria-label="Email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="username" placeholder="admin@example.com" required />
-        </label>
-
-        <label>
-          Пароль
-          <input aria-label="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" minLength={8} required />
-        </label>
-
-        <FormValidationSummary title="Проверьте форму входа" items={validationErrors} />
-        {error ? <FormError>{error}</FormError> : null}
-
-        <button className="primary-button" type="submit" disabled={loading}>
-          {loading ? 'Проверяем...' : 'Войти'}
-        </button>
-      </form>
-    </section>
   )
 }
 

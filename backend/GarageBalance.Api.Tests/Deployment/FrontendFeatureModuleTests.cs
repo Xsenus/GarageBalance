@@ -3,6 +3,35 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void AuthGateRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var authGateText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "auth",
+            "AuthGate.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { AuthGate } from './features/auth/AuthGate'", appText, StringComparison.Ordinal);
+        Assert.Contains("<AuthGate authClient={authClient} onAuthenticated={handleAuthenticated} />", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function AuthGate(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("getAuthValidationErrors", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function AuthGate(", authGateText, StringComparison.Ordinal);
+        Assert.Contains("getAuthValidationErrors('login'", authGateText, StringComparison.Ordinal);
+        Assert.Contains("await authClient.login({ email, password })", authGateText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Вход в систему\"", authGateText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/auth/AuthGate.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReleasePanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
