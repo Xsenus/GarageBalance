@@ -1208,6 +1208,34 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void IrregularPaymentDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        Assert.Contains("IIrregularPaymentRepository irregularPaymentRepository", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.Add", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.IrregularPayments", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IrregularPaymentRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "IIrregularPaymentRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfIrregularPaymentRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        Assert.Contains("interface IIrregularPaymentRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IIrregularPaymentRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IIrregularPaymentRepository, EfIrregularPaymentRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1256,6 +1284,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("ITariffRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfTariffRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IIrregularPaymentRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfIrregularPaymentRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -1277,6 +1307,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
