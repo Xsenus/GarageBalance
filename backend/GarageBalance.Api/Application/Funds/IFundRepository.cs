@@ -10,6 +10,7 @@ public interface IFundRepository
     Task<FundOperation?> FindOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken);
     Task<IReadOnlyList<string>> GetNormalizedFundNamesAsync(CancellationToken cancellationToken);
     Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken);
+    Task<decimal> GetActiveDepositTotalAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync(Guid fundId, bool trackChanges, CancellationToken cancellationToken);
     void AddFund(Fund fund);
     void AddOperation(FundOperation operation);

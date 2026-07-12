@@ -513,6 +513,21 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinanceFundDepositQueries_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Funds", "IFundRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfFundRepository.cs"));
+
+        Assert.Contains("IFundRepository fundRepository", service, StringComparison.Ordinal);
+        Assert.Equal(2, service.Split("fundRepository.GetActiveDepositTotalAsync(cancellationToken)", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("dbContext.FundOperations", service, StringComparison.Ordinal);
+        Assert.Contains("GetActiveDepositTotalAsync", abstraction, StringComparison.Ordinal);
+        Assert.Contains("GetActiveDepositTotalAsync", implementation, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CashMovementReportMethods_DelegatePersistenceQueriesToApplicationPort()
     {
         var repositoryRoot = FindRepositoryRoot();

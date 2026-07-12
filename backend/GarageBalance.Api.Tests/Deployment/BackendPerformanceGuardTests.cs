@@ -428,6 +428,15 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FundDepositTotal_IsFilteredAndAggregatedByDatabase()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
+
+        Assert.Contains("!operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
+        Assert.Contains(".SumAsync(operation => (decimal?)operation.Amount, cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DictionarySearchMigration_AddsPostgresTrigramIndexesForContainsSearch()
     {
         var source = ReadApiSource("Infrastructure/Data/Migrations/20260625031500_DictionarySearchTrigramIndexes.cs");

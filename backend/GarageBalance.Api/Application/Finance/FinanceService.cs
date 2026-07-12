@@ -2,6 +2,7 @@ using System.Globalization;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -19,6 +20,7 @@ public sealed class FinanceService(
     ITariffRepository tariffRepository,
     IFeeCampaignRepository feeCampaignRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
+    IFundRepository fundRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -75,7 +77,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -726,9 +728,7 @@ public sealed class FinanceService(
 
     private async Task<decimal> CalculateAvailableBankAmountAsync(CancellationToken cancellationToken)
     {
-        var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var bankDepositsTotal = await fundRepository.GetActiveDepositTotalAsync(cancellationToken);
         var bankExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
@@ -746,9 +746,7 @@ public sealed class FinanceService(
         var incomeTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
             .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var bankDepositsTotal = await dbContext.FundOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var bankDepositsTotal = await fundRepository.GetActiveDepositTotalAsync(cancellationToken);
         var cashExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
