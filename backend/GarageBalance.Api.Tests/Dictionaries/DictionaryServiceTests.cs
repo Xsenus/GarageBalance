@@ -1146,6 +1146,34 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateTariffAsync_AllowsSameNameWithDifferentEffectiveDateAsNewVersion()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var first = await service.CreateTariffAsync(
+            new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 7, 1), "Первая версия"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        var second = await service.CreateTariffAsync(
+            new UpsertTariffRequest("Вода", "meter_water", 60m, new DateOnly(2026, 8, 1), "Новая версия"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var versions = (await service.GetTariffsAsync(null, CancellationToken.None))
+            .Where(item => item.Name == "Вода")
+            .ToArray();
+
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        Assert.Equal(2, versions.Length);
+        Assert.Equal(new DateOnly(2026, 8, 1), versions[0].EffectiveFrom);
+        Assert.Equal(60m, versions[0].Rate);
+        Assert.Equal(new DateOnly(2026, 7, 1), versions[1].EffectiveFrom);
+        Assert.Equal(50m, versions[1].Rate);
+        Assert.Equal(2, database.Context.AuditEvents.Count(item => item.Action == "dictionary.tariff_created"));
+    }
+
+    [Fact]
     public async Task CreateTariffAsync_AllowsNameAndDateFromArchivedTariff()
     {
         await using var database = await TestDatabase.CreateAsync();

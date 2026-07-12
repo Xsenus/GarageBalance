@@ -1959,6 +1959,72 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void EffectiveDatedTariffsAreCompleteWhenVersionsSnapshotsAuditUiTestsAndReleasesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var tariffModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "Tariff.cs"));
+        var accrualModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Finance", "Accrual.cs"));
+        var dbContextText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+        var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var dictionaryTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var financeTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var frontendWorkbenchText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "dictionaryWorkbench.ts"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать тарифы с датой вступления в силу", StringComparison.Ordinal));
+        var retrospectiveDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Для новой ставки администратор должен создать новую версию тарифа", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("Effective-dated версия", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("название+дата", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("TariffId", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("Истории изменений", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("EffectiveDatedTariffsAreCompleteWhenVersionsSnapshotsAuditUiTestsAndReleasesExist", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("новую версию тарифа", retrospectiveDecisionLine, StringComparison.Ordinal);
+
+        Assert.Contains("public DateOnly EffectiveFrom", tariffModelText, StringComparison.Ordinal);
+        Assert.Contains("public Guid? TariffId", accrualModelText, StringComparison.Ordinal);
+        Assert.Contains("HasIndex(item => new { item.Name, item.EffectiveFrom })", dbContextText, StringComparison.Ordinal);
+        Assert.Contains("!item.IsArchived && item.Name == name && item.EffectiveFrom == request.EffectiveFrom", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("OrderByDescending(item => item.EffectiveFrom)", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_created", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_updated", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("dictionary.tariff_archived", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffId = tariff.Id", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("FormatTariffRateSnapshot(tariff)", financeServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("CreateTariffAsync_AllowsSameNameWithDifferentEffectiveDateAsNewVersion", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateTariffAsync_RejectsDuplicateNameAndDate", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetTariffsAsync_SearchesAndOrdersByEffectiveDate", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_KeepsExistingAccrualAmountAfterTariffUpdate", financeTestsText, StringComparison.Ordinal);
+        Assert.Contains("tariffs: ['Название', 'База', 'Ставка', 'Дата начала']", frontendWorkbenchText, StringComparison.Ordinal);
+        Assert.Contains("confirms tariff dictionary edits with labels dates and electricity tier diff", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows backend error when tariff effective date moves after existing accruals", frontendTestsText, StringComparison.Ordinal);
+
+        foreach (var version in new[] { "0.5.0", "0.66.0", "0.135.0", "0.207.0" })
+        {
+            Assert.Contains($"\"version\": \"{version}\"", releaseNotesText, StringComparison.Ordinal);
+            Assert.Contains(version, roadmapLine, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("Регулярные начисления сохраняют снимок тарифа", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Уточнен audit по тарифам", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Дата тарифа защищена после начислений", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("EffectiveDatedTariffsAreCompleteWhenVersionsSnapshotsAuditUiTestsAndReleasesExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("EffectiveDatedTariffsAreCompleteWhenVersionsSnapshotsAuditUiTestsAndReleasesExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
