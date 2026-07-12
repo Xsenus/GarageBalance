@@ -32,6 +32,14 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         WithDetails(dbContext.FeeCampaigns)
             .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
 
+    public Task<FeeCampaign?> FindActiveForAccrualGenerationAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.FeeCampaigns
+            .Include(item => item.IncomeType)
+            .Include(item => item.ParticipantGarages)
+                .ThenInclude(item => item.Garage)
+                    .ThenInclude(garage => garage.Owner)
+            .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+
     public Task<FeeCampaign?> FindArchivedWithDetailsAsync(Guid id, CancellationToken cancellationToken) =>
         WithDetails(dbContext.FeeCampaigns)
             .SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);

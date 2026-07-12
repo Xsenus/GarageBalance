@@ -15,6 +15,7 @@ public sealed class FinanceService(
     IExpenseTypeRepository expenseTypeRepository,
     IIncomeTypeRepository incomeTypeRepository,
     ITariffRepository tariffRepository,
+    IFeeCampaignRepository feeCampaignRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -71,7 +72,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1923,12 +1924,7 @@ public sealed class FinanceService(
     public async Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var campaign = await dbContext.FeeCampaigns
-            .Include(item => item.IncomeType)
-            .Include(item => item.ParticipantGarages)
-                .ThenInclude(item => item.Garage)
-                    .ThenInclude(garage => garage.Owner)
-            .SingleOrDefaultAsync(item => item.Id == request.FeeCampaignId && !item.IsArchived, cancellationToken);
+        var campaign = await feeCampaignRepository.FindActiveForAccrualGenerationAsync(request.FeeCampaignId, cancellationToken);
         if (campaign is null)
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_found", "Сбор не найден.");

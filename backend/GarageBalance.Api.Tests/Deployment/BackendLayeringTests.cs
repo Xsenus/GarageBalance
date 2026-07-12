@@ -1292,6 +1292,19 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinanceFeeCampaignQueries_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfFeeCampaignRepository.cs"));
+        Assert.Contains("IFeeCampaignRepository feeCampaignRepository", service, StringComparison.Ordinal);
+        Assert.Contains("feeCampaignRepository.FindActiveForAccrualGenerationAsync(request.FeeCampaignId", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.FeeCampaigns", service, StringComparison.Ordinal);
+        Assert.Contains("FindActiveForAccrualGenerationAsync", implementation, StringComparison.Ordinal);
+        Assert.Contains("ThenInclude(garage => garage.Owner)", implementation, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1367,6 +1380,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
