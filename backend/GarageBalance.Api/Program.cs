@@ -65,6 +65,7 @@ builder.Services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>();
+builder.Services.AddScoped<IFundChangeReportQuery, EfFundChangeReportQuery>();
 builder.Services.AddScoped<IUserManagementRepository, EfUserManagementRepository>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IFormStateRepository, EfFormStateRepository>();

@@ -93,6 +93,20 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FundChangeScreenQuery_UsesDatabaseCountSumsAndLimitBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFundChangeReportQuery.cs");
+
+        Assert.Matches(
+            BoundedQueryRegex(@"GetFundChangesAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?FundOperationKinds\.Deposit[\s\S]*?SumAsync[\s\S]*?FundOperationKinds\.Withdraw[\s\S]*?SumAsync[\s\S]*?ApplyLimit\(ordered, limit\)\.ToListAsync\(cancellationToken\)"),
+            source);
+        Assert.Contains("operation.Fund.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationKind.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Contains("operation.Reason.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Contains("ToDictionaryAsync(user => user.Id, user => user.DisplayName", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportSqliteFallbacks_AreExplicitlyScopedToTestProviderAndStillApplyLimit()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");

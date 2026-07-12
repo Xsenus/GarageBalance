@@ -1248,7 +1248,11 @@ public sealed class ReportServiceTests
 
     private static ReportService CreateService(GarageBalanceDbContext context)
     {
-        return new ReportService(context, new EfCashMovementReportQuery(context), new AuditEventWriter(context));
+        return new ReportService(
+            context,
+            new EfCashMovementReportQuery(context),
+            new EfFundChangeReportQuery(context),
+            new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable
