@@ -1,0 +1,145 @@
+using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Domain.Finance;
+using Microsoft.EntityFrameworkCore;
+
+namespace GarageBalance.Api.Infrastructure.Data;
+
+public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbContext) : IFinancialOperationRepository
+{
+    public async Task<IReadOnlyList<FinancialOperation>> GetListAsync(
+        DateOnly? dateFrom,
+        DateOnly? dateTo,
+        string? operationKind,
+        string? normalizedSearch,
+        Guid? garageId,
+        Guid? supplierId,
+        Guid? staffMemberId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplyFilters(QueryActive(), dateFrom, dateTo, operationKind, garageId, supplierId, staffMemberId);
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            return (await Order(query).ToListAsync(cancellationToken))
+                .Where(operation => OperationMatchesSearch(operation, normalizedSearch))
+                .Take(limit)
+                .ToList();
+        }
+
+        return await Order(ApplySearch(query, normalizedSearch))
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<FinancialOperationPageData> GetPageAsync(
+        DateOnly? dateFrom,
+        DateOnly? dateTo,
+        string? operationKind,
+        string? normalizedSearch,
+        Guid? garageId,
+        Guid? supplierId,
+        Guid? staffMemberId,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplyFilters(QueryActive(), dateFrom, dateTo, operationKind, garageId, supplierId, staffMemberId);
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            var filtered = (await Order(query).ToListAsync(cancellationToken))
+                .Where(operation => OperationMatchesSearch(operation, normalizedSearch))
+                .ToList();
+            return new FinancialOperationPageData(filtered.Skip(offset).Take(limit).ToList(), filtered.Count);
+        }
+
+        query = ApplySearch(query, normalizedSearch);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await Order(query)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return new FinancialOperationPageData(items, totalCount);
+    }
+
+    private IQueryable<FinancialOperation> QueryActive() =>
+        dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.Garage)
+            .ThenInclude(garage => garage!.Owner)
+            .Include(operation => operation.IncomeType)
+            .Include(operation => operation.Supplier)
+            .Include(operation => operation.StaffMember)
+            .ThenInclude(staffMember => staffMember!.Department)
+            .Include(operation => operation.ExpenseType)
+            .Where(operation => !operation.IsCanceled);
+
+    private static IQueryable<FinancialOperation> ApplyFilters(
+        IQueryable<FinancialOperation> query,
+        DateOnly? dateFrom,
+        DateOnly? dateTo,
+        string? operationKind,
+        Guid? garageId,
+        Guid? supplierId,
+        Guid? staffMemberId)
+    {
+        if (dateFrom.HasValue)
+        {
+            query = query.Where(operation => operation.OperationDate >= dateFrom.Value);
+        }
+
+        if (dateTo.HasValue)
+        {
+            query = query.Where(operation => operation.OperationDate <= dateTo.Value);
+        }
+
+        if (operationKind is not null)
+        {
+            query = query.Where(operation => operation.OperationKind == operationKind);
+        }
+
+        if (garageId.HasValue)
+        {
+            query = query.Where(operation => operation.GarageId == garageId.Value);
+        }
+
+        if (supplierId.HasValue)
+        {
+            query = query.Where(operation => operation.SupplierId == supplierId.Value);
+        }
+
+        if (staffMemberId.HasValue)
+        {
+            query = query.Where(operation => operation.StaffMemberId == staffMemberId.Value);
+        }
+
+        return query;
+    }
+
+    private static IQueryable<FinancialOperation> ApplySearch(IQueryable<FinancialOperation> query, string? normalizedSearch)
+    {
+        if (normalizedSearch is null)
+        {
+            return query;
+        }
+
+        return query.Where(operation =>
+            (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
+            (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)) ||
+            (operation.Garage != null && operation.Garage.Number.ToLower().Contains(normalizedSearch)) ||
+            (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
+            (operation.StaffMember != null && operation.StaffMember.FullName.ToLower().Contains(normalizedSearch)));
+    }
+
+    private static IOrderedQueryable<FinancialOperation> Order(IQueryable<FinancialOperation> query) =>
+        query.OrderByDescending(operation => operation.OperationDate)
+            .ThenBy(operation => operation.DocumentNumber);
+
+    private static bool OperationMatchesSearch(FinancialOperation operation, string normalizedSearch) =>
+        (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (operation.Garage?.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (operation.StaffMember?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private bool IsSqliteProvider() =>
+        dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+}

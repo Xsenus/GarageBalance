@@ -1033,6 +1033,25 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinancialOperationLists_DelegateToInfrastructureRepository()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "IFinancialOperationRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfFinancialOperationRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+
+        Assert.Contains("interface IFinancialOperationRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IFinancialOperationRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("IFinancialOperationRepository financialOperationRepository", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("private IQueryable<FinancialOperation> QueryOperations", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccrualLists_DelegateToInfrastructureRepository()
     {
         var repositoryRoot = FindRepositoryRoot();

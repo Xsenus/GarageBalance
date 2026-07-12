@@ -16,6 +16,7 @@ public sealed class FinanceService(
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
     IMeterReadingRepository meterReadingRepository,
+    IFinancialOperationRepository financialOperationRepository,
     IAccrualRepository accrualRepository,
     ISupplierAccrualRepository supplierAccrualRepository,
     ISupplierGroupRepository supplierGroupRepository,
@@ -82,17 +83,22 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfAccrualRepository(dbContext), new EfSupplierAccrualRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfFinancialOperationRepository(dbContext), new EfAccrualRepository(dbContext), new EfSupplierAccrualRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {
-        var operations = await ApplyFilters(QueryOperations(), request)
-            .OrderByDescending(operation => operation.OperationDate)
-            .ThenBy(operation => operation.DocumentNumber)
-            .Take(NormalizeListLimit(request.Limit))
-            .ToListAsync(cancellationToken);
+        var operations = await financialOperationRepository.GetListAsync(
+            request.DateFrom,
+            request.DateTo,
+            NormalizeOptional(request.OperationKind),
+            NormalizeSearch(request.Search),
+            request.GarageId,
+            request.SupplierId,
+            request.StaffMemberId,
+            NormalizeListLimit(request.Limit),
+            cancellationToken);
         return await ToOperationDtosAsync(operations, cancellationToken);
     }
 
@@ -100,15 +106,18 @@ public sealed class FinanceService(
     {
         var normalizedOffset = NormalizeListOffset(request.Offset);
         var normalizedLimit = NormalizeListLimit(request.Limit);
-        var query = ApplyFilters(QueryOperations(), request);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var operations = await query
-            .OrderByDescending(operation => operation.OperationDate)
-            .ThenBy(operation => operation.DocumentNumber)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .ToListAsync(cancellationToken);
-        return new FinancePagedResult<FinancialOperationDto>(await ToOperationDtosAsync(operations, cancellationToken), totalCount, normalizedOffset, normalizedLimit);
+        var page = await financialOperationRepository.GetPageAsync(
+            request.DateFrom,
+            request.DateTo,
+            NormalizeOptional(request.OperationKind),
+            NormalizeSearch(request.Search),
+            request.GarageId,
+            request.SupplierId,
+            request.StaffMemberId,
+            normalizedOffset,
+            normalizedLimit,
+            cancellationToken);
+        return new FinancePagedResult<FinancialOperationDto>(await ToOperationDtosAsync(page.Items, cancellationToken), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
@@ -2609,19 +2618,6 @@ public sealed class FinanceService(
             && tariff.ElectricityFirstRate.HasValue
             && tariff.ElectricitySecondRate.HasValue
             && tariff.ElectricityThirdRate.HasValue;
-    }
-
-    private IQueryable<FinancialOperation> QueryOperations()
-    {
-        return dbContext.FinancialOperations.AsNoTracking()
-            .Include(operation => operation.Garage)
-            .ThenInclude(garage => garage!.Owner)
-            .Include(operation => operation.IncomeType)
-            .Include(operation => operation.Supplier)
-            .Include(operation => operation.StaffMember)
-            .ThenInclude(staffMember => staffMember!.Department)
-            .Include(operation => operation.ExpenseType)
-            .Where(operation => !operation.IsCanceled);
     }
 
     private static IQueryable<FinancialOperation> ApplyFilters(IQueryable<FinancialOperation> query, FinancialOperationListRequest request)

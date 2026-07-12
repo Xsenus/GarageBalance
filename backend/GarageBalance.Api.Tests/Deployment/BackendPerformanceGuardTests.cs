@@ -7,7 +7,7 @@ public sealed class BackendPerformanceGuardTests
     [Theory]
     [InlineData("Infrastructure/Data/EfAuditEventRepository.cs", @"OrderByDescending[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfUserManagementRepository.cs", @"OrderBy\(user => user\.[^)]+\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    [InlineData("Application/Finance/FinanceService.cs", @"\.Take\(NormalizeListLimit\(request\.Limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfFinancialOperationRepository.cs", @"return await Order\(ApplySearch[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportRepository.cs", @"IsSqliteProvider[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportQuarantineRepository.cs", @"return await query[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfFeeCampaignRepository.cs", @"\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
@@ -22,19 +22,35 @@ public sealed class BackendPerformanceGuardTests
     public void FinanceWorkingLists_AllUseNormalizedRequestLimit()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
+        var financialOperationRepositorySource = ReadApiSource("Infrastructure/Data/EfFinancialOperationRepository.cs");
         var meterReadingRepositorySource = ReadApiSource("Infrastructure/Data/EfMeterReadingRepository.cs");
         var accrualRepositorySource = ReadApiSource("Infrastructure/Data/EfAccrualRepository.cs");
         var supplierAccrualRepositorySource = ReadApiSource("Infrastructure/Data/EfSupplierAccrualRepository.cs");
 
-        Assert.True(
-            CountOccurrences(source, ".Take(NormalizeListLimit(request.Limit))") >= 1,
-            "Finance working lists must keep explicit server-side limits before materialization.");
+        Assert.Contains("financialOperationRepository.GetListAsync", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(financialOperationRepositorySource, ".Take(limit)") >= 4);
         Assert.Contains("meterReadingRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(meterReadingRepositorySource, ".Take(limit)") >= 4);
         Assert.Contains("accrualRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(accrualRepositorySource, ".Take(limit)") >= 4);
         Assert.Contains("supplierAccrualRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(supplierAccrualRepositorySource, ".Take(limit)") >= 4);
+    }
+
+    [Fact]
+    public void FinancialOperationRepository_UsesDatabaseCountOffsetAndLimitWithScopedSqliteFallback()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFinancialOperationRepository.cs");
+
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
+        Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("OperationMatchesSearch", source, StringComparison.Ordinal);
+        Assert.Contains("garageId.HasValue", source, StringComparison.Ordinal);
+        Assert.Contains("supplierId.HasValue", source, StringComparison.Ordinal);
+        Assert.Contains("staffMemberId.HasValue", source, StringComparison.Ordinal);
+        Assert.Contains(".ThenBy(operation => operation.DocumentNumber)", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -258,31 +274,25 @@ public sealed class BackendPerformanceGuardTests
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
+        var financialOperationRepositorySource = ReadApiSource("Infrastructure/Data/EfFinancialOperationRepository.cs");
         var meterReadingRepositorySource = ReadApiSource("Infrastructure/Data/EfMeterReadingRepository.cs");
         var accrualRepositorySource = ReadApiSource("Infrastructure/Data/EfAccrualRepository.cs");
         var supplierAccrualRepositorySource = ReadApiSource("Infrastructure/Data/EfSupplierAccrualRepository.cs");
 
-        Assert.True(
-            CountOccurrences(source, "CountAsync(cancellationToken)") >= 1,
-            "Finance page queries must return total counts without materializing full result sets.");
+        Assert.Contains("financialOperationRepository.GetPageAsync", source, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", financialOperationRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", meterReadingRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", accrualRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", supplierAccrualRepositorySource, StringComparison.Ordinal);
-        Assert.True(
-            CountOccurrences(source, ".Skip(normalizedOffset)") >= 1,
-            "Finance page queries must apply server-side offset before materialization.");
+        Assert.Contains(".Skip(offset)", financialOperationRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", meterReadingRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", accrualRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", supplierAccrualRepositorySource, StringComparison.Ordinal);
-        Assert.True(
-            CountOccurrences(source, ".Take(normalizedLimit)") >= 1,
-            "Finance page queries must apply server-side limit before materialization.");
+        Assert.Contains(".Take(limit)", financialOperationRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", meterReadingRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", accrualRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", supplierAccrualRepositorySource, StringComparison.Ordinal);
-        Assert.True(
-            CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2,
-            "Finance list queries should materialize only after ordering and server-side bounds.");
+        Assert.True(CountOccurrences(financialOperationRepositorySource, ".ToListAsync(cancellationToken)") >= 4);
         Assert.True(CountOccurrences(meterReadingRepositorySource, ".ToListAsync(cancellationToken)") >= 4);
         Assert.True(CountOccurrences(accrualRepositorySource, ".ToListAsync(cancellationToken)") >= 4);
         Assert.True(CountOccurrences(supplierAccrualRepositorySource, ".ToListAsync(cancellationToken)") >= 4);
