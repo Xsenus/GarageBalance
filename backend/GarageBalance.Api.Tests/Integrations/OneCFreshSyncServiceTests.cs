@@ -327,7 +327,11 @@ public sealed class OneCFreshSyncServiceTests
         IIntegrationSecretSettingsService secretSettingsService,
         IOneCFreshSyncAdapter adapter)
     {
-        return new OneCFreshSyncService(context, secretSettingsService, adapter, new AuditEventWriter(context));
+        return new OneCFreshSyncService(
+            new EfApplicationUnitOfWork(context),
+            secretSettingsService,
+            adapter,
+            new AuditEventWriter(context));
     }
 
     private sealed class FakeSecretSettingsService(string? refreshToken) : IIntegrationSecretSettingsService

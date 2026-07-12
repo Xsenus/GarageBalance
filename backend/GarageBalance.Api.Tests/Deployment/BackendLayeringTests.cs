@@ -282,6 +282,25 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void OneCFreshSyncApplicationService_UsesUnitOfWorkAbstractionInsteadOfEfInfrastructure()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Integrations",
+            "OneCFreshSyncService.cs"));
+
+        Assert.Contains("IApplicationUnitOfWork unitOfWork", service, StringComparison.Ordinal);
+        Assert.Contains("unitOfWork.SaveChangesAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalanceDbContext", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalance.Api.Infrastructure", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -305,7 +324,9 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfImportQuarantineRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IReceiptPrintingRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfReceiptPrintingRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFreshSyncService", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);

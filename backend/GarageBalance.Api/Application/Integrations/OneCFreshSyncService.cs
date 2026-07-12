@@ -1,12 +1,12 @@
 using GarageBalance.Api.Application.Audit;
-using GarageBalance.Api.Infrastructure.Data;
+using GarageBalance.Api.Application.Common;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace GarageBalance.Api.Application.Integrations;
 
 public sealed class OneCFreshSyncService(
-    GarageBalanceDbContext dbContext,
+    IApplicationUnitOfWork unitOfWork,
     IIntegrationSecretSettingsService secretSettingsService,
     IOneCFreshSyncAdapter syncAdapter,
     IAuditEventWriter auditEventWriter) : IOneCFreshSyncService
@@ -71,7 +71,7 @@ public sealed class OneCFreshSyncService(
                 ["conflictCount"] = conflicts.Count,
                 ["protectedCredentialConfigured"] = true
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return OneCFreshSyncResult<OneCFreshSyncPreviewDto>.Success(new OneCFreshSyncPreviewDto(
             auditEvent!.Id,
@@ -163,7 +163,7 @@ public sealed class OneCFreshSyncService(
                 ["recoveryAction"] = outcome.RecoveryAction,
                 ["protectedCredentialConfigured"] = true
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return OneCFreshSyncResult<OneCFreshSyncDto>.Success(new OneCFreshSyncDto(
             auditEvent!.Id,
