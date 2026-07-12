@@ -2447,9 +2447,9 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var service = new FinanceService(database.Context);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 5, 1), 500m, "regular", null), null, CancellationToken.None);
-        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 600m, "manual", "garage monthly adjustment"), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 600m, "manual", "Ежемесячная корректировка гаража"), null, CancellationToken.None);
 
-        var result = await service.GetAccrualsAsync(new AccrualListRequest(null, null, "garage"), CancellationToken.None);
+        var result = await service.GetAccrualsAsync(new AccrualListRequest(null, null, "ежемесячная"), CancellationToken.None);
 
         Assert.Single(result);
         Assert.Equal(new DateOnly(2026, 6, 1), result[0].AccountingMonth);

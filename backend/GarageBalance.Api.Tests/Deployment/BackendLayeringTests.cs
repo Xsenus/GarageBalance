@@ -1033,6 +1033,25 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void AccrualLists_DelegateToInfrastructureRepository()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "IAccrualRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfAccrualRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+
+        Assert.Contains("interface IAccrualRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IAccrualRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("IAccrualRepository accrualRepository", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("private IQueryable<Accrual> QueryAccruals", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IAccrualRepository, EfAccrualRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierGroupDictionary_DelegatesPersistenceQueriesToApplicationPort()
     {
         var repositoryRoot = FindRepositoryRoot();

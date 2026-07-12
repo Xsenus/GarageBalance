@@ -16,6 +16,7 @@ public sealed class FinanceService(
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
     IMeterReadingRepository meterReadingRepository,
+    IAccrualRepository accrualRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
@@ -80,7 +81,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfAccrualRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -111,28 +112,27 @@ public sealed class FinanceService(
 
     public async Task<IReadOnlyList<AccrualDto>> GetAccrualsAsync(AccrualListRequest request, CancellationToken cancellationToken)
     {
-        return await ApplyAccrualFilters(QueryAccruals(), request)
-            .OrderByDescending(accrual => accrual.AccountingMonth)
-            .ThenBy(accrual => accrual.Garage.Number)
-            .Take(NormalizeListLimit(request.Limit))
-            .Select(accrual => ToDto(accrual))
-            .ToListAsync(cancellationToken);
+        var accruals = await accrualRepository.GetListAsync(
+            request.MonthFrom.HasValue ? MonthPeriod.Normalize(request.MonthFrom.Value) : null,
+            request.MonthTo.HasValue ? MonthPeriod.Normalize(request.MonthTo.Value) : null,
+            NormalizeSearch(request.Search),
+            NormalizeListLimit(request.Limit),
+            cancellationToken);
+        return accruals.Select(ToDto).ToList();
     }
 
     public async Task<FinancePagedResult<AccrualDto>> GetAccrualsPageAsync(AccrualListRequest request, CancellationToken cancellationToken)
     {
         var normalizedOffset = NormalizeListOffset(request.Offset);
         var normalizedLimit = NormalizeListLimit(request.Limit);
-        var query = ApplyAccrualFilters(QueryAccruals(), request);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderByDescending(accrual => accrual.AccountingMonth)
-            .ThenBy(accrual => accrual.Garage.Number)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(accrual => ToDto(accrual))
-            .ToListAsync(cancellationToken);
-        return new FinancePagedResult<AccrualDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await accrualRepository.GetPageAsync(
+            request.MonthFrom.HasValue ? MonthPeriod.Normalize(request.MonthFrom.Value) : null,
+            request.MonthTo.HasValue ? MonthPeriod.Normalize(request.MonthTo.Value) : null,
+            NormalizeSearch(request.Search),
+            normalizedOffset,
+            normalizedLimit,
+            cancellationToken);
+        return new FinancePagedResult<AccrualDto>(page.Items.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
@@ -2705,15 +2705,6 @@ public sealed class FinanceService(
             .ThenInclude(staffMember => staffMember!.Department)
             .Include(operation => operation.ExpenseType)
             .Where(operation => !operation.IsCanceled);
-    }
-
-    private IQueryable<Accrual> QueryAccruals()
-    {
-        return dbContext.Accruals.AsNoTracking()
-            .Include(accrual => accrual.Garage)
-            .ThenInclude(garage => garage.Owner)
-            .Include(accrual => accrual.IncomeType)
-            .Where(accrual => !accrual.IsCanceled);
     }
 
     private IQueryable<SupplierAccrual> QuerySupplierAccruals()
