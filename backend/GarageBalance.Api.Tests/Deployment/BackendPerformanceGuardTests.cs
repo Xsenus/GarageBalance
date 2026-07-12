@@ -40,6 +40,17 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void SupplierGroupRepository_UsesProductionCountOffsetAndLimitWithScopedSqliteFallback()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfSupplierGroupRepository.cs");
+
+        Assert.Contains("IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");

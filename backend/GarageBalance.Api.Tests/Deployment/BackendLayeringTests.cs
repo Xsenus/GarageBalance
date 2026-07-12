@@ -919,6 +919,37 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void SupplierGroupDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+
+        Assert.Contains("ISupplierGroupRepository supplierGroupRepository", service, StringComparison.Ordinal);
+        Assert.Contains("supplierGroupRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierGroupRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierGroupRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierGroupRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierGroupRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierGroupRepository.Add(group)", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SupplierGroupRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "ISupplierGroupRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfSupplierGroupRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+
+        Assert.Contains("interface ISupplierGroupRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains("class EfSupplierGroupRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains(": ISupplierGroupRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<ISupplierGroupRepository, EfSupplierGroupRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -951,6 +982,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfUserManagementRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IOwnerRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfOwnerRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("ISupplierGroupRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfSupplierGroupRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -972,6 +1005,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен двадцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);

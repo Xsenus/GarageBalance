@@ -11,6 +11,7 @@ namespace GarageBalance.Api.Application.Dictionaries;
 public sealed class DictionaryService(
     GarageBalanceDbContext dbContext,
     IOwnerRepository ownerRepository,
+    ISupplierGroupRepository supplierGroupRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -74,7 +75,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -481,79 +482,30 @@ public sealed class DictionaryService(
     public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var query = dbContext.SupplierGroups.AsNoTracking().Where(group => includeArchived || !group.IsArchived);
         var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            return (await query
-                    .OrderBy(group => group.Name)
-                    .ToListAsync(cancellationToken))
-                .Where(group => group.Name.Contains(searchValue, StringComparison.OrdinalIgnoreCase))
-                .Take(normalizedLimit)
-                .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
-                .ToList();
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(group => group.Name.ToLower().Contains(normalizedSearch));
-        }
-
-        return await query
-            .OrderBy(group => group.Name)
-            .Take(normalizedLimit)
-            .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
-            .ToListAsync(cancellationToken);
+        var groups = await supplierGroupRepository.GetListAsync(normalizedSearch, includeArchived, normalizedLimit, cancellationToken);
+        return groups.Select(ToSupplierGroupDto).ToList();
     }
 
     public async Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var query = dbContext.SupplierGroups.AsNoTracking().Where(group => includeArchived || !group.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            var filteredGroups = (await query
-                    .OrderBy(group => group.Name)
-                    .ToListAsync(cancellationToken))
-                .Where(group => group.Name.Contains(searchValue, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            var sqliteItems = filteredGroups
-                .Skip(normalizedOffset)
-                .Take(normalizedLimit)
-                .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
-                .ToList();
-
-            return new PagedResult<SupplierGroupDto>(sqliteItems, filteredGroups.Count, normalizedOffset, normalizedLimit);
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(group => group.Name.ToLower().Contains(normalizedSearch));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(group => group.Name)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(group => new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<SupplierGroupDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await supplierGroupRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<SupplierGroupDto>(page.Items.Select(ToSupplierGroupDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<SupplierGroupDto>> CreateSupplierGroupAsync(UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.SupplierGroups.AnyAsync(group => !group.IsArchived && group.Name == name, cancellationToken))
+        if (await supplierGroupRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Группа поставщиков с таким названием уже существует.");
         }
 
         var group = new SupplierGroup { Name = name };
-        dbContext.SupplierGroups.Add(group);
+        supplierGroupRepository.Add(group);
         AddAudit(actorUserId, "dictionary.supplier_group_created", "supplier_group", group.Id, $"Создана группа поставщиков {group.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
@@ -561,7 +513,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierGroupDto>> UpdateSupplierGroupAsync(Guid id, UpsertSupplierGroupRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var group = await dbContext.SupplierGroups.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var group = await supplierGroupRepository.FindActiveAsync(id, cancellationToken);
         if (group is null)
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Группа поставщиков не найдена.");
@@ -573,7 +525,7 @@ public sealed class DictionaryService(
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.SupplierGroups.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        if (await supplierGroupRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Группа поставщиков с таким названием уже существует.");
         }
@@ -607,7 +559,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var group = await dbContext.SupplierGroups.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var group = await supplierGroupRepository.FindActiveAsync(id, cancellationToken);
         if (group is null)
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Группа поставщиков не найдена.");
@@ -628,13 +580,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierGroupDto>> RestoreSupplierGroupAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var group = await dbContext.SupplierGroups.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var group = await supplierGroupRepository.FindArchivedAsync(id, cancellationToken);
         if (group is null)
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Группа поставщиков не найдена в архиве.");
         }
 
-        if (await dbContext.SupplierGroups.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == group.Name, cancellationToken))
+        if (await supplierGroupRepository.ActiveDuplicateExistsAsync(id, group.Name, cancellationToken))
         {
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_duplicate", "Активная группа поставщиков с таким названием уже существует.");
         }
@@ -2848,6 +2800,9 @@ public sealed class DictionaryService(
                 .ToList()
         };
     }
+
+    private static SupplierGroupDto ToSupplierGroupDto(SupplierGroup group) =>
+        new(group.Id, group.Name, group.IsSystem, group.IsArchived);
 
     private static GarageDto ToGarageDto(Garage garage, decimal? balance = null, decimal? overdueDebt = null)
     {
