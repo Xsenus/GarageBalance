@@ -1004,6 +1004,25 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void MeterReadingLists_DelegateToInfrastructureRepository()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "IMeterReadingRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfMeterReadingRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+
+        Assert.Contains("interface IMeterReadingRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IMeterReadingRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("IMeterReadingRepository meterReadingRepository", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("private IQueryable<MeterReading> QueryMeterReadings", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IMeterReadingRepository, EfMeterReadingRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierGroupDictionary_DelegatesPersistenceQueriesToApplicationPort()
     {
         var repositoryRoot = FindRepositoryRoot();

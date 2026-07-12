@@ -2681,9 +2681,9 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var service = new FinanceService(database.Context);
         await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 14m, null), null, CancellationToken.None);
-        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "monthly electricity"), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "Ежемесячное электричество"), null, CancellationToken.None);
 
-        var result = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", "monthly"), CancellationToken.None);
+        var result = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", "ежемесячное"), CancellationToken.None);
 
         var reading = Assert.Single(result);
         Assert.Equal("electricity", reading.MeterKind);

@@ -15,6 +15,7 @@ public sealed class FinanceService(
     IStaffMemberRepository staffMemberRepository,
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
+    IMeterReadingRepository meterReadingRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
@@ -79,7 +80,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -162,30 +163,29 @@ public sealed class FinanceService(
 
     public async Task<IReadOnlyList<MeterReadingDto>> GetMeterReadingsAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
     {
-        return await ApplyMeterReadingFilters(QueryMeterReadings(), request)
-            .OrderByDescending(reading => reading.AccountingMonth)
-            .ThenBy(reading => reading.Garage.Number)
-            .ThenBy(reading => reading.MeterKind)
-            .Take(NormalizeListLimit(request.Limit))
-            .Select(reading => ToDto(reading))
-            .ToListAsync(cancellationToken);
+        var readings = await meterReadingRepository.GetListAsync(
+            request.MonthFrom.HasValue ? MonthPeriod.Normalize(request.MonthFrom.Value) : null,
+            request.MonthTo.HasValue ? MonthPeriod.Normalize(request.MonthTo.Value) : null,
+            string.IsNullOrWhiteSpace(request.MeterKind) ? null : request.MeterKind.Trim(),
+            NormalizeSearch(request.Search),
+            NormalizeListLimit(request.Limit),
+            cancellationToken);
+        return readings.Select(ToDto).ToList();
     }
 
     public async Task<FinancePagedResult<MeterReadingDto>> GetMeterReadingsPageAsync(MeterReadingListRequest request, CancellationToken cancellationToken)
     {
         var normalizedOffset = NormalizeListOffset(request.Offset);
         var normalizedLimit = NormalizeListLimit(request.Limit);
-        var query = ApplyMeterReadingFilters(QueryMeterReadings(), request);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderByDescending(reading => reading.AccountingMonth)
-            .ThenBy(reading => reading.Garage.Number)
-            .ThenBy(reading => reading.MeterKind)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(reading => ToDto(reading))
-            .ToListAsync(cancellationToken);
-        return new FinancePagedResult<MeterReadingDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await meterReadingRepository.GetPageAsync(
+            request.MonthFrom.HasValue ? MonthPeriod.Normalize(request.MonthFrom.Value) : null,
+            request.MonthTo.HasValue ? MonthPeriod.Normalize(request.MonthTo.Value) : null,
+            string.IsNullOrWhiteSpace(request.MeterKind) ? null : request.MeterKind.Trim(),
+            NormalizeSearch(request.Search),
+            normalizedOffset,
+            normalizedLimit,
+            cancellationToken);
+        return new FinancePagedResult<MeterReadingDto>(page.Items.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken)
@@ -2757,14 +2757,6 @@ public sealed class FinanceService(
             .Include(accrual => accrual.Supplier)
             .Include(accrual => accrual.ExpenseType)
             .Where(accrual => !accrual.IsCanceled);
-    }
-
-    private IQueryable<MeterReading> QueryMeterReadings()
-    {
-        return dbContext.MeterReadings.AsNoTracking()
-            .Include(reading => reading.Garage)
-            .ThenInclude(garage => garage.Owner)
-            .Where(reading => !reading.IsCanceled);
     }
 
     private static IQueryable<FinancialOperation> ApplyFilters(IQueryable<FinancialOperation> query, FinancialOperationListRequest request)
