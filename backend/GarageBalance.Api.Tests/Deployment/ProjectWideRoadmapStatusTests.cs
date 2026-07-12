@@ -1141,6 +1141,73 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void AuditContractIsCompleteForCurrentMutatingServicesWhileFutureAdaptersRemainOpen()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var projectWideRoadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "audit-contract-verification.md"));
+        var auditCoverage = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "audit-event-coverage.md"));
+        var migrationPolicyTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "DatabaseMigrationPolicyTests.cs"));
+        var writerTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Audit", "AuditEventWriterTests.cs"));
+
+        var auditContractLine = activeRoadmapLines.Single(line =>
+            line.Contains("Ввести единый audit-контракт", StringComparison.Ordinal));
+        var writerLine = projectWideRoadmapLines.Single(line =>
+            line.Contains("Добавить backend service для записи истории", StringComparison.Ordinal));
+        var contractLine = projectWideRoadmapLines.Single(line =>
+            line.Contains("Спроектировать единый контракт", StringComparison.Ordinal));
+        var reasonLine = projectWideRoadmapLines.Single(line =>
+            line.Contains("Добавить единый формат причин", StringComparison.Ordinal));
+        var futureOneCLine = projectWideRoadmapLines.Single(line =>
+            line.Contains("1C Fresh и будущие интеграции: запуск синхронизации", StringComparison.Ordinal));
+        var futurePrintingLine = projectWideRoadmapLines.Single(line =>
+            line.Contains("Печать чеков/квитанций: формирование", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", auditContractLine, StringComparison.Ordinal);
+        Assert.Contains("IAuditEventWriter", auditContractLine, StringComparison.Ordinal);
+        Assert.Contains("Future реальные Access/1C/printing adapters", auditContractLine, StringComparison.Ordinal);
+        Assert.Contains("docs/audit-contract-verification.md", auditContractLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(AuditContractIsCompleteForCurrentMutatingServicesWhileFutureAdaptersRemainOpen), auditContractLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", writerLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", contractLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", reasonLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[~]`", futureOneCLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[~]`", futurePrintingLine, StringComparison.Ordinal);
+
+        var requiredSections = new[]
+        {
+            "## Единый Writer",
+            "## Контракт События",
+            "## Текущий Scope",
+            "## Автоматические Гарантии",
+            "## Future Integrations",
+            "## Release Notes"
+        };
+        Assert.All(requiredSections, section => Assert.Contains(section, verification, StringComparison.Ordinal));
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+        Assert.Contains("| Finance | 23 |", auditCoverage, StringComparison.Ordinal);
+        Assert.Contains("| Integrations | 6 |", auditCoverage, StringComparison.Ordinal);
+        Assert.Contains("| Reports | 10 |", auditCoverage, StringComparison.Ordinal);
+        Assert.Contains("ProductionBackendCode_CreatesAuditEventsOnlyThroughAuditEventWriter", migrationPolicyTests, StringComparison.Ordinal);
+        Assert.Contains("new\\s+AuditEvent", migrationPolicyTests, StringComparison.Ordinal);
+        Assert.Contains("AuditEvents.Add(", migrationPolicyTests, StringComparison.Ordinal);
+        Assert.Contains("Add_CreatesStructuredAuditEventWithDiffMetadataAndRelatedFields", writerTests, StringComparison.Ordinal);
+        Assert.Contains("Add_ReturnsNullAndDoesNotAddEventWhenExplicitDiffHasNoChanges", writerTests, StringComparison.Ordinal);
+        Assert.Contains("Add_RequiresReasonForDangerousActions", writerTests, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт основной архитектурный пункт единого audit-контракта", historyText, StringComparison.Ordinal);
+        Assert.Contains(nameof(AuditContractIsCompleteForCurrentMutatingServicesWhileFutureAdaptersRemainOpen), historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
     {
         var repositoryRoot = FindRepositoryRoot();
