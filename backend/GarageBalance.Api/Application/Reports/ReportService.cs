@@ -948,26 +948,57 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.OperationDate >= dateFrom &&
                 operation.OperationDate <= dateTo);
 
-        var operations = await operationsQuery
-            .OrderBy(operation => operation.OperationDate)
-            .ThenBy(operation => operation.DocumentNumber)
-            .ToListAsync(cancellationToken);
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
+        List<FinancialOperation> operations;
+        int rowCount;
+        decimal total;
+        if (dbContext.Database.IsNpgsql())
         {
-            var normalizedSearch = request.Search.Trim();
-            operations = operations
-                .Where(operation =>
-                    (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (operation.ExpenseType?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
-                .ToList();
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var normalizedSearch = request.Search.Trim().ToLower();
+                operationsQuery = operationsQuery.Where(operation =>
+                    (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
+                    (operation.ExpenseType != null && operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)) ||
+                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
+                    (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)));
+            }
+
+            rowCount = await operationsQuery.CountAsync(cancellationToken);
+            total = rowCount == 0
+                ? 0m
+                : await operationsQuery.SumAsync(operation => operation.Amount, cancellationToken);
+            operations = await ApplyReportRowLimit(
+                    operationsQuery
+                        .OrderBy(operation => operation.OperationDate)
+                        .ThenBy(operation => operation.DocumentNumber),
+                    request.Limit)
+                .ToListAsync(cancellationToken);
+        }
+        else
+        {
+            operations = await operationsQuery
+                .OrderBy(operation => operation.OperationDate)
+                .ThenBy(operation => operation.DocumentNumber)
+                .ToListAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var normalizedSearch = request.Search.Trim();
+                operations = operations
+                    .Where(operation =>
+                        (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                        (operation.ExpenseType?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                        (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                        (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                    .ToList();
+            }
+
+            rowCount = operations.Count;
+            total = operations.Sum(operation => operation.Amount);
+            operations = ApplyEnumerableReportRowLimit(operations, request.Limit).ToList();
         }
 
-        var rowCount = operations.Count;
-        var visibleOperations = ApplyEnumerableReportRowLimit(operations, request.Limit).ToList();
-        var rows = visibleOperations
+        var rows = operations
             .Select(operation => new CashPaymentReportRowDto(
                 operation.Id,
                 operation.OperationDate,
@@ -979,7 +1010,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.DocumentNumber,
                 operation.Comment))
             .ToList();
-        var report = new CashPaymentReportDto(dateFrom, dateTo, operations.Sum(operation => operation.Amount), rowCount, rows);
+        var report = new CashPaymentReportDto(dateFrom, dateTo, total, rowCount, rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,

@@ -686,6 +686,56 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetCashPaymentReportAsync_AppliesRowLimitWithoutChangingTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = new ReportService(database.Context);
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 10),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 100m,
+                DocumentNumber = "RKO-LIMIT-1",
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 11),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 200m,
+                DocumentNumber = "RKO-LIMIT-2",
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 12),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 300m,
+                DocumentNumber = "RKO-LIMIT-3",
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetCashPaymentReportAsync(
+            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Search: null, Limit: 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(600m, result.Value!.Total);
+        Assert.Equal(3, result.Value.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("RKO-LIMIT-1", row.DocumentNumber);
+    }
+
+    [Fact]
     public async Task GetBankDepositReportAsync_ReturnsDepositRowsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
