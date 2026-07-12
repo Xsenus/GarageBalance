@@ -1461,6 +1461,138 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void StaffDepartmentsAndMembersAreCompleteWhenModelsCrudFinanceReportsAuditUiTestsAndReleaseExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var departmentModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "StaffDepartment.cs"));
+        var memberModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "StaffMember.cs"));
+        var financialOperationModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Finance", "FinancialOperation.cs"));
+        var contractsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryContracts.cs"));
+        var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "DictionariesController.cs"));
+        var dbContextText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
+        var staffMigrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260706083234_SupplierContactsAndStaff.cs"));
+        var operationMigrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260706122634_FinancialOperationStaffMember.cs"));
+        var dictionaryTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionariesControllerTests.cs"));
+        var financeTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var frontendServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "dictionariesApi.ts"));
+        var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var customerAuditText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "customer-request-audit-2026-07-04.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать сотрудников и отделы персонала: отдел, ставка, статус", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("StaffDepartment", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("StaffMember", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.write", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("банковского фонда", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.408.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("StaffDepartmentsAndMembersAreCompleteWhenModelsCrudFinanceReportsAuditUiTestsAndReleaseExist", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed class StaffDepartment", departmentModelText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsArchived", departmentModelText, StringComparison.Ordinal);
+        Assert.Contains("ICollection<StaffMember> StaffMembers", departmentModelText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class StaffMember", memberModelText, StringComparison.Ordinal);
+        Assert.Contains("public decimal Rate", memberModelText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsArchived", memberModelText, StringComparison.Ordinal);
+        Assert.Contains("public Guid DepartmentId", memberModelText, StringComparison.Ordinal);
+        Assert.Contains("public StaffDepartment Department", memberModelText, StringComparison.Ordinal);
+        Assert.Contains("StaffMemberId", financialOperationModelText, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed record StaffDepartmentDto", contractsText, StringComparison.Ordinal);
+        Assert.Contains("public sealed record StaffMemberDto", contractsText, StringComparison.Ordinal);
+        Assert.Contains("[Range(0, 999999999)] decimal Rate", contractsText, StringComparison.Ordinal);
+
+        Assert.Contains("name: \"staff_departments\"", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("name: \"staff_members\"", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("numeric(18,2)", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("ReferentialAction.Restrict", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("IX_staff_departments_Name", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("IX_staff_members_DepartmentId", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("IX_staff_members_FullName", staffMigrationText, StringComparison.Ordinal);
+        Assert.Contains("name: \"StaffMemberId\"", operationMigrationText, StringComparison.Ordinal);
+        Assert.Contains("FK_financial_operations_staff_members_StaffMemberId", operationMigrationText, StringComparison.Ordinal);
+
+        Assert.Contains("modelBuilder.Entity<StaffDepartment>", dbContextText, StringComparison.Ordinal);
+        Assert.Contains("modelBuilder.Entity<StaffMember>", dbContextText, StringComparison.Ordinal);
+        Assert.Contains("HasPrecision(18, 2)", dbContextText, StringComparison.Ordinal);
+        Assert.Contains("HasForeignKey(member => member.DepartmentId)", dbContextText, StringComparison.Ordinal);
+        Assert.Contains("HasIndex(operation => operation.StaffMemberId)", dbContextText, StringComparison.Ordinal);
+
+        Assert.Contains("[HttpGet(\"staff-departments\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"staff-departments\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPut(\"staff-departments/{id:guid}\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"staff-departments/{id:guid}/restore\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpGet(\"staff-members\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"staff-members\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPut(\"staff-members/{id:guid}\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPost(\"staff-members/{id:guid}/restore\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[Authorize(Policy = SystemPermissions.DictionariesWrite)]", controllerText, StringComparison.Ordinal);
+
+        var dictionaryActions = new[]
+        {
+            "dictionary.staff_department_created",
+            "dictionary.staff_department_updated",
+            "dictionary.staff_department_archived",
+            "dictionary.staff_department_restored",
+            "dictionary.staff_member_created",
+            "dictionary.staff_member_updated",
+            "dictionary.staff_member_archived",
+            "dictionary.staff_member_restored"
+        };
+        foreach (var action in dictionaryActions)
+        {
+            Assert.Contains(action, dictionaryServiceText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("staff_department_used", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("MoneyMath.RoundMoney(request.Rate)", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("CreateStaffPaymentAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("staffMember.Rate - paidThisMonth", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("CalculateAvailableBankAmountAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("finance.staff_payment_created", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("Include(operation => operation.StaffMember)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("new ExpenseWorksheetRowDto", financeServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("StaffDepartmentAndMemberAsync_WriteAuditAndBlockUsedDepartmentArchive", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreStaffMemberAsync_RestoresOnlyWhenDepartmentIsActiveAndWritesAudit", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateStaffMember_ReturnsOkAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("ArchiveStaffMember_ReturnsNoContentAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetOperationsPageAsync_FiltersExpenseHistoryBySupplierAndStaffMember", financeTestsText, StringComparison.Ordinal);
+        Assert.Contains("staff_payment_amount_exceeds_available", financeTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("/api/dictionaries/staff-departments", frontendServiceText, StringComparison.Ordinal);
+        Assert.Contains("/api/dictionaries/staff-members", frontendServiceText, StringComparison.Ordinal);
+        Assert.Contains("Ставка сотрудника", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет сотрудника", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Подтвердить изменения сотрудника", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Причина удаления сотрудника", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Восстановить сотрудника", frontendTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("supplier-contacts-and-staff-backend", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.408.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Отделы и сотрудники персонала сохраняются в отдельных справочниках", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("модель персонала и отделов с soft delete/restore", customerAuditText, StringComparison.Ordinal);
+        Assert.Contains("фактические выплаты сотрудникам", customerAuditText, StringComparison.Ordinal);
+
+        Assert.Contains("StaffDepartmentsAndMembersAreCompleteWhenModelsCrudFinanceReportsAuditUiTestsAndReleaseExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("найденная реализация полностью закрывает критерии", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("StaffDepartmentsAndMembersAreCompleteWhenModelsCrudFinanceReportsAuditUiTestsAndReleaseExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
