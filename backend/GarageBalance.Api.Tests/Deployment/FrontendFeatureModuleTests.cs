@@ -3,6 +3,38 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void ImportPanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var importPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "import",
+            "ImportPanel.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { ImportPanel } from './features/import/ImportPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<ImportPanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function ImportPanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type ImportTab", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("importCreatedRecordsScreenRequestLimit", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function ImportPanel(", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("importClient.dryRunAccess", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("importClient.requestAccessImportApply", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("importClient.cancelAccessImportApplyRequest", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("importClient.requestAccessImportRollback", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("importClient.resolveQuarantineItem", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/import/ImportPanel.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FundsPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();

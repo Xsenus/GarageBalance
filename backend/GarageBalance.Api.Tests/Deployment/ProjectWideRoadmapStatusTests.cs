@@ -4267,7 +4267,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var importContracts = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Import", "ImportContracts.cs"));
         var importServiceTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
         var importControllerTests = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportControllerTests.cs"));
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var importPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "import", "ImportPanel.tsx"));
         var appTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var importApiTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "importApi.test.ts"));
         var dbContext = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
@@ -4303,8 +4303,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("AccessImportCreatedRecordDto", importContracts, StringComparison.Ordinal);
         Assert.Contains("GetAccessImportCreatedRecordsAsync_ReturnsRunRecordsWithLimit", importServiceTests, StringComparison.Ordinal);
         Assert.Contains("GetAccessImportCreatedRecords_ReturnsRecords", importControllerTests, StringComparison.Ordinal);
-        Assert.Contains("importCreatedRecordsScreenRequestLimit", appText, StringComparison.Ordinal);
-        Assert.Contains("Созданные записи появятся после фактического переноса Access", appText, StringComparison.Ordinal);
+        Assert.Contains("importCreatedRecordsScreenRequestLimit", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("Созданные записи появятся после фактического переноса Access", importPanelText, StringComparison.Ordinal);
         Assert.Contains("getAccessCreatedRecords", appTests, StringComparison.Ordinal);
         Assert.Contains("getAccessCreatedRecords", importApiTests, StringComparison.Ordinal);
         Assert.Contains("DbSet<AccessImportCreatedRecord>", dbContext, StringComparison.Ordinal);
@@ -4388,7 +4388,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var checklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "access-import-frontend-tests-checklist.md"));
         var appTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var importApiTests = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "importApi.test.ts"));
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var importPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "import", "ImportPanel.tsx"));
 
         var frontendTestsLine = activeRoadmapLines.Single(line =>
             line.Contains("React-", StringComparison.Ordinal)
@@ -4426,9 +4426,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("cancels Access import apply request with a required reason", importApiTests, StringComparison.Ordinal);
         Assert.Contains("getAccessCreatedRecords", importApiTests, StringComparison.Ordinal);
 
-        Assert.Contains("importCreatedRecordsScreenRequestLimit", appText, StringComparison.Ordinal);
-        Assert.Contains("loadingCreatedRecords", appText, StringComparison.Ordinal);
-        Assert.Contains("quarantine", appText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("importCreatedRecordsScreenRequestLimit", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("loadingCreatedRecords", importPanelText, StringComparison.Ordinal);
+        Assert.Contains("quarantine", importPanelText, StringComparison.OrdinalIgnoreCase);
 
         Assert.Contains("AccessImportFrontendTestsRoadmapItemRemainsBlockedUntilTransferWizardAndReconciliationUiExist", historyText, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
@@ -6483,6 +6483,13 @@ public sealed class ProjectWideRoadmapStatusTests
             "features",
             "releases",
             "ReleasePanel.tsx"));
+        var importPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "import",
+            "ImportPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var accessibleStatusTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "accessibleStatus.test.ts"));
         var formFeedbackText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "formFeedback.tsx"));
@@ -6508,7 +6515,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Пока нет опубликованных изменений", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("Пользователей пока нет", appText, StringComparison.Ordinal);
         Assert.Contains("В этом справочнике пока нет записей", appText, StringComparison.Ordinal);
-        Assert.Contains("Проверок пока нет", appText, StringComparison.Ordinal);
+        Assert.Contains("Проверок пока нет", importPanelText, StringComparison.Ordinal);
 
         Assert.Contains("shows login errors without opening protected workspace", appTestsText, StringComparison.Ordinal);
         Assert.Contains("shows auth validation summary before calling backend", appTestsText, StringComparison.Ordinal);

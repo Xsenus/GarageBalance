@@ -12,7 +12,8 @@ describe('accessible dynamic messages', () => {
   const releasePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'releases', 'ReleasePanel.tsx'), 'utf8')
   const settingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const fundsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'funds', 'FundsPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource].join('\n')
+  const importPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'import', 'ImportPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
