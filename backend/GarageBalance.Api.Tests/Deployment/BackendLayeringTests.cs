@@ -1041,6 +1041,33 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void StaffMemberDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        Assert.Contains("IStaffMemberRepository staffMemberRepository", service, StringComparison.Ordinal);
+        Assert.Contains("staffMemberRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffMemberRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffMemberRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffMemberRepository.Add", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.StaffMembers", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StaffMemberRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "IStaffMemberRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfStaffMemberRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        Assert.Contains("interface IStaffMemberRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IStaffMemberRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IStaffMemberRepository, EfStaffMemberRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1081,6 +1108,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfSupplierContactRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IStaffMemberRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfStaffMemberRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -1102,6 +1131,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен двадцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать пятый срез разделения backend-слоев", history, StringComparison.Ordinal);

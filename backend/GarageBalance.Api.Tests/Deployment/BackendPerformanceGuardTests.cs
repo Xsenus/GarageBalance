@@ -79,6 +79,14 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void StaffMemberRepository_UsesDatabaseLimitBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
+        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
@@ -266,10 +274,16 @@ public sealed class BackendPerformanceGuardTests
     public void DictionarySearchQueries_KeepExplicitLimitForSearchAndDefaultLists()
     {
         var source = ReadApiSource("Application/Dictionaries/DictionaryService.cs");
+        var staffMemberRepositorySource = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
 
         Assert.True(
-            CountOccurrences(source, ".Take(NormalizeListLimit(limit))") >= 5,
+            CountOccurrences(source, ".Take(NormalizeListLimit(limit))") >= 4,
             "Dictionary default lists must use normalized server-side limits.");
+        Assert.Contains(
+            "staffMemberRepository.GetListAsync(departmentId, normalizedSearch, includeArchived, NormalizeListLimit(limit)",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", staffMemberRepositorySource, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(source, ".Take(normalizedLimit)") >= 2,
             "Dictionary search branches must keep their explicit normalized limit.");

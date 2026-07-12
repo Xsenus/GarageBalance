@@ -15,6 +15,7 @@ public sealed class DictionaryService(
     ISupplierRepository supplierRepository,
     ISupplierContactRepository supplierContactRepository,
     IStaffDepartmentRepository staffDepartmentRepository,
+    IStaffMemberRepository staffMemberRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -78,7 +79,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -978,26 +979,9 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<StaffMemberDto>> GetStaffMembersAsync(Guid? departmentId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.StaffMembers.AsNoTracking().Include(member => member.Department).Where(member => includeArchived || !member.IsArchived);
-        if (departmentId is not null)
-        {
-            query = query.Where(member => member.DepartmentId == departmentId);
-        }
-
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(member =>
-                member.FullName.ToLower().Contains(normalizedSearch) ||
-                member.Department.Name.ToLower().Contains(normalizedSearch));
-        }
-
-        return await query
-            .OrderBy(member => member.Department.Name)
-            .ThenBy(member => member.FullName)
-            .Take(NormalizeListLimit(limit))
-            .Select(member => ToStaffMemberDto(member))
-            .ToListAsync(cancellationToken);
+        var members = await staffMemberRepository.GetListAsync(departmentId, normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return members.Select(ToStaffMemberDto).ToList();
     }
 
     public async Task<DictionaryResult<StaffMemberDto>> CreateStaffMemberAsync(UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1016,7 +1000,7 @@ public sealed class DictionaryService(
             Rate = MoneyMath.RoundMoney(request.Rate)
         };
 
-        dbContext.StaffMembers.Add(member);
+        staffMemberRepository.Add(member);
         AddAudit(actorUserId, "dictionary.staff_member_created", "staff_member", member.Id, $"Создан сотрудник {member.FullName}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
@@ -1024,7 +1008,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<StaffMemberDto>> UpdateStaffMemberAsync(Guid id, UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var member = await dbContext.StaffMembers.Include(item => item.Department).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var member = await staffMemberRepository.FindActiveAsync(id, cancellationToken);
         if (member is null)
         {
             return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден.");
@@ -1074,7 +1058,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var member = await dbContext.StaffMembers.Include(item => item.Department).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var member = await staffMemberRepository.FindActiveAsync(id, cancellationToken);
         if (member is null)
         {
             return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден.");
@@ -1089,7 +1073,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<StaffMemberDto>> RestoreStaffMemberAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var member = await dbContext.StaffMembers.Include(item => item.Department).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var member = await staffMemberRepository.FindArchivedAsync(id, cancellationToken);
         if (member is null)
         {
             return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден в архиве.");
