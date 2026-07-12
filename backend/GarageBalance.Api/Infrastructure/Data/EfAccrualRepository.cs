@@ -53,12 +53,138 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         return new AccrualPageData(items, totalCount);
     }
 
+    public async Task<decimal> GetTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
+        await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < accountingMonth)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+
+    public async Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(
+        Guid garageId,
+        DateOnly? monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= monthTo);
+        if (monthFrom.HasValue)
+        {
+            query = query.Where(accrual => accrual.AccountingMonth >= monthFrom.Value);
+        }
+
+        var rows = await query
+            .GroupBy(accrual => accrual.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .OrderBy(bucket => bucket.AccountingMonth)
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => new AccrualBucketData(row.AccountingMonth, row.Amount)).ToList();
+    }
+
+    public async Task<IReadOnlyList<AccrualIncomeTypeBucketData>> GetIncomeTypeBucketsAsync(
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.AccountingMonth >= monthFrom &&
+                accrual.AccountingMonth <= monthTo)
+            .GroupBy(accrual => new
+            {
+                accrual.AccountingMonth,
+                accrual.IncomeTypeId,
+                accrual.IncomeType.Name,
+                accrual.IncomeType.Code
+            })
+            .Select(group => new
+            {
+                group.Key.AccountingMonth,
+                group.Key.IncomeTypeId,
+                IncomeTypeName = group.Key.Name,
+                IncomeTypeCode = group.Key.Code,
+                Amount = group.Sum(accrual => accrual.Amount)
+            })
+            .ToListAsync(cancellationToken);
+        return rows
+            .Select(row => new AccrualIncomeTypeBucketData(row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.IncomeTypeCode, row.Amount))
+            .ToList();
+    }
+
+    public async Task<AccrualSummaryData> GetSummaryAsync(
+        DateOnly? monthFrom,
+        DateOnly? monthTo,
+        string? normalizedSearch,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplyPeriod(QueryActive(), monthFrom, monthTo);
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            var filtered = (await query.ToListAsync(cancellationToken))
+                .Where(accrual => AccrualMatchesSearch(accrual, normalizedSearch))
+                .ToList();
+            return new AccrualSummaryData(filtered.Sum(accrual => accrual.Amount), filtered.Count);
+        }
+
+        query = ApplySearch(query, normalizedSearch);
+        return new AccrualSummaryData(
+            await query.SumAsync(accrual => accrual.Amount, cancellationToken),
+            await query.CountAsync(cancellationToken));
+    }
+
+    public Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
+        TrackedAggregate().SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
+
+    public Task<Accrual?> FindActiveForUpdateAsync(
+        Guid garageId,
+        Guid incomeTypeId,
+        DateOnly accountingMonth,
+        string source,
+        CancellationToken cancellationToken) =>
+        TrackedAggregate().SingleOrDefaultAsync(accrual =>
+            !accrual.IsCanceled &&
+            accrual.GarageId == garageId &&
+            accrual.IncomeTypeId == incomeTypeId &&
+            accrual.AccountingMonth == accountingMonth &&
+            accrual.Source == source,
+            cancellationToken);
+
+    public Task<bool> ActiveDuplicateExistsAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        Guid incomeTypeId,
+        DateOnly accountingMonth,
+        string source,
+        CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking().AnyAsync(accrual =>
+            !accrual.IsCanceled &&
+            (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
+            accrual.GarageId == garageId &&
+            accrual.IncomeTypeId == incomeTypeId &&
+            accrual.AccountingMonth == accountingMonth &&
+            accrual.Source == source,
+            cancellationToken);
+
+    public async Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
+        await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= accountingMonth)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+
+    public void Add(Accrual accrual) => dbContext.Accruals.Add(accrual);
+
     private IQueryable<Accrual> QueryActive() =>
         dbContext.Accruals.AsNoTracking()
             .Include(accrual => accrual.Garage)
             .ThenInclude(garage => garage.Owner)
             .Include(accrual => accrual.IncomeType)
             .Where(accrual => !accrual.IsCanceled);
+
+    private IQueryable<Accrual> TrackedAggregate() =>
+        dbContext.Accruals
+            .Include(accrual => accrual.Garage)
+            .ThenInclude(garage => garage.Owner)
+            .Include(accrual => accrual.IncomeType);
 
     private static IQueryable<Accrual> ApplyPeriod(IQueryable<Accrual> query, DateOnly? monthFrom, DateOnly? monthTo)
     {

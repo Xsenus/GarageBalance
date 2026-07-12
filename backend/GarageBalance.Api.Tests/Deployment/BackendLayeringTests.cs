@@ -1047,7 +1047,18 @@ public sealed class BackendLayeringTests
         Assert.Contains("IAccrualRepository accrualRepository", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.GetListAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetTotalBeforeMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetMonthlyBucketsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetSummaryAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.FindActiveForUpdateAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.GetTotalThroughMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("accrualRepository.Add(accrual)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.Accruals", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<Accrual> QueryAccruals", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyAccrualFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IAccrualRepository, EfAccrualRepository>()", program, StringComparison.Ordinal);
     }
 
