@@ -933,6 +933,55 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void MeterReadingOperatorScenarioIsCompleteWhenYearTableWorksheetAccrualsDebtAndReportsAreCovered()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "meter-reading-operator-scenario-verification.md"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+
+        var scenarioLine = activeRoadmapLines.Single(line =>
+            line.Contains("Оператор вводит показания воды и электричества", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", scenarioLine, StringComparison.Ordinal);
+        Assert.Contains("годовая таблица", scenarioLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("месячная ведомость", scenarioLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("сводный отчет", scenarioLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("docs/meter-reading-operator-scenario-verification.md", scenarioLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(MeterReadingOperatorScenarioIsCompleteWhenYearTableWorksheetAccrualsDebtAndReportsAreCovered), scenarioLine, StringComparison.Ordinal);
+
+        Assert.Contains("Расход рассчитывается", verification, StringComparison.Ordinal);
+        Assert.Contains("Месячная ведомость гаража", verification, StringComparison.Ordinal);
+        Assert.Contains("Сводный отчет", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("GenerateRegularAccrualsAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheetAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_CalculatesMeterAmountFromReading", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageIncomeWorksheetAsync_BuildsRowsFromAccrualsPaymentsAndMeters", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetConsolidatedReportAsync_ReturnsMonthlyTotalsAndGarageRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("MeterReadingCount", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("MeterReadingsPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.Contains("createGarageIncomeRowsFromWorksheet", appText, StringComparison.Ordinal);
+        Assert.Contains("shows meter readings prototype as a yearly garage table", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("creates meter reading and shows calculated consumption", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("highlights garages without meter readings for selected month", appTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт верхнеуровневый сценарий оператора по счетчикам", historyText, StringComparison.Ordinal);
+        Assert.Contains(nameof(MeterReadingOperatorScenarioIsCompleteWhenYearTableWorksheetAccrualsDebtAndReportsAreCovered), historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
     {
         var repositoryRoot = FindRepositoryRoot();
