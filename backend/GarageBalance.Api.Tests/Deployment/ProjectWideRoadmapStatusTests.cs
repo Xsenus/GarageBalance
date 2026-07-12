@@ -1682,6 +1682,89 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DictionaryWorkspaceUiIsCompleteWhenSubgroupsSearchStatesPagingContextCrudAndCentralAuditExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "DictionariesController.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var frontendApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "dictionariesApi.ts"));
+        var frontendWorkbenchText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "dictionaryWorkbench.ts"));
+        var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать UI справочников с поиском, фильтрами, пустыми состояниями", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("серверной пагинацией", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("контекстное меню", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("едином разделе `История изменений`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.194.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.379.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.384.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryWorkspaceUiIsCompleteWhenSubgroupsSearchStatesPagingContextCrudAndCentralAuditExist", roadmapLine, StringComparison.Ordinal);
+
+        var pageNames = new[]
+        {
+            "Owners",
+            "Garages",
+            "SupplierGroups",
+            "Suppliers",
+            "IncomeTypes",
+            "ExpenseTypes",
+            "Tariffs"
+        };
+        foreach (var pageName in pageNames)
+        {
+            Assert.Contains($"Get{pageName}Page", controllerText, StringComparison.Ordinal);
+            Assert.Contains($"Get{pageName}PageAsync", serviceText, StringComparison.Ordinal);
+            Assert.Contains($"get{pageName}Page", frontendApiText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("new PagedResult<", serviceText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseTypesPageAsync", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetOwnersPageAsync", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("dictionarySectionGroups", frontendWorkbenchText, StringComparison.Ordinal);
+        Assert.Contains("getDictionaryTableHeaders", frontendWorkbenchText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getOwnersPage", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getTariffsPage", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("onContextMenu={(event) => openContextMenu(event, activeSection, item)}", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("В этом справочнике пока нет записей", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("label: 'История изменений'", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Раздел истории изменений\"", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Тип объекта истории изменений\"", frontendAppText, StringComparison.Ordinal);
+
+        Assert.Contains("edits supplier groups and accounting operation types from dictionary dialogs", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("announces empty dictionary lists", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("requests bounded dictionary lists from dictionaries workspace", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("searches garages by number or owner from dictionaries workspace", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("searches suppliers by name or inn from dictionaries workspace", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows archived dictionary records and restores them after confirmation", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("filters audit journal by section action kind entity type actor quick filter and date range", frontendTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("\"version\": \"0.194.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Справочники открываются рабочими таблицами", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Таблицы используют постраничную загрузку с сервера", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.379.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("История справочников показывает изменения", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.384.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("История изменений называется единообразно", releaseNotesText, StringComparison.Ordinal);
+
+        Assert.Contains("DictionaryWorkspaceUiIsCompleteWhenSubgroupsSearchStatesPagingContextCrudAndCentralAuditExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("локальные дубли журналов намеренно удалены", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("DictionaryWorkspaceUiIsCompleteWhenSubgroupsSearchStatesPagingContextCrudAndCentralAuditExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
