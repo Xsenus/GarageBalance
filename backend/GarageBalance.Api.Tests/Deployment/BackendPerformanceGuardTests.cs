@@ -40,6 +40,18 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void GarageRepository_UsesProductionPaginationAndDatabaseBalanceAggregatesWithScopedSqliteFallback()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfGarageRepository.cs");
+        Assert.Contains("IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
+        Assert.True(CountOccurrences(source, ".GroupBy(") >= 2);
+        Assert.True(CountOccurrences(source, ".ToDictionaryAsync(") >= 2);
+    }
+
+    [Fact]
     public void SupplierGroupRepository_UsesProductionCountOffsetAndLimitWithScopedSqliteFallback()
     {
         var source = ReadApiSource("Infrastructure/Data/EfSupplierGroupRepository.cs");
@@ -346,6 +358,7 @@ public sealed class BackendPerformanceGuardTests
         var irregularPaymentRepositorySource = ReadApiSource("Infrastructure/Data/EfIrregularPaymentRepository.cs");
         var chargeServiceSettingRepositorySource = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
         var feeCampaignRepositorySource = ReadApiSource("Infrastructure/Data/EfFeeCampaignRepository.cs");
+        var garageRepositorySource = ReadApiSource("Infrastructure/Data/EfGarageRepository.cs");
 
         Assert.DoesNotContain(".Take(NormalizeListLimit(limit))", source, StringComparison.Ordinal);
         Assert.Contains(
@@ -373,9 +386,16 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", feeCampaignRepositorySource, StringComparison.Ordinal);
-        Assert.True(
-            CountOccurrences(source, ".Take(normalizedLimit)") >= 2,
-            "Dictionary search branches must keep their explicit normalized limit.");
+        Assert.Contains(
+            "garageRepository.GetListAsync(normalizedSearch, includeArchived, normalizedLimit",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "garageRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", garageRepositorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Take(normalizedLimit)", source, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -11,6 +11,7 @@ namespace GarageBalance.Api.Application.Dictionaries;
 public sealed class DictionaryService(
     GarageBalanceDbContext dbContext,
     IOwnerRepository ownerRepository,
+    IGarageRepository garageRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     ISupplierContactRepository supplierContactRepository,
@@ -85,7 +86,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfGarageRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -213,78 +214,19 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<GarageDto>> GetGaragesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => includeArchived || !garage.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            var sqliteGarages = await query
-                .OrderBy(garage => garage.Number)
-                .ToListAsync(cancellationToken);
-            var matchedGarages = sqliteGarages
-                .Where(garage => GarageMatchesSearch(garage, searchValue))
-                .Take(normalizedLimit)
-                .ToList();
-            return await ToGarageDtosWithBalancesAsync(matchedGarages, cancellationToken);
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(garage =>
-                garage.Number.ToLower().Contains(normalizedSearch) ||
-                (garage.Owner != null && (
-                    garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
-                    garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                    (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                    (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch))));
-        }
-
-        var garages = await query
-            .OrderBy(garage => garage.Number)
-            .Take(normalizedLimit)
-            .ToListAsync(cancellationToken);
+        var garages = await garageRepository.GetListAsync(normalizedSearch, includeArchived, normalizedLimit, cancellationToken);
         return await ToGarageDtosWithBalancesAsync(garages, cancellationToken);
     }
 
     public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Garages.AsNoTracking().Include(garage => garage.Owner).Where(garage => includeArchived || !garage.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            var sqliteGarages = await query
-                .OrderBy(garage => garage.Number)
-                .ToListAsync(cancellationToken);
-            var filteredGarages = sqliteGarages
-                .Where(garage => GarageMatchesSearch(garage, searchValue))
-                .ToList();
-            var items = filteredGarages
-                .Skip(normalizedOffset)
-                .Take(normalizedLimit)
-                .ToList();
-            return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(items, cancellationToken), filteredGarages.Count, normalizedOffset, normalizedLimit);
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(garage =>
-                garage.Number.ToLower().Contains(normalizedSearch) ||
-                (garage.Owner != null && (
-                    garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
-                    garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                    (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                    (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch))));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-        var garages = await query
-            .OrderBy(garage => garage.Number)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .ToListAsync(cancellationToken);
-        return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(garages, cancellationToken), totalCount, normalizedOffset, normalizedLimit);
+        var page = await garageRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(page.Items, cancellationToken), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     private async Task<GarageDto> ToGarageDtoWithBalanceAsync(Garage garage, CancellationToken cancellationToken)
@@ -300,39 +242,18 @@ public sealed class DictionaryService(
         }
 
         var garageIds = garages.Select(garage => garage.Id).ToArray();
-        var accrualTotals = await dbContext.Accruals
-            .AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && garageIds.Contains(accrual.GarageId))
-            .GroupBy(accrual => accrual.GarageId)
-            .Select(group => new { GarageId = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
-            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
-        var incomeTotals = await dbContext.FinancialOperations
-            .AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId.HasValue &&
-                garageIds.Contains(operation.GarageId.Value))
-            .GroupBy(operation => operation.GarageId!.Value)
-            .Select(group => new { GarageId = group.Key, Amount = group.Sum(operation => operation.Amount) })
-            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
+        var totals = await garageRepository.GetBalanceTotalsAsync(garageIds, cancellationToken);
 
         return garages
             .Select(garage =>
             {
                 var balance = garage.StartingBalance +
-                    accrualTotals.GetValueOrDefault(garage.Id) -
-                    incomeTotals.GetValueOrDefault(garage.Id);
+                    totals.AccrualTotals.GetValueOrDefault(garage.Id) -
+                    totals.IncomeTotals.GetValueOrDefault(garage.Id);
                 balance = Math.Round(balance, 2, MidpointRounding.AwayFromZero);
                 return ToGarageDto(garage, balance, Math.Max(balance, 0m));
             })
             .ToList();
-    }
-
-    private static bool GarageMatchesSearch(Garage garage, string normalizedSearch)
-    {
-        return garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-            (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
     private static AccountingTypeDto ToAccountingTypeDto(IncomeType item) =>
@@ -341,15 +262,10 @@ public sealed class DictionaryService(
     private static AccountingTypeDto ToAccountingTypeDto(ExpenseType item) =>
         new(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived);
 
-    private bool IsSqliteProvider()
-    {
-        return dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
-    }
-
     public async Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var number = request.Number.Trim();
-        if (await dbContext.Garages.AnyAsync(garage => !garage.IsArchived && garage.Number == number, cancellationToken))
+        if (await garageRepository.ActiveNumberExistsAsync(null, number, cancellationToken))
         {
             return DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Гараж с таким номером уже существует.");
         }
@@ -373,7 +289,7 @@ public sealed class DictionaryService(
             Comment = NormalizeOptional(request.Comment)
         };
 
-        dbContext.Garages.Add(garage);
+        garageRepository.Add(garage);
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
@@ -381,14 +297,14 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(id, cancellationToken);
         if (garage is null)
         {
             return DictionaryResult<GarageDto>.Failure("garage_not_found", "Гараж не найден.");
         }
 
         var number = request.Number.Trim();
-        if (await dbContext.Garages.AnyAsync(item => item.Id != id && !item.IsArchived && item.Number == number, cancellationToken))
+        if (await garageRepository.ActiveNumberExistsAsync(id, number, cancellationToken))
         {
             return DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Гараж с таким номером уже существует.");
         }
@@ -454,7 +370,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(id, cancellationToken);
         if (garage is null)
         {
             return DictionaryResult<GarageDto>.Failure("garage_not_found", "Гараж не найден.");
@@ -470,13 +386,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<GarageDto>> RestoreGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindArchivedWithOwnerAsync(id, cancellationToken);
         if (garage is null)
         {
             return DictionaryResult<GarageDto>.Failure("garage_not_found", "Гараж не найден в архиве.");
         }
 
-        if (await dbContext.Garages.AnyAsync(item => item.Id != id && !item.IsArchived && item.Number == garage.Number, cancellationToken))
+        if (await garageRepository.ActiveNumberExistsAsync(id, garage.Number, cancellationToken))
         {
             return DictionaryResult<GarageDto>.Failure("garage_number_duplicate", "Активный гараж с таким номером уже существует.");
         }
@@ -1955,7 +1871,7 @@ public sealed class DictionaryService(
     {
         return ownerId is null
             ? null
-            : await dbContext.Owners.SingleOrDefaultAsync(owner => owner.Id == ownerId && !owner.IsArchived, cancellationToken);
+            : await ownerRepository.FindActiveAsync(ownerId.Value, cancellationToken);
     }
 
     private static DictionaryResult<T>? ValidateArchiveReason<T>(string? reason, out string normalizedReason)
@@ -2288,10 +2204,7 @@ public sealed class DictionaryService(
         }
 
         var participantIds = request.ParticipantGarageIds ?? [];
-        var garages = await dbContext.Garages
-            .Where(garage => participantIds.Contains(garage.Id) && !garage.IsArchived)
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
+        var garages = await garageRepository.GetActiveByIdsAsync(participantIds, cancellationToken);
 
         if (garages.Count != participantIds.Count)
         {

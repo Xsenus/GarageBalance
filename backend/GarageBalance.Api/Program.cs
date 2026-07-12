@@ -45,6 +45,7 @@ builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
 builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
+builder.Services.AddScoped<IGarageRepository, EfGarageRepository>();
 builder.Services.AddScoped<ISupplierGroupRepository, EfSupplierGroupRepository>();
 builder.Services.AddScoped<ISupplierRepository, EfSupplierRepository>();
 builder.Services.AddScoped<ISupplierContactRepository, EfSupplierContactRepository>();
