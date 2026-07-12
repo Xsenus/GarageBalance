@@ -8,7 +8,11 @@ describe('accessible dynamic messages', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
   const formFeedbackSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'formFeedback.tsx'), 'utf8')
+  const authGateSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'auth', 'AuthGate.tsx'), 'utf8')
+  const releasePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'releases', 'ReleasePanel.tsx'), 'utf8')
   const settingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
+  const fundsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'funds', 'FundsPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -410,19 +414,19 @@ describe('accessible dynamic messages', () => {
     ]
 
     for (const className of sharedButtonClasses) {
-      expect(appSource).toContain(className)
+      expect(workspaceSource).toContain(className)
     }
 
-    const buttonIndexes = [...appSource.matchAll(/<button\b/g)].map((match) => match.index ?? -1)
+    const buttonIndexes = [...workspaceSource.matchAll(/<button\b/g)].map((match) => match.index ?? -1)
 
     expect(buttonIndexes.length).toBeGreaterThan(0)
 
     const unstyledButtons = buttonIndexes
       .map((buttonStart) => {
-        const openingTagEnd = appSource.indexOf('>', buttonStart)
+        const openingTagEnd = workspaceSource.indexOf('>', buttonStart)
         expect(openingTagEnd).toBeGreaterThan(buttonStart)
 
-        return appSource.slice(buttonStart, openingTagEnd + 1)
+        return workspaceSource.slice(buttonStart, openingTagEnd + 1)
       })
       .filter((openingTagSource) => !sharedButtonClasses.some((className) => openingTagSource.includes(className)))
       .filter((openingTagSource) => !containerStyledButtonPatterns.some((pattern) => pattern.test(openingTagSource)))

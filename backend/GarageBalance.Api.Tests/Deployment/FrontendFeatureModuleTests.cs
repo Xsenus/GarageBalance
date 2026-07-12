@@ -3,6 +3,38 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void FundsPanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var fundsPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "funds",
+            "FundsPanel.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { FundsPrototypePanel } from './features/funds/FundsPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<FundsPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function FundsPrototypePanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type FundOperationDraft", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("mapFundDtoToPrototypeRow", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function FundsPrototypePanel(", fundsPanelText, StringComparison.Ordinal);
+        Assert.Contains("fundsClient.createOperation", fundsPanelText, StringComparison.Ordinal);
+        Assert.Contains("fundsClient.updateOperation", fundsPanelText, StringComparison.Ordinal);
+        Assert.Contains("fundsClient.cancelOperation", fundsPanelText, StringComparison.Ordinal);
+        Assert.Contains("fundsClient.restoreOperation", fundsPanelText, StringComparison.Ordinal);
+        Assert.Contains("operationReverse.operation.fundId", fundsPanelText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/funds/FundsPanel.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PasswordPanelRemainsInItsFeatureModuleWithSharedFormField()
     {
         var repositoryRoot = FindRepositoryRoot();
