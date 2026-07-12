@@ -158,6 +158,9 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Where\(setting => !setting\.IsArchived && setting\.IsRegular\)[\s\S]*?OrderBy\(setting => setting\.Name\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            source);
     }
 
     [Fact]

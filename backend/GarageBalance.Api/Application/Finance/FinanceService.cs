@@ -16,6 +16,7 @@ public sealed class FinanceService(
     IIncomeTypeRepository incomeTypeRepository,
     ITariffRepository tariffRepository,
     IFeeCampaignRepository feeCampaignRepository,
+    IChargeServiceSettingRepository chargeServiceSettingRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -72,7 +73,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1844,11 +1845,7 @@ public sealed class FinanceService(
     public async Task<FinanceResult<RegularCatalogAccrualGenerationResultDto>> GenerateRegularCatalogAccrualsAsync(GenerateRegularCatalogAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var settings = await dbContext.ChargeServiceSettings
-            .AsNoTracking()
-            .Where(setting => !setting.IsArchived && setting.IsRegular)
-            .OrderBy(setting => setting.Name)
-            .ToListAsync(cancellationToken);
+        var settings = await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken);
         if (settings.Count == 0)
         {
             return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_empty", "В каталоге нет активных регулярных услуг.");

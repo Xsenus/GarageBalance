@@ -24,6 +24,12 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync(CancellationToken cancellationToken) =>
+        await dbContext.ChargeServiceSettings.AsNoTracking()
+            .Where(setting => !setting.IsArchived && setting.IsRegular)
+            .OrderBy(setting => setting.Name)
+            .ToListAsync(cancellationToken);
+
     public Task<ChargeServiceSetting?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
 

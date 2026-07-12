@@ -1310,6 +1310,19 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinanceChargeServiceCatalogQueries_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfChargeServiceSettingRepository.cs"));
+        Assert.Contains("IChargeServiceSettingRepository chargeServiceSettingRepository", service, StringComparison.Ordinal);
+        Assert.Contains("chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.ChargeServiceSettings", service, StringComparison.Ordinal);
+        Assert.Contains("!setting.IsArchived && setting.IsRegular", implementation, StringComparison.Ordinal);
+        Assert.Contains(".OrderBy(setting => setting.Name)", implementation, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FeeCampaignDictionary_DelegatesPersistenceQueriesToApplicationPort()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1428,6 +1441,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен сорок второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен сорок первый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен сороковой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
