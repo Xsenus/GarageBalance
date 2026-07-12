@@ -2174,6 +2174,52 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ExternalSecretConfigurationIsCompleteWhenUserSecretsEnvironmentDeploymentAndPersistentKeysExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var projectText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "GarageBalance.Api.csproj"));
+        var programText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var readmeText = File.ReadAllText(Path.Combine(repositoryRoot, "README.md"));
+        var composeText = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
+        var localInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+        var vpsInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "vps-deployment-checklist.md"));
+        var verificationText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "secret-configuration-verification.md"));
+        var configurationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "SecretConfigurationTests.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать хранение секретов через env/user-secrets/deployment secrets", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("UserSecretsId", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ConnectionStrings:DefaultConnection", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("DataProtection:KeysPath", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ExternalSecretConfigurationIsCompleteWhenUserSecretsEnvironmentDeploymentAndPersistentKeysExist", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("<UserSecretsId>GarageBalance.Api-", projectText, StringComparison.Ordinal);
+        Assert.Contains("builder.Configuration[\"DataProtection:KeysPath\"]", programText, StringComparison.Ordinal);
+        Assert.Contains("dotnet user-secrets set \"Jwt:SigningKey\"", readmeText, StringComparison.Ordinal);
+        Assert.Contains("ConnectionStrings__DefaultConnection", composeText, StringComparison.Ordinal);
+        Assert.Contains("DataProtection__KeysPath", composeText, StringComparison.Ordinal);
+        Assert.Contains("data-protection-keys", composeText, StringComparison.Ordinal);
+        Assert.Contains("DataProtection__KeysPath=C:\\GarageBalance\\Config\\DataProtectionKeys", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("ConnectionStrings__DefaultConnection", vpsInstallText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConnectionStrings__Postgres", vpsInstallText, StringComparison.Ordinal);
+        Assert.Contains("DataProtection__KeysPath=/var/lib/garagebalance-staging/data-protection-keys", vpsInstallText, StringComparison.Ordinal);
+        Assert.Contains("Development user-secrets", verificationText, StringComparison.Ordinal);
+        Assert.Contains("ApiProjectAndDocumentationSupportUserSecretsEnvironmentAndPersistentDeploymentKeys", configurationTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("ExternalSecretConfigurationIsCompleteWhenUserSecretsEnvironmentDeploymentAndPersistentKeysExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExternalSecretConfigurationIsCompleteWhenUserSecretsEnvironmentDeploymentAndPersistentKeysExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();

@@ -31,7 +31,10 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-garagebalance};Username=${POSTGRES_USER:-garagebalance};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before running docker compose}
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env before running docker compose}
+      DataProtection__KeysPath: ${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
       Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-http://127.0.0.1:5173}
+    volumes:
+      - data-protection-keys:${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
     ports:
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080"
     healthcheck:
@@ -58,3 +61,4 @@ services:
 
 volumes:
   postgres-data:
+  data-protection-keys:

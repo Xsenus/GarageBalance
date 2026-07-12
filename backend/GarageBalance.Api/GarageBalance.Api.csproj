@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>GarageBalance.Api-9d88a7e4-1f14-4fc8-91b2-9a64a6570da2</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

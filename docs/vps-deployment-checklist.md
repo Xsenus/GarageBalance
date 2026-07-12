@@ -9,6 +9,7 @@
 - [ ] Убедиться, что новые порты и имена сервисов не конфликтуют с существующими проектами.
 - [ ] Создать отдельный каталог приложения: `/opt/garagebalance-staging`.
 - [ ] Создать отдельный каталог резервных копий: `/opt/garagebalance-staging/backups`.
+- [ ] Создать постоянный каталог Data Protection keys: `/var/lib/garagebalance-staging/data-protection-keys` и выдать доступ только учетной записи API.
 - [ ] Создать файл окружения вне Git: `/etc/garagebalance-staging.env`.
 - [ ] Ограничить права на secrets-файл: `chmod 600 /etc/garagebalance-staging.env`.
 
@@ -19,15 +20,17 @@
 ```bash
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://127.0.0.1:3101
-ConnectionStrings__Postgres=Host=127.0.0.1;Port=5432;Database=garagebalance_staging;Username=garagebalance_staging;Password=REPLACE_WITH_SECRET
+ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=garagebalance_staging;Username=garagebalance_staging;Password=REPLACE_WITH_SECRET
 Jwt__Issuer=GarageBalance
 Jwt__Audience=GarageBalance
 Jwt__SigningKey=REPLACE_WITH_AT_LEAST_32_UTF8_BYTES_SECRET
+DataProtection__KeysPath=/var/lib/garagebalance-staging/data-protection-keys
 ```
 
 - [ ] Не использовать примерный `change-this`/`development` JWT secret вне Development.
 - [ ] Не хранить `/etc/garagebalance-staging.env` в рабочем каталоге проекта.
 - [ ] Проверить, что database user имеет права только на базу `garagebalance_staging`.
+- [ ] Не удалять Data Protection keys при deploy/rollback: без прежних ключей защищенные настройки интеграций нельзя расшифровать.
 
 ## 3. Сборка и миграции
 

@@ -10,6 +10,9 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("sgk.blagodaty.ru", document, StringComparison.Ordinal);
         Assert.Contains("/opt/garagebalance-staging", document, StringComparison.Ordinal);
         Assert.Contains("/etc/garagebalance-staging.env", document, StringComparison.Ordinal);
+        Assert.Contains("ConnectionStrings__DefaultConnection", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConnectionStrings__Postgres", document, StringComparison.Ordinal);
+        Assert.Contains("DataProtection__KeysPath=/var/lib/garagebalance-staging/data-protection-keys", document, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging.service", document, StringComparison.Ordinal);
         Assert.Contains("certbot --nginx -d sgk.blagodaty.ru", document, StringComparison.Ordinal);
         Assert.Contains("nginx -t", document, StringComparison.Ordinal);
@@ -38,6 +41,8 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("C:\\GarageBalance\\Backups", document, StringComparison.Ordinal);
         Assert.Contains("C:\\GarageBalance\\Config\\garagebalance.local.env", document, StringComparison.Ordinal);
         Assert.Contains("ConnectionStrings__DefaultConnection", document, StringComparison.Ordinal);
+        Assert.Contains("DataProtection__KeysPath=C:\\GarageBalance\\Config\\DataProtectionKeys", document, StringComparison.Ordinal);
+        Assert.Contains("data-protection-keys", document, StringComparison.Ordinal);
         Assert.Contains("JWT_SIGNING_KEY", document, StringComparison.Ordinal);
         Assert.Contains("docker compose up --build -d", document, StringComparison.Ordinal);
         Assert.Contains("POSTGRES_BIND_ADDRESS=127.0.0.1", document, StringComparison.Ordinal);

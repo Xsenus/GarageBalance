@@ -17,6 +17,7 @@
 ```powershell
 C:\GarageBalance\App
 C:\GarageBalance\Config
+C:\GarageBalance\Config\DataProtectionKeys
 C:\GarageBalance\Backups
 C:\GarageBalance\Logs
 C:\GarageBalance\Imports
@@ -37,7 +38,8 @@ ASPNETCORE_URLS=http://127.0.0.1:5080
 ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=garagebalance_local;Username=garagebalance_local;Password=REPLACE_WITH_SECRET
 Jwt__Issuer=GarageBalance
 Jwt__Audience=GarageBalance
-JWT_SIGNING_KEY=REPLACE_WITH_AT_LEAST_32_UTF8_BYTES_SECRET
+Jwt__SigningKey=REPLACE_WITH_AT_LEAST_32_UTF8_BYTES_SECRET
+DataProtection__KeysPath=C:\GarageBalance\Config\DataProtectionKeys
 Cors__AllowedOrigins__0=http://127.0.0.1:5173
 ```
 
@@ -45,6 +47,7 @@ Cors__AllowedOrigins__0=http://127.0.0.1:5173
 - [ ] Использовать JWT secret не короче 32 UTF-8 байт.
 - [ ] Не использовать примерный `change-this-development-key-before-real-data-32` для реальных данных.
 - [ ] Ограничить доступ к `C:\GarageBalance\Config`.
+- [ ] Убедиться, что `C:\GarageBalance\Config\DataProtectionKeys` сохраняется между обновлениями и доступен только учетной записи API/администратору.
 
 ## 4. Вариант A: локальный запуск через Docker Compose
 
@@ -52,6 +55,7 @@ Cors__AllowedOrigins__0=http://127.0.0.1:5173
 
 - [ ] Скопировать `.env.example` в `.env`.
 - [ ] Заменить `POSTGRES_PASSWORD` и `JWT_SIGNING_KEY` на реальные значения.
+- [ ] Оставить `DATA_PROTECTION_KEYS_PATH=/var/lib/garagebalance/keys` и проверить постоянный volume `data-protection-keys`.
 - [ ] Оставить локальные bind-адреса без публикации наружу: `POSTGRES_BIND_ADDRESS=127.0.0.1`, `API_BIND_ADDRESS=127.0.0.1`, `FRONTEND_BIND_ADDRESS=127.0.0.1`.
 - [ ] Оставить локальные порты: `POSTGRES_PORT=5432`, `API_PORT=5080`, `FRONTEND_PORT=5173`, `FRONTEND_ORIGIN=http://127.0.0.1:5173`.
 - [ ] Проверить путь для backup mount: `BACKUP_HOST_PATH=./backups` или отдельная локальная папка вне Git.
@@ -117,6 +121,7 @@ $env:ConnectionStrings__DefaultConnection="Host=127.0.0.1;Port=5432;Database=gar
 $env:Jwt__Issuer="GarageBalance"
 $env:Jwt__Audience="GarageBalance"
 $env:Jwt__SigningKey="REPLACE_WITH_AT_LEAST_32_UTF8_BYTES_SECRET"
+$env:DataProtection__KeysPath="C:\GarageBalance\Config\DataProtectionKeys"
 dotnet .\backend\GarageBalance.Api\bin\Release\net10.0\GarageBalance.Api.dll
 ```
 
