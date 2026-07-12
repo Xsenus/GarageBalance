@@ -1,6 +1,7 @@
 using System.Globalization;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -10,6 +11,7 @@ namespace GarageBalance.Api.Application.Finance;
 
 public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
+    IStaffMemberRepository staffMemberRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -66,7 +68,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -475,11 +477,7 @@ public sealed class FinanceService(
                 operation.IncomeTypeId != null)
             .ToListAsync(cancellationToken);
 
-        var activeStaffMembers = await dbContext.StaffMembers.AsNoTracking()
-            .Include(staffMember => staffMember.Department)
-            .Where(staffMember => !staffMember.IsArchived)
-            .OrderBy(staffMember => staffMember.FullName)
-            .ToListAsync(cancellationToken);
+        var activeStaffMembers = await staffMemberRepository.GetActiveForExpenseWorksheetAsync(cancellationToken);
 
         var collectedByIncomeKey = incomeBuckets
             .Where(operation => operation.IncomeType is not null)
@@ -820,9 +818,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateStaffPaymentAsync(CreateStaffPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var staffMember = await dbContext.StaffMembers
-            .Include(item => item.Department)
-            .SingleOrDefaultAsync(item => item.Id == request.StaffMemberId && !item.IsArchived, cancellationToken);
+        var staffMember = await staffMemberRepository.FindActiveAsync(request.StaffMemberId, cancellationToken);
         if (staffMember is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("staff_member_not_found", "Сотрудник для выплаты не найден.");

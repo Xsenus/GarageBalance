@@ -87,6 +87,16 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void StaffMemberRepository_ExpenseWorksheetQueryKeepsCompleteFilteredActiveSet()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
+        Assert.Contains("GetActiveForExpenseWorksheetAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".Where(member => !member.IsArchived)", source, StringComparison.Ordinal);
+        Assert.Contains(".OrderBy(member => member.FullName)", source, StringComparison.Ordinal);
+        Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
