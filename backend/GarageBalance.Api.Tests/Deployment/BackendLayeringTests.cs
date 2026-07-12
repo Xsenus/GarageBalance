@@ -1066,6 +1066,13 @@ public sealed class BackendLayeringTests
         Assert.Contains("ISupplierAccrualRepository supplierAccrualRepository", service, StringComparison.Ordinal);
         Assert.Contains("supplierAccrualRepository.GetListAsync", service, StringComparison.Ordinal);
         Assert.Contains("supplierAccrualRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.GetActiveForMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.GetTotalThroughMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.GetMonthlyBucketsThroughMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.Add(accrual)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.SupplierAccruals", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<SupplierAccrual> QuerySupplierAccruals", service, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplySupplierAccrualFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<ISupplierAccrualRepository, EfSupplierAccrualRepository>()", program, StringComparison.Ordinal);

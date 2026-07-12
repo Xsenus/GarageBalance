@@ -117,6 +117,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("AccrualMatchesSearch", source, StringComparison.Ordinal);
         Assert.Contains(".ThenBy(accrual => accrual.Supplier.Name)", source, StringComparison.Ordinal);
+        Assert.Contains("GetTotalThroughMonthAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".SumAsync(accrual => accrual.Amount", source, StringComparison.Ordinal);
+        Assert.Contains("GetMonthlyBucketsThroughMonthAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -422,11 +422,7 @@ public sealed class FinanceService(
     {
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
 
-        var supplierAccruals = await dbContext.SupplierAccruals.AsNoTracking()
-            .Include(accrual => accrual.Supplier)
-            .Include(accrual => accrual.ExpenseType)
-            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth == accountingMonth)
-            .ToListAsync(cancellationToken);
+        var supplierAccruals = await supplierAccrualRepository.GetActiveForMonthAsync(accountingMonth, cancellationToken);
 
         var expenseOperations = await dbContext.FinancialOperations.AsNoTracking()
             .Include(operation => operation.Supplier)
@@ -1483,15 +1479,7 @@ public sealed class FinanceService(
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
-        if (await dbContext.SupplierAccruals.AnyAsync(
-            accrual =>
-                !accrual.IsCanceled &&
-                accrual.SupplierId == supplier.Id &&
-                accrual.ExpenseTypeId == expenseType.Id &&
-                accrual.AccountingMonth == month &&
-                accrual.Source == source &&
-                accrual.DocumentNumber == documentNumber,
-            cancellationToken))
+        if (await supplierAccrualRepository.ActiveDuplicateExistsAsync(null, supplier.Id, expenseType.Id, month, source, documentNumber, cancellationToken))
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
         }
@@ -1509,7 +1497,7 @@ public sealed class FinanceService(
             Comment = NormalizeOptional(request.Comment)
         };
 
-        dbContext.SupplierAccruals.Add(accrual);
+        supplierAccrualRepository.Add(accrual);
         AddAudit(actorUserId, "finance.supplier_accrual_created", accrual, FormatSupplierAccrualCreatedAuditSummary(accrual));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
@@ -1533,10 +1521,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_source_invalid", "Источник начисления поставщику должен быть manual или regular.");
         }
 
-        var accrual = await dbContext.SupplierAccruals
-            .Include(item => item.Supplier)
-            .Include(item => item.ExpenseType)
-            .SingleOrDefaultAsync(item => item.Id == supplierAccrualId, cancellationToken);
+        var accrual = await supplierAccrualRepository.FindForUpdateAsync(supplierAccrualId, cancellationToken);
         if (accrual is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_found", "Начисление поставщику не найдено.");
@@ -1561,15 +1546,7 @@ public sealed class FinanceService(
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
-        if (await dbContext.SupplierAccruals.AnyAsync(item =>
-            !item.IsCanceled &&
-            item.Id != accrual.Id &&
-            item.SupplierId == supplier.Id &&
-            item.ExpenseTypeId == expenseType.Id &&
-            item.AccountingMonth == month &&
-            item.Source == source &&
-            item.DocumentNumber == documentNumber,
-            cancellationToken))
+        if (await supplierAccrualRepository.ActiveDuplicateExistsAsync(accrual.Id, supplier.Id, expenseType.Id, month, source, documentNumber, cancellationToken))
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
         }
@@ -1626,10 +1603,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_cancel_reason_required", "Для отмены начисления поставщику нужна причина.");
         }
 
-        var accrual = await dbContext.SupplierAccruals
-            .Include(item => item.Supplier)
-            .Include(item => item.ExpenseType)
-            .SingleOrDefaultAsync(item => item.Id == supplierAccrualId, cancellationToken);
+        var accrual = await supplierAccrualRepository.FindForUpdateAsync(supplierAccrualId, cancellationToken);
         if (accrual is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_found", "Начисление поставщику не найдено.");
@@ -1649,10 +1623,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<SupplierAccrualDto>> RestoreSupplierAccrualAsync(Guid supplierAccrualId, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var accrual = await dbContext.SupplierAccruals
-            .Include(item => item.Supplier)
-            .Include(item => item.ExpenseType)
-            .SingleOrDefaultAsync(item => item.Id == supplierAccrualId, cancellationToken);
+        var accrual = await supplierAccrualRepository.FindForUpdateAsync(supplierAccrualId, cancellationToken);
         if (accrual is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_found", "Начисление поставщику не найдено.");
@@ -1663,14 +1634,13 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_canceled", "Начисление поставщику уже активно.");
         }
 
-        if (await dbContext.SupplierAccruals.AnyAsync(item =>
-            !item.IsCanceled &&
-            item.Id != accrual.Id &&
-            item.SupplierId == accrual.SupplierId &&
-            item.ExpenseTypeId == accrual.ExpenseTypeId &&
-            item.AccountingMonth == accrual.AccountingMonth &&
-            item.Source == accrual.Source &&
-            item.DocumentNumber == accrual.DocumentNumber,
+        if (await supplierAccrualRepository.ActiveDuplicateExistsAsync(
+            accrual.Id,
+            accrual.SupplierId,
+            accrual.ExpenseTypeId,
+            accrual.AccountingMonth,
+            accrual.Source,
+            accrual.DocumentNumber,
             cancellationToken))
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
@@ -2023,14 +1993,13 @@ public sealed class FinanceService(
         var skipped = new List<string>();
         foreach (var supplier in suppliers)
         {
-            var duplicate = await dbContext.SupplierAccruals.AnyAsync(
-                accrual =>
-                    !accrual.IsCanceled &&
-                    accrual.SupplierId == supplier.Id &&
-                    accrual.ExpenseTypeId == salaryExpenseType.Id &&
-                    accrual.AccountingMonth == month &&
-                    accrual.Source == AccrualSources.Regular &&
-                    accrual.DocumentNumber == documentNumber,
+            var duplicate = await supplierAccrualRepository.ActiveDuplicateExistsAsync(
+                null,
+                supplier.Id,
+                salaryExpenseType.Id,
+                month,
+                AccrualSources.Regular,
+                documentNumber,
                 cancellationToken);
             if (duplicate)
             {
@@ -2050,7 +2019,7 @@ public sealed class FinanceService(
                 DocumentNumber = documentNumber,
                 Comment = BuildSupplierGroupSalaryComment(group.Name, comment)
             };
-            dbContext.SupplierAccruals.Add(accrual);
+            supplierAccrualRepository.Add(accrual);
             created.Add(ToDto(accrual));
         }
 
@@ -3189,9 +3158,7 @@ public sealed class FinanceService(
     {
         var supplierId = operation.SupplierId!.Value;
         var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
-        var accrualTotal = await dbContext.SupplierAccruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= operation.AccountingMonth)
-            .SumAsync(accrual => accrual.Amount, cancellationToken);
+        var accrualTotal = await supplierAccrualRepository.GetTotalThroughMonthAsync(supplierId, operation.AccountingMonth, cancellationToken);
         var previousExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(previous =>
                 !previous.IsCanceled &&
@@ -3216,12 +3183,7 @@ public sealed class FinanceService(
                 previous.SupplierId == supplierId &&
                 previous.OperationDate < operation.OperationDate)
             .SumAsync(previous => previous.Amount, cancellationToken);
-        var accrualBucketRows = await dbContext.SupplierAccruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= operation.AccountingMonth)
-            .GroupBy(accrual => accrual.AccountingMonth)
-            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
-            .OrderBy(bucket => bucket.AccountingMonth)
-            .ToListAsync(cancellationToken);
+        var accrualBucketRows = await supplierAccrualRepository.GetMonthlyBucketsThroughMonthAsync(supplierId, operation.AccountingMonth, cancellationToken);
         var accrualBuckets = accrualBucketRows
             .Select(bucket => new AllocationDebtBucket("month", bucket.AccountingMonth, $"{bucket.AccountingMonth:MM.yyyy}", bucket.Amount))
             .ToList();

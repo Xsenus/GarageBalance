@@ -55,6 +55,58 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         return new SupplierAccrualPageData(items, totalCount);
     }
 
+    public async Task<IReadOnlyList<SupplierAccrual>> GetActiveForMonthAsync(DateOnly accountingMonth, CancellationToken cancellationToken) =>
+        await dbContext.SupplierAccruals.AsNoTracking()
+            .Include(accrual => accrual.Supplier)
+            .Include(accrual => accrual.ExpenseType)
+            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth == accountingMonth)
+            .ToListAsync(cancellationToken);
+
+    public Task<bool> ActiveDuplicateExistsAsync(
+        Guid? ignoredId,
+        Guid supplierId,
+        Guid expenseTypeId,
+        DateOnly accountingMonth,
+        string source,
+        string? documentNumber,
+        CancellationToken cancellationToken) =>
+        dbContext.SupplierAccruals.AsNoTracking().AnyAsync(accrual =>
+            !accrual.IsCanceled &&
+            (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
+            accrual.SupplierId == supplierId &&
+            accrual.ExpenseTypeId == expenseTypeId &&
+            accrual.AccountingMonth == accountingMonth &&
+            accrual.Source == source &&
+            accrual.DocumentNumber == documentNumber,
+            cancellationToken);
+
+    public Task<SupplierAccrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.SupplierAccruals
+            .Include(accrual => accrual.Supplier)
+            .Include(accrual => accrual.ExpenseType)
+            .SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
+
+    public async Task<decimal> GetTotalThroughMonthAsync(Guid supplierId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
+        await dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= accountingMonth)
+            .SumAsync(accrual => accrual.Amount, cancellationToken);
+
+    public async Task<IReadOnlyList<SupplierAccrualBucketData>> GetMonthlyBucketsThroughMonthAsync(
+        Guid supplierId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= accountingMonth)
+            .GroupBy(accrual => accrual.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
+            .OrderBy(bucket => bucket.AccountingMonth)
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => new SupplierAccrualBucketData(row.AccountingMonth, row.Amount)).ToList();
+    }
+
+    public void Add(SupplierAccrual accrual) => dbContext.SupplierAccruals.Add(accrual);
+
     private IQueryable<SupplierAccrual> QueryActive() =>
         dbContext.SupplierAccruals.AsNoTracking()
             .Include(accrual => accrual.Supplier)

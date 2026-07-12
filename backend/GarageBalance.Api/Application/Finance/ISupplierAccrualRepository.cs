@@ -20,6 +20,14 @@ public interface ISupplierAccrualRepository
         int offset,
         int limit,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<SupplierAccrual>> GetActiveForMonthAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid supplierId, Guid expenseTypeId, DateOnly accountingMonth, string source, string? documentNumber, CancellationToken cancellationToken);
+    Task<SupplierAccrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
+    Task<decimal> GetTotalThroughMonthAsync(Guid supplierId, DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SupplierAccrualBucketData>> GetMonthlyBucketsThroughMonthAsync(Guid supplierId, DateOnly accountingMonth, CancellationToken cancellationToken);
+    void Add(SupplierAccrual accrual);
 }
 
 public sealed record SupplierAccrualPageData(IReadOnlyList<SupplierAccrual> Items, int TotalCount);
+public sealed record SupplierAccrualBucketData(DateOnly AccountingMonth, decimal Amount);
