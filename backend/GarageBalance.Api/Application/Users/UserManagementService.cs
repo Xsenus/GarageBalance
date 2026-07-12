@@ -2,13 +2,11 @@ using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Domain.Users;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Users;
 
 public sealed class UserManagementService(
-    GarageBalanceDbContext dbContext,
+    IUserManagementRepository repository,
     IPasswordHasher passwordHasher,
     IPasswordPolicyValidator passwordPolicyValidator,
     IAuditEventWriter auditEventWriter) : IUserManagementService
@@ -21,9 +19,7 @@ public sealed class UserManagementService(
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
-        var roles = await dbContext.Roles.AsNoTracking()
-            .OrderBy(role => role.Name)
-            .ToListAsync(cancellationToken);
+        var roles = await repository.GetRolesAsync(cancellationToken);
 
         return roles.Select(ToDto).ToList();
     }
@@ -32,10 +28,7 @@ public sealed class UserManagementService(
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
-        var users = await BuildUsersQuery(search)
-            .OrderBy(user => user.DisplayName)
-            .Take(NormalizeListLimit(limit))
-            .ToListAsync(cancellationToken);
+        var users = await repository.GetUsersAsync(NormalizeSearch(search), NormalizeListLimit(limit), cancellationToken);
 
         return users.Select(ToDto).ToList();
     }
@@ -46,32 +39,8 @@ public sealed class UserManagementService(
 
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizePageLimit(limit);
-        var query = BuildUsersQuery(search);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var users = await query
-            .OrderBy(user => user.DisplayName)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .ToListAsync(cancellationToken);
-
-        return new ManagedUsersPageDto(users.Select(ToDto).ToList(), totalCount, normalizedOffset, normalizedLimit);
-    }
-
-    private IQueryable<AppUser> BuildUsersQuery(string? search)
-    {
-        IQueryable<AppUser> query = dbContext.Users.AsNoTracking()
-            .Include(user => user.UserRoles)
-            .ThenInclude(userRole => userRole.Role);
-
-        var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(user =>
-                user.NormalizedEmail.Contains(normalizedSearch) ||
-                user.DisplayName.ToLower().Contains(normalizedSearch));
-        }
-
-        return query;
+        var page = await repository.GetUsersPageAsync(NormalizeSearch(search), normalizedOffset, normalizedLimit, cancellationToken);
+        return new ManagedUsersPageDto(page.Users.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     private static int NormalizeListLimit(int? limit)
@@ -99,7 +68,7 @@ public sealed class UserManagementService(
         await EnsureSystemRolesAsync(cancellationToken);
 
         var normalizedEmail = NormalizeEmail(request.Email);
-        if (await dbContext.Users.AnyAsync(user => user.NormalizedEmail == normalizedEmail, cancellationToken))
+        if (await repository.EmailExistsAsync(normalizedEmail, cancellationToken))
         {
             return UserManagementResult<ManagedUserDto>.Failure("user_email_duplicate", "Пользователь с таким email уже существует.");
         }
@@ -134,7 +103,7 @@ public sealed class UserManagementService(
             });
         }
 
-        dbContext.Users.Add(user);
+        repository.AddUser(user);
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "users.user_created",
@@ -151,7 +120,7 @@ public sealed class UserManagementService(
                 ["isActive"] = user.IsActive,
                 ["roles"] = FormatRoleCodes(rolesResult.Value!)
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
     }
@@ -160,10 +129,7 @@ public sealed class UserManagementService(
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
-        var user = await dbContext.Users
-            .Include(item => item.UserRoles)
-            .ThenInclude(userRole => userRole.Role)
-            .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);
+        var user = await repository.FindUserForUpdateAsync(userId, inactiveOnly: false, cancellationToken);
 
         if (user is null)
         {
@@ -262,7 +228,7 @@ public sealed class UserManagementService(
                 ["isActive"] = user.IsActive,
                 ["credentialsChanged"] = passwordChanged
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
     }
@@ -271,10 +237,7 @@ public sealed class UserManagementService(
     {
         await EnsureSystemRolesAsync(cancellationToken);
 
-        var user = await dbContext.Users
-            .Include(item => item.UserRoles)
-            .ThenInclude(userRole => userRole.Role)
-            .SingleOrDefaultAsync(item => item.Id == userId && !item.IsActive, cancellationToken);
+        var user = await repository.FindUserForUpdateAsync(userId, inactiveOnly: true, cancellationToken);
 
         if (user is null)
         {
@@ -309,7 +272,7 @@ public sealed class UserManagementService(
                 ["roles"] = FormatRoleCodes(user.UserRoles.Select(userRole => userRole.Role)),
                 ["isActive"] = user.IsActive
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         return UserManagementResult<ManagedUserDto>.Success(ToDto(user));
     }
@@ -319,7 +282,7 @@ public sealed class UserManagementService(
         await EnsureSystemRolesAsync(cancellationToken);
 
         var normalizedRoleCode = roleCode.Trim();
-        var role = await dbContext.Roles.SingleOrDefaultAsync(item => item.Code == normalizedRoleCode, cancellationToken);
+        var role = await repository.FindRoleForUpdateAsync(normalizedRoleCode, cancellationToken);
         if (role is null)
         {
             return UserManagementResult<ManagedRoleDto>.Failure("role_not_found", "Роль не найдена.");
@@ -368,7 +331,7 @@ public sealed class UserManagementService(
                 ["roleCode"] = role.Code,
                 ["permissions"] = newPermissionsText
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         return UserManagementResult<ManagedRoleDto>.Success(ToDto(role));
     }
@@ -402,9 +365,7 @@ public sealed class UserManagementService(
             return UserManagementResult<IReadOnlyList<AppRole>>.Failure("roles_required", "Нужно выбрать хотя бы одну роль.");
         }
 
-        var roles = await dbContext.Roles
-            .Where(role => normalizedRoleCodes.Contains(role.Code))
-            .ToListAsync(cancellationToken);
+        var roles = await repository.GetRolesByCodesAsync(normalizedRoleCodes, cancellationToken);
 
         if (roles.Count != normalizedRoleCodes.Length)
         {
@@ -416,11 +377,7 @@ public sealed class UserManagementService(
 
     private async Task<bool> IsLastActiveAdministratorAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var activeAdministrators = await dbContext.Users
-            .Where(user => user.IsActive)
-            .Where(user => user.UserRoles.Any(userRole => userRole.Role.Code == SystemRoles.Administrator))
-            .Select(user => user.Id)
-            .ToListAsync(cancellationToken);
+        var activeAdministrators = await repository.GetActiveAdministratorIdsAsync(cancellationToken);
 
         return activeAdministrators.Count == 1 && activeAdministrators[0] == userId;
     }
@@ -431,24 +388,12 @@ public sealed class UserManagementService(
         await EnsureRoleAsync(SystemRoles.Accountant, "Бухгалтер", SystemPermissions.Accountant, cancellationToken);
         await EnsureRoleAsync(SystemRoles.Operator, "Оператор", SystemPermissions.Operator, cancellationToken);
         await EnsureRoleAsync(SystemRoles.ReportsViewer, "Просмотр отчетов", SystemPermissions.ReportsViewer, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureRoleAsync(string code, string name, IReadOnlyList<string> permissions, CancellationToken cancellationToken)
     {
-        var role = await dbContext.Roles.SingleOrDefaultAsync(item => item.Code == code, cancellationToken);
-        if (role is null)
-        {
-            dbContext.Roles.Add(new AppRole
-            {
-                Code = code,
-                Name = name,
-                Permissions = permissions.ToList()
-            });
-            return;
-        }
-
-        role.Name = name;
+        await repository.EnsureRoleAsync(code, name, permissions, cancellationToken);
     }
 
     private static readonly IReadOnlyDictionary<string, string> UserAuditFieldLabels = new Dictionary<string, string>

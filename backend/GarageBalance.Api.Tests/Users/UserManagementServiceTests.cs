@@ -432,7 +432,7 @@ public sealed class UserManagementServiceTests
         for (var index = 0; index < 3; index++)
         {
             var result = await service.CreateUserAsync(
-                new CreateManagedUserRequest($"user{index}@example.com", $"РЎРѕС‚СЂСѓРґРЅРёРє {index}", "StrongPass123", [SystemRoles.Operator]),
+                new CreateManagedUserRequest($"user{index}@example.com", $"Сотрудник {index}", "StrongPass123", [SystemRoles.Operator]),
                 null,
                 CancellationToken.None);
             Assert.True(result.Succeeded);
@@ -449,7 +449,11 @@ public sealed class UserManagementServiceTests
 
     private static UserManagementService CreateService(GarageBalanceDbContext context)
     {
-        return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator(), new AuditEventWriter(context));
+        return new UserManagementService(
+            new EfUserManagementRepository(context),
+            new Pbkdf2PasswordHasher(),
+            new PasswordPolicyValidator(),
+            new AuditEventWriter(context));
     }
 
 }
