@@ -56,6 +56,9 @@ public sealed class EfExpenseTypeRepository(GarageBalanceDbContext dbContext) : 
     public Task<ExpenseType?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
 
+    public Task<ExpenseType?> FindActiveByCodeAsync(string code, CancellationToken cancellationToken) =>
+        dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Code == code && !item.IsArchived, cancellationToken);
+
     public Task<ExpenseType?> FindArchivedAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
 

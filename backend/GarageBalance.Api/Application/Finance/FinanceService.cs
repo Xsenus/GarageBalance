@@ -12,6 +12,7 @@ namespace GarageBalance.Api.Application.Finance;
 public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
     IStaffMemberRepository staffMemberRepository,
+    IExpenseTypeRepository expenseTypeRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -68,7 +69,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -762,7 +763,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
         }
 
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
@@ -824,8 +825,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("staff_member_not_found", "Сотрудник для выплаты не найден.");
         }
 
-        var salaryExpenseType = await dbContext.ExpenseTypes
-            .SingleOrDefaultAsync(item => item.Code == "salary" && !item.IsArchived, cancellationToken);
+        var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
         if (salaryExpenseType is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системный вид выплаты Зарплата не найден.");
@@ -996,7 +996,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
         }
 
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
@@ -1507,7 +1507,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_not_found", "Поставщик для начисления не найден.");
         }
 
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
@@ -1585,7 +1585,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_not_found", "Поставщик для начисления не найден.");
         }
 
-        var expenseType = await dbContext.ExpenseTypes.SingleOrDefaultAsync(item => item.Id == request.ExpenseTypeId && !item.IsArchived, cancellationToken);
+        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
@@ -2057,8 +2057,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("supplier_group_not_found", "Группа персонала не найдена.");
         }
 
-        var salaryExpenseType = await dbContext.ExpenseTypes
-            .SingleOrDefaultAsync(item => item.Code == "salary" && !item.IsArchived, cancellationToken);
+        var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
         if (salaryExpenseType is null)
         {
             return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системный вид выплаты Зарплата не найден.");

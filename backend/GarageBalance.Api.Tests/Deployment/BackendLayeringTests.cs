@@ -1134,7 +1134,20 @@ public sealed class BackendLayeringTests
         Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
         Assert.Contains(": IExpenseTypeRepository", implementation, StringComparison.Ordinal);
         Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("FindActiveByCodeAsync", abstraction, StringComparison.Ordinal);
+        Assert.Contains("FindActiveByCodeAsync", implementation, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IExpenseTypeRepository, EfExpenseTypeRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FinanceExpenseTypeQueries_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        Assert.Contains("IExpenseTypeRepository expenseTypeRepository", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId", service, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.FindActiveByCodeAsync(\"salary\"", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.ExpenseTypes", service, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1205,6 +1218,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);

@@ -1671,6 +1671,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "system-dictionaries-decision-template.md"));
         var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
         var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var expenseTypeRepositoryText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfExpenseTypeRepository.cs"));
         var migrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260623152000_DefaultAccountingTypes.cs"));
         var supplierGroupText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "SupplierGroup.cs"));
         var incomeTypeText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "IncomeType.cs"));
@@ -1726,7 +1727,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Системный вид поступления нельзя архивировать", dictionaryServiceText, StringComparison.Ordinal);
         Assert.Contains("Системный вид выплаты нельзя изменять", dictionaryServiceText, StringComparison.Ordinal);
         Assert.Contains("Системный вид выплаты нельзя архивировать", dictionaryServiceText, StringComparison.Ordinal);
-        Assert.Contains("item.Code == \"salary\"", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("expenseTypeRepository.FindActiveByCodeAsync(\"salary\"", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("item.Code == code && !item.IsArchived", expenseTypeRepositoryText, StringComparison.Ordinal);
         Assert.Contains("\"membership\" or \"target\" or \"entry\" or \"connection\"", dictionaryServiceText, StringComparison.Ordinal);
 
         Assert.Contains("SystemDictionariesRoadmapItemRemainsDecisionUntilClassificationOperationsCodesAndImportRulesAreApproved", historyText, StringComparison.Ordinal);
