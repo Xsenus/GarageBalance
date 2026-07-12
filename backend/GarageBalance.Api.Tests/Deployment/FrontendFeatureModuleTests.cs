@@ -3,6 +3,35 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void AuditPanelRemainsInItsFeatureModuleWithSharedNavigationContracts()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
+        var navigationContractsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "workspaceNavigation.ts"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { AuditPanel } from './features/audit/AuditPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<AuditPanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function AuditPanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("getAuditEventSectionLabel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("const auditSectionOptions", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function AuditPanel(", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("auditClient.getEventsPage", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("auditClient.exportEvents", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("auditClient.exportEventsXlsx", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("getAuditWorkspaceTarget", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("export type WorkspaceSection", navigationContractsText, StringComparison.Ordinal);
+        Assert.Contains("export type ContractorOpenTarget", navigationContractsText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/audit/AuditPanel.tsx", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/shared/workspaceNavigation.ts", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MeterReadingsPanelRemainsInItsFeatureModuleWithSharedEditingHelpers()
     {
         var repositoryRoot = FindRepositoryRoot();

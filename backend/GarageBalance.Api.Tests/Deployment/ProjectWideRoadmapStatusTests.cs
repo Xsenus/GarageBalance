@@ -1222,6 +1222,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
         var meterReadingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "meterReadings", "MeterReadingsPanel.tsx"));
+        var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
         var serviceRulesLine = activeRoadmapLines.Single(line =>
@@ -1262,7 +1263,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("payments-prototype-required-cell", appText, StringComparison.Ordinal);
         Assert.Contains("row.meterRequired && row.meter === null", appText, StringComparison.Ordinal);
         Assert.Contains("meterRequired: row.meterKind !== null && row.meterValue === null", appText, StringComparison.Ordinal);
-        Assert.Contains("meter_reading", appText, StringComparison.Ordinal);
+        Assert.Contains("meter_reading", auditPanelText, StringComparison.Ordinal);
         Assert.Contains("Подтвердить показание?", meterReadingsPanelText, StringComparison.Ordinal);
 
         Assert.Contains("calculationBase: 'meter_water'", appTestsText, StringComparison.Ordinal);
@@ -1976,6 +1977,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var frontendApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "dictionariesApi.ts"));
         var frontendWorkbenchText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "dictionaryWorkbench.ts"));
         var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
 
@@ -2019,8 +2021,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("В этом справочнике пока нет записей", frontendAppText, StringComparison.Ordinal);
         Assert.Contains("Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}", frontendAppText, StringComparison.Ordinal);
         Assert.Contains("label: 'История изменений'", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Раздел истории изменений\"", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Тип объекта истории изменений\"", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Раздел истории изменений\"", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Тип объекта истории изменений\"", auditPanelText, StringComparison.Ordinal);
 
         Assert.Contains("edits supplier groups and accounting operation types from dictionary dialogs", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("announces empty dictionary lists", frontendTestsText, StringComparison.Ordinal);
@@ -2421,6 +2423,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var verificationText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "tariff-react-tests-verification.md"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var validationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "validation.test.ts"));
         var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
@@ -2431,8 +2434,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
         Assert.Contains("централизованной `Истории изменений`", roadmapLine, StringComparison.Ordinal);
         Assert.Contains("TariffReactTestsAreCompleteWhenFormsValidationConfirmationsPermissionsAndCentralAuditExist", roadmapLine, StringComparison.Ordinal);
-        Assert.Contains("auditEvent.entityType === 'tariff'", appText, StringComparison.Ordinal);
-        Assert.Contains("section: 'tariffsAndFees', label: 'Тарифы и сборы'", appText, StringComparison.Ordinal);
+        Assert.Contains("auditEvent.entityType === 'tariff'", auditPanelText, StringComparison.Ordinal);
+        Assert.Contains("section: 'tariffsAndFees', label: 'Тарифы и сборы'", auditPanelText, StringComparison.Ordinal);
 
         foreach (var scenario in new[]
         {
