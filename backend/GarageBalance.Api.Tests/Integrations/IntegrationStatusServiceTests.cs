@@ -112,7 +112,7 @@ public sealed class IntegrationStatusServiceTests
 
     private static IntegrationSecretSettingsService CreateSecretService(GarageBalanceDbContext context)
     {
-        var provider = DataProtectionProvider.Create("GarageBalance.IntegrationStatus.Tests");
+        var provider = new EphemeralDataProtectionProvider();
         var protector = new DataProtectionSensitiveDataProtector(provider);
         return new IntegrationSecretSettingsService(context, protector, new AuditEventWriter(context));
     }

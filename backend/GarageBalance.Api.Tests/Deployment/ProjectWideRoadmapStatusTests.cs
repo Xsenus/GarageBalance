@@ -1196,6 +1196,73 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void GarageOwnerChangeOpenQuestionRemainsDecisionUntilHistoryBalanceAndDataRulesAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "garage-owner-change-decision-template.md"));
+        var balanceChecklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "balance-model-decision-checklist.md"));
+        var historyRoadmapText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openQuestionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Нужно подтвердить историю смены владельца гаража.", StringComparison.Ordinal));
+        var dataDecisionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Уточнить, может ли гараж менять владельца и нужна ли история владения.", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/garage-owner-change-decision-template.md", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("истории владения", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("эффективной даты смены", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("долга/переплаты", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("документа-основания", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("audit", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("карточке/отчетах", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("GarageOwnerChangeOpenQuestionRemainsDecisionUntilHistoryBalanceAndDataRulesAreApproved", openQuestionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Нужно подтвердить историю смены владельца гаража", openQuestionLine, StringComparison.Ordinal);
+
+        Assert.StartsWith("- `[decision]`", dataDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/garage-owner-change-decision-template.md", dataDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("истории владения", dataDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("переноса/разделения долга/переплаты", dataDecisionLine, StringComparison.Ordinal);
+        Assert.Contains("карточке/отчетах", dataDecisionLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Garage Owner Change Decision Template", templateText, StringComparison.Ordinal);
+        Assert.Contains("Эффективная дата смены владельца", templateText, StringComparison.Ordinal);
+        Assert.Contains("Предыдущий владелец", templateText, StringComparison.Ordinal);
+        Assert.Contains("Новый владелец", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Balance Rule", templateText, StringComparison.Ordinal);
+        Assert.Contains("Долг/переплата остается на гараже", templateText, StringComparison.Ordinal);
+        Assert.Contains("Долг/переплата закрывается с предыдущим владельцем", templateText, StringComparison.Ordinal);
+        Assert.Contains("Долг/переплата переносится на нового владельца", templateText, StringComparison.Ordinal);
+        Assert.Contains("ручным settlement", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Historical Data", templateText, StringComparison.Ordinal);
+        Assert.Contains("владельца на дату операции", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Workflow Permissions And Audit", templateText, StringComparison.Ordinal);
+        Assert.Contains("effective date", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Safe Data Rules", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Close Conditions", templateText, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", templateText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", templateText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("Как закрывать переплату при смене владельца гаража", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("project-wide-history-and-safety-roadmap.md", templateText, StringComparison.Ordinal);
+        Assert.Contains("Владельцы: создание", historyRoadmapText, StringComparison.Ordinal);
+        Assert.Contains("Гаражи: создание", historyRoadmapText, StringComparison.Ordinal);
+        Assert.Contains("историю изменений", historyRoadmapText, StringComparison.Ordinal);
+
+        Assert.Contains("GarageOwnerChangeOpenQuestionRemainsDecisionUntilHistoryBalanceAndDataRulesAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может сам решить, разрешена ли смена владельца", historyText, StringComparison.Ordinal);
+        Assert.Contains("получить безопасно записанный decision record", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageOwnerChangeOpenQuestionRemainsDecisionUntilHistoryBalanceAndDataRulesAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();

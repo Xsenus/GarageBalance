@@ -49,7 +49,7 @@ public sealed class SensitiveDataProtectorTests
 
     private static DataProtectionSensitiveDataProtector CreateProtector()
     {
-        var provider = DataProtectionProvider.Create("GarageBalance.Tests");
+        var provider = new EphemeralDataProtectionProvider();
         return new DataProtectionSensitiveDataProtector(provider);
     }
 }
