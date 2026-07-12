@@ -1,5 +1,6 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -14,7 +15,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateOwnerAsync_TrimsFieldsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateOwnerAsync(
@@ -32,7 +33,7 @@ public sealed class DictionaryServiceTests
     public async Task OwnerAudit_UsesWriterStructuredFieldsAndArchiveReason()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var created = await service.CreateOwnerAsync(
@@ -64,7 +65,7 @@ public sealed class DictionaryServiceTests
     public async Task GetOwnersAsync_SearchesByNameAndPhone()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         await service.CreateOwnerAsync(new UpsertOwnerRequest("Петров", "Петр", null, "+7 111", null, null), null, CancellationToken.None);
         await service.CreateOwnerAsync(new UpsertOwnerRequest("Сидоров", "Сергей", null, "+7 222", null, null), null, CancellationToken.None);
 
@@ -78,7 +79,7 @@ public sealed class DictionaryServiceTests
     public async Task ListMethods_ApplyExplicitLimit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var groupResults = new List<DictionaryResult<SupplierGroupDto>>();
         for (var index = 0; index < 3; index++)
@@ -110,7 +111,7 @@ public sealed class DictionaryServiceTests
     public async Task ListMethods_SearchSupplierGroupsAndAccountingTypes()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         Assert.True((await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Бухгалтерия"), null, CancellationToken.None)).Succeeded);
@@ -133,7 +134,7 @@ public sealed class DictionaryServiceTests
     public async Task ArchiveOwnerAsync_HidesOwnerFromListAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
 
@@ -150,7 +151,7 @@ public sealed class DictionaryServiceTests
     public async Task ArchiveOwnerAsync_RejectsEmptyReason()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
 
         var result = await service.ArchiveOwnerAsync(ownerResult.Value!.Id, "   ", null, CancellationToken.None);
@@ -165,7 +166,7 @@ public sealed class DictionaryServiceTests
     public async Task ListMethods_ReturnArchivedRecordsOnlyWhenRequested()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Архивов", "Олег", null, null, null, null), null, CancellationToken.None);
         var garage = await service.CreateGarageAsync(new UpsertGarageRequest("ARCH-1", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
@@ -205,7 +206,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreOwnerAsync_ReturnsOwnerToListAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
         await service.ArchiveOwnerAsync(ownerResult.Value!.Id, "Тестовая причина", null, CancellationToken.None);
@@ -223,7 +224,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreMethods_RejectAlreadyActiveRecordsAndDoNotWriteDuplicateAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         const string archiveReason = "Duplicate restore guard";
 
@@ -289,7 +290,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", "Иванович", "+7 900", "Адрес", "Счетчик"), null, CancellationToken.None);
@@ -317,7 +318,7 @@ public sealed class DictionaryServiceTests
     public async Task CurrentExtendedUpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
@@ -370,7 +371,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateOwnerAsync_WritesOldAndNewValuesToAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
@@ -396,7 +397,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateOwnerAsync_ReturnsNotFoundForMissingOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.UpdateOwnerAsync(
             Guid.NewGuid(),
@@ -412,7 +413,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateGarageAsync_RejectsMissingOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateGarageAsync(
             new UpsertGarageRequest("A-1", 1, 1, Guid.NewGuid(), 0, 10, 20, null),
@@ -427,7 +428,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateGarageAsync_RejectsDuplicateNumber()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
         var result = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, null, 0, null, null, null), null, CancellationToken.None);
@@ -440,7 +441,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreGarageAsync_RejectsDuplicateActiveNumber()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
         await service.ArchiveGarageAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
@@ -455,7 +456,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateGarageAsync_AllowsNumberFromArchivedGarage()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archivedGarage = await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, "old import row"), null, CancellationToken.None);
         await service.ArchiveGarageAsync(archivedGarage.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
@@ -472,7 +473,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateGarageAsync_RejectsNumberOfAnotherActiveGarage()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
         var second = await service.CreateGarageAsync(new UpsertGarageRequest("21", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
@@ -486,7 +487,7 @@ public sealed class DictionaryServiceTests
     public async Task Dictionaries_RoundMoneyAndTariffRateBeforeSaving()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var supplierGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
 
         var garage = await service.CreateGarageAsync(new UpsertGarageRequest("17", 1, 1, null, 10.005m, 1.2345m, 9.8765m, null), null, CancellationToken.None);
@@ -507,7 +508,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateGarageAsync_ChangesOwnerAndKeepsDtoOwnerName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Кузнецов", "Олег", null, null, null, null), null, CancellationToken.None);
         var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
@@ -528,7 +529,7 @@ public sealed class DictionaryServiceTests
     public async Task ArchiveGarageAsync_HidesGarageFromList()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
 
         var result = await service.ArchiveGarageAsync(garageResult.Value!.Id, "Тестовая причина", null, CancellationToken.None);
@@ -543,7 +544,7 @@ public sealed class DictionaryServiceTests
     public async Task GetGaragesAsync_SearchesByNumberAndOwnerName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var firstOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
         var secondOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Петров", "Петр", null, null, null, null), null, CancellationToken.None);
         await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, firstOwner.Value!.Id, 0, null, null, null), null, CancellationToken.None);
@@ -583,7 +584,7 @@ public sealed class DictionaryServiceTests
     public async Task GetGaragesAsync_ReturnsCalculatedBalanceAndOverdueDebt()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Electricity", "electricity"), null, CancellationToken.None);
         var debtGarage = await service.CreateGarageAsync(new UpsertGarageRequest("BAL-1", 1, 1, null, 100m, null, null, null), null, CancellationToken.None);
         var overpaidGarage = await service.CreateGarageAsync(new UpsertGarageRequest("BAL-2", 1, 1, null, 0m, null, null, null), null, CancellationToken.None);
@@ -659,7 +660,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var owner = await service.CreateOwnerAsync(
             new UpsertOwnerRequest("Семенов", "Андрей", "Петрович", "+7 900 100", null, null),
             null,
@@ -689,7 +690,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateSupplierGroupAsync_RejectsDuplicateName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
 
         var result = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
@@ -702,7 +703,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateSupplierGroupAsync_AllowsNameFromArchivedGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         await service.ArchiveSupplierGroupAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
@@ -717,7 +718,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateSupplierAsync_RejectsMissingGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateSupplierAsync(
             new UpsertSupplierRequest("Водоканал", Guid.NewGuid(), "5400000000", null, null, null, null, 0, null),
@@ -732,7 +733,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateSupplierAsync_RejectsDuplicateNameInActiveGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
         await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
 
@@ -746,7 +747,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateSupplierAsync_AllowsDuplicateNameInDifferentGroupAndArchivedSupplier()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var utilityGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
         var bankGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Banks"), null, CancellationToken.None);
         var archived = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", utilityGroup.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
@@ -764,7 +765,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateSupplierAsync_RejectsDuplicateNameInActiveGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
         await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Electricity", group.Value.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
@@ -783,7 +784,7 @@ public sealed class DictionaryServiceTests
     public async Task SupplierContactAsync_SavesContactAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(
@@ -816,7 +817,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreSupplierContactAsync_RestoresSupplierAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(
@@ -843,7 +844,7 @@ public sealed class DictionaryServiceTests
     public async Task StaffDepartmentAndMemberAsync_WriteAuditAndBlockUsedDepartmentArchive()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Бухгалтерия"), actorUserId, CancellationToken.None);
@@ -870,7 +871,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreStaffMemberAsync_RestoresOnlyWhenDepartmentIsActiveAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Accounting"), actorUserId, CancellationToken.None);
@@ -918,7 +919,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreSupplierGroupAsync_RejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         await service.ArchiveSupplierGroupAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
@@ -933,7 +934,7 @@ public sealed class DictionaryServiceTests
     public async Task GetSuppliersAsync_FiltersByGroupAndSearch()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var utilityGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var bankGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Банки"), null, CancellationToken.None);
         await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", utilityGroup.Value!.Id, "5401", null, "Мария", null, null, 100, null), null, CancellationToken.None);
@@ -950,7 +951,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreSupplierAsync_RejectsArchivedSupplierGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
         await service.ArchiveSupplierAsync(supplier.Value!.Id, "Тестовая причина", null, CancellationToken.None);
@@ -966,7 +967,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreSupplierAsync_RejectsDuplicateActiveNameInGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
         var archived = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
         await service.ArchiveSupplierAsync(archived.Value!.Id, "Archived supplier duplicate restore check", null, CancellationToken.None);
@@ -982,7 +983,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreSupplierContactAsync_RejectsDuplicateSupplierRestore()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Utilities"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Water", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
         var contact = await service.CreateSupplierContactAsync(
@@ -1003,7 +1004,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateIncomeTypeAsync_RejectsDuplicateName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership"), null, CancellationToken.None);
 
         var result = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership2"), null, CancellationToken.None);
@@ -1016,7 +1017,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateIncomeTypeAsync_AllowsNameFromArchivedType()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_old"), null, CancellationToken.None);
         await service.ArchiveIncomeTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
@@ -1032,7 +1033,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreIncomeTypeAsync_RejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_old"), null, CancellationToken.None);
         await service.ArchiveIncomeTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Целевой взнос", "target_new"), null, CancellationToken.None);
@@ -1055,7 +1056,7 @@ public sealed class DictionaryServiceTests
         };
         database.Context.IncomeTypes.Add(systemType);
         await database.Context.SaveChangesAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.ArchiveIncomeTypeAsync(systemType.Id, "Тестовая причина", null, CancellationToken.None);
 
@@ -1111,7 +1112,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateExpenseTypeAsync_WritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), actorUserId, CancellationToken.None);
@@ -1125,7 +1126,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateExpenseTypeAsync_AllowsNameFromArchivedType()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_old"), null, CancellationToken.None);
         await service.ArchiveExpenseTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
 
@@ -1141,7 +1142,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreExpenseTypeAsync_RejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var archived = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_old"), null, CancellationToken.None);
         await service.ArchiveExpenseTypeAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
         await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вывоз мусора", "trash_new"), null, CancellationToken.None);
@@ -1156,7 +1157,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_RejectsDuplicateNameAndDate()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var effectiveFrom = new DateOnly(2026, 7, 1);
         await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50.25m, effectiveFrom, null), null, CancellationToken.None);
 
@@ -1170,7 +1171,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_AllowsSameNameWithDifferentEffectiveDateAsNewVersion()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var first = await service.CreateTariffAsync(
             new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 7, 1), "Первая версия"),
             Guid.NewGuid(),
@@ -1198,7 +1199,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_AllowsNameAndDateFromArchivedTariff()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var effectiveFrom = new DateOnly(2026, 7, 1);
         var archived = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50m, effectiveFrom, null), null, CancellationToken.None);
         await service.ArchiveTariffAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
@@ -1215,7 +1216,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_RejectsUnsupportedCalculationBase()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateTariffAsync(
             new UpsertTariffRequest("Непонятный тариф", "unknown_base", 50m, new DateOnly(2026, 7, 1), null),
@@ -1232,7 +1233,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_WritesAuditWithBaseAndRate()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateTariffAsync(
@@ -1252,7 +1253,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_SavesElectricityTiersAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateTariffAsync(
@@ -1287,7 +1288,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateTariffAsync_RejectsIncompleteElectricityTiers()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateTariffAsync(
             new UpsertTariffRequest(
@@ -1310,7 +1311,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateTariffAsync_UpdatesTariffAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
 
@@ -1345,7 +1346,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateTariffAsync_ClearsElectricityTiersWhenBaseChanges()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateTariffAsync(
             new UpsertTariffRequest(
                 "Электроэнергия",
@@ -1379,7 +1380,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateTariffAsync_RejectsUnsupportedCalculationBaseAndKeepsExistingValue()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
         await database.Context.SaveChangesAsync();
@@ -1403,7 +1404,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateChargeServiceSettingAsync_SavesServiceSettingsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateChargeServiceSettingAsync(
@@ -1437,7 +1438,7 @@ public sealed class DictionaryServiceTests
         database.Context.IncomeTypes.Add(incomeType);
         database.Context.Tariffs.AddRange(tariff, waterTariff);
         await database.Context.SaveChangesAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Членский взнос", true, 12, 1, 30, 6, 30, false, false, "руб.", incomeType.Id, tariff.Id),
@@ -1459,7 +1460,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateChargeServiceSettingAsync_WritesChangedFieldsAndSkipsNoOp()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м3"),
             null,
@@ -1500,7 +1501,7 @@ public sealed class DictionaryServiceTests
     public async Task CreateChargeServiceSettingAsync_RejectsInvalidFebruaryDayAndTieredWithoutMeter()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var februaryResult = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Членский взнос", true, 1, 1, 29, 2, 30, false, false, "руб."),
@@ -1523,7 +1524,7 @@ public sealed class DictionaryServiceTests
     public async Task ArchiveChargeServiceSettingAsync_HidesSettingRequiresReasonAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Electricity", true, 1, 1, 30, 6, 30, true, true, "kWh"),
@@ -1554,7 +1555,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreChargeServiceSettingAsync_RestoresArchivedSettingAndRejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var archived = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Electricity", true, 1, 1, 30, 6, 30, true, true, "kWh"),
@@ -1587,7 +1588,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
         var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1625,7 +1626,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateTariffAsync_AllowsEffectiveDateOnExistingRegularAccrualMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
         var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1657,7 +1658,7 @@ public sealed class DictionaryServiceTests
     public async Task ArchiveTariffAsync_WritesAuditWithBaseAndRate()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100.5m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
 
@@ -1675,7 +1676,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreTariffAsync_ReturnsTariffToListAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100.5m, new DateOnly(2026, 7, 1), null), null, CancellationToken.None);
         await service.ArchiveTariffAsync(created.Value!.Id, "Тестовая причина", null, CancellationToken.None);
@@ -1693,7 +1694,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreTariffAsync_RejectsDuplicateActiveNameAndEffectiveDate()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var effectiveFrom = new DateOnly(2026, 7, 1);
         var archived = await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100m, effectiveFrom, null), null, CancellationToken.None);
         await service.ArchiveTariffAsync(archived.Value!.Id, "Тестовая причина", null, CancellationToken.None);
@@ -1709,7 +1710,7 @@ public sealed class DictionaryServiceTests
     public async Task UpdateTariffAsync_RejectsDuplicateNameAndDateOnAnotherTariff()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var effectiveFrom = new DateOnly(2026, 7, 1);
         var first = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50m, effectiveFrom, null), null, CancellationToken.None);
         await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100m, effectiveFrom, null), null, CancellationToken.None);
@@ -1724,7 +1725,7 @@ public sealed class DictionaryServiceTests
     public async Task GetTariffsAsync_SearchesAndOrdersByEffectiveDate()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 100m, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
         await service.CreateTariffAsync(new UpsertTariffRequest("Мусор", "people", 120m, new DateOnly(2026, 2, 1), null), null, CancellationToken.None);
         await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 50m, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
@@ -1740,7 +1741,7 @@ public sealed class DictionaryServiceTests
     public async Task IrregularPaymentAsync_SavesStatusAndBlocksArchiveWhenUsed()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Вступительный взнос", 1500m), actorUserId, CancellationToken.None);
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Вступительный взнос", "entry"), null, CancellationToken.None);
@@ -1773,7 +1774,7 @@ public sealed class DictionaryServiceTests
     public async Task IrregularPaymentAsync_IgnoresCanceledUsageAndBlocksActiveIncomeOperation()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var canceledPayment = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Отмененный сбор", 100m), null, CancellationToken.None);
         var activePayment = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Оплаченный сбор", 200m), null, CancellationToken.None);
         var canceledIncomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Отмененный сбор", "canceled_fee"), null, CancellationToken.None);
@@ -1825,7 +1826,7 @@ public sealed class DictionaryServiceTests
     public async Task ArchiveIrregularPaymentAsync_HidesUnusedPaymentAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Штраф за пропуск", 300m), null, CancellationToken.None);
 
@@ -1850,7 +1851,7 @@ public sealed class DictionaryServiceTests
     public async Task RestoreIrregularPaymentAsync_RestoresUnusedPaymentAndRejectsDuplicateActiveName()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var archived = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Gate repair", 500m), null, CancellationToken.None);
         await service.ArchiveIrregularPaymentAsync(archived.Value!.Id, "Finished", actorUserId, CancellationToken.None);
@@ -1877,7 +1878,7 @@ public sealed class DictionaryServiceTests
     public async Task FeeCampaignAsync_CreatesUpdatesArchivesAndRestoresWithAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
         Assert.True(incomeType.Succeeded);
@@ -1932,7 +1933,7 @@ public sealed class DictionaryServiceTests
     public async Task FeeCampaignAsync_RejectsInvalidInputAndDuplicateRestore()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
         Assert.True(incomeType.Succeeded);
@@ -1981,7 +1982,7 @@ public sealed class DictionaryServiceTests
     public async Task FeeCampaignAsync_SavesSelectedParticipantGaragesAndWritesDiff()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new DictionaryService(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
         var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };

@@ -878,10 +878,16 @@ public sealed class BackendLayeringTests
             "Application",
             "Dictionaries",
             "DictionaryService.cs"));
+        var testFactory = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Common",
+            "DictionaryServiceTestFactory.cs"));
 
         Assert.Contains("IApplicationUnitOfWork unitOfWork", service, StringComparison.Ordinal);
         Assert.Contains("await unitOfWork.SaveChangesAsync(cancellationToken)", service, StringComparison.Ordinal);
-        Assert.Contains("new EfApplicationUnitOfWork(dbContext)", service, StringComparison.Ordinal);
+        Assert.Contains("new EfApplicationUnitOfWork(dbContext)", testFactory, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.SaveChangesAsync", service, StringComparison.Ordinal);
     }
 
@@ -1472,15 +1478,17 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
-    public void DictionaryService_HasNoDirectDbContextQueriesAndKeepsContextConstructorTestOnly()
+    public void DictionaryService_HasNoInfrastructureDependencyAndUsesTestFactoryForSqliteWiring()
     {
         var repositoryRoot = FindRepositoryRoot();
         var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
-        var assemblyInfo = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Properties", "AssemblyInfo.cs"));
+        var testFactory = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "DictionaryServiceTestFactory.cs"));
         Assert.DoesNotContain("dbContext.", service, StringComparison.Ordinal);
-        Assert.Contains("internal DictionaryService(GarageBalanceDbContext dbContext)", service, StringComparison.Ordinal);
-        Assert.DoesNotContain("public DictionaryService(GarageBalanceDbContext dbContext)", service, StringComparison.Ordinal);
-        Assert.Contains("InternalsVisibleTo(\"GarageBalance.Api.Tests\")", assemblyInfo, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalanceDbContext", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure.Data", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", service, StringComparison.Ordinal);
+        Assert.Contains("class DictionaryServiceTestFactory", testFactory, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", testFactory, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1566,7 +1574,7 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
-    public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
+    public void BackendLayering_IsCompleteWhenApplicationHasNoInfrastructureOrEfDependencies()
     {
         var repositoryRoot = FindRepositoryRoot();
         var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
@@ -1575,9 +1583,9 @@ public sealed class BackendLayeringTests
             .ToArray();
         var history = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var layeringLine = activeRoadmapLines.Single(line =>
-            line.Contains("Backend разделить на слои", StringComparison.Ordinal));
+            line.Contains("Backend разделен на слои", StringComparison.Ordinal));
 
-        Assert.StartsWith("- `[~]`", layeringLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFormStateRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFormStateRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IApplicationUnitOfWork", layeringLine, StringComparison.Ordinal);
@@ -1624,6 +1632,12 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfFeeCampaignRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IFinancialOperationRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfFinancialOperationRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IAccrualRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfAccrualRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("ISupplierAccrualRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfSupplierAccrualRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfAuditEventRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IImportRepository", layeringLine, StringComparison.Ordinal);
@@ -1686,7 +1700,15 @@ public sealed class BackendLayeringTests
         Assert.Contains("выполнен третий срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен следующий срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("Общий layering-пункт остается `[~]`", history, StringComparison.Ordinal);
+        var applicationRoot = Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application");
+        foreach (var applicationFile in Directory.GetFiles(applicationRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            var applicationSource = File.ReadAllText(applicationFile);
+            Assert.DoesNotContain("GarageBalance.Api.Infrastructure", applicationSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("GarageBalanceDbContext", applicationSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("Microsoft.EntityFrameworkCore", applicationSource, StringComparison.Ordinal);
+        }
+        Assert.Contains("общий backend-layering пункт закрыт", history, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", history, StringComparison.Ordinal);
     }
 

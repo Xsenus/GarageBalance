@@ -2202,7 +2202,7 @@ public sealed class FinanceServiceTests
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
-        var dictionaries = new DictionaryService(database.Context);
+        var dictionaries = DictionaryServiceTestFactory.Create(database.Context);
 
         await finance.GenerateRegularAccrualsAsync(
             new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),

@@ -3,8 +3,6 @@ using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Dictionaries;
 
@@ -83,11 +81,6 @@ public sealed class DictionaryService(
         ["appliesToAllGarages"] = "Участники",
         ["isActive"] = "Статус"
     };
-
-    internal DictionaryService(GarageBalanceDbContext dbContext)
-        : this(new EfOwnerRepository(dbContext), new EfGarageRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
-    {
-    }
 
     public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
