@@ -5,8 +5,7 @@ using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Security;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
+using TestDatabase = GarageBalance.Api.Tests.Common.SqliteTestDatabase;
 
 namespace GarageBalance.Api.Tests.Users;
 
@@ -453,34 +452,4 @@ public sealed class UserManagementServiceTests
         return new UserManagementService(context, new Pbkdf2PasswordHasher(), new PasswordPolicyValidator(), new AuditEventWriter(context));
     }
 
-    private sealed class TestDatabase : IAsyncDisposable
-    {
-        private readonly SqliteConnection connection;
-
-        private TestDatabase(SqliteConnection connection, GarageBalanceDbContext context)
-        {
-            this.connection = connection;
-            Context = context;
-        }
-
-        public GarageBalanceDbContext Context { get; }
-
-        public static async Task<TestDatabase> CreateAsync()
-        {
-            var connection = new SqliteConnection("DataSource=:memory:");
-            await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
-            var context = new GarageBalanceDbContext(options);
-            await context.Database.EnsureCreatedAsync();
-            return new TestDatabase(connection, context);
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Context.DisposeAsync();
-            await connection.DisposeAsync();
-        }
-    }
 }

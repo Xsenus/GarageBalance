@@ -2,8 +2,8 @@ using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using TestDatabase = GarageBalance.Api.Tests.Common.SqliteTestDatabase;
 
 namespace GarageBalance.Api.Tests.Import;
 
@@ -123,34 +123,4 @@ public sealed class ImportFingerprintServiceTests
         return new ImportFingerprintService(context, new AuditEventWriter(context));
     }
 
-    private sealed class TestDatabase : IAsyncDisposable
-    {
-        private readonly SqliteConnection connection;
-
-        private TestDatabase(SqliteConnection connection, GarageBalanceDbContext context)
-        {
-            this.connection = connection;
-            Context = context;
-        }
-
-        public GarageBalanceDbContext Context { get; }
-
-        public static async Task<TestDatabase> CreateAsync()
-        {
-            var connection = new SqliteConnection("DataSource=:memory:");
-            await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
-            var context = new GarageBalanceDbContext(options);
-            await context.Database.EnsureCreatedAsync();
-            return new TestDatabase(connection, context);
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Context.DisposeAsync();
-            await connection.DisposeAsync();
-        }
-    }
 }

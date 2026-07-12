@@ -1326,6 +1326,65 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void SharedTestBuildersAndFixturesAreCompleteWhenCommonDatabaseBuilderTestsAndAdoptionExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var databaseFixtureText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "SqliteTestDatabase.cs"));
+        var entityBuilderText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "AccountingTestDataBuilder.cs"));
+        var infrastructureTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "TestInfrastructureTests.cs"));
+        var userTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Users", "UserManagementServiceTests.cs"));
+        var fingerprintTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportFingerprintServiceTests.cs"));
+        var formStateTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Workflows", "FormStateServiceTests.cs"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить shared test builders/fixtures после появления первых сущностей.", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("SqliteTestDatabase", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("AccountingTestDataBuilder", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("users/import/workflows", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("SharedTestBuildersAndFixturesAreCompleteWhenCommonDatabaseBuilderTestsAndAdoptionExist", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed class SqliteTestDatabase", databaseFixtureText, StringComparison.Ordinal);
+        Assert.Contains("CreateAsync(CancellationToken cancellationToken = default)", databaseFixtureText, StringComparison.Ordinal);
+        Assert.Contains("EnsureCreatedAsync(cancellationToken)", databaseFixtureText, StringComparison.Ordinal);
+        Assert.Contains("IAsyncDisposable, IDisposable", databaseFixtureText, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.Exchange", databaseFixtureText, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed class AccountingTestDataBuilder", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("BuildOwner", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("BuildGarage", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("BuildSupplierGroup", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("BuildSupplier", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("BuildIncomeType", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("BuildExpenseType", entityBuilderText, StringComparison.Ordinal);
+        Assert.Contains("DefaultTimestamp", entityBuilderText, StringComparison.Ordinal);
+
+        Assert.Contains("SqliteTestDatabase_CreatesSchemaAndPersistsBuiltEntities", infrastructureTestsText, StringComparison.Ordinal);
+        Assert.Contains("AccountingTestDataBuilder_UsesUniqueDefaultsAndRespectsOverrides", infrastructureTestsText, StringComparison.Ordinal);
+        Assert.Contains("SqliteTestDatabase_CreateSupportsSynchronousTests", infrastructureTestsText, StringComparison.Ordinal);
+
+        const string sharedAlias = "using TestDatabase = GarageBalance.Api.Tests.Common.SqliteTestDatabase;";
+        Assert.Contains(sharedAlias, userTestsText, StringComparison.Ordinal);
+        Assert.Contains(sharedAlias, fingerprintTestsText, StringComparison.Ordinal);
+        Assert.Contains(sharedAlias, formStateTestsText, StringComparison.Ordinal);
+        Assert.DoesNotContain("private sealed class TestDatabase", userTestsText, StringComparison.Ordinal);
+        Assert.DoesNotContain("private sealed class TestDatabase", fingerprintTestsText, StringComparison.Ordinal);
+        Assert.DoesNotContain("private sealed class TestDatabase", formStateTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("SharedTestBuildersAndFixturesAreCompleteWhenCommonDatabaseBuilderTestsAndAdoptionExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("профильный test-infrastructure срез", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("SharedTestBuildersAndFixturesAreCompleteWhenCommonDatabaseBuilderTestsAndAdoptionExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
