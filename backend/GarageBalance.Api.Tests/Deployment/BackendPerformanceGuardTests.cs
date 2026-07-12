@@ -71,6 +71,14 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void StaffDepartmentRepository_UsesDatabaseLimitBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfStaffDepartmentRepository.cs");
+        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");

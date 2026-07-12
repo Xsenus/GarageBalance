@@ -1013,6 +1013,34 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void StaffDepartmentDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        Assert.Contains("IStaffDepartmentRepository staffDepartmentRepository", service, StringComparison.Ordinal);
+        Assert.Contains("staffDepartmentRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffDepartmentRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffDepartmentRepository.HasActiveMembersAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffDepartmentRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffDepartmentRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.StaffDepartments", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StaffDepartmentRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "IStaffDepartmentRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfStaffDepartmentRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        Assert.Contains("interface IStaffDepartmentRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IStaffDepartmentRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IStaffDepartmentRepository, EfStaffDepartmentRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1051,6 +1079,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfSupplierRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("ISupplierContactRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfSupplierContactRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -1072,6 +1102,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен двадцать седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);

@@ -14,6 +14,7 @@ public sealed class DictionaryService(
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     ISupplierContactRepository supplierContactRepository,
+    IStaffDepartmentRepository staffDepartmentRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -77,7 +78,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -882,24 +883,20 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<StaffDepartmentDto>> GetStaffDepartmentsAsync(CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        return await dbContext.StaffDepartments.AsNoTracking()
-            .Where(department => includeArchived || !department.IsArchived)
-            .OrderBy(department => department.Name)
-            .Take(NormalizeListLimit(limit))
-            .Select(department => new StaffDepartmentDto(department.Id, department.Name, department.IsArchived))
-            .ToListAsync(cancellationToken);
+        var departments = await staffDepartmentRepository.GetListAsync(includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return departments.Select(ToStaffDepartmentDto).ToList();
     }
 
     public async Task<DictionaryResult<StaffDepartmentDto>> CreateStaffDepartmentAsync(UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.StaffDepartments.AnyAsync(department => !department.IsArchived && department.Name == name, cancellationToken))
+        if (await staffDepartmentRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_duplicate", "Отдел с таким названием уже существует.");
         }
 
         var department = new StaffDepartment { Name = name };
-        dbContext.StaffDepartments.Add(department);
+        staffDepartmentRepository.Add(department);
         AddAudit(actorUserId, "dictionary.staff_department_created", "staff_department", department.Id, $"Создан отдел {department.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
@@ -907,14 +904,14 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<StaffDepartmentDto>> UpdateStaffDepartmentAsync(Guid id, UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var department = await staffDepartmentRepository.FindActiveAsync(id, cancellationToken);
         if (department is null)
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Отдел не найден.");
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.StaffDepartments.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        if (await staffDepartmentRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_duplicate", "Отдел с таким названием уже существует.");
         }
@@ -941,13 +938,13 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var department = await staffDepartmentRepository.FindActiveAsync(id, cancellationToken);
         if (department is null)
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Отдел не найден.");
         }
 
-        if (await dbContext.StaffMembers.AnyAsync(member => member.DepartmentId == id && !member.IsArchived, cancellationToken))
+        if (await staffDepartmentRepository.HasActiveMembersAsync(id, cancellationToken))
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_used", "В отделе есть активные сотрудники.");
         }
@@ -961,13 +958,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<StaffDepartmentDto>> RestoreStaffDepartmentAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var department = await staffDepartmentRepository.FindArchivedAsync(id, cancellationToken);
         if (department is null)
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_not_found", "Отдел не найден в архиве.");
         }
 
-        if (await dbContext.StaffDepartments.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == department.Name, cancellationToken))
+        if (await staffDepartmentRepository.ActiveDuplicateExistsAsync(id, department.Name, cancellationToken))
         {
             return DictionaryResult<StaffDepartmentDto>.Failure("staff_department_duplicate", "Активный отдел с таким названием уже существует.");
         }
@@ -1005,7 +1002,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<StaffMemberDto>> CreateStaffMemberAsync(UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == request.DepartmentId && !item.IsArchived, cancellationToken);
+        var department = await staffDepartmentRepository.FindActiveAsync(request.DepartmentId, cancellationToken);
         if (department is null)
         {
             return DictionaryResult<StaffMemberDto>.Failure("staff_department_not_found", "Отдел не найден.");
@@ -1033,7 +1030,7 @@ public sealed class DictionaryService(
             return DictionaryResult<StaffMemberDto>.Failure("staff_member_not_found", "Сотрудник не найден.");
         }
 
-        var department = await dbContext.StaffDepartments.SingleOrDefaultAsync(item => item.Id == request.DepartmentId && !item.IsArchived, cancellationToken);
+        var department = await staffDepartmentRepository.FindActiveAsync(request.DepartmentId, cancellationToken);
         if (department is null)
         {
             return DictionaryResult<StaffMemberDto>.Failure("staff_department_not_found", "Отдел не найден.");
@@ -2735,6 +2732,9 @@ public sealed class DictionaryService(
 
     private static SupplierGroupDto ToSupplierGroupDto(SupplierGroup group) =>
         new(group.Id, group.Name, group.IsSystem, group.IsArchived);
+
+    private static StaffDepartmentDto ToStaffDepartmentDto(StaffDepartment department) =>
+        new(department.Id, department.Name, department.IsArchived);
 
     private static GarageDto ToGarageDto(Garage garage, decimal? balance = null, decimal? overdueDebt = null)
     {
