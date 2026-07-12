@@ -5,8 +5,6 @@ using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Finance;
 
@@ -80,11 +78,6 @@ public sealed class FinanceService(
         ["consumption"] = "Расход",
         ["hasGapWarning"] = "Разрыв истории"
     };
-
-    public FinanceService(GarageBalanceDbContext dbContext)
-        : this(new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfFinancialOperationRepository(dbContext), new EfAccrualRepository(dbContext), new EfSupplierAccrualRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
-    {
-    }
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {

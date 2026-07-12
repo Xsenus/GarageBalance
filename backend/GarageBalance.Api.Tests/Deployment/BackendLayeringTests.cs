@@ -896,10 +896,16 @@ public sealed class BackendLayeringTests
             "Application",
             "Finance",
             "FinanceService.cs"));
+        var testFactory = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api.Tests",
+            "Common",
+            "FinanceServiceTestFactory.cs"));
 
         Assert.Contains("IApplicationUnitOfWork unitOfWork", service, StringComparison.Ordinal);
         Assert.Contains("await unitOfWork.SaveChangesAsync(cancellationToken)", service, StringComparison.Ordinal);
-        Assert.Contains("new EfApplicationUnitOfWork(dbContext)", service, StringComparison.Ordinal);
+        Assert.Contains("new EfApplicationUnitOfWork(dbContext)", testFactory, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.SaveChangesAsync", service, StringComparison.Ordinal);
     }
 
@@ -1040,6 +1046,7 @@ public sealed class BackendLayeringTests
         var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfFinancialOperationRepository.cs"));
         var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
         var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var testFactory = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "FinanceServiceTestFactory.cs"));
 
         Assert.Contains("interface IFinancialOperationRepository", abstraction, StringComparison.Ordinal);
         Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
@@ -1062,10 +1069,15 @@ public sealed class BackendLayeringTests
         Assert.Contains("financialOperationRepository.GetPreviousSupplierExpenseTotalAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.Add(operation)", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.FinancialOperations", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalanceDbContext", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure.Data", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<FinancialOperation> QueryOperations", service, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplyFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>()", program, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IFinanceService>(services => new FinanceService(", program, StringComparison.Ordinal);
+        Assert.Contains("class FinanceServiceTestFactory", testFactory, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", testFactory, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -18,7 +19,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateIncomeAsync(
@@ -54,7 +55,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var created = await service.CreateIncomeAsync(
@@ -110,7 +111,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var accrual = await service.CreateAccrualAsync(
@@ -170,7 +171,7 @@ public sealed class FinanceServiceTests
         var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
         database.Context.AddRange(department, staffMember, salaryType);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateStaffPaymentAsync(
@@ -227,7 +228,7 @@ public sealed class FinanceServiceTests
         var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
         database.Context.AddRange(department, staffMember, salaryType);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateStaffPaymentAsync(
             new CreateStaffPaymentRequest(
@@ -251,7 +252,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var income = await service.CreateIncomeAsync(
@@ -311,7 +312,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var income = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100.005m, "PKO-round", null),
@@ -345,7 +346,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         for (var index = 0; index < 3; index++)
         {
@@ -385,7 +386,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         for (var index = 0; index < 3; index++)
         {
@@ -443,7 +444,7 @@ public sealed class FinanceServiceTests
     public async Task PageEndpoints_NormalizeInvalidPaging()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var operations = await service.GetOperationsPageAsync(new FinancialOperationListRequest(null, null, null, null, 999, -5), CancellationToken.None);
         var accruals = await service.GetAccrualsPageAsync(new AccrualListRequest(null, null, null, 999, -5), CancellationToken.None);
@@ -465,7 +466,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
         var secondGarage = new Garage { Number = "99", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
         database.Context.Garages.Add(secondGarage);
@@ -496,7 +497,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId };
         var department = new StaffDepartment { Name = "Бухгалтерия" };
         var firstStaff = new StaffMember { FullName = "Петрова Ольга", Department = department, Rate = 40000m };
@@ -544,7 +545,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Garage.StartingBalance = 200m;
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
 
         var firstPayment = await service.CreateIncomeAsync(
@@ -574,7 +575,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Garage.StartingBalance = 900m;
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateGarageDebtPaymentAsync(
@@ -607,7 +608,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Garage.StartingBalance = 900m;
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var firstPayment = await service.CreateGarageDebtPaymentAsync(
             new CreateGarageDebtPaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 500m, null),
@@ -629,7 +630,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Июнь"), null, CancellationToken.None);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 700m, "manual", "Июль"), null, CancellationToken.None);
 
@@ -666,7 +667,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Garage.StartingBalance = 100m;
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         Assert.True((await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "regular", null), null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200m, "PKO-history-1", null), null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 700m, "regular", null), null, CancellationToken.None)).Succeeded);
@@ -710,7 +711,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.GetGarageBalanceHistoryAsync(Guid.NewGuid(), new GarageBalanceHistoryRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)), CancellationToken.None);
 
@@ -723,7 +724,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 400m, "manual", "INV-6", "Июнь"), null, CancellationToken.None);
         await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), 600m, "manual", "INV-7", "Июль"), null, CancellationToken.None);
 
@@ -758,7 +759,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1000m, "PKO-19", null);
         await service.CreateIncomeAsync(request, null, CancellationToken.None);
 
@@ -773,7 +774,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null),
             null,
@@ -806,7 +807,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "manual", "Начисление месяца"),
             null,
@@ -850,7 +851,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
         var created = await service.CreateIncomeAsync(
@@ -885,7 +886,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-empty-reason", null),
             null,
@@ -902,7 +903,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-already-canceled", null),
             null,
@@ -920,7 +921,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
         var created = await service.CreateIncomeAsync(
@@ -951,7 +952,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 400m, "PKO-restore-duplicate", null);
         var created = await service.CreateIncomeAsync(request, null, CancellationToken.None);
         await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Заменили документ"), null, CancellationToken.None);
@@ -969,7 +970,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200m, "RKO-restore-bank", null),
             null,
@@ -992,7 +993,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(Guid.NewGuid(), fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 300m, null, null),
@@ -1008,7 +1009,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateExpenseAsync(
@@ -1046,7 +1047,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(
@@ -1085,7 +1086,7 @@ public sealed class FinanceServiceTests
                 IncomeTypeId = fixtures.IncomeType.Id
             });
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(
@@ -1116,7 +1117,7 @@ public sealed class FinanceServiceTests
         var cashExpenseType = new ExpenseType { Name = "Выплата без чека", Code = "no_receipt" };
         database.Context.Add(cashExpenseType);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(
@@ -1141,7 +1142,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         fixtures.Supplier.StartingBalance = 300m;
         await database.Context.SaveChangesAsync();
         await service.CreateSupplierAccrualAsync(
@@ -1175,7 +1176,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         fixtures.Supplier.StartingBalance = 300m;
         await database.Context.SaveChangesAsync();
         await service.CreateSupplierAccrualAsync(
@@ -1235,7 +1236,7 @@ public sealed class FinanceServiceTests
             CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
         });
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 250m, "RKO-bank-limit", null),
             null,
@@ -1275,7 +1276,7 @@ public sealed class FinanceServiceTests
                 IncomeTypeId = fixtures.IncomeType.Id
             });
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 100m, "RKO-bank-to-cash", null),
             null,
@@ -1305,7 +1306,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Supplier.StartingBalance = 300m;
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 800m, "manual", "INV-1", "Счет за месяц"),
             null,
@@ -1336,7 +1337,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "1", null), null, CancellationToken.None);
         await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "2", null), null, CancellationToken.None);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
@@ -1358,7 +1359,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "DOC-12", "Оплата по квитанции"), null, CancellationToken.None);
         await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "DOC-20", "Компенсация поставщику"), null, CancellationToken.None);
 
@@ -1379,7 +1380,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateAccrualAsync(
@@ -1406,7 +1407,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var created = await service.CreateDebtTransferAsync(
@@ -1444,7 +1445,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", null),
@@ -1460,7 +1461,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null),
             null,
@@ -1481,7 +1482,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Исходная ручная сумма"),
@@ -1516,7 +1517,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null);
         await service.CreateAccrualAsync(request, null, CancellationToken.None);
 
@@ -1531,7 +1532,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null);
         var firstAccrual = await service.CreateAccrualAsync(request, null, CancellationToken.None);
         Assert.True(firstAccrual.Succeeded);
@@ -1559,7 +1560,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Ручная корректировка"),
@@ -1591,7 +1592,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Ручная корректировка"),
@@ -1621,7 +1622,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null);
         var created = await service.CreateAccrualAsync(request, null, CancellationToken.None);
         await service.CancelAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Начисление заменено"), null, CancellationToken.None);
@@ -1639,7 +1640,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateSupplierAccrualAsync(
@@ -1668,7 +1669,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-no-comment", "   "),
@@ -1686,7 +1687,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "imported", "INV-source", "Счет поставщика"),
@@ -1704,7 +1705,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-regular", null),
             null,
@@ -1725,7 +1726,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-old", "Исходный счет"),
@@ -1761,7 +1762,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-1", null);
         await service.CreateSupplierAccrualAsync(request, null, CancellationToken.None);
 
@@ -1776,7 +1777,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-1", null);
         var firstAccrual = await service.CreateSupplierAccrualAsync(request, null, CancellationToken.None);
         Assert.True(firstAccrual.Succeeded);
@@ -1802,7 +1803,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-cancel", "Счет поставщика"),
@@ -1831,7 +1832,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-restore", "Счет поставщика"),
@@ -1858,7 +1859,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", "INV-supplier-restore-duplicate", null);
         var created = await service.CreateSupplierAccrualAsync(request, null, CancellationToken.None);
         await service.CancelSupplierAccrualAsync(created.Value!.Id, new CancelFinanceEntryRequest("Счет заменен"), null, CancellationToken.None);
@@ -1876,7 +1877,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 5, 1), 900m, "regular", "INV-05", null), null, CancellationToken.None);
         await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-06", "Ежемесячная корректировка поставщика"), null, CancellationToken.None);
 
@@ -1892,7 +1893,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId };
         database.Context.Suppliers.Add(secondSupplier);
         await database.Context.SaveChangesAsync();
@@ -1916,7 +1917,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.GenerateRegularAccrualsAsync(
@@ -1957,7 +1958,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Вывоз мусора", CalculationBase = "people", Rate = 125m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.AddRange(secondOwner, secondGarage, archivedGarage, tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.GenerateRegularAccrualsAsync(
             new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
@@ -1989,7 +1990,7 @@ public sealed class FinanceServiceTests
         };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var beforeEffectiveDate = await service.GenerateRegularAccrualsAsync(
             new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 7, 15), null),
@@ -2048,7 +2049,7 @@ public sealed class FinanceServiceTests
                 UnitName = "руб."
             });
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.GenerateRegularCatalogAccrualsAsync(
@@ -2094,7 +2095,7 @@ public sealed class FinanceServiceTests
         };
         database.Context.AddRange(secondOwner, secondGarage, archivedGarage, campaign);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.GenerateFeeCampaignAccrualsAsync(
@@ -2143,7 +2144,7 @@ public sealed class FinanceServiceTests
         };
         database.Context.Add(campaign);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null);
 
         var first = await service.GenerateFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
@@ -2177,7 +2178,7 @@ public sealed class FinanceServiceTests
         campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = selectedGarage });
         database.Context.AddRange(secondOwner, selectedGarage, notSelectedGarage, campaign);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.GenerateFeeCampaignAccrualsAsync(
             new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null),
@@ -2200,7 +2201,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var finance = new FinanceService(database.Context);
+        var finance = FinanceServiceTestFactory.Create(database.Context);
         var dictionaries = new DictionaryService(database.Context);
 
         await finance.GenerateRegularAccrualsAsync(
@@ -2239,7 +2240,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, null),
             null,
@@ -2265,7 +2266,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.GenerateRegularAccrualsAsync(
             new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
@@ -2298,7 +2299,7 @@ public sealed class FinanceServiceTests
         };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 230m, null),
             null,
@@ -2327,7 +2328,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var firstReading = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Первичный замер"),
             null,
@@ -2368,7 +2369,7 @@ public sealed class FinanceServiceTests
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null);
         await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
 
@@ -2384,7 +2385,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var group = fixtures.Supplier.Group;
         var secondSupplier = new Supplier { Name = "Бухгалтер", GroupId = group.Id };
@@ -2426,7 +2427,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
         database.Context.Add(salaryType);
         await database.Context.SaveChangesAsync();
@@ -2445,7 +2446,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 5, 1), 500m, "regular", null), null, CancellationToken.None);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 600m, "manual", "Ежемесячная корректировка гаража"), null, CancellationToken.None);
 
@@ -2461,7 +2462,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateMeterReadingAsync(
@@ -2493,7 +2494,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Garage.InitialWaterMeterValue = 10.0005m;
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5555m, null),
@@ -2511,7 +2512,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Первичное показание"),
@@ -2545,7 +2546,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Контроль"),
@@ -2575,7 +2576,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Контроль"),
@@ -2600,7 +2601,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var created = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
             null,
@@ -2623,7 +2624,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 20), 110m, null),
             null,
@@ -2646,7 +2647,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 5m, null),
@@ -2662,7 +2663,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 110m, null), null, CancellationToken.None);
 
         var result = await service.CreateMeterReadingAsync(
@@ -2679,7 +2680,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 14m, null), null, CancellationToken.None);
         await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "Ежемесячное электричество"), null, CancellationToken.None);
 
@@ -2703,7 +2704,7 @@ public sealed class FinanceServiceTests
         var archivedGarage = new Garage { Number = "14", PeopleCount = 1, FloorCount = 1, IsArchived = true };
         database.Context.AddRange(secondOwner, secondGarage, archivedGarage);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
             null,
@@ -2734,7 +2735,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.GetMissingMeterReadingsAsync(
             new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), "water", "12", 1),
@@ -2754,7 +2755,7 @@ public sealed class FinanceServiceTests
         var secondGarage = new Garage { Number = "13", PeopleCount = 1, FloorCount = 1 };
         database.Context.Garages.Add(secondGarage);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 6, 1);
         await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", month, new DateOnly(2026, 6, 20), 10m, null),
@@ -2779,7 +2780,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.GetMissingMeterReadingsAsync(
             new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), "gas", null),
@@ -2796,7 +2797,7 @@ public sealed class FinanceServiceTests
         var electricityType = new IncomeType { Name = "Электроэнергия", Code = "electricity" };
         database.Context.IncomeTypes.Add(electricityType);
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         Assert.True((await service.CreateAccrualAsync(
             new CreateAccrualRequest(fixtures.Garage.Id, electricityType.Id, new DateOnly(2026, 6, 1), 5674m, "regular", null),
@@ -2848,7 +2849,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         fixtures.Garage.StartingBalance = 200m;
         await database.Context.SaveChangesAsync();
@@ -2888,7 +2889,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 6, 1);
         var waterIncomeType = new IncomeType { Name = "Водоснабжение", Code = "water" };
         var salaryExpenseType = new ExpenseType { Name = "Зарплата", Code = "salary" };
@@ -2973,7 +2974,7 @@ public sealed class FinanceServiceTests
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)
             });
         await database.Context.SaveChangesAsync();
-        var service = new FinanceService(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
 
         Assert.True((await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, waterIncomeType.Id, new DateOnly(2026, 6, 10), month, 1000m, "PKO-reconcile", null),
