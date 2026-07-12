@@ -979,11 +979,28 @@ public sealed class BackendLayeringTests
             "Finance workflows must share the active garage lookup instead of querying the DbSet directly.");
         Assert.Equal(2, service.Split("garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)", StringSplitOptions.None).Length - 1);
         Assert.Equal(2, service.Split("garageRepository.GetStartingBalanceAsync(garageId, cancellationToken)", StringSplitOptions.None).Length - 1);
-        Assert.Equal(1, service.Split("dbContext.Garages", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("dbContext.Garages", service, StringComparison.Ordinal);
+        Assert.Contains("IMissingMeterReadingQuery missingMeterReadingQuery", service, StringComparison.Ordinal);
         Assert.Contains("GetAllActiveWithOwnerAsync", abstraction, StringComparison.Ordinal);
         Assert.Contains("GetStartingBalanceAsync", abstraction, StringComparison.Ordinal);
         Assert.Contains(".Where(garage => !garage.IsArchived)", implementation, StringComparison.Ordinal);
         Assert.Contains(".OrderBy(garage => garage.Number)", implementation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MissingMeterReadingQuery_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "IMissingMeterReadingQuery.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfMissingMeterReadingQuery.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+
+        Assert.Contains("interface IMissingMeterReadingQuery", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IMissingMeterReadingQuery", implementation, StringComparison.Ordinal);
+        Assert.Contains("missingMeterReadingQuery.GetMissingAsync", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IMissingMeterReadingQuery, EfMissingMeterReadingQuery>()", program, StringComparison.Ordinal);
     }
 
     [Fact]

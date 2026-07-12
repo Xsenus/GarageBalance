@@ -52,6 +52,19 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void MissingMeterReadingQuery_BoundsAntiQueriesAndCandidateMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfMissingMeterReadingQuery.cs");
+
+        Assert.Contains("!dbContext.MeterReadings.Any", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
+        Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
+        Assert.Contains(".Where(garage => !garage.IsArchived)", source, StringComparison.Ordinal);
+        Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("GarageMatchesSearch", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierGroupRepository_UsesProductionCountOffsetAndLimitWithScopedSqliteFallback()
     {
         var source = ReadApiSource("Infrastructure/Data/EfSupplierGroupRepository.cs");

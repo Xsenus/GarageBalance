@@ -2715,12 +2715,16 @@ public sealed class FinanceServiceTests
         var result = await service.GetMissingMeterReadingsAsync(
             new MissingMeterReadingListRequest(new DateOnly(2026, 6, 15), null, null),
             CancellationToken.None);
+        var byOwner = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(new DateOnly(2026, 6, 15), "water", "петров"),
+            CancellationToken.None);
 
         Assert.Equal(3, result.Count);
         Assert.Contains(result, item => item.GarageNumber == "12" && item.MeterKind == "electricity" && item.AccountingMonth == new DateOnly(2026, 6, 1));
         Assert.Contains(result, item => item.GarageNumber == "13" && item.MeterKind == "water");
         Assert.Contains(result, item => item.GarageNumber == "13" && item.MeterKind == "electricity");
         Assert.DoesNotContain(result, item => item.GarageNumber == "14");
+        Assert.Equal("13", Assert.Single(byOwner).GarageNumber);
     }
 
     [Fact]
@@ -2738,6 +2742,34 @@ public sealed class FinanceServiceTests
         Assert.Equal("12", missing.GarageNumber);
         Assert.Equal("water", missing.MeterKind);
         Assert.Equal("Иванов Иван", missing.OwnerName);
+    }
+
+    [Fact]
+    public async Task GetMissingMeterReadingsAsync_AppliesLimitAfterSkippingCompleteGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondGarage = new Garage { Number = "13", PeopleCount = 1, FloorCount = 1 };
+        database.Context.Garages.Add(secondGarage);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", month, new DateOnly(2026, 6, 20), 10m, null),
+            null,
+            CancellationToken.None);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", month, new DateOnly(2026, 6, 20), 100m, null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(month, null, null, 1),
+            CancellationToken.None);
+
+        var missing = Assert.Single(result);
+        Assert.Equal("13", missing.GarageNumber);
+        Assert.Equal("water", missing.MeterKind);
     }
 
     [Fact]

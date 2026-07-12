@@ -57,6 +57,7 @@ builder.Services.AddScoped<ITariffRepository, EfTariffRepository>();
 builder.Services.AddScoped<IIrregularPaymentRepository, EfIrregularPaymentRepository>();
 builder.Services.AddScoped<IChargeServiceSettingRepository, EfChargeServiceSettingRepository>();
 builder.Services.AddScoped<IFeeCampaignRepository, EfFeeCampaignRepository>();
+builder.Services.AddScoped<IMissingMeterReadingQuery, EfMissingMeterReadingQuery>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IFundService, FundService>();

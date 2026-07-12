@@ -14,6 +14,7 @@ public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
     IStaffMemberRepository staffMemberRepository,
     IGarageRepository garageRepository,
+    IMissingMeterReadingQuery missingMeterReadingQuery,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
@@ -78,7 +79,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -194,41 +195,9 @@ public sealed class FinanceService(
         var search = NormalizeSearch(request.Search);
         var limit = NormalizeListLimit(request.Limit);
 
-        var garageQuery = dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
-            .Where(garage => !garage.IsArchived);
-        if (search is not null)
-        {
-            garageQuery = garageQuery.Where(garage =>
-                garage.Number.ToLower().Contains(search) ||
-                (garage.Owner != null && (
-                    garage.Owner.LastName.ToLower().Contains(search) ||
-                    garage.Owner.FirstName.ToLower().Contains(search) ||
-                    (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(search)) ||
-                    (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(search))));
-        }
-
-        var garages = await garageQuery
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
-        var existingReadings = await dbContext.MeterReadings.AsNoTracking()
-            .Where(reading => !reading.IsCanceled && reading.AccountingMonth == month && meterKinds.Contains(reading.MeterKind))
-            .Select(reading => new { reading.GarageId, reading.MeterKind })
-            .ToListAsync(cancellationToken);
-        var existingKeys = existingReadings
-            .Select(reading => (reading.GarageId, reading.MeterKind))
-            .ToHashSet();
-
-        return garages
-            .SelectMany(garage => meterKinds
-                .Where(meterKind => !existingKeys.Contains((garage.Id, meterKind)))
-                .Select(meterKind => new MissingMeterReadingDto(
-                    garage.Id,
-                    garage.Number,
-                    garage.Owner?.FullName,
-                    meterKind,
-                    month)))
-            .Take(limit)
+        var rows = await missingMeterReadingQuery.GetMissingAsync(month, meterKinds, search, limit, cancellationToken);
+        return rows
+            .Select(row => new MissingMeterReadingDto(row.GarageId, row.GarageNumber, row.OwnerName, row.MeterKind, month))
             .ToList();
     }
 
