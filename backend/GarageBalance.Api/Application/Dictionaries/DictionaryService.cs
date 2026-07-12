@@ -20,6 +20,7 @@ public sealed class DictionaryService(
     IExpenseTypeRepository expenseTypeRepository,
     ITariffRepository tariffRepository,
     IIrregularPaymentRepository irregularPaymentRepository,
+    IChargeServiceSettingRepository chargeServiceSettingRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -83,7 +84,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1557,18 +1558,9 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.ChargeServiceSettings.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
-        }
-
-        return await query
-            .OrderBy(item => item.Name)
-            .Take(NormalizeListLimit(limit))
-            .Select(item => ToChargeServiceSettingDto(item))
-            .ToListAsync(cancellationToken);
+        var settings = await chargeServiceSettingRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return settings.Select(ToChargeServiceSettingDto).ToList();
     }
 
     public async Task<DictionaryResult<ChargeServiceSettingDto>> CreateChargeServiceSettingAsync(UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1586,7 +1578,7 @@ public sealed class DictionaryService(
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.ChargeServiceSettings.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
         }
@@ -1594,7 +1586,7 @@ public sealed class DictionaryService(
         var setting = new ChargeServiceSetting { Name = name };
         ApplyChargeServiceSetting(setting, request);
 
-        dbContext.ChargeServiceSettings.Add(setting);
+        chargeServiceSettingRepository.Add(setting);
         AddAudit(actorUserId, "dictionary.charge_service_created", "charge_service", setting.Id, $"Создана настройка услуги {setting.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
@@ -1602,7 +1594,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var setting = await dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
@@ -1621,7 +1613,7 @@ public sealed class DictionaryService(
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.ChargeServiceSettings.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
         }
@@ -1648,7 +1640,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var setting = await dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
@@ -1664,13 +1656,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var setting = await dbContext.ChargeServiceSettings.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var setting = await chargeServiceSettingRepository.FindArchivedAsync(id, cancellationToken);
         if (setting is null)
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена в архиве.");
         }
 
-        if (await dbContext.ChargeServiceSettings.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == setting.Name, cancellationToken))
+        if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, setting.Name, cancellationToken))
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Активная услуга с таким наименованием уже существует.");
         }

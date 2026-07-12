@@ -138,6 +138,14 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ChargeServiceSettingRepository_UsesDatabaseLimitBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
+        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
@@ -328,9 +336,10 @@ public sealed class BackendPerformanceGuardTests
         var staffMemberRepositorySource = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
         var tariffRepositorySource = ReadApiSource("Infrastructure/Data/EfTariffRepository.cs");
         var irregularPaymentRepositorySource = ReadApiSource("Infrastructure/Data/EfIrregularPaymentRepository.cs");
+        var chargeServiceSettingRepositorySource = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
 
         Assert.True(
-            CountOccurrences(source, ".Take(NormalizeListLimit(limit))") >= 2,
+            CountOccurrences(source, ".Take(NormalizeListLimit(limit))") >= 1,
             "Dictionary default lists must use normalized server-side limits.");
         Assert.Contains(
             "staffMemberRepository.GetListAsync(departmentId, normalizedSearch, includeArchived, NormalizeListLimit(limit)",
@@ -347,6 +356,11 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", irregularPaymentRepositorySource, StringComparison.Ordinal);
+        Assert.Contains(
+            "chargeServiceSettingRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit)",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", chargeServiceSettingRepositorySource, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(source, ".Take(normalizedLimit)") >= 2,
             "Dictionary search branches must keep their explicit normalized limit.");
