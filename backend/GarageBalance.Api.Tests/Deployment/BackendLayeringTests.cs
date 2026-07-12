@@ -1198,6 +1198,16 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinanceTariffQueries_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        Assert.Contains("ITariffRepository tariffRepository", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.FindActiveAsync(request.TariffId", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.Tariffs", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1267,6 +1277,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);

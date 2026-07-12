@@ -14,6 +14,7 @@ public sealed class FinanceService(
     IStaffMemberRepository staffMemberRepository,
     IExpenseTypeRepository expenseTypeRepository,
     IIncomeTypeRepository incomeTypeRepository,
+    ITariffRepository tariffRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -70,7 +71,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1725,7 +1726,7 @@ public sealed class FinanceService(
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("income_type_not_found", "Вид начисления не найден.");
         }
 
-        var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == request.TariffId && !item.IsArchived, cancellationToken);
+        var tariff = await tariffRepository.FindActiveAsync(request.TariffId, cancellationToken);
         if (tariff is null)
         {
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_found", "Тариф для регулярного начисления не найден.");
