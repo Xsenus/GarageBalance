@@ -1,12 +1,10 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Finance;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Integrations;
 
 public sealed class ReceiptPrintingService(
-    GarageBalanceDbContext dbContext,
+    IReceiptPrintingRepository repository,
     IAuditEventWriter auditEventWriter,
     IReceiptPrintingAdapter receiptPrintingAdapter) : IReceiptPrintingService
 {
@@ -35,14 +33,7 @@ public sealed class ReceiptPrintingService(
             return ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("receipt_print_reason_required", "Для отмены или повторной печати нужна причина.");
         }
 
-        var operation = await dbContext.FinancialOperations
-            .Include(item => item.Garage)
-                .ThenInclude(garage => garage!.Owner)
-            .Include(item => item.IncomeType)
-            .Include(item => item.Supplier)
-            .Include(item => item.ExpenseType)
-            .AsTracking()
-            .SingleOrDefaultAsync(item => item.Id == financialOperationId, cancellationToken);
+        var operation = await repository.FindOperationAsync(financialOperationId, cancellationToken);
         if (operation is null)
         {
             return ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("financial_operation_not_found", "Финансовая операция не найдена.");
@@ -123,7 +114,7 @@ public sealed class ReceiptPrintingService(
             RelatedCounterpartyName: ownerName,
             RelatedDocumentId: operation.Id.ToString(),
             RelatedDocumentNumber: documentNumber));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         return ReceiptPrintingResult<ReceiptPrintingActionDto>.Success(new ReceiptPrintingActionDto(
             auditEvent!.Id,

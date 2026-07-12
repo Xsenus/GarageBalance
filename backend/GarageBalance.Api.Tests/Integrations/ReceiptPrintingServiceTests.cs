@@ -225,7 +225,10 @@ public sealed class ReceiptPrintingServiceTests
 
     private static ReceiptPrintingService CreateService(GarageBalanceDbContext context, IReceiptPrintingAdapter? adapter = null)
     {
-        return new ReceiptPrintingService(context, new AuditEventWriter(context), adapter ?? new DisabledReceiptPrintingAdapter());
+        return new ReceiptPrintingService(
+            new EfReceiptPrintingRepository(context),
+            new AuditEventWriter(context),
+            adapter ?? new DisabledReceiptPrintingAdapter());
     }
 
     private static async Task<FinancialOperation> SeedIncomeOperationAsync(GarageBalanceDbContext context)

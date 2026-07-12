@@ -57,6 +57,7 @@ builder.Services.AddScoped<IIntegrationStatusService, IntegrationStatusService>(
 builder.Services.AddScoped<IOneCFreshSyncAdapter, DisabledOneCFreshSyncAdapter>();
 builder.Services.AddScoped<IOneCFreshSyncService, OneCFreshSyncService>();
 builder.Services.AddScoped<IReceiptPrintingAdapter, DisabledReceiptPrintingAdapter>();
+builder.Services.AddScoped<IReceiptPrintingRepository, EfReceiptPrintingRepository>();
 builder.Services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IReportService, ReportService>();
