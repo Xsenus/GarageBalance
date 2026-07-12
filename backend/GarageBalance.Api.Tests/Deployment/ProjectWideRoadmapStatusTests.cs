@@ -2248,6 +2248,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var accrualModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Finance", "Accrual.cs"));
         var dbContextText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
         var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var tariffRepositoryText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfTariffRepository.cs"));
         var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
         var dictionaryTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
         var financeTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
@@ -2271,8 +2272,10 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("public DateOnly EffectiveFrom", tariffModelText, StringComparison.Ordinal);
         Assert.Contains("public Guid? TariffId", accrualModelText, StringComparison.Ordinal);
         Assert.Contains("HasIndex(item => new { item.Name, item.EffectiveFrom })", dbContextText, StringComparison.Ordinal);
-        Assert.Contains("!item.IsArchived && item.Name == name && item.EffectiveFrom == request.EffectiveFrom", dictionaryServiceText, StringComparison.Ordinal);
-        Assert.Contains("OrderByDescending(item => item.EffectiveFrom)", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.ActiveDuplicateExistsAsync", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("item.Name == name", tariffRepositoryText, StringComparison.Ordinal);
+        Assert.Contains("item.EffectiveFrom == effectiveFrom", tariffRepositoryText, StringComparison.Ordinal);
+        Assert.Contains("OrderByDescending(item => item.EffectiveFrom)", tariffRepositoryText, StringComparison.Ordinal);
         Assert.Contains("dictionary.tariff_created", dictionaryServiceText, StringComparison.Ordinal);
         Assert.Contains("dictionary.tariff_updated", dictionaryServiceText, StringComparison.Ordinal);
         Assert.Contains("dictionary.tariff_archived", dictionaryServiceText, StringComparison.Ordinal);

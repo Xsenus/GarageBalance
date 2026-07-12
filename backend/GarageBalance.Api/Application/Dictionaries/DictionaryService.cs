@@ -18,6 +18,7 @@ public sealed class DictionaryService(
     IStaffMemberRepository staffMemberRepository,
     IIncomeTypeRepository incomeTypeRepository,
     IExpenseTypeRepository expenseTypeRepository,
+    ITariffRepository tariffRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -81,7 +82,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1351,46 +1352,18 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item =>
-                item.Name.ToLower().Contains(normalizedSearch) ||
-                item.CalculationBase.ToLower().Contains(normalizedSearch));
-        }
-
-        return await query
-            .OrderByDescending(item => item.EffectiveFrom)
-            .ThenBy(item => item.Name)
-            .Take(NormalizeListLimit(limit))
-            .Select(item => ToTariffDto(item))
-            .ToListAsync(cancellationToken);
+        var tariffs = await tariffRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return tariffs.Select(ToTariffDto).ToList();
     }
 
     public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item =>
-                item.Name.ToLower().Contains(normalizedSearch) ||
-                item.CalculationBase.ToLower().Contains(normalizedSearch));
-        }
-
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderByDescending(item => item.EffectiveFrom)
-            .ThenBy(item => item.Name)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(item => ToTariffDto(item))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<TariffDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await tariffRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<TariffDto>(page.Items.Select(ToTariffDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     private static int NormalizeListLimit(int? limit)
@@ -1428,7 +1401,7 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Failure(electricityTiers.ErrorCode!, electricityTiers.ErrorMessage!);
         }
 
-        if (await dbContext.Tariffs.AnyAsync(item => !item.IsArchived && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
+        if (await tariffRepository.ActiveDuplicateExistsAsync(null, name, request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
         }
@@ -1443,7 +1416,7 @@ public sealed class DictionaryService(
         };
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
-        dbContext.Tariffs.Add(tariff);
+        tariffRepository.Add(tariff);
         AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {FormatTariffAuditDetails(tariff)}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
@@ -1451,7 +1424,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<TariffDto>> UpdateTariffAsync(Guid id, UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var tariff = await tariffRepository.FindActiveAsync(id, cancellationToken);
         if (tariff is null)
         {
             return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден.");
@@ -1470,16 +1443,14 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Failure(electricityTiers.ErrorCode!, electricityTiers.ErrorMessage!);
         }
 
-        if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name && item.EffectiveFrom == request.EffectiveFrom, cancellationToken))
+        if (await tariffRepository.ActiveDuplicateExistsAsync(id, name, request.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Тариф с таким названием и датой действия уже существует.");
         }
 
         if (request.EffectiveFrom > tariff.EffectiveFrom)
         {
-            var earliestAccrualMonth = await dbContext.Accruals.AsNoTracking()
-                .Where(accrual => !accrual.IsCanceled && accrual.Source == AccrualSources.Regular && accrual.TariffId == tariff.Id)
-                .MinAsync(accrual => (DateOnly?)accrual.AccountingMonth, cancellationToken);
+            var earliestAccrualMonth = await tariffRepository.GetEarliestRegularAccrualMonthAsync(tariff.Id, cancellationToken);
             if (earliestAccrualMonth is not null && request.EffectiveFrom > earliestAccrualMonth.Value)
             {
                 return DictionaryResult<TariffDto>.Failure(
@@ -1548,7 +1519,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var tariff = await tariffRepository.FindActiveAsync(id, cancellationToken);
         if (tariff is null)
         {
             return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден.");
@@ -1564,13 +1535,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<TariffDto>> RestoreTariffAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var tariff = await dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var tariff = await tariffRepository.FindArchivedAsync(id, cancellationToken);
         if (tariff is null)
         {
             return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден в архиве.");
         }
 
-        if (await dbContext.Tariffs.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == tariff.Name && item.EffectiveFrom == tariff.EffectiveFrom, cancellationToken))
+        if (await tariffRepository.ActiveDuplicateExistsAsync(id, tariff.Name, tariff.EffectiveFrom, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure("tariff_duplicate", "Активный тариф с таким названием и датой действия уже существует.");
         }
@@ -2240,9 +2211,7 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Failure("charge_service_income_type_not_found", "Вид начисления для услуги не найден.");
         }
 
-        var tariff = await dbContext.Tariffs
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == request.TariffId!.Value && !item.IsArchived, cancellationToken);
+        var tariff = await tariffRepository.FindActiveAsync(request.TariffId!.Value, cancellationToken);
         if (tariff is null)
         {
             return DictionaryResult<object>.Failure("charge_service_tariff_not_found", "Тариф для услуги не найден.");

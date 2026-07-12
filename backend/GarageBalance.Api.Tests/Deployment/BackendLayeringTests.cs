@@ -1168,6 +1168,36 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void TariffDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        Assert.Contains("ITariffRepository tariffRepository", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.GetEarliestRegularAccrualMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("tariffRepository.Add", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.Tariffs", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TariffRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "ITariffRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfTariffRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        Assert.Contains("interface ITariffRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": ITariffRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<ITariffRepository, EfTariffRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1214,6 +1244,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("ITariffRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfTariffRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -1235,6 +1267,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);
