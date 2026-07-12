@@ -1084,6 +1084,63 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DatabaseQueryBoundariesAreCompleteForCurrentListsReportsImportsFundsAndReleases()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "database-query-boundaries-verification.md"));
+        var performanceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "BackendPerformanceGuardTests.cs"));
+        var reportTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+
+        var databaseBoundaryLine = activeRoadmapLines.Single(line =>
+            line.Contains("PostgreSQL использовать как источник фильтрации", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", databaseBoundaryLine, StringComparison.Ordinal);
+        Assert.Contains("server bounds/pagination", databaseBoundaryLine, StringComparison.Ordinal);
+        Assert.Contains("Future list/report endpoints", databaseBoundaryLine, StringComparison.Ordinal);
+        Assert.Contains("docs/database-query-boundaries-verification.md", databaseBoundaryLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(DatabaseQueryBoundariesAreCompleteForCurrentListsReportsImportsFundsAndReleases), databaseBoundaryLine, StringComparison.Ordinal);
+
+        var requiredSections = new[]
+        {
+            "## Растущие Списки",
+            "## Отчеты",
+            "## Автоматические Гарантии",
+            "## Отдельная Приемка",
+            "## Future Rule",
+            "## Release Notes"
+        };
+        Assert.All(requiredSections, section => Assert.Contains(section, verification, StringComparison.Ordinal));
+        Assert.Contains("EXPLAIN (ANALYZE, BUFFERS)", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        var requiredPerformanceGuards = new[]
+        {
+            "FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization",
+            "ScreenReportQueries_UseDatabaseLimitsForVisibleRows",
+            "CashPaymentScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization",
+            "BankDepositScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization",
+            "ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization",
+            "AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization",
+            "DictionarySearchQueries_KeepExplicitLimitForSearchAndDefaultLists",
+            "FundOperationsAndReleaseLists_KeepNormalizedOutputBounds"
+        };
+        Assert.All(requiredPerformanceGuards, guard => Assert.Contains(guard, performanceTestsText, StringComparison.Ordinal));
+        Assert.Contains("GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetCashPaymentReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetBankDepositReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт архитектурный пункт PostgreSQL filtering/sorting/aggregation/pagination", historyText, StringComparison.Ordinal);
+        Assert.Contains(nameof(DatabaseQueryBoundariesAreCompleteForCurrentListsReportsImportsFundsAndReleases), historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
     {
         var repositoryRoot = FindRepositoryRoot();

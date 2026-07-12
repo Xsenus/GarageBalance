@@ -163,6 +163,23 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FundOperationsAndReleaseLists_KeepNormalizedOutputBounds()
+    {
+        var fundSource = ReadApiSource("Application/Funds/FundService.cs");
+        var releaseSource = ReadApiSource("Application/Releases/AppReleaseService.cs");
+
+        Assert.Contains("var boundedLimit = Math.Clamp(limit, 1, 100)", fundSource, StringComparison.Ordinal);
+        Assert.True(
+            CountOccurrences(fundSource, ".Take(boundedLimit)") >= 2,
+            "Fund operation lists must apply the same bound in PostgreSQL and SQLite branches.");
+        Assert.Contains("private const int DefaultLimit = 10", releaseSource, StringComparison.Ordinal);
+        Assert.Contains("private const int MaxLimit = 50", releaseSource, StringComparison.Ordinal);
+        Assert.True(
+            CountOccurrences(releaseSource, ".Take(NormalizeLimit(limit))") >= 2,
+            "Public and manageable release lists must keep normalized output limits.");
+    }
+
+    [Fact]
     public void DictionarySearchMigration_AddsPostgresTrigramIndexesForContainsSearch()
     {
         var source = ReadApiSource("Infrastructure/Data/Migrations/20260625031500_DictionarySearchTrigramIndexes.cs");
