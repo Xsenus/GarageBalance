@@ -1249,13 +1249,13 @@ public sealed class ReportServiceTests
     private static ReportService CreateService(GarageBalanceDbContext context)
     {
         return new ReportService(
-            context,
             new EfCashMovementReportQuery(context),
             new EfFundChangeReportQuery(context),
             new EfConsolidatedMonthlyReportQuery(context),
             new EfConsolidatedGarageReportQuery(context),
             new EfFeeReportQuery(context),
             new EfExpenseReportQuery(context),
+            new EfIncomeReportQuery(context),
             new EfApplicationUnitOfWork(context),
             new AuditEventWriter(context));
     }

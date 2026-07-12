@@ -5,7 +5,7 @@
 ## Что уже закреплено автоматически
 
 - Экранный консолидированный отчет, отчет по поступлениям и отчет по выплатам без текстового поиска не должны материализовать весь набор строк ради первых видимых строк.
-- `BackendPerformanceGuardTests.ScreenReportQueries_UseDatabaseLimitsForVisibleRows` проверяет, что `ReportService` сохраняет серверные ограничения видимых строк через `ApplyReportRowLimit`, `Take(NormalizeReportLimit(...))`, `CountAsync` и `SumAsync`.
+- `BackendPerformanceGuardTests.ScreenReportQueries_UseDatabaseLimitsForVisibleRows` проверяет, что `ReportService` нормализует лимит, а `EfIncomeReportQuery` и `EfExpenseReportQuery` ограничивают видимые строки через `Take(limit.Value)` и считают полные итоги через `CountAsync` и `SumAsync`.
 - Итоги отчетов считаются отдельными database aggregate-запросами, а `rowCount` берется через `CountAsync`, чтобы экран мог показывать количество строк без загрузки полной выборки в память приложения.
 - Общий финальный чеклист `docs/final-performance-checklist.md` уже описывает `EXPLAIN (ANALYZE, BUFFERS)`, индексы, bundle budget, browser console и acceptance thresholds для полного performance gate.
 

@@ -3431,6 +3431,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "report-performance-verification.md"));
         var reportService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Reports", "ReportService.cs"));
+        var incomeReportQuery = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfIncomeReportQuery.cs"));
         var expenseReportQuery = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfExpenseReportQuery.cs"));
         var performanceGuards = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "BackendPerformanceGuardTests.cs"));
 
@@ -3440,8 +3441,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[acceptance]`", performanceLine, StringComparison.Ordinal);
         Assert.Contains("docs/report-performance-verification.md", performanceLine, StringComparison.Ordinal);
         Assert.Contains("BackendPerformanceGuardTests", performanceLine, StringComparison.Ordinal);
-        Assert.Contains("ApplyReportRowLimit", performanceLine, StringComparison.Ordinal);
-        Assert.Contains("Take(NormalizeReportLimit(...))", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("нормализацию лимита в Application", performanceLine, StringComparison.Ordinal);
+        Assert.Contains("Take(limit.Value)", performanceLine, StringComparison.Ordinal);
         Assert.Contains("CountAsync", performanceLine, StringComparison.Ordinal);
         Assert.Contains("SumAsync", performanceLine, StringComparison.Ordinal);
         Assert.Contains("postgresTcp=False", performanceLine, StringComparison.Ordinal);
@@ -3450,12 +3451,12 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("StageSevenReportPerformanceCheckRequiresRealPostgresAcceptance", performanceLine, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[x]` Проверить производительность отчетов", performanceLine, StringComparison.Ordinal);
 
-        Assert.Contains("GetIncomeReportWithoutSearchAsync", reportService, StringComparison.Ordinal);
+        Assert.Contains("incomeReportQuery.GetRowsAsync", reportService, StringComparison.Ordinal);
         Assert.Contains("expenseReportQuery.GetRowsAsync", reportService, StringComparison.Ordinal);
-        Assert.Contains("ApplyReportRowLimit", reportService, StringComparison.Ordinal);
-        Assert.Contains(".Take(NormalizeReportLimit(limit.Value))", reportService, StringComparison.Ordinal);
-        Assert.Contains("CountAsync(cancellationToken)", reportService, StringComparison.Ordinal);
-        Assert.Contains("SumAsync(", reportService, StringComparison.Ordinal);
+        Assert.Contains("NormalizeReportLimit(request.Limit.Value)", reportService, StringComparison.Ordinal);
+        Assert.Contains("query.Take(limit.Value)", incomeReportQuery, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", incomeReportQuery, StringComparison.Ordinal);
+        Assert.Contains("SumAsync(", incomeReportQuery, StringComparison.Ordinal);
         Assert.Contains("query.Take(limit.Value)", expenseReportQuery, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", expenseReportQuery, StringComparison.Ordinal);
         Assert.Contains("SumAsync(", expenseReportQuery, StringComparison.Ordinal);

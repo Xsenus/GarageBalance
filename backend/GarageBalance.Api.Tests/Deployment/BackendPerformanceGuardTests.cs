@@ -53,24 +53,25 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Application/Reports/ReportService.cs");
         var garageSource = ReadApiSource("Infrastructure/Data/EfConsolidatedGarageReportQuery.cs");
         var expenseSource = ReadApiSource("Infrastructure/Data/EfExpenseReportQuery.cs");
+        var incomeSource = ReadApiSource("Infrastructure/Data/EfIncomeReportQuery.cs");
 
-        Assert.Contains("GetIncomeReportWithoutSearchAsync", source, StringComparison.Ordinal);
+        Assert.Contains("incomeReportQuery.GetRowsAsync", source, StringComparison.Ordinal);
         Assert.Contains("expenseReportQuery.GetRowsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetRowsWithoutSearchAsync", garageSource, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(source, "ApplyReportRowLimit(") >= 3 &&
+            CountOccurrences(incomeSource, "ApplyLimit(") >= 4 &&
             CountOccurrences(expenseSource, "ApplyLimit(") >= 4,
             "Remaining report visible rows must be bounded before materialization for income, expense, accrual and starting-balance segments.");
         Assert.True(
-            CountOccurrences(source, ".Take(NormalizeReportLimit(limit.Value))") >= 1 &&
+            incomeSource.Contains("query.Take(limit.Value)", StringComparison.Ordinal) &&
             expenseSource.Contains("query.Take(limit.Value)", StringComparison.Ordinal),
             "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
         Assert.True(
-            CountOccurrences(source, "CountAsync(cancellationToken)") >= 3 &&
+            CountOccurrences(incomeSource, "CountAsync(cancellationToken)") >= 3 &&
             CountOccurrences(expenseSource, "CountAsync(cancellationToken)") >= 3,
             "Report totals must keep total row counts without materializing every visible-row candidate.");
         Assert.True(
-            CountOccurrences(source, "SumAsync(") >= 3 &&
+            CountOccurrences(incomeSource, "SumAsync(") >= 3 &&
             CountOccurrences(expenseSource, "SumAsync(") >= 3,
             "Report totals must be aggregated in the database instead of being derived only from materialized rows.");
         Assert.Matches(

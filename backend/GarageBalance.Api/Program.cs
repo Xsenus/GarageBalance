@@ -70,6 +70,7 @@ builder.Services.AddScoped<IConsolidatedMonthlyReportQuery, EfConsolidatedMonthl
 builder.Services.AddScoped<IConsolidatedGarageReportQuery, EfConsolidatedGarageReportQuery>();
 builder.Services.AddScoped<IFeeReportQuery, EfFeeReportQuery>();
 builder.Services.AddScoped<IExpenseReportQuery, EfExpenseReportQuery>();
+builder.Services.AddScoped<IIncomeReportQuery, EfIncomeReportQuery>();
 builder.Services.AddScoped<IUserManagementRepository, EfUserManagementRepository>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IFormStateRepository, EfFormStateRepository>();
