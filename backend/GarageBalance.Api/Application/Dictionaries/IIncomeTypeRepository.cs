@@ -12,7 +12,6 @@ public interface IIncomeTypeRepository
     Task<IncomeType?> FindFirstArchivedByCodeOrNameAsync(string code, string name, CancellationToken cancellationToken);
     Task<IncomeType?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
-    Task<IReadOnlyList<Guid>> GetIdsByNameAsync(string name, CancellationToken cancellationToken);
     void Add(IncomeType incomeType);
 }
 

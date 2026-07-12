@@ -1121,7 +1121,6 @@ public sealed class BackendLayeringTests
         Assert.Contains("incomeTypeRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
         Assert.Contains("incomeTypeRepository.FindActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("incomeTypeRepository.FindArchivedAsync", service, StringComparison.Ordinal);
-        Assert.Contains("incomeTypeRepository.GetIdsByNameAsync", service, StringComparison.Ordinal);
         Assert.Contains("incomeTypeRepository.Add", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.IncomeTypes", service, StringComparison.Ordinal);
     }
@@ -1249,8 +1248,11 @@ public sealed class BackendLayeringTests
         Assert.Contains("irregularPaymentRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
         Assert.Contains("irregularPaymentRepository.FindActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("irregularPaymentRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.IsUsedAsync", service, StringComparison.Ordinal);
         Assert.Contains("irregularPaymentRepository.Add", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.IrregularPayments", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.Accruals", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.FinancialOperations", service, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1265,6 +1267,18 @@ public sealed class BackendLayeringTests
         Assert.Contains(": IIrregularPaymentRepository", implementation, StringComparison.Ordinal);
         Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IIrregularPaymentRepository, EfIrregularPaymentRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DictionaryService_HasNoDirectDbContextQueriesAndKeepsContextConstructorTestOnly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var assemblyInfo = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Properties", "AssemblyInfo.cs"));
+        Assert.DoesNotContain("dbContext.", service, StringComparison.Ordinal);
+        Assert.Contains("internal DictionaryService(GarageBalanceDbContext dbContext)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("public DictionaryService(GarageBalanceDbContext dbContext)", service, StringComparison.Ordinal);
+        Assert.Contains("InternalsVisibleTo(\"GarageBalance.Api.Tests\")", assemblyInfo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1414,6 +1428,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен сорок первый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен сороковой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);

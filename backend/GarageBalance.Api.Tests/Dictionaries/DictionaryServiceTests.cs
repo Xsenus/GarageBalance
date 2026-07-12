@@ -1749,6 +1749,58 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task IrregularPaymentAsync_IgnoresCanceledUsageAndBlocksActiveIncomeOperation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = new DictionaryService(database.Context);
+        var canceledPayment = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Отмененный сбор", 100m), null, CancellationToken.None);
+        var activePayment = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Оплаченный сбор", 200m), null, CancellationToken.None);
+        var canceledIncomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Отмененный сбор", "canceled_fee"), null, CancellationToken.None);
+        var activeIncomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Оплаченный сбор", "paid_fee"), null, CancellationToken.None);
+        var garage = await service.CreateGarageAsync(new UpsertGarageRequest("IRR-1", 1, 1, null, 0m, null, null, null), null, CancellationToken.None);
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = garage.Value!.Id,
+            IncomeTypeId = canceledIncomeType.Value!.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 100m,
+            Source = AccrualSources.Manual,
+            IsCanceled = true
+        });
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                GarageId = garage.Value.Id,
+                IncomeTypeId = canceledIncomeType.Value.Id,
+                OperationDate = new DateOnly(2026, 7, 10),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 100m,
+                IsCanceled = true
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                GarageId = garage.Value.Id,
+                IncomeTypeId = activeIncomeType.Value!.Id,
+                OperationDate = new DateOnly(2026, 7, 11),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 200m
+            });
+        await database.Context.SaveChangesAsync();
+
+        var canceledArchive = await service.ArchiveIrregularPaymentAsync(canceledPayment.Value!.Id, "Использование отменено", null, CancellationToken.None);
+        var activeArchive = await service.ArchiveIrregularPaymentAsync(activePayment.Value!.Id, "Проверка использования", null, CancellationToken.None);
+        var activeList = await service.GetIrregularPaymentsAsync(null, CancellationToken.None);
+
+        Assert.True(canceledArchive.Succeeded);
+        Assert.False(canceledArchive.Value!.IsUsed);
+        Assert.False(activeArchive.Succeeded);
+        Assert.Equal("irregular_payment_used", activeArchive.ErrorCode);
+        Assert.True(activeList.Single(payment => payment.Id == activePayment.Value.Id).IsUsed);
+    }
+
+    [Fact]
     public async Task ArchiveIrregularPaymentAsync_HidesUnusedPaymentAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

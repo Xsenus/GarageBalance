@@ -35,5 +35,21 @@ public sealed class EfIrregularPaymentRepository(GarageBalanceDbContext dbContex
             item => !item.IsArchived && item.Name == name && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
 
+    public async Task<bool> IsUsedAsync(string name, CancellationToken cancellationToken)
+    {
+        var incomeTypeIds = dbContext.IncomeTypes.AsNoTracking()
+            .Where(incomeType => incomeType.Name == name)
+            .Select(incomeType => incomeType.Id);
+
+        return await dbContext.Accruals.AsNoTracking()
+                .AnyAsync(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId), cancellationToken)
+            || await dbContext.FinancialOperations.AsNoTracking()
+                .AnyAsync(operation =>
+                    !operation.IsCanceled &&
+                    operation.IncomeTypeId.HasValue &&
+                    incomeTypeIds.Contains(operation.IncomeTypeId.Value),
+                    cancellationToken);
+    }
+
     public void Add(IrregularPayment payment) => dbContext.IrregularPayments.Add(payment);
 }

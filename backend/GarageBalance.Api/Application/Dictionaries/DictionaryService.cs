@@ -9,7 +9,6 @@ using Microsoft.EntityFrameworkCore;
 namespace GarageBalance.Api.Application.Dictionaries;
 
 public sealed class DictionaryService(
-    GarageBalanceDbContext dbContext,
     IOwnerRepository ownerRepository,
     IGarageRepository garageRepository,
     ISupplierGroupRepository supplierGroupRepository,
@@ -85,8 +84,8 @@ public sealed class DictionaryService(
         ["isActive"] = "Статус"
     };
 
-    public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfGarageRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+    internal DictionaryService(GarageBalanceDbContext dbContext)
+        : this(new EfOwnerRepository(dbContext), new EfGarageRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1700,7 +1699,7 @@ public sealed class DictionaryService(
             return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.");
         }
 
-        if (await IsIrregularPaymentUsedAsync(payment.Name, cancellationToken))
+        if (await irregularPaymentRepository.IsUsedAsync(payment.Name, cancellationToken))
         {
             return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_used", "Удаление недоступно: нерегулярный платеж уже используется в платежах или начислениях.");
         }
@@ -2400,20 +2399,6 @@ public sealed class DictionaryService(
         return string.Equals(left, right, StringComparison.Ordinal);
     }
 
-    private async Task<bool> IsIrregularPaymentUsedAsync(string name, CancellationToken cancellationToken)
-    {
-        var incomeTypeIds = await incomeTypeRepository.GetIdsByNameAsync(name, cancellationToken);
-        if (incomeTypeIds.Count == 0)
-        {
-            return false;
-        }
-
-        return await dbContext.Accruals.AsNoTracking()
-                .AnyAsync(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId), cancellationToken)
-            || await dbContext.FinancialOperations.AsNoTracking()
-                .AnyAsync(operation => !operation.IsCanceled && operation.IncomeTypeId.HasValue && incomeTypeIds.Contains(operation.IncomeTypeId.Value), cancellationToken);
-    }
-
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -2542,7 +2527,7 @@ public sealed class DictionaryService(
             payment.Amount,
             payment.IsActive,
             payment.IsArchived,
-            await IsIrregularPaymentUsedAsync(payment.Name, cancellationToken));
+            await irregularPaymentRepository.IsUsedAsync(payment.Name, cancellationToken));
     }
 
     private static FeeCampaignDto ToFeeCampaignDto(FeeCampaign campaign)
