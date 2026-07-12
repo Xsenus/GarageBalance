@@ -2,11 +2,11 @@ namespace GarageBalance.Api.Application.Integrations;
 
 public sealed class IntegrationStatusService(IIntegrationSecretSettingsService secretSettingsService) : IIntegrationStatusService
 {
-    private const string OneCFreshProvider = "OneCFresh";
-    private const string ReceiptPrintingProvider = "ReceiptPrinting";
-    private const string RefreshTokenSettingKey = "RefreshToken";
-    private const string DeviceConnectionSettingKey = "DeviceConnection";
-    private const string ReceiptTemplateSettingKey = "ReceiptTemplate";
+    private const string OneCFreshProvider = IntegrationSecretCatalog.OneCFreshProvider;
+    private const string ReceiptPrintingProvider = IntegrationSecretCatalog.ReceiptPrintingProvider;
+    private const string RefreshTokenSettingKey = IntegrationSecretCatalog.OneCFreshRefreshToken;
+    private const string DeviceConnectionSettingKey = IntegrationSecretCatalog.ReceiptPrintingDeviceConnection;
+    private const string ReceiptTemplateSettingKey = IntegrationSecretCatalog.ReceiptPrintingReceiptTemplate;
     private static readonly string[] OneCFreshRequiredSettings = [RefreshTokenSettingKey];
     private static readonly string[] ReceiptPrintingRequiredSettings = [DeviceConnectionSettingKey, ReceiptTemplateSettingKey];
     private static readonly string[] ReceiptPrintingPlannedActions = ["Печать квитанции", "Отмена печати", "Печать копии квитанции"];

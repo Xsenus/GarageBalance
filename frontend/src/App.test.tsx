@@ -24,7 +24,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
-import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
+import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
@@ -4323,6 +4323,72 @@ describe('App', () => {
     expect(within(integrationPanel).getByText('Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh.')).toHaveAttribute('role', 'status')
     expect(integrationPanel).not.toHaveTextContent('one-c-refresh-token')
     expect(tokenSeen).toBe('token')
+  })
+
+  it('lets administrators replace protected integration settings without displaying plaintext', async () => {
+    const user = userEvent.setup()
+    const saved: Array<{ provider: string; settingKey: string; plaintextValue: string }> = []
+    const updateProtectedSetting = vi.fn(async (_accessToken: string, provider: string, settingKey: string, plaintextValue: string) => {
+      saved.push({ provider, settingKey, plaintextValue })
+      return createIntegrationSecretSetting({ provider, settingKey, purpose: `${provider}.${settingKey}` })
+    })
+    const integrationClient = createIntegrationClient({ updateProtectedSetting })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const oneCPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const tokenInput = within(oneCPanel).getByLabelText('Новый refresh token 1C Fresh')
+    await user.type(tokenInput, 'private-one-c-token')
+    await user.click(within(oneCPanel).getByRole('button', { name: 'Сохранить токен' }))
+    await waitFor(() => expect(updateProtectedSetting).toHaveBeenCalledTimes(1))
+    expect(tokenInput).toHaveValue('')
+    expect(oneCPanel).not.toHaveTextContent('private-one-c-token')
+    expect(within(oneCPanel).getByLabelText('Статус интеграции 1C Fresh')).toHaveTextContent('1 / 1')
+
+    const receiptPanel = await screen.findByRole('region', { name: 'Печать чеков и квитанций' })
+    const deviceInput = within(receiptPanel).getByLabelText('Новое подключение к устройству печати')
+    const templateInput = within(receiptPanel).getByLabelText('Новый защищенный шаблон квитанции')
+    await user.type(deviceInput, 'usb-private-connection')
+    await user.click(within(receiptPanel).getByRole('button', { name: 'Сохранить подключение' }))
+    await user.type(templateInput, 'private-receipt-template')
+    await user.click(within(receiptPanel).getByRole('button', { name: 'Сохранить шаблон' }))
+
+    await waitFor(() => expect(updateProtectedSetting).toHaveBeenCalledTimes(3))
+    expect(deviceInput).toHaveValue('')
+    expect(templateInput).toHaveValue('')
+    expect(receiptPanel).not.toHaveTextContent('usb-private-connection')
+    expect(receiptPanel).not.toHaveTextContent('private-receipt-template')
+    expect(within(receiptPanel).getByLabelText('Статус печати чеков и квитанций')).toHaveTextContent('2 / 2')
+    expect(saved).toEqual([
+      { provider: 'OneCFresh', settingKey: 'RefreshToken', plaintextValue: 'private-one-c-token' },
+      { provider: 'ReceiptPrinting', settingKey: 'DeviceConnection', plaintextValue: 'usb-private-connection' },
+      { provider: 'ReceiptPrinting', settingKey: 'ReceiptTemplate', plaintextValue: 'private-receipt-template' },
+    ])
+    expect(await screen.findByText(/Защищенная настройка ReceiptPrinting:ReceiptTemplate сохранена/)).toHaveAttribute('role', 'status')
+  })
+
+  it('hides protected integration setting forms without user management permission', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({
+      user: {
+        permissions: ['import.run', 'payments.write'],
+      },
+    })
+    const updateProtectedSetting = vi.fn(async () => createIntegrationSecretSetting())
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient({ updateProtectedSetting })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const oneCPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
+    const receiptPanel = await screen.findByRole('region', { name: 'Печать чеков и квитанций' })
+    expect(within(oneCPanel).queryByLabelText('Защищенная настройка 1C Fresh')).not.toBeInTheDocument()
+    expect(within(receiptPanel).queryByLabelText('Защищенные настройки печати')).not.toBeInTheDocument()
+    expect(updateProtectedSetting).not.toHaveBeenCalled()
   })
 
   it('shows unconfigured 1C Fresh status with synchronization controls disabled', async () => {
@@ -11199,6 +11265,20 @@ function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): In
       action: request.action,
       statusMessage: 'Действие квитанции зарегистрировано.',
     }),
+    updateProtectedSetting: async (_token, provider, settingKey) => createIntegrationSecretSetting({ provider, settingKey, purpose: `${provider}.${settingKey}` }),
+    ...overrides,
+  }
+}
+
+function createIntegrationSecretSetting(overrides: Partial<IntegrationSecretSettingDto> = {}): IntegrationSecretSettingDto {
+  return {
+    id: 'integration-secret-setting',
+    provider: 'OneCFresh',
+    settingKey: 'RefreshToken',
+    purpose: 'OneCFresh.RefreshToken',
+    updatedAtUtc: '2026-07-12T05:00:00Z',
+    updatedByUserId: 'admin-user',
+    hasProtectedValue: true,
     ...overrides,
   }
 }

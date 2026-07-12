@@ -664,8 +664,15 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
   const [receiptPrintingStatus, setReceiptPrintingStatus] = useState<ReceiptPrintingIntegrationStatusDto | null>(null)
   const [receiptPrintingLoading, setReceiptPrintingLoading] = useState(false)
   const [receiptPrintingError, setReceiptPrintingError] = useState<string | null>(null)
+  const [oneCFreshToken, setOneCFreshToken] = useState('')
+  const [receiptDeviceConnection, setReceiptDeviceConnection] = useState('')
+  const [receiptTemplate, setReceiptTemplate] = useState('')
+  const [protectedSettingSaving, setProtectedSettingSaving] = useState<string | null>(null)
+  const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
+  const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const canViewIntegrationStatus = hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = hasPermission(auth, permissions.paymentsWrite)
+  const canManageIntegrationSettings = hasPermission(auth, permissions.usersManage)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
@@ -846,6 +853,54 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
     }
   }
 
+  async function saveProtectedSetting(provider: string, settingKey: string, plaintextValue: string, clearValue: () => void) {
+    const value = plaintextValue.trim()
+    setProtectedSettingMessage(null)
+    setProtectedSettingError(null)
+    if (!value) {
+      setProtectedSettingError('Введите защищенное значение перед сохранением.')
+      return
+    }
+
+    const savingKey = `${provider}:${settingKey}`
+    setProtectedSettingSaving(savingKey)
+    try {
+      const setting = await integrationClient.updateProtectedSetting(auth.accessToken, provider, settingKey, value)
+      clearValue()
+      setProtectedSettingMessage(`Защищенная настройка ${setting.provider}:${setting.settingKey} сохранена. Значение повторно не отображается.`)
+      if (setting.provider === 'OneCFresh') {
+        setOneCFreshStatus((state) => state ? {
+          ...state,
+          isConfigured: true,
+          status: 'prepared',
+          statusMessage: 'Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh.',
+          configuredSettings: Array.from(new Set([...state.configuredSettings, setting.settingKey])),
+          lastProtectedSettingUpdatedAtUtc: setting.updatedAtUtc,
+        } : state)
+      } else if (setting.provider === 'ReceiptPrinting') {
+        setReceiptPrintingStatus((state) => {
+          if (!state) return state
+          const configuredSettings = Array.from(new Set([...state.configuredSettings, setting.settingKey]))
+          const isConfigured = state.requiredSettings.every((key) => configuredSettings.includes(key))
+          return {
+            ...state,
+            configuredSettings,
+            isConfigured,
+            status: isConfigured ? 'prepared' : 'not_configured',
+            statusMessage: isConfigured
+              ? 'Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования.'
+              : 'Для будущей печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate.',
+            lastProtectedSettingUpdatedAtUtc: setting.updatedAtUtc,
+          }
+        })
+      }
+    } catch (caught) {
+      setProtectedSettingError(caught instanceof Error ? caught.message : 'Не удалось сохранить защищенную настройку.')
+    } finally {
+      setProtectedSettingSaving(null)
+    }
+  }
+
   return (
     <>
       <section className="password-panel" aria-label="Безопасность аккаунта">
@@ -910,6 +965,21 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
           ) : null}
           {oneCFreshStatus ? (
             <p className="empty-state" role="status" aria-live="polite">{oneCFreshStatus.statusMessage}</p>
+          ) : null}
+          {canManageIntegrationSettings ? (
+            <form className="dictionary-form" aria-label="Защищенная настройка 1C Fresh" onSubmit={(event) => {
+              event.preventDefault()
+              void saveProtectedSetting('OneCFresh', 'RefreshToken', oneCFreshToken, () => setOneCFreshToken(''))
+            }}>
+              <FormField label="Refresh token 1C Fresh">
+                <input aria-label="Новый refresh token 1C Fresh" type="password" autoComplete="new-password" value={oneCFreshToken} onChange={(event) => setOneCFreshToken(event.target.value)} />
+              </FormField>
+              <p className="form-hint">Сохраненное значение нельзя просмотреть: можно только заменить новым.</p>
+              <button className="secondary-button" type="submit" disabled={protectedSettingSaving !== null}>
+                <ShieldCheck size={16} />
+                <span>{protectedSettingSaving === 'OneCFresh:RefreshToken' ? 'Сохраняем...' : 'Сохранить токен'}</span>
+              </button>
+            </form>
           ) : null}
           {oneCFreshSyncMessage ? <div className="form-success" role="status" aria-live="polite">{oneCFreshSyncMessage}</div> : null}
           {oneCFreshPreview ? (
@@ -1004,8 +1074,29 @@ function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: {
               <p className="form-hint">Будущие действия: {receiptPrintingStatus.plannedActions.join(', ')}.</p>
             </>
           ) : null}
+          {canManageIntegrationSettings ? (
+            <form className="dictionary-form" aria-label="Защищенные настройки печати" onSubmit={(event) => event.preventDefault()}>
+              <FormField label="Подключение к устройству">
+                <input aria-label="Новое подключение к устройству печати" type="password" autoComplete="new-password" value={receiptDeviceConnection} onChange={(event) => setReceiptDeviceConnection(event.target.value)} />
+              </FormField>
+              <button className="secondary-button" type="button" disabled={protectedSettingSaving !== null} onClick={() => void saveProtectedSetting('ReceiptPrinting', 'DeviceConnection', receiptDeviceConnection, () => setReceiptDeviceConnection(''))}>
+                <ShieldCheck size={16} />
+                <span>{protectedSettingSaving === 'ReceiptPrinting:DeviceConnection' ? 'Сохраняем...' : 'Сохранить подключение'}</span>
+              </button>
+              <FormField label="Шаблон квитанции">
+                <textarea aria-label="Новый защищенный шаблон квитанции" rows={3} value={receiptTemplate} onChange={(event) => setReceiptTemplate(event.target.value)} />
+              </FormField>
+              <button className="secondary-button" type="button" disabled={protectedSettingSaving !== null} onClick={() => void saveProtectedSetting('ReceiptPrinting', 'ReceiptTemplate', receiptTemplate, () => setReceiptTemplate(''))}>
+                <ShieldCheck size={16} />
+                <span>{protectedSettingSaving === 'ReceiptPrinting:ReceiptTemplate' ? 'Сохраняем...' : 'Сохранить шаблон'}</span>
+              </button>
+              <p className="form-hint">Сохраненные значения не возвращаются из API и после записи очищаются из формы.</p>
+            </form>
+          ) : null}
         </section>
       ) : null}
+      {protectedSettingError ? <FormError>{protectedSettingError}</FormError> : null}
+      {protectedSettingMessage ? <div className="form-success" role="status" aria-live="polite">{protectedSettingMessage}</div> : null}
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
           <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>

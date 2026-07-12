@@ -21,7 +21,7 @@
 - `FinancialOperation.Amount`, `DocumentNumber`, `Comment`, `CancelReason` - финансовые сведения и возможные персональные комментарии; видимость по permissions, запись действий в audit.
 - `Accrual.Comment`, `SupplierAccrual.Comment`, `MeterReading.Comment` - комментарии могут содержать ручные пояснения оператора, поэтому считаются чувствительными.
 - `AccessImportRun.OriginalFileName`, `ContentSha256`, `ReportJson` - данные импорта; raw-файл не хранить в Git и не отдавать через публичные endpoints.
-- `Jwt:SigningKey`, `Jwt__SigningKey`, `ConnectionStrings:Default`, будущие `OneCFresh` токены и настройки фискального принтера - секреты контура, хранить только вне репозитория; при сохранении в БД использовать encryption at rest.
+- `Jwt:SigningKey`, `Jwt__SigningKey`, `ConnectionStrings:Default`, `OneCFresh:RefreshToken` и настройки печати - секреты контура, хранить только вне репозитория; runtime-настройки интеграций сохранять в БД только через encryption at rest.
 
 ## Правила Хранения Импорта
 
@@ -46,7 +46,7 @@
 3. Rotation ключей должен иметь план: новый ключ для новых записей, безопасная миграция старых значений и audit-событие администраторского действия.
 4. Логи ошибок шифрования не должны содержать plaintext секретов.
 5. Тесты должны проверять, что секретное значение не возвращается из API, не попадает в audit summary и не пишется в release/debug output.
-6. Для интеграционных секретов использовать `ISensitiveDataProtector` и `IIntegrationSecretSettingsService`: сохранять в `integration_secret_settings` только значения с префиксом `gb:protected:v1:`, разделять токены по purpose (`OneCFresh.Token`, `FiscalPrinter.Token`) и настраивать `DataProtection:KeysPath` на стендах, где ключи должны переживать перезапуск.
+6. Для интеграционных секретов использовать `ISensitiveDataProtector` и `IIntegrationSecretSettingsService`: сохранять в `integration_secret_settings` только значения с префиксом `gb:protected:v1:`, разрешать только allowlist `OneCFresh:RefreshToken`, `ReceiptPrinting:DeviceConnection`, `ReceiptPrinting:ReceiptTemplate`, разделять значения по purpose и настраивать постоянный `DataProtection:KeysPath`. API изменения доступен только с `users.manage`, возвращает metadata без plaintext; UI очищает введенное значение после сохранения и не умеет читать его обратно.
 
 ## Acceptance-Критерии
 

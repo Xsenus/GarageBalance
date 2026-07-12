@@ -22,7 +22,7 @@ public sealed class IntegrationsControllerTests
             ["RefreshToken"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(oneCFreshStatus: expected);
-        var controller = new IntegrationsController(service, new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
+        var controller = new IntegrationsController(service, new FakeIntegrationSecretSettingsService(), new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
 
         var result = await controller.GetOneCFreshStatus(CancellationToken.None);
 
@@ -46,7 +46,7 @@ public sealed class IntegrationsControllerTests
             ["Печать квитанции", "Отмена печати", "Печать копии квитанции"],
             DateTimeOffset.UtcNow);
         var service = new FakeIntegrationStatusService(receiptPrintingStatus: expected);
-        var controller = new IntegrationsController(service, new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
+        var controller = new IntegrationsController(service, new FakeIntegrationSecretSettingsService(), new FakeOneCFreshSyncService(), new FakeReceiptPrintingService());
 
         var result = await controller.GetReceiptPrintingStatus(CancellationToken.None);
 
@@ -84,6 +84,65 @@ public sealed class IntegrationsControllerTests
         Assert.Equal(operationId, service.LastOperationId);
         Assert.Equal(request, service.LastRequest);
         Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateProtectedSetting_ReturnsMetadataAndPassesActorWithoutReturningPlaintext()
+    {
+        var actorUserId = Guid.NewGuid();
+        var expected = new IntegrationSecretSettingDto(
+            Guid.NewGuid(),
+            "OneCFresh",
+            "RefreshToken",
+            "OneCFresh.RefreshToken",
+            DateTimeOffset.UtcNow,
+            actorUserId,
+            HasProtectedValue: true);
+        var secretService = new FakeIntegrationSecretSettingsService
+        {
+            Result = IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Success(expected)
+        };
+        var controller = CreateController(new FakeReceiptPrintingService(), actorUserId, integrationSecretSettingsService: secretService);
+
+        var result = await controller.UpdateProtectedSetting(
+            "OneCFresh",
+            "RefreshToken",
+            new UpdateIntegrationSecretRequest("private-refresh-token"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(expected, ok.Value);
+        Assert.Equal(actorUserId, secretService.LastActorUserId);
+        Assert.Equal("OneCFresh", secretService.LastRequest?.Provider);
+        Assert.Equal("RefreshToken", secretService.LastRequest?.SettingKey);
+        Assert.Equal("private-refresh-token", secretService.LastRequest?.PlaintextValue);
+        Assert.DoesNotContain("private-refresh-token", expected.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateProtectedSetting_RequiresBodyAndMapsValidationError()
+    {
+        var controller = CreateController(new FakeReceiptPrintingService());
+        var missingBody = await controller.UpdateProtectedSetting("OneCFresh", "RefreshToken", null, CancellationToken.None);
+
+        var missingBodyResult = Assert.IsType<BadRequestObjectResult>(missingBody.Result);
+        Assert.Equal("integration_secret_request_required", Assert.IsType<ProblemDetails>(missingBodyResult.Value).Title);
+
+        var secretService = new FakeIntegrationSecretSettingsService
+        {
+            Result = IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Failure(
+                "integration_secret_unsupported",
+                "Unsupported setting.")
+        };
+        controller = CreateController(new FakeReceiptPrintingService(), integrationSecretSettingsService: secretService);
+        var unsupported = await controller.UpdateProtectedSetting(
+            "Unknown",
+            "Token",
+            new UpdateIntegrationSecretRequest("value"),
+            CancellationToken.None);
+
+        var unsupportedResult = Assert.IsType<BadRequestObjectResult>(unsupported.Result);
+        Assert.Equal("integration_secret_unsupported", Assert.IsType<ProblemDetails>(unsupportedResult.Value).Title);
     }
 
     [Fact]
@@ -255,10 +314,12 @@ public sealed class IntegrationsControllerTests
     private static IntegrationsController CreateController(
         FakeReceiptPrintingService receiptPrintingService,
         Guid? actorUserId = null,
-        FakeOneCFreshSyncService? oneCFreshSyncService = null)
+        FakeOneCFreshSyncService? oneCFreshSyncService = null,
+        FakeIntegrationSecretSettingsService? integrationSecretSettingsService = null)
     {
         var controller = new IntegrationsController(
             new FakeIntegrationStatusService(),
+            integrationSecretSettingsService ?? new FakeIntegrationSecretSettingsService(),
             oneCFreshSyncService ?? new FakeOneCFreshSyncService(),
             receiptPrintingService)
         {
@@ -275,6 +336,36 @@ public sealed class IntegrationsControllerTests
         }
 
         return controller;
+    }
+
+    private sealed class FakeIntegrationSecretSettingsService : IIntegrationSecretSettingsService
+    {
+        public UpsertIntegrationSecretRequest? LastRequest { get; private set; }
+
+        public Guid? LastActorUserId { get; private set; }
+
+        public IntegrationSecretSettingResult<IntegrationSecretSettingDto> Result { get; init; } =
+            IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Failure("not_configured", "Not configured.");
+
+        public Task<IntegrationSecretSettingResult<IntegrationSecretSettingDto>> UpsertSecretAsync(
+            UpsertIntegrationSecretRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(Result);
+        }
+
+        public Task<IntegrationSecretSettingResult<string>> GetSecretAsync(string provider, string settingKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(IntegrationSecretSettingResult<string>.Failure("not_configured", "Not configured."));
+        }
+
+        public Task<IReadOnlyList<IntegrationSecretSettingDto>> GetSettingsAsync(string? provider, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<IntegrationSecretSettingDto>>([]);
+        }
     }
 
     private sealed class FakeOneCFreshSyncService : IOneCFreshSyncService

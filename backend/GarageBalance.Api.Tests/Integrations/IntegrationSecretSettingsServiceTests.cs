@@ -58,11 +58,11 @@ public sealed class IntegrationSecretSettingsServiceTests
         var service = CreateService(database.Context);
 
         await service.UpsertSecretAsync(
-            new UpsertIntegrationSecretRequest("FiscalPrinter", "ApiToken", "printer-api-token"),
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "DeviceConnection", "printer-api-token"),
             null,
             CancellationToken.None);
 
-        var result = await service.GetSecretAsync("FiscalPrinter", "ApiToken", CancellationToken.None);
+        var result = await service.GetSecretAsync("ReceiptPrinting", "DeviceConnection", CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("printer-api-token", result.Value);
@@ -85,7 +85,9 @@ public sealed class IntegrationSecretSettingsServiceTests
         Assert.Equal(2, await database.Context.AuditEvents.CountAsync(item => item.Action == "integration.secret_upserted"));
         var updateAudit = database.Context.AuditEvents.Single(item => item.Action == "integration.secret_upserted" && item.ActionKind == "update");
         using var metadata = JsonDocument.Parse(updateAudit.MetadataJson!);
-        Assert.Contains("Защищенное значение", metadata.RootElement.GetProperty("changedFields").GetString(), StringComparison.Ordinal);
+        Assert.Equal("Защищенное значение", metadata.RootElement.GetProperty("fieldName").GetString());
+        Assert.Equal("задано", metadata.RootElement.GetProperty("oldValue").GetString());
+        Assert.Equal("обновлено", metadata.RootElement.GetProperty("newValue").GetString());
         Assert.Equal("обновлено", metadata.RootElement.GetProperty("protectedValueState").GetString());
         Assert.DoesNotContain("first-token", updateAudit.MetadataJson, StringComparison.Ordinal);
         Assert.DoesNotContain("second-token", updateAudit.MetadataJson, StringComparison.Ordinal);
@@ -118,6 +120,23 @@ public sealed class IntegrationSecretSettingsServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(expectedCode, result.ErrorCode);
+        Assert.Empty(database.Context.IntegrationSecretSettings);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpsertSecretAsync_RejectsUnknownProviderAndSettingKey()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("UnknownProvider", "ApiToken", "secret"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("integration_secret_unsupported", result.ErrorCode);
         Assert.Empty(database.Context.IntegrationSecretSettings);
         Assert.Empty(database.Context.AuditEvents);
     }

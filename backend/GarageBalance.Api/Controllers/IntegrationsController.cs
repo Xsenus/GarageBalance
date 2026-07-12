@@ -10,9 +10,34 @@ namespace GarageBalance.Api.Controllers;
 [Route("api/integrations")]
 public sealed class IntegrationsController(
     IIntegrationStatusService integrationStatusService,
+    IIntegrationSecretSettingsService integrationSecretSettingsService,
     IOneCFreshSyncService oneCFreshSyncService,
     IReceiptPrintingService receiptPrintingService) : ControllerBase
 {
+    [HttpPut("settings/{provider}/{settingKey}")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType<IntegrationSecretSettingDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IntegrationSecretSettingDto>> UpdateProtectedSetting(
+        string provider,
+        string settingKey,
+        [FromBody] UpdateIntegrationSecretRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BadRequest(ApiProblemDetails.Create("integration_secret_request_required", "Передайте защищенное значение.", StatusCodes.Status400BadRequest));
+        }
+
+        var result = await integrationSecretSettingsService.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest(provider, settingKey, request.PlaintextValue),
+            GetActorUserId(),
+            cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpGet("one-c-fresh/status")]
     [Authorize(Policy = SystemPermissions.ImportRun)]
     [ProducesResponseType<OneCFreshIntegrationStatusDto>(StatusCodes.Status200OK)]

@@ -11,8 +11,8 @@ public sealed class OneCFreshSyncService(
     IOneCFreshSyncAdapter syncAdapter,
     IAuditEventWriter auditEventWriter) : IOneCFreshSyncService
 {
-    private const string Provider = "OneCFresh";
-    private const string RefreshTokenSettingKey = "RefreshToken";
+    private const string Provider = IntegrationSecretCatalog.OneCFreshProvider;
+    private const string RefreshTokenSettingKey = IntegrationSecretCatalog.OneCFreshRefreshToken;
     private const string PreviewDirection = "pending_decision";
     private const string PreviewStatus = "draft_preview";
 

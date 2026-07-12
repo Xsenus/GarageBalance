@@ -2220,6 +2220,62 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ProtectedIntegrationSettingsAreCompleteWhenAllowlistEncryptionAdminApiUiAuditAndPersistentKeysExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var catalogText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Integrations", "IntegrationSecretCatalog.cs"));
+        var serviceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Integrations", "IntegrationSecretSettingsService.cs"));
+        var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "IntegrationsController.cs"));
+        var serviceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Integrations", "IntegrationSecretSettingsServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Integrations", "IntegrationsControllerTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "ControllerAuthorizationCoverageTests.cs"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var apiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
+        var composeText = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
+        var verificationText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "protected-integration-settings-verification.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать шифрование чувствительных настроек и токенов интеграций", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("OneCFresh:RefreshToken", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrinting:DeviceConnection", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPrinting:ReceiptTemplate", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("users.manage", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ProtectedIntegrationSettingsAreCompleteWhenAllowlistEncryptionAdminApiUiAuditAndPersistentKeysExist", roadmapLine, StringComparison.Ordinal);
+
+        foreach (var value in new[] { "OneCFreshRefreshToken", "ReceiptPrintingDeviceConnection", "ReceiptPrintingReceiptTemplate" })
+        {
+            Assert.Contains(value, catalogText, StringComparison.Ordinal);
+        }
+        Assert.Contains("integration_secret_unsupported", serviceText, StringComparison.Ordinal);
+        Assert.Contains("sensitiveDataProtector.Protect", serviceText, StringComparison.Ordinal);
+        Assert.Contains("integration.secret_upserted", serviceText, StringComparison.Ordinal);
+        Assert.Contains("[HttpPut(\"settings/{provider}/{settingKey}\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("SystemPermissions.UsersManage", controllerText, StringComparison.Ordinal);
+        Assert.Contains("UpdateProtectedSetting_ReturnsMetadataAndPassesActorWithoutReturningPlaintext", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpsertSecretAsync_RejectsUnknownProviderAndSettingKey", serviceTestsText, StringComparison.Ordinal);
+        Assert.Contains("nameof(IntegrationsController.UpdateProtectedSetting), SystemPermissions.UsersManage", authorizationTestsText, StringComparison.Ordinal);
+        Assert.Contains("integrationClient.updateProtectedSetting", appText, StringComparison.Ordinal);
+        Assert.Contains("lets administrators replace protected integration settings without displaying plaintext", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("hides protected integration setting forms without user management permission", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("updates an allowlisted protected setting without expecting plaintext in response", apiTestsText, StringComparison.Ordinal);
+        Assert.Contains("data-protection-keys", composeText, StringComparison.Ordinal);
+        Assert.Contains("возвращает только metadata", verificationText, StringComparison.Ordinal);
+
+        Assert.Contains("ProtectedIntegrationSettingsAreCompleteWhenAllowlistEncryptionAdminApiUiAuditAndPersistentKeysExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.539.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Защищенная настройка интеграций", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();

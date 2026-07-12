@@ -87,6 +87,16 @@ export type ReceiptPrintingActionDto = {
   registeredAtUtc: string
 }
 
+export type IntegrationSecretSettingDto = {
+  id: string
+  provider: string
+  settingKey: string
+  purpose: string
+  updatedAtUtc: string
+  updatedByUserId: string | null
+  hasProtectedValue: boolean
+}
+
 export type IntegrationClient = {
   getOneCFreshStatus(accessToken: string): Promise<OneCFreshIntegrationStatusDto>
   previewOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncPreviewDto>
@@ -94,6 +104,7 @@ export type IntegrationClient = {
   retryOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncDto>
   getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
   registerReceiptPrintingAction(accessToken: string, operationId: string, request: ReceiptPrintingActionRequest): Promise<ReceiptPrintingActionDto>
+  updateProtectedSetting(accessToken: string, provider: string, settingKey: string, plaintextValue: string): Promise<IntegrationSecretSettingDto>
 }
 
 export const integrationsApi: IntegrationClient = {
@@ -128,6 +139,16 @@ export const integrationsApi: IntegrationClient = {
       {
         method: 'POST',
         body: JSON.stringify(request),
+      },
+    )
+  },
+  updateProtectedSetting(accessToken, provider, settingKey, plaintextValue) {
+    return requestJson<IntegrationSecretSettingDto>(
+      accessToken,
+      `/api/integrations/settings/${encodeURIComponent(provider)}/${encodeURIComponent(settingKey)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ plaintextValue }),
       },
     )
   },

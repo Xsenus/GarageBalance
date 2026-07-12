@@ -30,8 +30,7 @@ public sealed class IntegrationSecretSettingsService(
             return validation;
         }
 
-        var provider = request.Provider.Trim();
-        var settingKey = request.SettingKey.Trim();
+        IntegrationSecretCatalog.TryGetCanonical(request.Provider, request.SettingKey, out var provider, out var settingKey);
         var normalizedProvider = Normalize(provider);
         var normalizedSettingKey = Normalize(settingKey);
         var purpose = BuildPurpose(provider, settingKey);
@@ -192,6 +191,13 @@ public sealed class IntegrationSecretSettingsService(
         if (request.Provider.Trim().Length > 100 || request.SettingKey.Trim().Length > 120)
         {
             return IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Failure("integration_secret_key_too_long", "Integration provider or setting key is too long.");
+        }
+
+        if (!IntegrationSecretCatalog.TryGetCanonical(request.Provider, request.SettingKey, out _, out _))
+        {
+            return IntegrationSecretSettingResult<IntegrationSecretSettingDto>.Failure(
+                "integration_secret_unsupported",
+                "Эта защищенная настройка интеграции не поддерживается.");
         }
 
         return null;

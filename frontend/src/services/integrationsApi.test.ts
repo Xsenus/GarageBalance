@@ -105,4 +105,27 @@ describe('integrationsApi', () => {
     expect(headers.get('Authorization')).toBe('Bearer token')
     expect(headers.get('Content-Type')).toBe('application/json')
   })
+
+  it('updates an allowlisted protected setting without expecting plaintext in response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'setting-1',
+      provider: 'OneCFresh',
+      settingKey: 'RefreshToken',
+      purpose: 'OneCFresh.RefreshToken',
+      updatedAtUtc: '2026-07-12T05:00:00Z',
+      updatedByUserId: 'admin-user',
+      hasProtectedValue: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await integrationsApi.updateProtectedSetting('token', 'OneCFresh', 'RefreshToken', 'private-token')
+
+    expect(result.hasProtectedValue).toBe(true)
+    expect(result).not.toHaveProperty('plaintextValue')
+    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/settings/OneCFresh/RefreshToken', {
+      method: 'PUT',
+      body: JSON.stringify({ plaintextValue: 'private-token' }),
+      headers: expect.any(Headers),
+    })
+  })
 })
