@@ -1263,6 +1263,69 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void LocalBackupStrategyOpenQuestionRemainsDecisionUntilStorageRetentionAndRestoreOwnershipAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-backup-strategy-decision-template.md"));
+        var backupGuideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "postgres-backup-restore.md"));
+        var localInstallText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "local-pc-install-checklist.md"));
+        var backupScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "backup-postgres.ps1"));
+        var registerTaskScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "register-local-backup-task.ps1"));
+        var restoreScriptText = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "restore-postgres.ps1"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var openQuestionLine = activeRoadmapLines.Single(line =>
+            line.Contains("Нужно подтвердить стратегию резервного копирования для локальной установки.", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("docs/local-backup-strategy-decision-template.md", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("основного и вторичного хранения", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("schedule/retention", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("RPO/RTO", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("ответственных", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("успешного restore-check", openQuestionLine, StringComparison.Ordinal);
+        Assert.Contains("LocalBackupStrategyOpenQuestionRemainsDecisionUntilStorageRetentionAndRestoreOwnershipAreApproved", openQuestionLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("- `[x]` Нужно подтвердить стратегию резервного копирования", openQuestionLine, StringComparison.Ordinal);
+
+        Assert.Contains("# Local Backup Strategy Decision Template", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Primary Backup Location", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Secondary Copy And Offline Protection", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Schedule And Retention", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Restore Check Ownership", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Recovery Objectives", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Implementation Impact", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Safe Data Rules", templateText, StringComparison.Ordinal);
+        Assert.Contains("## Close Conditions", templateText, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check", templateText, StringComparison.Ordinal);
+        Assert.Contains("GarageBalance Local PostgreSQL Backup", templateText, StringComparison.Ordinal);
+        Assert.Contains("-AllowProductionTarget", templateText, StringComparison.Ordinal);
+        Assert.Contains("второй копии", templateText, StringComparison.Ordinal);
+        Assert.Contains("retention", templateText, StringComparison.Ordinal);
+        Assert.DoesNotContain("password=", templateText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization: Bearer", templateText, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("Раз в месяц выполнять restore-check", backupGuideText, StringComparison.Ordinal);
+        Assert.Contains("Не хранить единственный backup на том же диске без копии", localInstallText, StringComparison.Ordinal);
+        Assert.Contains("--format=custom", backupScriptText, StringComparison.Ordinal);
+        Assert.Contains("$temporaryPath", backupScriptText, StringComparison.Ordinal);
+        Assert.Contains("New-ScheduledTaskTrigger -Daily", registerTaskScriptText, StringComparison.Ordinal);
+        Assert.Contains("$BackupDirectory", registerTaskScriptText, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check", restoreScriptText, StringComparison.Ordinal);
+        Assert.Contains("AllowProductionTarget", restoreScriptText, StringComparison.Ordinal);
+
+        Assert.Contains("LocalBackupStrategyOpenQuestionRemainsDecisionUntilStorageRetentionAndRestoreOwnershipAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("агент не может выбрать место основного и второго хранения", historyText, StringComparison.Ordinal);
+        Assert.Contains("получить заполненный decision record", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalBackupStrategyOpenQuestionRemainsDecisionUntilStorageRetentionAndRestoreOwnershipAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
