@@ -8,6 +8,7 @@ describe('accessible dynamic messages', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
   const formFeedbackSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'formFeedback.tsx'), 'utf8')
+  const settingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -483,24 +484,26 @@ describe('accessible dynamic messages', () => {
       {
         id: 'own-password-policy-hint',
         fields: ['aria-label="Новый пароль"', 'aria-label="Повтор нового пароля"'],
+        source: settingsPanelSource,
       },
       {
         id: 'new-user-password-policy-hint',
         fields: ['aria-label="Пароль пользователя"'],
+        source: appSource,
       },
     ]
 
     for (const hint of passwordPolicyHints) {
-      expect(appSource).toContain(`id="${hint.id}">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>`)
+      expect(hint.source).toContain(`id="${hint.id}">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>`)
 
       for (const fieldLabel of hint.fields) {
-        const fieldIndex = appSource.indexOf(fieldLabel)
+        const fieldIndex = hint.source.indexOf(fieldLabel)
         expect(fieldIndex).toBeGreaterThan(-1)
 
-        const fieldEnd = appSource.indexOf('>', fieldIndex)
+        const fieldEnd = hint.source.indexOf('>', fieldIndex)
         expect(fieldEnd).toBeGreaterThan(fieldIndex)
 
-        const fieldSource = appSource.slice(fieldIndex, fieldEnd + 1)
+        const fieldSource = hint.source.slice(fieldIndex, fieldEnd + 1)
         expect(fieldSource).toContain(`aria-describedby="${hint.id}"`)
       }
     }

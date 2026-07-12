@@ -2515,7 +2515,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var serviceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Integrations", "IntegrationSecretSettingsServiceTests.cs"));
         var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Integrations", "IntegrationsControllerTests.cs"));
         var authorizationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "ControllerAuthorizationCoverageTests.cs"));
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var settingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "settings", "PasswordPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var apiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
         var composeText = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
@@ -2544,7 +2544,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("UpdateProtectedSetting_ReturnsMetadataAndPassesActorWithoutReturningPlaintext", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("UpsertSecretAsync_RejectsUnknownProviderAndSettingKey", serviceTestsText, StringComparison.Ordinal);
         Assert.Contains("nameof(IntegrationsController.UpdateProtectedSetting), SystemPermissions.UsersManage", authorizationTestsText, StringComparison.Ordinal);
-        Assert.Contains("integrationClient.updateProtectedSetting", appText, StringComparison.Ordinal);
+        Assert.Contains("integrationClient.updateProtectedSetting", settingsPanelText, StringComparison.Ordinal);
         Assert.Contains("lets administrators replace protected integration settings without displaying plaintext", appTestsText, StringComparison.Ordinal);
         Assert.Contains("hides protected integration setting forms without user management permission", appTestsText, StringComparison.Ordinal);
         Assert.Contains("updates an allowlisted protected setting without expecting plaintext in response", apiTestsText, StringComparison.Ordinal);
@@ -5095,7 +5095,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "GarageBalance.Api.Tests",
             "Auth",
             "ControllerAuthorizationCoverageTests.cs"));
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var settingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "settings", "PasswordPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
         var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
@@ -5134,8 +5134,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("RetryOneCFreshSync_ReturnsResultAndPassesActorUserId", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("StartOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
         Assert.Contains("RetryOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
-        Assert.Contains("Запустить синхронизацию", appText, StringComparison.Ordinal);
-        Assert.Contains("Повторить запрос", appText, StringComparison.Ordinal);
+        Assert.Contains("Запустить синхронизацию", settingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("Повторить запрос", settingsPanelText, StringComparison.Ordinal);
         Assert.Contains("startOneCFreshSync", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("retryOneCFreshSync", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("/api/integrations/one-c-fresh/sync-runs", integrationsApiText, StringComparison.Ordinal);
@@ -5187,7 +5187,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "GarageBalance.Api.Tests",
             "Integrations",
             "OneCFreshSyncServiceTests.cs"));
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var settingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "settings", "PasswordPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
         var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
@@ -5225,9 +5225,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("StartSyncAsync_WritesAdapterErrorStatusAsRetryable", serviceTestsText, StringComparison.Ordinal);
         Assert.Contains("StartSyncAsync_WritesConflictStatusWithoutRetry", serviceTestsText, StringComparison.Ordinal);
         Assert.Contains("RetrySyncAsync_CreatesSeparateAuditEventWithoutPlaintextToken", serviceTestsText, StringComparison.Ordinal);
-        Assert.Contains("getOneCFreshSyncRecoveryMessage", appText, StringComparison.Ordinal);
-        Assert.Contains("oneCFreshSyncResult?.canRetry", appText, StringComparison.Ordinal);
-        Assert.Contains("Обнаружен конфликт синхронизации", appText, StringComparison.Ordinal);
+        Assert.Contains("getOneCFreshSyncRecoveryMessage", settingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("oneCFreshSyncResult?.canRetry", settingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("Обнаружен конфликт синхронизации", settingsPanelText, StringComparison.Ordinal);
         Assert.Contains("canRetry: boolean", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("hasConflict: boolean", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("recoveryAction: string | null", integrationsApiText, StringComparison.Ordinal);
@@ -5295,7 +5295,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "GarageBalance.Api.Tests",
             "Auth",
             "ControllerAuthorizationCoverageTests.cs"));
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var settingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "settings", "PasswordPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
         var integrationsApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.test.ts"));
@@ -5343,9 +5343,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("PreviewOneCFreshSync", authorizationTestsText, StringComparison.Ordinal);
         Assert.Contains("previewOneCFreshSync", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("/api/integrations/one-c-fresh/sync-runs/preview", integrationsApiText, StringComparison.Ordinal);
-        Assert.Contains("Подготовить предпросмотр", appText, StringComparison.Ordinal);
-        Assert.Contains("Предпросмотр синхронизации 1C Fresh", appText, StringComparison.Ordinal);
-        Assert.Contains("oneCFreshPreview.canApply", appText, StringComparison.Ordinal);
+        Assert.Contains("Подготовить предпросмотр", settingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("Предпросмотр синхронизации 1C Fresh", settingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("oneCFreshPreview.canApply", settingsPanelText, StringComparison.Ordinal);
         Assert.Contains("previews 1C Fresh synchronization before sending changes", appTestsText, StringComparison.Ordinal);
         Assert.Contains("previewOneCFreshSync", integrationsApiTestsText, StringComparison.Ordinal);
         Assert.Contains("\"version\": \"0.536.0\"", releaseNotesText, StringComparison.Ordinal);

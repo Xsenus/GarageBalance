@@ -3,6 +3,40 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void PasswordPanelRemainsInItsFeatureModuleWithSharedFormField()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var passwordPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "settings",
+            "PasswordPanel.tsx"));
+        var formFieldText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "FormField.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { PasswordPanel } from './features/settings/PasswordPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<PasswordPanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function PasswordPanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("getOneCFreshSyncConfirmationTitle", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function FormField(", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function PasswordPanel(", passwordPanelText, StringComparison.Ordinal);
+        Assert.Contains("authClient.changeOwnPassword", passwordPanelText, StringComparison.Ordinal);
+        Assert.Contains("integrationClient.previewOneCFreshSync", passwordPanelText, StringComparison.Ordinal);
+        Assert.Contains("integrationClient.updateProtectedSetting", passwordPanelText, StringComparison.Ordinal);
+        Assert.Contains("hasPermission(auth, permissions.usersManage)", passwordPanelText, StringComparison.Ordinal);
+        Assert.Contains("export function FormField(", formFieldText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/settings/PasswordPanel.tsx", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("shared UI", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AuthGateRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
