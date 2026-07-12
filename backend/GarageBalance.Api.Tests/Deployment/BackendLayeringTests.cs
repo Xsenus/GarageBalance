@@ -49,7 +49,54 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
-    public void FormStateRepositoryLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
+    public void AppReleaseApplicationService_UsesUnitOfWorkAbstractionInsteadOfEfInfrastructure()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Releases",
+            "AppReleaseService.cs"));
+
+        Assert.Contains("IApplicationUnitOfWork? unitOfWork", service, StringComparison.Ordinal);
+        Assert.Contains("unitOfWork.SaveChangesAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalanceDbContext", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarageBalance.Api.Infrastructure", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplicationUnitOfWork_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Common",
+            "IApplicationUnitOfWork.cs"));
+        var implementation = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Data",
+            "EfApplicationUnitOfWork.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+
+        Assert.Contains("interface IApplicationUnitOfWork", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains("class EfApplicationUnitOfWork", implementation, StringComparison.Ordinal);
+        Assert.Contains(": IApplicationUnitOfWork", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
         var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
@@ -63,7 +110,10 @@ public sealed class BackendLayeringTests
         Assert.StartsWith("- `[~]`", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFormStateRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFormStateRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IApplicationUnitOfWork", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfApplicationUnitOfWork", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен следующий срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("Общий layering-пункт остается `[~]`", history, StringComparison.Ordinal);
         Assert.Contains("Новая запись \"Что нового\" не добавлялась", history, StringComparison.Ordinal);

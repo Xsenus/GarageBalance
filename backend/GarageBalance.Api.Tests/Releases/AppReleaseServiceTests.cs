@@ -91,7 +91,10 @@ public sealed class AppReleaseServiceTests
         using var directory = new TempContentRoot();
         directory.WriteReleasesJson("[]");
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AppReleaseService(directory.Environment, database.Context, new AuditEventWriter(database.Context));
+        var service = new AppReleaseService(
+            directory.Environment,
+            new EfApplicationUnitOfWork(database.Context),
+            new AuditEventWriter(database.Context));
         var actorUserId = Guid.Parse("6f01f4cd-2065-47f5-9c4d-a5b20cb3e35a");
 
         var createResult = await service.CreateReleaseAsync(
@@ -141,7 +144,10 @@ public sealed class AppReleaseServiceTests
             ]
             """);
         await using var database = await TestDatabase.CreateAsync();
-        var service = new AppReleaseService(directory.Environment, database.Context, new AuditEventWriter(database.Context));
+        var service = new AppReleaseService(
+            directory.Environment,
+            new EfApplicationUnitOfWork(database.Context),
+            new AuditEventWriter(database.Context));
         var actorUserId = Guid.Parse("6f01f4cd-2065-47f5-9c4d-a5b20cb3e35a");
         var request = new UpsertAppReleaseRequest(
             "release-1",

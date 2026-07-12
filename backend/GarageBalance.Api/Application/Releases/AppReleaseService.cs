@@ -1,13 +1,13 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
-using GarageBalance.Api.Infrastructure.Data;
+using GarageBalance.Api.Application.Common;
 using Microsoft.AspNetCore.Hosting;
 
 namespace GarageBalance.Api.Application.Releases;
 
 public sealed class AppReleaseService(
     IWebHostEnvironment environment,
-    GarageBalanceDbContext? dbContext = null,
+    IApplicationUnitOfWork? unitOfWork = null,
     IAuditEventWriter? auditEventWriter = null) : IAppReleaseService
 {
     private const int DefaultLimit = 10;
@@ -359,7 +359,7 @@ public sealed class AppReleaseService(
         IReadOnlyDictionary<string, object?>? newValues,
         CancellationToken cancellationToken)
     {
-        if (dbContext is null || auditEventWriter is null)
+        if (unitOfWork is null || auditEventWriter is null)
         {
             return;
         }
@@ -378,7 +378,7 @@ public sealed class AppReleaseService(
             FieldLabels: FieldLabels,
             RelatedDocumentId: release.ReleaseId,
             RelatedDocumentNumber: release.Version));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private string GetReleasesPath()
