@@ -10,7 +10,7 @@ public sealed class BackendPerformanceGuardTests
     [InlineData("Application/Finance/FinanceService.cs", @"\.Take\(NormalizeListLimit\(request\.Limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportRepository.cs", @"IsSqliteProvider[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportQuarantineRepository.cs", @"return await query[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    [InlineData("Application/Dictionaries/DictionaryService.cs", @"\.Take\(NormalizeListLimit\(limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfFeeCampaignRepository.cs", @"\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     public void ProductionListQueries_MaterializeBoundedResultSets(string relativePath, string boundedQueryPattern)
     {
         var source = ReadApiSource(relativePath);
@@ -141,6 +141,14 @@ public sealed class BackendPerformanceGuardTests
     public void ChargeServiceSettingRepository_UsesDatabaseLimitBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
+        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FeeCampaignRepository_UsesDatabaseLimitBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFeeCampaignRepository.cs");
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
     }
@@ -337,10 +345,9 @@ public sealed class BackendPerformanceGuardTests
         var tariffRepositorySource = ReadApiSource("Infrastructure/Data/EfTariffRepository.cs");
         var irregularPaymentRepositorySource = ReadApiSource("Infrastructure/Data/EfIrregularPaymentRepository.cs");
         var chargeServiceSettingRepositorySource = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
+        var feeCampaignRepositorySource = ReadApiSource("Infrastructure/Data/EfFeeCampaignRepository.cs");
 
-        Assert.True(
-            CountOccurrences(source, ".Take(NormalizeListLimit(limit))") >= 1,
-            "Dictionary default lists must use normalized server-side limits.");
+        Assert.DoesNotContain(".Take(NormalizeListLimit(limit))", source, StringComparison.Ordinal);
         Assert.Contains(
             "staffMemberRepository.GetListAsync(departmentId, normalizedSearch, includeArchived, NormalizeListLimit(limit)",
             source,
@@ -361,6 +368,11 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", chargeServiceSettingRepositorySource, StringComparison.Ordinal);
+        Assert.Contains(
+            "feeCampaignRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit)",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", feeCampaignRepositorySource, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(source, ".Take(normalizedLimit)") >= 2,
             "Dictionary search branches must keep their explicit normalized limit.");

@@ -21,6 +21,7 @@ public sealed class DictionaryService(
     ITariffRepository tariffRepository,
     IIrregularPaymentRepository irregularPaymentRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
+    IFeeCampaignRepository feeCampaignRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -84,7 +85,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfIrregularPaymentRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -1819,39 +1820,9 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<FeeCampaignDto>> GetFeeCampaignsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.FeeCampaigns
-            .AsNoTracking()
-            .Where(item => includeArchived || !item.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item =>
-                item.Name.ToLower().Contains(normalizedSearch) ||
-                (item.Goal != null && item.Goal.ToLower().Contains(normalizedSearch)));
-        }
-
-        return await query
-            .OrderBy(item => item.StartsOn)
-            .ThenBy(item => item.Name)
-            .Take(NormalizeListLimit(limit))
-            .Select(item => new FeeCampaignDto(
-                item.Id,
-                item.Name,
-                item.IncomeTypeId,
-                item.IncomeType.Name,
-                item.Goal,
-                item.ContributionAmount,
-                item.TargetAmount,
-                item.StartsOn,
-                item.EndsOn,
-                item.AppliesToAllGarages,
-                item.ParticipantGarages
-                    .OrderBy(participant => participant.Garage.Number)
-                    .Select(participant => participant.GarageId)
-                    .ToList(),
-                item.OverdueGraceDays,
-                item.IsArchived))
-            .ToListAsync(cancellationToken);
+        var campaigns = await feeCampaignRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return campaigns.Select(ToFeeCampaignDto).ToList();
     }
 
     public async Task<DictionaryResult<FeeCampaignDto>> CreateFeeCampaignAsync(UpsertFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1862,7 +1833,7 @@ public sealed class DictionaryService(
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.FeeCampaigns.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        if (await feeCampaignRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
@@ -1884,7 +1855,7 @@ public sealed class DictionaryService(
         campaign.IncomeType = incomeType;
         SyncFeeCampaignParticipants(campaign, participants.Value!);
 
-        dbContext.FeeCampaigns.Add(campaign);
+        feeCampaignRepository.Add(campaign);
         AddAudit(actorUserId, "dictionary.fee_campaign_created", "fee_campaign", campaign.Id, $"Объявлен сбор {campaign.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
@@ -1897,18 +1868,14 @@ public sealed class DictionaryService(
             return validationError;
         }
 
-        var campaign = await dbContext.FeeCampaigns
-            .Include(item => item.IncomeType)
-            .Include(item => item.ParticipantGarages)
-                .ThenInclude(item => item.Garage)
-            .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var campaign = await feeCampaignRepository.FindActiveWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.FeeCampaigns.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        if (await feeCampaignRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
@@ -1949,11 +1916,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var campaign = await dbContext.FeeCampaigns
-            .Include(item => item.IncomeType)
-            .Include(item => item.ParticipantGarages)
-                .ThenInclude(item => item.Garage)
-            .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var campaign = await feeCampaignRepository.FindActiveWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
@@ -1969,17 +1932,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<FeeCampaignDto>> RestoreFeeCampaignAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.FeeCampaigns
-            .Include(item => item.IncomeType)
-            .Include(item => item.ParticipantGarages)
-                .ThenInclude(item => item.Garage)
-            .SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var campaign = await feeCampaignRepository.FindArchivedWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден в архиве.");
         }
 
-        if (await dbContext.FeeCampaigns.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == campaign.Name, cancellationToken))
+        if (await feeCampaignRepository.ActiveDuplicateExistsAsync(id, campaign.Name, cancellationToken))
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
