@@ -1,0 +1,132 @@
+using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Domain.Finance;
+using Microsoft.EntityFrameworkCore;
+
+namespace GarageBalance.Api.Infrastructure.Data;
+
+public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) : ICashMovementReportQuery
+{
+    public async Task<CashPaymentReportData> GetCashPaymentsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string? search,
+        int? limit,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.Supplier)
+            .Include(operation => operation.ExpenseType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.OperationDate >= dateFrom &&
+                operation.OperationDate <= dateTo);
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var normalizedSearch = search.Trim().ToLower();
+                query = query.Where(operation =>
+                    (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
+                    (operation.ExpenseType != null && operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)) ||
+                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
+                    (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)));
+            }
+
+            var rowCount = await query.CountAsync(cancellationToken);
+            var total = rowCount == 0 ? 0m : await query.SumAsync(operation => operation.Amount, cancellationToken);
+            var ordered = query.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.DocumentNumber);
+            var operations = await ApplyLimit(ordered, limit).ToListAsync(cancellationToken);
+            return new CashPaymentReportData(operations, total, rowCount);
+        }
+
+        var fallbackOperations = await query
+            .OrderBy(operation => operation.OperationDate)
+            .ThenBy(operation => operation.DocumentNumber)
+            .ToListAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim();
+            fallbackOperations = fallbackOperations.Where(operation =>
+                    (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.ExpenseType?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        return new CashPaymentReportData(
+            ApplyLimit(fallbackOperations, limit).ToList(),
+            fallbackOperations.Sum(operation => operation.Amount),
+            fallbackOperations.Count);
+    }
+
+    public async Task<BankDepositReportData> GetBankDepositsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string? search,
+        int? limit,
+        CancellationToken cancellationToken)
+    {
+        var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var query = dbContext.FundOperations.AsNoTracking()
+            .Include(operation => operation.Fund)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FundOperationKinds.Deposit &&
+                operation.CreatedAtUtc >= fromUtc &&
+                operation.CreatedAtUtc < toExclusiveUtc);
+
+        if (IsSqliteProvider())
+        {
+            var operations = (await dbContext.FundOperations.AsNoTracking()
+                    .Include(operation => operation.Fund)
+                    .ToListAsync(cancellationToken))
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FundOperationKinds.Deposit &&
+                    operation.CreatedAtUtc >= fromUtc &&
+                    operation.CreatedAtUtc < toExclusiveUtc)
+                .ToList();
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var normalizedSearch = search.Trim();
+                operations = operations.Where(operation =>
+                        operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                        operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            operations = operations.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ToList();
+            return new BankDepositReportData(
+                ApplyLimit(operations, limit).ToList(),
+                operations.Sum(operation => operation.Amount),
+                operations.Count);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToLower();
+            query = query.Where(operation =>
+                operation.Fund.Name.ToLower().Contains(normalizedSearch) ||
+                operation.Reason.ToLower().Contains(normalizedSearch));
+        }
+
+        var rowCount = await query.CountAsync(cancellationToken);
+        var total = rowCount == 0 ? 0m : await query.SumAsync(operation => operation.Amount, cancellationToken);
+        var orderedQuery = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name);
+        var result = await ApplyLimit(orderedQuery, limit).ToListAsync(cancellationToken);
+        return new BankDepositReportData(result, total, rowCount);
+    }
+
+    private static IQueryable<T> ApplyLimit<T>(IQueryable<T> query, int? limit) =>
+        limit is > 0 ? query.Take(limit.Value) : query;
+
+    private static IEnumerable<T> ApplyLimit<T>(IEnumerable<T> items, int? limit) =>
+        limit is > 0 ? items.Take(limit.Value) : items;
+
+    private bool IsSqliteProvider() =>
+        dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+}

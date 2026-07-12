@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -21,7 +22,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "1", null), null, CancellationToken.None);
@@ -52,7 +53,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
 
@@ -71,7 +72,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
 
@@ -89,7 +90,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 23), 2000m, "regular", null), null, CancellationToken.None);
 
         var result = await service.GetConsolidatedReportAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 30), new DateOnly(2026, 6, 15), null), CancellationToken.None);
@@ -104,7 +105,7 @@ public sealed class ReportServiceTests
     public async Task GetConsolidatedReportAsync_ReturnsErrorForInvalidPeriod()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.GetConsolidatedReportAsync(new ConsolidatedReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null), CancellationToken.None);
 
@@ -118,7 +119,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
 
         var result = await service.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null), CancellationToken.None);
@@ -137,7 +138,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
 
         var result = await service.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null), CancellationToken.None);
@@ -155,7 +156,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
 
@@ -172,7 +173,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
 
@@ -189,7 +190,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "manual", "Начисление за июнь"), null, CancellationToken.None);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата за июнь"), null, CancellationToken.None);
 
@@ -213,7 +214,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", null), null, CancellationToken.None);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 700m, "PKO-2", null), null, CancellationToken.None);
 
@@ -235,7 +236,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var accrual = await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "manual", "Начисление за июнь"), null, CancellationToken.None);
         Assert.True(accrual.Succeeded);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 700m, "PKO-1", null), null, CancellationToken.None);
@@ -261,7 +262,7 @@ public sealed class ReportServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.FirstGarage.StartingBalance = 750m;
         await database.Context.SaveChangesAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.GetIncomeReportAsync(
             new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "accruals"),
@@ -285,7 +286,7 @@ public sealed class ReportServiceTests
         database.Context.IncomeTypes.Add(targetIncomeType);
         await database.Context.SaveChangesAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", null), null, CancellationToken.None);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, targetIncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 700m, "PKO-2", null), null, CancellationToken.None);
 
@@ -313,7 +314,7 @@ public sealed class ReportServiceTests
     public async Task GetIncomeReportAsync_ReturnsErrorForInvalidPeriod()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.GetIncomeReportAsync(
             new IncomeReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all"),
@@ -329,7 +330,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
 
         var result = await service.GetExpenseReportAsync(
@@ -353,7 +354,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 300m, "RKO-2", null), null, CancellationToken.None);
 
@@ -376,7 +377,7 @@ public sealed class ReportServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Supplier.StartingBalance = 1200m;
         await database.Context.SaveChangesAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.GetExpenseReportAsync(
             new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "accruals"),
@@ -402,7 +403,7 @@ public sealed class ReportServiceTests
         database.Context.ExpenseTypes.Add(secondExpenseType);
         await database.Context.SaveChangesAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(secondSupplier.Id, secondExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 900m, "RKO-2", null), null, CancellationToken.None);
 
@@ -430,7 +431,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", null), null, CancellationToken.None);
         await finance.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 650m, "manual", "INV-1", "Счет поставщика"), null, CancellationToken.None);
 
@@ -453,7 +454,7 @@ public sealed class ReportServiceTests
     public async Task GetExpenseReportAsync_ReturnsErrorForInvalidPeriod()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
 
         var result = await service.GetExpenseReportAsync(
             new ExpenseReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all"),
@@ -467,7 +468,7 @@ public sealed class ReportServiceTests
     public async Task GetFundChangeReportAsync_ReturnsFundOperationsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var operatorUser = new AppUser
         {
@@ -550,7 +551,7 @@ public sealed class ReportServiceTests
     public async Task ExportFundChangeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var operatorUser = new AppUser
         {
@@ -622,7 +623,7 @@ public sealed class ReportServiceTests
     public async Task ExportFundChangeReportPdfAsync_ReturnsDocumentWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Электроэнергия", NormalizedName = "ЭЛЕКТРОЭНЕРГИЯ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
@@ -662,7 +663,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
@@ -690,7 +691,7 @@ public sealed class ReportServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         database.Context.FinancialOperations.AddRange(
             new FinancialOperation
             {
@@ -739,7 +740,7 @@ public sealed class ReportServiceTests
     public async Task GetBankDepositReportAsync_ReturnsDepositRowsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
@@ -801,7 +802,7 @@ public sealed class ReportServiceTests
     public async Task GetBankDepositReportAsync_AppliesRowLimitWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var fund = new Fund { Name = "Банк", NormalizedName = "БАНК", SortOrder = 10 };
         database.Context.Funds.Add(fund);
         database.Context.FundOperations.AddRange(
@@ -855,7 +856,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var firstAccrual = await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
         var secondAccrual = await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
@@ -894,7 +895,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var campaign = new FeeCampaign
         {
             Name = "Сбор на ворота",
@@ -936,7 +937,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
 
         var result = await service.ExportIncomeReportXlsxAsync(
@@ -956,7 +957,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
 
         var result = await service.ExportExpenseReportXlsxAsync(
@@ -975,7 +976,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
 
         var result = await service.ExportIncomeReportPdfAsync(
@@ -995,7 +996,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
 
         var result = await service.ExportExpenseReportPdfAsync(
@@ -1015,7 +1016,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
@@ -1044,7 +1045,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
 
         var result = await service.ExportCashPaymentReportPdfAsync(
@@ -1062,7 +1063,7 @@ public sealed class ReportServiceTests
     public async Task ExportBankDepositReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
@@ -1112,7 +1113,7 @@ public sealed class ReportServiceTests
     public async Task ExportBankDepositReportPdfAsync_ReturnsDocumentWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
@@ -1146,7 +1147,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
@@ -1178,7 +1179,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var finance = new FinanceService(database.Context);
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"), null, CancellationToken.None);
 
@@ -1198,7 +1199,7 @@ public sealed class ReportServiceTests
     public async Task ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new ReportService(database.Context);
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var rawSearch = "private@example.com";
 
@@ -1243,6 +1244,11 @@ public sealed class ReportServiceTests
                 Assert.DoesNotContain(rawSearch, exported.Summary, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain(rawSearch, exported.MetadataJson, StringComparison.OrdinalIgnoreCase);
             });
+    }
+
+    private static ReportService CreateService(GarageBalanceDbContext context)
+    {
+        return new ReportService(context, new EfCashMovementReportQuery(context), new AuditEventWriter(context));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

@@ -7,7 +7,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Reports;
 
-public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventWriter auditEventWriter) : IReportService
+public sealed class ReportService(
+    GarageBalanceDbContext dbContext,
+    ICashMovementReportQuery cashMovementReportQuery,
+    IAuditEventWriter auditEventWriter) : IReportService
 {
     private const string IncomeReportAllRows = "all";
     private const string IncomeReportAccrualRows = "accruals";
@@ -16,11 +19,6 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
     private const string ExpenseReportAllRows = "all";
     private const string ExpenseReportAccrualRows = "accruals";
     private const string ExpenseReportPaymentRows = "payments";
-
-    public ReportService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new AuditEventWriter(dbContext))
-    {
-    }
 
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
@@ -939,66 +937,10 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             return ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
-        var operationsQuery = dbContext.FinancialOperations.AsNoTracking()
-            .Include(operation => operation.Supplier)
-            .Include(operation => operation.ExpenseType)
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.OperationDate >= dateFrom &&
-                operation.OperationDate <= dateTo);
+        int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var data = await cashMovementReportQuery.GetCashPaymentsAsync(dateFrom, dateTo, request.Search, limit, cancellationToken);
 
-        List<FinancialOperation> operations;
-        int rowCount;
-        decimal total;
-        if (dbContext.Database.IsNpgsql())
-        {
-            if (!string.IsNullOrWhiteSpace(request.Search))
-            {
-                var normalizedSearch = request.Search.Trim().ToLower();
-                operationsQuery = operationsQuery.Where(operation =>
-                    (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
-                    (operation.ExpenseType != null && operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)) ||
-                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
-                    (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)));
-            }
-
-            rowCount = await operationsQuery.CountAsync(cancellationToken);
-            total = rowCount == 0
-                ? 0m
-                : await operationsQuery.SumAsync(operation => operation.Amount, cancellationToken);
-            operations = await ApplyReportRowLimit(
-                    operationsQuery
-                        .OrderBy(operation => operation.OperationDate)
-                        .ThenBy(operation => operation.DocumentNumber),
-                    request.Limit)
-                .ToListAsync(cancellationToken);
-        }
-        else
-        {
-            operations = await operationsQuery
-                .OrderBy(operation => operation.OperationDate)
-                .ThenBy(operation => operation.DocumentNumber)
-                .ToListAsync(cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(request.Search))
-            {
-                var normalizedSearch = request.Search.Trim();
-                operations = operations
-                    .Where(operation =>
-                        (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                        (operation.ExpenseType?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                        (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                        (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
-                    .ToList();
-            }
-
-            rowCount = operations.Count;
-            total = operations.Sum(operation => operation.Amount);
-            operations = ApplyEnumerableReportRowLimit(operations, request.Limit).ToList();
-        }
-
-        var rows = operations
+        var rows = data.Operations
             .Select(operation => new CashPaymentReportRowDto(
                 operation.Id,
                 operation.OperationDate,
@@ -1010,7 +952,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.DocumentNumber,
                 operation.Comment))
             .ToList();
-        var report = new CashPaymentReportDto(dateFrom, dateTo, total, rowCount, rows);
+        var report = new CashPaymentReportDto(dateFrom, dateTo, data.Total, data.RowCount, rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -1123,73 +1065,10 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
             return ReportResult<BankDepositReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
-        var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var operationsQuery = dbContext.FundOperations.AsNoTracking()
-            .Include(operation => operation.Fund)
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FundOperationKinds.Deposit &&
-                operation.CreatedAtUtc >= fromUtc &&
-                operation.CreatedAtUtc < toExclusiveUtc);
+        int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var data = await cashMovementReportQuery.GetBankDepositsAsync(dateFrom, dateTo, request.Search, limit, cancellationToken);
 
-        List<FundOperation> operations;
-        int rowCount;
-        decimal total;
-        if (dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            operations = await dbContext.FundOperations.AsNoTracking()
-                .Include(operation => operation.Fund)
-                .ToListAsync(cancellationToken);
-            operations = operations
-                .Where(operation =>
-                    !operation.IsCanceled &&
-                    operation.OperationKind == FundOperationKinds.Deposit &&
-                    operation.CreatedAtUtc >= fromUtc &&
-                    operation.CreatedAtUtc < toExclusiveUtc)
-                .ToList();
-
-            if (!string.IsNullOrWhiteSpace(request.Search))
-            {
-                var normalizedSearch = request.Search.Trim();
-                operations = operations
-                    .Where(operation =>
-                        operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                        operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-
-            operations = operations
-                .OrderBy(operation => operation.CreatedAtUtc)
-                .ThenBy(operation => operation.Fund.Name)
-                .ToList();
-            rowCount = operations.Count;
-            total = operations.Sum(operation => operation.Amount);
-            operations = ApplyEnumerableReportRowLimit(operations, request.Limit).ToList();
-        }
-        else
-        {
-            if (!string.IsNullOrWhiteSpace(request.Search))
-            {
-                var normalizedSearch = request.Search.Trim().ToLower();
-                operationsQuery = operationsQuery.Where(operation =>
-                    operation.Fund.Name.ToLower().Contains(normalizedSearch) ||
-                    operation.Reason.ToLower().Contains(normalizedSearch));
-            }
-
-            rowCount = await operationsQuery.CountAsync(cancellationToken);
-            total = rowCount == 0
-                ? 0m
-                : await operationsQuery.SumAsync(operation => operation.Amount, cancellationToken);
-            operations = await ApplyReportRowLimit(
-                    operationsQuery
-                        .OrderBy(operation => operation.CreatedAtUtc)
-                        .ThenBy(operation => operation.Fund.Name),
-                    request.Limit)
-                .ToListAsync(cancellationToken);
-        }
-
-        var rows = operations
+        var rows = data.Operations
             .Select(operation => new BankDepositReportRowDto(
                 operation.Id,
                 DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
@@ -1197,7 +1076,7 @@ public sealed class ReportService(GarageBalanceDbContext dbContext, IAuditEventW
                 operation.Fund.Name,
                 operation.Reason))
             .ToList();
-        var report = new BankDepositReportDto(dateFrom, dateTo, total, rowCount, rows);
+        var report = new BankDepositReportDto(dateFrom, dateTo, data.Total, data.RowCount, rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,

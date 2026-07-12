@@ -72,10 +72,10 @@ public sealed class BackendPerformanceGuardTests
     [Fact]
     public void CashPaymentScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization()
     {
-        var source = ReadApiSource("Application/Reports/ReportService.cs");
+        var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetCashPaymentReportAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyReportRowLimit\([\s\S]*?request\.Limit\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetCashPaymentsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyLimit\(ordered, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.Contains("operation.Supplier.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Contains("operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
@@ -84,10 +84,10 @@ public sealed class BackendPerformanceGuardTests
     [Fact]
     public void BankDepositScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization()
     {
-        var source = ReadApiSource("Application/Reports/ReportService.cs");
+        var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetBankDepositReportAsync[\s\S]*?else[\s\S]*?operation\.Fund\.Name\.ToLower\(\)\.Contains\(normalizedSearch\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyReportRowLimit\([\s\S]*?request\.Limit\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetBankDepositsAsync[\s\S]*?operation\.Fund\.Name\.ToLower\(\)\.Contains\(normalizedSearch\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyLimit\(orderedQuery, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.Contains("operation.Reason.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
     }
