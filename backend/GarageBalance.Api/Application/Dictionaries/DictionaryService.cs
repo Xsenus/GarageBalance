@@ -16,6 +16,7 @@ public sealed class DictionaryService(
     ISupplierContactRepository supplierContactRepository,
     IStaffDepartmentRepository staffDepartmentRepository,
     IStaffMemberRepository staffMemberRepository,
+    IIncomeTypeRepository incomeTypeRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -79,7 +80,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfStaffDepartmentRepository(dbContext), new EfStaffMemberRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -334,6 +335,9 @@ public sealed class DictionaryService(
         return name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
             (code?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
     }
+
+    private static AccountingTypeDto ToAccountingTypeDto(IncomeType item) =>
+        new(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived);
 
     private bool IsSqliteProvider()
     {
@@ -1094,73 +1098,23 @@ public sealed class DictionaryService(
     public async Task<IReadOnlyList<AccountingTypeDto>> GetIncomeTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var query = dbContext.IncomeTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
-        var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            return (await query
-                    .OrderBy(item => item.Name)
-                    .ToListAsync(cancellationToken))
-                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
-                .Take(normalizedLimit)
-                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-                .ToList();
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
-        }
-
-        return await query
-            .OrderBy(item => item.Name)
-            .Take(normalizedLimit)
-            .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-            .ToListAsync(cancellationToken);
+        var incomeTypes = await incomeTypeRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return incomeTypes.Select(ToAccountingTypeDto).ToList();
     }
 
     public async Task<PagedResult<AccountingTypeDto>> GetIncomeTypesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var query = dbContext.IncomeTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
-        {
-            var filteredTypes = (await query
-                    .OrderBy(item => item.Name)
-                    .ToListAsync(cancellationToken))
-                .Where(item => AccountingTypeMatchesSearch(item.Name, item.Code, searchValue))
-                .ToList();
-            var sqliteItems = filteredTypes
-                .Skip(normalizedOffset)
-                .Take(normalizedLimit)
-                .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-                .ToList();
-
-            return new PagedResult<AccountingTypeDto>(sqliteItems, filteredTypes.Count, normalizedOffset, normalizedLimit);
-        }
-
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(item => item.Name)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(item => new AccountingTypeDto(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<AccountingTypeDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await incomeTypeRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<AccountingTypeDto>(page.Items.Select(ToAccountingTypeDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
-        if (await dbContext.IncomeTypes.AnyAsync(item => !item.IsArchived && item.Name == name, cancellationToken))
+        if (await incomeTypeRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
         }
@@ -1171,7 +1125,7 @@ public sealed class DictionaryService(
             Code = NormalizeOptional(request.Code)
         };
 
-        dbContext.IncomeTypes.Add(incomeType);
+        incomeTypeRepository.Add(incomeType);
         AddAudit(actorUserId, "dictionary.income_type_created", "income_type", incomeType.Id, $"Создан вид поступления {incomeType.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
@@ -1179,7 +1133,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<AccountingTypeDto>> UpdateIncomeTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(id, cancellationToken);
         if (incomeType is null)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Вид поступления не найден.");
@@ -1191,7 +1145,7 @@ public sealed class DictionaryService(
         }
 
         var name = request.Name.Trim();
-        if (await dbContext.IncomeTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == name, cancellationToken))
+        if (await incomeTypeRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
         }
@@ -1229,7 +1183,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(id, cancellationToken);
         if (incomeType is null)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Вид поступления не найден.");
@@ -1250,13 +1204,13 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<AccountingTypeDto>> RestoreIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindArchivedAsync(id, cancellationToken);
         if (incomeType is null)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_not_found", "Вид поступления не найден в архиве.");
         }
 
-        if (await dbContext.IncomeTypes.AnyAsync(item => item.Id != id && !item.IsArchived && item.Name == incomeType.Name, cancellationToken))
+        if (await incomeTypeRepository.ActiveDuplicateExistsAsync(id, incomeType.Name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Активный вид поступления с таким названием уже существует.");
         }
@@ -2010,7 +1964,7 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
@@ -2056,7 +2010,7 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
@@ -2332,9 +2286,7 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Success(new object());
         }
 
-        var incomeType = await dbContext.IncomeTypes
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId.Value && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId.Value, cancellationToken);
         if (incomeType is null)
         {
             return DictionaryResult<object>.Failure("charge_service_income_type_not_found", "Вид начисления для услуги не найден.");
@@ -2677,10 +2629,7 @@ public sealed class DictionaryService(
 
     private async Task<bool> IsIrregularPaymentUsedAsync(string name, CancellationToken cancellationToken)
     {
-        var incomeTypeIds = await dbContext.IncomeTypes.AsNoTracking()
-            .Where(item => item.Name == name)
-            .Select(item => item.Id)
-            .ToListAsync(cancellationToken);
+        var incomeTypeIds = await incomeTypeRepository.GetIdsByNameAsync(name, cancellationToken);
         if (incomeTypeIds.Count == 0)
         {
             return false;

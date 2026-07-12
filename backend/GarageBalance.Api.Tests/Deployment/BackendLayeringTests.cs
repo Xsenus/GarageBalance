@@ -1079,6 +1079,36 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void IncomeTypeDictionary_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        Assert.Contains("IIncomeTypeRepository incomeTypeRepository", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.FindActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.FindArchivedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.GetIdsByNameAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.Add", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.IncomeTypes", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IncomeTypeRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "IIncomeTypeRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfIncomeTypeRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        Assert.Contains("interface IIncomeTypeRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IIncomeTypeRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IIncomeTypeRepository, EfIncomeTypeRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1121,6 +1151,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IStaffMemberRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfStaffMemberRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
@@ -1142,6 +1174,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен двадцать седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);

@@ -97,6 +97,17 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void IncomeTypeRepository_UsesProviderAwareSearchAndDatabasePaging()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfIncomeTypeRepository.cs");
+        Assert.Contains("IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
+        Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 4);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
