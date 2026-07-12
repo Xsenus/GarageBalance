@@ -6476,6 +6476,13 @@ public sealed class ProjectWideRoadmapStatusTests
         var statesLine = activeRoadmapLines.Single(line =>
             line.Contains("Показать состояния без данных", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var releasePanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "releases",
+            "ReleasePanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var accessibleStatusTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "accessibleStatus.test.ts"));
         var formFeedbackText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "formFeedback.tsx"));
@@ -6497,8 +6504,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("role=\"alert\"", appText, StringComparison.Ordinal);
         Assert.Contains("className=\"empty-state\"", appText, StringComparison.Ordinal);
         Assert.Contains("role=\"status\" aria-live=\"polite\"", appText, StringComparison.Ordinal);
-        Assert.Contains("Загружаем историю обновлений", appText, StringComparison.Ordinal);
-        Assert.Contains("Пока нет опубликованных изменений", appText, StringComparison.Ordinal);
+        Assert.Contains("Загружаем историю обновлений", releasePanelText, StringComparison.Ordinal);
+        Assert.Contains("Пока нет опубликованных изменений", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("Пользователей пока нет", appText, StringComparison.Ordinal);
         Assert.Contains("В этом справочнике пока нет записей", appText, StringComparison.Ordinal);
         Assert.Contains("Проверок пока нет", appText, StringComparison.Ordinal);
