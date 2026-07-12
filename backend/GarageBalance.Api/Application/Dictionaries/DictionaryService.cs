@@ -13,6 +13,7 @@ public sealed class DictionaryService(
     IOwnerRepository ownerRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
+    ISupplierContactRepository supplierContactRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -76,7 +77,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfSupplierContactRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -773,28 +774,9 @@ public sealed class DictionaryService(
 
     public async Task<IReadOnlyList<SupplierContactDto>> GetSupplierContactsAsync(Guid? supplierId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.SupplierContacts.AsNoTracking().Include(contact => contact.Supplier).Where(contact => includeArchived || !contact.IsArchived);
-        if (supplierId is not null)
-        {
-            query = query.Where(contact => contact.SupplierId == supplierId);
-        }
-
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(contact =>
-                contact.FullName.ToLower().Contains(normalizedSearch) ||
-                (contact.Position != null && contact.Position.ToLower().Contains(normalizedSearch)) ||
-                (contact.Phone != null && contact.Phone.ToLower().Contains(normalizedSearch)) ||
-                (contact.Email != null && contact.Email.ToLower().Contains(normalizedSearch)));
-        }
-
-        return await query
-            .OrderBy(contact => contact.Supplier.Name)
-            .ThenBy(contact => contact.FullName)
-            .Take(NormalizeListLimit(limit))
-            .Select(contact => ToSupplierContactDto(contact))
-            .ToListAsync(cancellationToken);
+        var contacts = await supplierContactRepository.GetListAsync(supplierId, normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return contacts.Select(ToSupplierContactDto).ToList();
     }
 
     public async Task<DictionaryResult<SupplierContactDto>> CreateSupplierContactAsync(UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -807,7 +789,7 @@ public sealed class DictionaryService(
 
         var contact = new SupplierContact { FullName = request.FullName.Trim(), SupplierId = supplier.Id, Supplier = supplier };
         ApplySupplierContact(contact, request);
-        dbContext.SupplierContacts.Add(contact);
+        supplierContactRepository.Add(contact);
         AddAudit(actorUserId, "dictionary.supplier_contact_created", "supplier_contact", contact.Id, $"Создан контакт {contact.FullName} поставщика {supplier.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
@@ -815,7 +797,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierContactDto>> UpdateSupplierContactAsync(Guid id, UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var contact = await dbContext.SupplierContacts.Include(item => item.Supplier).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var contact = await supplierContactRepository.FindActiveWithSupplierAsync(id, cancellationToken);
         if (contact is null)
         {
             return DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Контакт поставщика не найден.");
@@ -851,7 +833,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var contact = await dbContext.SupplierContacts.Include(item => item.Supplier).SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var contact = await supplierContactRepository.FindActiveWithSupplierAsync(id, cancellationToken);
         if (contact is null)
         {
             return DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Контакт поставщика не найден.");
@@ -867,7 +849,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierContactDto>> RestoreSupplierContactAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var contact = await dbContext.SupplierContacts.Include(item => item.Supplier).ThenInclude(supplier => supplier.Group).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var contact = await supplierContactRepository.FindArchivedWithSupplierGroupAsync(id, cancellationToken);
         if (contact is null)
         {
             return DictionaryResult<SupplierContactDto>.Failure("supplier_contact_not_found", "Контакт поставщика не найден в архиве.");
