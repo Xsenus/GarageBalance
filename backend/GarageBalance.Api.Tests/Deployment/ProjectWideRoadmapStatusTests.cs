@@ -1030,6 +1030,60 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void BusinessCalculationsRemainInServicesAndDomainWhenControllersForbidDomainHelpers()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "business-calculation-layer-verification.md"));
+        var controllerThinnessTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Controllers", "ControllerThinnessTests.cs"));
+        var dictionaryServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var fundServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Funds", "FundServiceTests.cs"));
+        var importServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Import", "ImportServiceTests.cs"));
+        var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
+
+        var calculationLine = activeRoadmapLines.Single(line =>
+            line.Contains("Расчеты тарифов, начислений, задолженности, балансов", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", calculationLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryService", calculationLine, StringComparison.Ordinal);
+        Assert.Contains("FinanceService", calculationLine, StringComparison.Ordinal);
+        Assert.Contains("FundService", calculationLine, StringComparison.Ordinal);
+        Assert.Contains("ImportService", calculationLine, StringComparison.Ordinal);
+        Assert.Contains("ReportService", calculationLine, StringComparison.Ordinal);
+        Assert.Contains("docs/business-calculation-layer-verification.md", calculationLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(BusinessCalculationsRemainInServicesAndDomainWhenControllersForbidDomainHelpers), calculationLine, StringComparison.Ordinal);
+
+        Assert.Contains("HTTP-контроллеры не используют domain calculation helpers", verification, StringComparison.Ordinal);
+        Assert.Contains("Любой новый бизнес-расчет", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+        Assert.Contains("Controllers_DoNotContainBusinessCalculationHelpersOrAggregations", controllerThinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("MoneyMath.", controllerThinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("MonthPeriod.", controllerThinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("TariffCalculationBases", controllerThinnessTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Dictionaries_RoundMoneyAndTariffRateBeforeSaving", dictionaryServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_CalculatesTieredElectricityAmountFromReading", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateIncomeAsync_AllocatesPaymentToOldestGarageDebts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageBalanceHistoryAsync_ReturnsMonthlyRunningDebt", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("CreateOperationAsync_DoesNotWithdrawMoreThanBalance", fundServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateOperationAsync_UpdatesOperationRecalculatesBalancesAndWritesAudit", fundServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("DryRunAccessImportAsync_PersistsReportAndWritesAudit", importServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("DryRunAccessImportAsync_RejectsUnsupportedExtension", importServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetConsolidatedReportAsync_ReturnsMonthlyTotalsAndGarageRows", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_ReturnsDebtAfterEachPayment", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetExpenseReportAsync_IncludesSupplierStartingBalanceAsObligation", reportServiceTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт верхнеуровневый архитектурный пункт размещения бизнес-расчетов", historyText, StringComparison.Ordinal);
+        Assert.Contains(nameof(BusinessCalculationsRemainInServicesAndDomainWhenControllersForbidDomainHelpers), historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
     {
         var repositoryRoot = FindRepositoryRoot();

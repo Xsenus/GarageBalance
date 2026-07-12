@@ -39,6 +39,35 @@ public sealed class ControllerThinnessTests
     }
 
     [Fact]
+    public void Controllers_DoNotContainBusinessCalculationHelpersOrAggregations()
+    {
+        var controllerRoot = Path.Combine(FindApiProjectRoot(), "Controllers");
+        var forbiddenPatterns = new[]
+        {
+            "MoneyMath.",
+            "MonthPeriod.",
+            "TariffCalculationBases",
+            ".GroupBy(",
+            ".Sum(",
+            ".Average("
+        };
+
+        var offenders = Directory.EnumerateFiles(controllerRoot, "*Controller.cs", SearchOption.TopDirectoryOnly)
+            .SelectMany(path =>
+            {
+                var text = File.ReadAllText(path);
+
+                return forbiddenPatterns
+                    .Where(pattern => text.Contains(pattern, StringComparison.Ordinal))
+                    .Select(pattern => $"{Path.GetFileName(path)} contains business calculation pattern {pattern}");
+            })
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void ControllerConstructors_DoNotDependOnInfrastructureServices()
     {
         var offenders = GetControllerTypes()
