@@ -1593,6 +1593,140 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var ownerModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "Owner.cs"));
+        var garageModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "Garage.cs"));
+        var supplierModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "Supplier.cs"));
+        var contactModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "SupplierContact.cs"));
+        var departmentModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "StaffDepartment.cs"));
+        var memberModelText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Domain", "Dictionaries", "StaffMember.cs"));
+        var contractsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryContracts.cs"));
+        var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "DictionariesController.cs"));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var migrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260706083234_SupplierContactsAndStaff.cs"));
+        var dictionaryTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var controllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionariesControllerTests.cs"));
+        var frontendServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "dictionariesApi.ts"));
+        var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var customerAuditText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "customer-request-audit-2026-07-04.md"));
+        var auditCoverageText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "audit-event-coverage.md"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать карточки контрагентов по Excel-формам", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("гаража/поставщика/сотрудника", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("SupplierContact.Status", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.write", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("soft-delete/restore", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.408.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.409.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("0.454.0", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed class Owner", ownerModelText, StringComparison.Ordinal);
+        Assert.Contains("public List<Garage> Garages", ownerModelText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class Garage", garageModelText, StringComparison.Ordinal);
+        Assert.Contains("public decimal StartingBalance", garageModelText, StringComparison.Ordinal);
+        Assert.Contains("public Guid? OwnerId", garageModelText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsArchived", garageModelText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class Supplier", supplierModelText, StringComparison.Ordinal);
+        Assert.Contains("public decimal StartingBalance", supplierModelText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsArchived", supplierModelText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class SupplierContact", contactModelText, StringComparison.Ordinal);
+        Assert.Contains("public string Status", contactModelText, StringComparison.Ordinal);
+        Assert.Contains("public string? Position", contactModelText, StringComparison.Ordinal);
+        Assert.Contains("public string? Comment", contactModelText, StringComparison.Ordinal);
+        Assert.Contains("public bool IsArchived", contactModelText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class StaffDepartment", departmentModelText, StringComparison.Ordinal);
+        Assert.Contains("public sealed class StaffMember", memberModelText, StringComparison.Ordinal);
+
+        Assert.Contains("public sealed record SupplierContactDto", contractsText, StringComparison.Ordinal);
+        Assert.Contains("[Required, MaxLength(40)] string Status", contractsText, StringComparison.Ordinal);
+        Assert.Contains("[EmailAddress, MaxLength(320)] string? Email", contractsText, StringComparison.Ordinal);
+        Assert.Contains("[MaxLength(1000)] string? Comment", contractsText, StringComparison.Ordinal);
+        Assert.Contains("name: \"supplier_contacts\"", migrationText, StringComparison.Ordinal);
+        Assert.Contains("IX_supplier_contacts_Status", migrationText, StringComparison.Ordinal);
+        Assert.Contains("IX_supplier_contacts_Email", migrationText, StringComparison.Ordinal);
+        Assert.Contains("FK_supplier_contacts_suppliers_SupplierId", migrationText, StringComparison.Ordinal);
+
+        var requiredRoutes = new[]
+        {
+            "owners", "garages", "supplier-groups", "suppliers", "supplier-contacts", "staff-departments", "staff-members"
+        };
+        foreach (var route in requiredRoutes)
+        {
+            Assert.Contains(route, controllerText, StringComparison.Ordinal);
+            Assert.Contains($"/api/dictionaries/{route}", frontendServiceText, StringComparison.Ordinal);
+        }
+        Assert.Contains("[Authorize(Policy = SystemPermissions.DictionariesWrite)]", controllerText, StringComparison.Ordinal);
+
+        var auditActions = new[]
+        {
+            "dictionary.owner_archived", "dictionary.owner_restored",
+            "dictionary.garage_archived", "dictionary.garage_restored",
+            "dictionary.supplier_archived", "dictionary.supplier_restored",
+            "dictionary.supplier_contact_created", "dictionary.supplier_contact_updated",
+            "dictionary.supplier_contact_archived", "dictionary.supplier_contact_restored",
+            "dictionary.staff_department_archived", "dictionary.staff_department_restored",
+            "dictionary.staff_member_archived", "dictionary.staff_member_restored"
+        };
+        foreach (var action in auditActions)
+        {
+            Assert.Contains(action, dictionaryServiceText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("GetGarageBalanceHistoryAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("operation.SupplierId?.ToString() ?? operation.StaffMemberId?.ToString()", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("operation.Supplier?.Name ?? operation.StaffMember?.FullName", financeServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("Открыть финансовый отчет гаража", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет поставщика", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет сотрудника", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Финансовый отчет гаража", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Финансовый отчет поставщика", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Финансовый отчет сотрудника", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Контактное лицо", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Должность", frontendAppText, StringComparison.Ordinal);
+
+        Assert.Contains("SupplierContactAsync_SavesContactAndWritesAudit", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("RestoreSupplierContactAsync_RestoresSupplierAndWritesAudit", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("SupplierContactsAndStaffEndpoints_PassFiltersAndActorToService", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет гаража 1", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет поставщика Водоканал", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет сотрудника Петрова Ольга", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Причина удаления сотрудника", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Восстановить отдел", frontendTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("Контрагенты, постоянное хранение новой формы | `[x]`", customerAuditText, StringComparison.Ordinal);
+        Assert.Contains("расширенные контакты поставщика", customerAuditText, StringComparison.Ordinal);
+        Assert.Contains("soft delete и restore", customerAuditText, StringComparison.Ordinal);
+        Assert.Contains("# Покрытие Backend Истории Изменений", auditCoverageText, StringComparison.Ordinal);
+
+        Assert.Contains("supplier-contacts-and-staff-backend", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("contractor-garage-cards-backend", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.408.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.409.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.454.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("История изменений в карточках контрагентов", releaseNotesText, StringComparison.Ordinal);
+
+        Assert.Contains("ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("реализация полностью закрывает карточки контрагентов", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
