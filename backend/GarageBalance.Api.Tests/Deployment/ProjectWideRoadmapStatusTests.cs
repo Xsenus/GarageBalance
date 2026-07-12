@@ -982,6 +982,54 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ThinControllerArchitectureIsCompleteWhenAllControllersUseApplicationAbstractionsAndPolicyTests()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "thin-controller-architecture-verification.md"));
+        var projectWideRoadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var thinnessTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Controllers", "ControllerThinnessTests.cs"));
+        var authorizationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Auth", "ControllerAuthorizationCoverageTests.cs"));
+
+        var architectureLine = activeRoadmapLines.Single(line =>
+            line.Contains("Контроллеры держать тонкими", StringComparison.Ordinal));
+        var projectWideArchitectureLine = projectWideRoadmapLines.Single(line =>
+            line.Contains("Backend controllers остаются thin", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", architectureLine, StringComparison.Ordinal);
+        Assert.Contains("application service interfaces", architectureLine, StringComparison.Ordinal);
+        Assert.Contains("Future endpoints", architectureLine, StringComparison.Ordinal);
+        Assert.Contains("docs/thin-controller-architecture-verification.md", architectureLine, StringComparison.Ordinal);
+        Assert.Contains(nameof(ThinControllerArchitectureIsCompleteWhenAllControllersUseApplicationAbstractionsAndPolicyTests), architectureLine, StringComparison.Ordinal);
+        Assert.StartsWith("- `[x]`", projectWideArchitectureLine, StringComparison.Ordinal);
+
+        Assert.Contains("Все текущие API-контроллеры", verification, StringComparison.Ordinal);
+        Assert.Contains("application use cases через interfaces", verification, StringComparison.Ordinal);
+        Assert.Contains("не зависят напрямую от EF Core", verification, StringComparison.Ordinal);
+        Assert.Contains("не возвращают Domain entities", verification, StringComparison.Ordinal);
+        Assert.Contains("Любой новый controller endpoint", verification, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+
+        Assert.Contains("Controllers_DoNotUseEfCoreOrInfrastructureDataDirectly", thinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("ControllerConstructors_DoNotDependOnInfrastructureServices", thinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("ControllerConstructors_DependOnServiceAbstractionsOnly", thinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("ControllerActions_DoNotExposeDomainEntities", thinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("DangerousControllerActions_RequireConstrainedReasonRequest", thinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("StateChangingControllerActions_DoNotUseSafeHttpMethods", thinnessTestsText, StringComparison.Ordinal);
+        Assert.Contains("ControllerAuthorizationCoverageTests", authorizationTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("закрыт устаревший верхнеуровневый статус thin controllers", historyText, StringComparison.Ordinal);
+        Assert.Contains(nameof(ThinControllerArchitectureIsCompleteWhenAllControllersUseApplicationAbstractionsAndPolicyTests), historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
     {
         var repositoryRoot = FindRepositoryRoot();
