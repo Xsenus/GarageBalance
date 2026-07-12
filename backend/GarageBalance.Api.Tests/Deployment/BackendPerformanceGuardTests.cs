@@ -29,6 +29,17 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void OwnerRepository_UsesDatabaseCountOffsetAndLimitBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfOwnerRepository.cs");
+
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
+        Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");

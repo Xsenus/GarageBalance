@@ -10,6 +10,7 @@ namespace GarageBalance.Api.Application.Dictionaries;
 
 public sealed class DictionaryService(
     GarageBalanceDbContext dbContext,
+    IOwnerRepository ownerRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -73,56 +74,24 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfOwnerRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
     public async Task<IReadOnlyList<OwnerDto>> GetOwnersAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
-        var query = dbContext.Owners.AsNoTracking().Include(owner => owner.Garages).Where(owner => includeArchived || !owner.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(owner =>
-                owner.LastName.ToLower().Contains(normalizedSearch) ||
-                owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                (owner.MiddleName != null && owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                (owner.Phone != null && owner.Phone.ToLower().Contains(normalizedSearch)));
-        }
-
-        return await query
-            .OrderBy(owner => owner.LastName)
-            .ThenBy(owner => owner.FirstName)
-            .Take(NormalizeListLimit(limit))
-            .Select(owner => ToOwnerDto(owner))
-            .ToListAsync(cancellationToken);
+        var owners = await ownerRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return owners.Select(ToOwnerDto).ToList();
     }
 
     public async Task<PagedResult<OwnerDto>> GetOwnersPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var query = dbContext.Owners.AsNoTracking().Include(owner => owner.Garages).Where(owner => includeArchived || !owner.IsArchived);
         var normalizedSearch = NormalizeSearch(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(owner =>
-                owner.LastName.ToLower().Contains(normalizedSearch) ||
-                owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                (owner.MiddleName != null && owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                (owner.Phone != null && owner.Phone.ToLower().Contains(normalizedSearch)));
-        }
-
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(owner => owner.LastName)
-            .ThenBy(owner => owner.FirstName)
-            .Skip(normalizedOffset)
-            .Take(normalizedLimit)
-            .Select(owner => ToOwnerDto(owner))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<OwnerDto>(items, totalCount, normalizedOffset, normalizedLimit);
+        var page = await ownerRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<OwnerDto>(page.Items.Select(ToOwnerDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<OwnerDto>> CreateOwnerAsync(UpsertOwnerRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -137,7 +106,7 @@ public sealed class DictionaryService(
             MeterNotes = NormalizeOptional(request.MeterNotes)
         };
 
-        dbContext.Owners.Add(owner);
+        ownerRepository.Add(owner);
         AddAudit(actorUserId, "dictionary.owner_created", "owner", owner.Id, $"Создан владелец {owner.FullName}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
@@ -145,7 +114,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<OwnerDto>> UpdateOwnerAsync(Guid id, UpsertOwnerRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var owner = await dbContext.Owners.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var owner = await ownerRepository.FindActiveAsync(id, cancellationToken);
         if (owner is null)
         {
             return DictionaryResult<OwnerDto>.Failure("owner_not_found", "Владелец не найден.");
@@ -201,7 +170,7 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
-        var owner = await dbContext.Owners.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        var owner = await ownerRepository.FindActiveAsync(id, cancellationToken);
         if (owner is null)
         {
             return DictionaryResult<OwnerDto>.Failure("owner_not_found", "Владелец не найден.");
@@ -217,7 +186,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<OwnerDto>> RestoreOwnerAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var owner = await dbContext.Owners.Include(item => item.Garages).SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        var owner = await ownerRepository.FindArchivedWithGaragesAsync(id, cancellationToken);
         if (owner is null)
         {
             return DictionaryResult<OwnerDto>.Failure("owner_not_found", "Владелец не найден в архиве.");
