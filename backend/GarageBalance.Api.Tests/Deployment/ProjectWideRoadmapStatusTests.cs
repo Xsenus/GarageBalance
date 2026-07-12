@@ -1752,6 +1752,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var contractsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryContracts.cs"));
         var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
         var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var financialOperationRepositoryText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfFinancialOperationRepository.cs"));
         var controllerText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Controllers", "DictionariesController.cs"));
         var dbContextText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
         var staffMigrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260706083234_SupplierContactsAndStaff.cs"));
@@ -1838,7 +1839,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("staffMember.Rate - paidThisMonth", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("CalculateAvailableBankAmountAsync", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("finance.staff_payment_created", financeServiceText, StringComparison.Ordinal);
-        Assert.Contains("Include(operation => operation.StaffMember)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("Include(operation => operation.StaffMember)", financialOperationRepositoryText, StringComparison.Ordinal);
         Assert.Contains("var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate)", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("new ExpenseWorksheetRowDto", financeServiceText, StringComparison.Ordinal);
 

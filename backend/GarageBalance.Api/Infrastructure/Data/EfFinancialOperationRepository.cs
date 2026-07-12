@@ -79,6 +79,199 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
             operation.DocumentNumber == documentNumber,
             cancellationToken);
 
+    public async Task<decimal> GetIncomeTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
+        await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.AccountingMonth < accountingMonth)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+
+    public async Task<IReadOnlyList<FinancialOperationBucketData>> GetIncomeMonthlyBucketsAsync(
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.AccountingMonth >= monthFrom &&
+                operation.AccountingMonth <= monthTo)
+            .GroupBy(operation => operation.AccountingMonth)
+            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(operation => operation.Amount) })
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => new FinancialOperationBucketData(row.AccountingMonth, row.Amount)).ToList();
+    }
+
+    public async Task<IReadOnlyList<FinancialOperationIncomeTypeBucketData>> GetIncomeTypeBucketsAsync(
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.IncomeTypeId != null &&
+                operation.AccountingMonth >= monthFrom &&
+                operation.AccountingMonth <= monthTo)
+            .GroupBy(operation => new
+            {
+                operation.AccountingMonth,
+                IncomeTypeId = operation.IncomeTypeId!.Value,
+                operation.IncomeType!.Name,
+                operation.IncomeType.Code
+            })
+            .Select(group => new
+            {
+                group.Key.AccountingMonth,
+                group.Key.IncomeTypeId,
+                IncomeTypeName = group.Key.Name,
+                IncomeTypeCode = group.Key.Code,
+                Amount = group.Sum(operation => operation.Amount)
+            })
+            .ToListAsync(cancellationToken);
+        return rows
+            .Select(row => new FinancialOperationIncomeTypeBucketData(row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.IncomeTypeCode, row.Amount))
+            .ToList();
+    }
+
+    public async Task<FinancialOperationWorksheetData> GetWorksheetDataAsync(DateOnly accountingMonth, CancellationToken cancellationToken)
+    {
+        var expenses = await dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.Supplier)
+            .Include(operation => operation.StaffMember)
+                .ThenInclude(staffMember => staffMember!.Department)
+            .Include(operation => operation.ExpenseType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.AccountingMonth == accountingMonth)
+            .ToListAsync(cancellationToken);
+        var incomes = await dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.IncomeType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.AccountingMonth == accountingMonth &&
+                operation.IncomeTypeId != null)
+            .ToListAsync(cancellationToken);
+        return new FinancialOperationWorksheetData(expenses, incomes);
+    }
+
+    public async Task<FinancialOperationSummaryData> GetSummaryAsync(
+        DateOnly? dateFrom,
+        DateOnly? dateTo,
+        string? operationKind,
+        string? normalizedSearch,
+        Guid? garageId,
+        Guid? supplierId,
+        Guid? staffMemberId,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplyFilters(QueryActive(), dateFrom, dateTo, operationKind, garageId, supplierId, staffMemberId);
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            var filtered = (await query.ToListAsync(cancellationToken))
+                .Where(operation => OperationMatchesSearch(operation, normalizedSearch))
+                .ToList();
+            return new FinancialOperationSummaryData(
+                filtered.Where(operation => operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => operation.Amount),
+                filtered.Where(operation => operation.OperationKind == FinancialOperationKinds.Expense).Sum(operation => operation.Amount),
+                filtered.Count);
+        }
+
+        query = ApplySearch(query, normalizedSearch);
+        return new FinancialOperationSummaryData(
+            await query.Where(operation => operation.OperationKind == FinancialOperationKinds.Income).SumAsync(operation => operation.Amount, cancellationToken),
+            await query.Where(operation => operation.OperationKind == FinancialOperationKinds.Expense).SumAsync(operation => operation.Amount, cancellationToken),
+            await query.CountAsync(cancellationToken));
+    }
+
+    public async Task<decimal> GetOpeningDebtPaymentTotalAsync(
+        Guid garageId,
+        DateOnly accountingMonth,
+        string incomeTypeCode,
+        string incomeTypeName,
+        CancellationToken cancellationToken) =>
+        await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.AccountingMonth == accountingMonth &&
+                operation.IncomeType != null &&
+                (operation.IncomeType.Code == incomeTypeCode || operation.IncomeType.Name == incomeTypeName))
+            .SumAsync(operation => operation.Amount, cancellationToken);
+
+    public async Task<decimal> GetBankExpenseTotalAsync(
+        string[] cashExpenseTypeCodes,
+        string[] cashExpenseTypeNames,
+        CancellationToken cancellationToken) =>
+        await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                (operation.ExpenseType == null ||
+                    !(
+                        (operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                        cashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+
+    public async Task<FinancialOperationCashBalanceData> GetCashBalanceDataAsync(
+        string[] cashExpenseTypeCodes,
+        string[] cashExpenseTypeNames,
+        CancellationToken cancellationToken)
+    {
+        var incomeTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var cashExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.ExpenseType != null &&
+                ((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                    cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
+            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        return new FinancialOperationCashBalanceData(incomeTotal, cashExpenseTotal);
+    }
+
+    public async Task<decimal> GetStaffExpenseTotalAsync(Guid staffMemberId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
+        await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.StaffMemberId == staffMemberId &&
+                operation.AccountingMonth == accountingMonth)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+
+    public async Task<decimal> GetPreviousGarageIncomeTotalAsync(Guid ignoredId, Guid garageId, DateOnly operationDate, CancellationToken cancellationToken) =>
+        await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.Id != ignoredId &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.OperationDate < operationDate)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+
+    public async Task<decimal> GetPreviousSupplierExpenseTotalAsync(Guid ignoredId, Guid supplierId, DateOnly operationDate, CancellationToken cancellationToken) =>
+        await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.Id != ignoredId &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.SupplierId == supplierId &&
+                operation.OperationDate < operationDate)
+            .SumAsync(operation => operation.Amount, cancellationToken);
+
     public void Add(FinancialOperation operation) => dbContext.FinancialOperations.Add(operation);
 
     private IQueryable<FinancialOperation> QueryActive() =>

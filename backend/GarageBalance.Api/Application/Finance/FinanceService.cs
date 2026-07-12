@@ -11,7 +11,6 @@ using Microsoft.EntityFrameworkCore;
 namespace GarageBalance.Api.Application.Finance;
 
 public sealed class FinanceService(
-    GarageBalanceDbContext dbContext,
     IStaffMemberRepository staffMemberRepository,
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
@@ -83,7 +82,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfFinancialOperationRepository(dbContext), new EfAccrualRepository(dbContext), new EfSupplierAccrualRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfMissingMeterReadingQuery(dbContext), new EfMeterReadingRepository(dbContext), new EfFinancialOperationRepository(dbContext), new EfAccrualRepository(dbContext), new EfSupplierAccrualRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -235,25 +234,11 @@ public sealed class FinanceService(
         }
 
         var previousAccrualTotal = await accrualRepository.GetTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
-        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.AccountingMonth < monthFrom)
-            .SumAsync(operation => operation.Amount, cancellationToken);
+        var previousIncomeTotal = await financialOperationRepository.GetIncomeTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
         var accrualBuckets = (await accrualRepository.GetMonthlyBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
             .ToDictionary(item => item.AccountingMonth, item => item.Amount);
-        var incomeBuckets = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.AccountingMonth >= monthFrom &&
-                operation.AccountingMonth <= monthTo)
-            .GroupBy(operation => operation.AccountingMonth)
-            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(operation => operation.Amount) })
-            .ToDictionaryAsync(item => item.AccountingMonth, item => item.Amount, cancellationToken);
+        var incomeBuckets = (await financialOperationRepository.GetIncomeMonthlyBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
+            .ToDictionary(item => item.AccountingMonth, item => item.Amount);
 
         var rows = new List<GarageBalanceHistoryRowDto>(monthCount);
         var openingDebt = MoneyMath.RoundMoney(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal);
@@ -307,13 +292,7 @@ public sealed class FinanceService(
         }
 
         var previousAccrualTotal = await accrualRepository.GetTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
-        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.AccountingMonth < monthFrom)
-            .SumAsync(operation => operation.Amount, cancellationToken);
+        var previousIncomeTotal = await financialOperationRepository.GetIncomeTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
         var openingDebt = MoneyMath.RoundMoney(Math.Max(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal, 0m));
 
         var accrualBuckets = (await accrualRepository.GetIncomeTypeBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
@@ -325,28 +304,14 @@ public sealed class FinanceService(
                 bucket.Amount))
             .ToList();
 
-        var incomeBuckets = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.IncomeTypeId != null &&
-                operation.AccountingMonth >= monthFrom &&
-                operation.AccountingMonth <= monthTo)
-            .GroupBy(operation => new
-            {
-                operation.AccountingMonth,
-                IncomeTypeId = operation.IncomeTypeId!.Value,
-                operation.IncomeType!.Name,
-                operation.IncomeType.Code
-            })
-            .Select(group => new IncomeWorksheetBucket(
-                group.Key.AccountingMonth,
-                group.Key.IncomeTypeId,
-                group.Key.Name,
-                group.Key.Code,
-                group.Sum(operation => operation.Amount)))
-            .ToListAsync(cancellationToken);
+        var incomeBuckets = (await financialOperationRepository.GetIncomeTypeBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
+            .Select(bucket => new IncomeWorksheetBucket(
+                bucket.AccountingMonth,
+                bucket.IncomeTypeId,
+                bucket.IncomeTypeName,
+                bucket.IncomeTypeCode,
+                bucket.Amount))
+            .ToList();
 
         var meterReadings = await meterReadingRepository.GetForGaragePeriodAsync(garageId, monthFrom, monthTo, cancellationToken);
         var meterReadingByMonthKind = meterReadings
@@ -411,25 +376,9 @@ public sealed class FinanceService(
 
         var supplierAccruals = await supplierAccrualRepository.GetActiveForMonthAsync(accountingMonth, cancellationToken);
 
-        var expenseOperations = await dbContext.FinancialOperations.AsNoTracking()
-            .Include(operation => operation.Supplier)
-            .Include(operation => operation.StaffMember)
-                .ThenInclude(staffMember => staffMember!.Department)
-            .Include(operation => operation.ExpenseType)
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth == accountingMonth)
-            .ToListAsync(cancellationToken);
-
-        var incomeBuckets = await dbContext.FinancialOperations.AsNoTracking()
-            .Include(operation => operation.IncomeType)
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.AccountingMonth == accountingMonth &&
-                operation.IncomeTypeId != null)
-            .ToListAsync(cancellationToken);
+        var worksheetData = await financialOperationRepository.GetWorksheetDataAsync(accountingMonth, cancellationToken);
+        var expenseOperations = worksheetData.Expenses;
+        var incomeBuckets = worksheetData.Incomes;
 
         var activeStaffMembers = await staffMemberRepository.GetActiveForExpenseWorksheetAsync(cancellationToken);
 
@@ -543,7 +492,15 @@ public sealed class FinanceService(
 
     public async Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
     {
-        var operations = ApplyFilters(dbContext.FinancialOperations.AsNoTracking().Where(operation => !operation.IsCanceled), request);
+        var operationSummary = await financialOperationRepository.GetSummaryAsync(
+            request.DateFrom,
+            request.DateTo,
+            NormalizeOptional(request.OperationKind),
+            NormalizeSearch(request.Search),
+            request.GarageId,
+            request.SupplierId,
+            request.StaffMemberId,
+            cancellationToken);
         var accrualSummary = await accrualRepository.GetSummaryAsync(
             request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
             request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
@@ -554,14 +511,15 @@ public sealed class FinanceService(
             request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
             NormalizeSearch(request.Search),
             cancellationToken);
-        var incomeTotal = await operations
-            .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
-            .SumAsync(operation => operation.Amount, cancellationToken);
-        var expenseTotal = await operations
-            .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense)
-            .SumAsync(operation => operation.Amount, cancellationToken);
-        var operationCount = await operations.CountAsync(cancellationToken);
-        return new FinanceSummaryDto(incomeTotal, expenseTotal, accrualSummary.TotalAmount, incomeTotal - expenseTotal, accrualSummary.TotalAmount - incomeTotal, operationCount, accrualSummary.Count, meterReadingCount);
+        return new FinanceSummaryDto(
+            operationSummary.IncomeTotal,
+            operationSummary.ExpenseTotal,
+            accrualSummary.TotalAmount,
+            operationSummary.IncomeTotal - operationSummary.ExpenseTotal,
+            accrualSummary.TotalAmount - operationSummary.IncomeTotal,
+            operationSummary.Count,
+            accrualSummary.Count,
+            meterReadingCount);
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -650,22 +608,13 @@ public sealed class FinanceService(
     private async Task<decimal> CalculateAvailableOpeningDebtAsync(Garage garage, DateOnly accountingMonth, CancellationToken cancellationToken)
     {
         var previousAccrualTotal = await accrualRepository.GetTotalBeforeMonthAsync(garage.Id, accountingMonth, cancellationToken);
-        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garage.Id &&
-                operation.AccountingMonth < accountingMonth)
-            .SumAsync(operation => operation.Amount, cancellationToken);
-        var alreadyPaidOpeningDebt = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garage.Id &&
-                operation.AccountingMonth == accountingMonth &&
-                operation.IncomeType != null &&
-                (operation.IncomeType.Code == DebtTransferIncomeTypeCode || operation.IncomeType.Name == DebtTransferIncomeTypeName))
-            .SumAsync(operation => operation.Amount, cancellationToken);
+        var previousIncomeTotal = await financialOperationRepository.GetIncomeTotalBeforeMonthAsync(garage.Id, accountingMonth, cancellationToken);
+        var alreadyPaidOpeningDebt = await financialOperationRepository.GetOpeningDebtPaymentTotalAsync(
+            garage.Id,
+            accountingMonth,
+            DebtTransferIncomeTypeCode,
+            DebtTransferIncomeTypeName,
+            cancellationToken);
 
         return MoneyMath.RoundMoney(Math.Max(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal - alreadyPaidOpeningDebt, 0m));
     }
@@ -673,34 +622,17 @@ public sealed class FinanceService(
     private async Task<decimal> CalculateAvailableBankAmountAsync(CancellationToken cancellationToken)
     {
         var bankDepositsTotal = await fundRepository.GetActiveDepositTotalAsync(cancellationToken);
-        var bankExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                (operation.ExpenseType == null ||
-                    !((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                    CashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var bankExpenseTotal = await financialOperationRepository.GetBankExpenseTotalAsync(CashExpenseTypeCodes, CashExpenseTypeNames, cancellationToken);
 
         return MoneyMath.RoundMoney(Math.Max(bankDepositsTotal - bankExpenseTotal, 0m));
     }
 
     private async Task<decimal> CalculateAvailableCashAmountAsync(CancellationToken cancellationToken)
     {
-        var incomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+        var cashBalance = await financialOperationRepository.GetCashBalanceDataAsync(CashExpenseTypeCodes, CashExpenseTypeNames, cancellationToken);
         var bankDepositsTotal = await fundRepository.GetActiveDepositTotalAsync(cancellationToken);
-        var cashExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.ExpenseType != null &&
-                ((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                    CashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
 
-        return MoneyMath.RoundMoney(Math.Max(incomeTotal - bankDepositsTotal - cashExpenseTotal, 0m));
+        return MoneyMath.RoundMoney(Math.Max(cashBalance.IncomeTotal - bankDepositsTotal - cashBalance.CashExpenseTotal, 0m));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -787,13 +719,7 @@ public sealed class FinanceService(
 
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
         var amount = MoneyMath.RoundMoney(request.Amount);
-        var paidThisMonth = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.StaffMemberId == staffMember.Id &&
-                operation.AccountingMonth == accountingMonth)
-            .SumAsync(operation => operation.Amount, cancellationToken);
+        var paidThisMonth = await financialOperationRepository.GetStaffExpenseTotalAsync(staffMember.Id, accountingMonth, cancellationToken);
         var availableAmount = MoneyMath.RoundMoney(staffMember.Rate - paidThisMonth);
         if (amount > availableAmount)
         {
@@ -1065,13 +991,10 @@ public sealed class FinanceService(
         {
             if (operation.StaffMemberId is not null)
             {
-                var paidThisMonth = await dbContext.FinancialOperations.AsNoTracking()
-                    .Where(item =>
-                        !item.IsCanceled &&
-                        item.OperationKind == FinancialOperationKinds.Expense &&
-                        item.StaffMemberId == operation.StaffMemberId &&
-                        item.AccountingMonth == operation.AccountingMonth)
-                    .SumAsync(item => item.Amount, cancellationToken);
+                var paidThisMonth = await financialOperationRepository.GetStaffExpenseTotalAsync(
+                    operation.StaffMemberId.Value,
+                    operation.AccountingMonth,
+                    cancellationToken);
                 var availableStaffAmount = MoneyMath.RoundMoney((operation.StaffMember?.Rate ?? 0m) - paidThisMonth);
                 if (operation.Amount > availableStaffAmount)
                 {
@@ -2597,53 +2520,6 @@ public sealed class FinanceService(
             && tariff.ElectricityThirdRate.HasValue;
     }
 
-    private static IQueryable<FinancialOperation> ApplyFilters(IQueryable<FinancialOperation> query, FinancialOperationListRequest request)
-    {
-        if (request.DateFrom is not null)
-        {
-            query = query.Where(operation => operation.OperationDate >= request.DateFrom);
-        }
-
-        if (request.DateTo is not null)
-        {
-            query = query.Where(operation => operation.OperationDate <= request.DateTo);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.OperationKind))
-        {
-            var kind = request.OperationKind.Trim();
-            query = query.Where(operation => operation.OperationKind == kind);
-        }
-
-        if (request.GarageId is not null)
-        {
-            query = query.Where(operation => operation.GarageId == request.GarageId);
-        }
-
-        if (request.SupplierId is not null)
-        {
-            query = query.Where(operation => operation.SupplierId == request.SupplierId);
-        }
-
-        if (request.StaffMemberId is not null)
-        {
-            query = query.Where(operation => operation.StaffMemberId == request.StaffMemberId);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(operation =>
-                (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(search)) ||
-                (operation.Comment != null && operation.Comment.ToLower().Contains(search)) ||
-                (operation.Garage != null && operation.Garage.Number.ToLower().Contains(search)) ||
-                (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(search)) ||
-                (operation.StaffMember != null && operation.StaffMember.FullName.ToLower().Contains(search)));
-        }
-
-        return query;
-    }
-
     private static string[] NormalizeMeterKindFilter(string? meterKind)
     {
         if (string.IsNullOrWhiteSpace(meterKind))
@@ -3002,14 +2878,11 @@ public sealed class FinanceService(
         var garageId = operation.GarageId!.Value;
         var startingBalance = operation.Garage?.StartingBalance ?? await garageRepository.GetStartingBalanceAsync(garageId, cancellationToken);
         var accrualTotal = await accrualRepository.GetTotalThroughMonthAsync(garageId, operation.AccountingMonth, cancellationToken);
-        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(previous =>
-                !previous.IsCanceled &&
-                previous.Id != operation.Id &&
-                previous.OperationKind == FinancialOperationKinds.Income &&
-                previous.GarageId == garageId &&
-                previous.OperationDate < operation.OperationDate)
-            .SumAsync(previous => previous.Amount, cancellationToken);
+        var previousIncomeTotal = await financialOperationRepository.GetPreviousGarageIncomeTotalAsync(
+            operation.Id,
+            garageId,
+            operation.OperationDate,
+            cancellationToken);
 
         return MoneyMath.RoundMoney(startingBalance + accrualTotal - previousIncomeTotal);
     }
@@ -3018,14 +2891,11 @@ public sealed class FinanceService(
     {
         var garageId = operation.GarageId!.Value;
         var startingBalance = operation.Garage?.StartingBalance ?? await garageRepository.GetStartingBalanceAsync(garageId, cancellationToken);
-        var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(previous =>
-                !previous.IsCanceled &&
-                previous.Id != operation.Id &&
-                previous.OperationKind == FinancialOperationKinds.Income &&
-                previous.GarageId == garageId &&
-                previous.OperationDate < operation.OperationDate)
-            .SumAsync(previous => previous.Amount, cancellationToken);
+        var previousIncomeTotal = await financialOperationRepository.GetPreviousGarageIncomeTotalAsync(
+            operation.Id,
+            garageId,
+            operation.OperationDate,
+            cancellationToken);
         var accrualBucketRows = await accrualRepository.GetMonthlyBucketsAsync(garageId, null, operation.AccountingMonth, cancellationToken);
         var accrualBuckets = accrualBucketRows
             .Select(bucket => new AllocationDebtBucket("month", bucket.AccountingMonth, $"{bucket.AccountingMonth:MM.yyyy}", bucket.Amount))
@@ -3045,14 +2915,11 @@ public sealed class FinanceService(
         var supplierId = operation.SupplierId!.Value;
         var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
         var accrualTotal = await supplierAccrualRepository.GetTotalThroughMonthAsync(supplierId, operation.AccountingMonth, cancellationToken);
-        var previousExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(previous =>
-                !previous.IsCanceled &&
-                previous.Id != operation.Id &&
-                previous.OperationKind == FinancialOperationKinds.Expense &&
-                previous.SupplierId == supplierId &&
-                previous.OperationDate < operation.OperationDate)
-            .SumAsync(previous => previous.Amount, cancellationToken);
+        var previousExpenseTotal = await financialOperationRepository.GetPreviousSupplierExpenseTotalAsync(
+            operation.Id,
+            supplierId,
+            operation.OperationDate,
+            cancellationToken);
 
         return MoneyMath.RoundMoney(startingBalance + accrualTotal - previousExpenseTotal);
     }
@@ -3061,14 +2928,11 @@ public sealed class FinanceService(
     {
         var supplierId = operation.SupplierId!.Value;
         var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
-        var previousExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(previous =>
-                !previous.IsCanceled &&
-                previous.Id != operation.Id &&
-                previous.OperationKind == FinancialOperationKinds.Expense &&
-                previous.SupplierId == supplierId &&
-                previous.OperationDate < operation.OperationDate)
-            .SumAsync(previous => previous.Amount, cancellationToken);
+        var previousExpenseTotal = await financialOperationRepository.GetPreviousSupplierExpenseTotalAsync(
+            operation.Id,
+            supplierId,
+            operation.OperationDate,
+            cancellationToken);
         var accrualBucketRows = await supplierAccrualRepository.GetMonthlyBucketsThroughMonthAsync(supplierId, operation.AccountingMonth, cancellationToken);
         var accrualBuckets = accrualBucketRows
             .Select(bucket => new AllocationDebtBucket("month", bucket.AccountingMonth, $"{bucket.AccountingMonth:MM.yyyy}", bucket.Amount))

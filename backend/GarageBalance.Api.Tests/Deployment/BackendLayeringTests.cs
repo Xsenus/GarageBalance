@@ -1049,11 +1049,23 @@ public sealed class BackendLayeringTests
         Assert.Contains("financialOperationRepository.GetPageAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.ActiveDocumentDuplicateExistsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetIncomeTotalBeforeMonthAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetIncomeMonthlyBucketsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetWorksheetDataAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetSummaryAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetOpeningDebtPaymentTotalAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetBankExpenseTotalAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetCashBalanceDataAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetStaffExpenseTotalAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetPreviousGarageIncomeTotalAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financialOperationRepository.GetPreviousSupplierExpenseTotalAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.Add(operation)", service, StringComparison.Ordinal);
-        Assert.DoesNotContain("dbContext.FinancialOperations.Add", service, StringComparison.Ordinal);
-        Assert.DoesNotContain("var operation = await dbContext.FinancialOperations", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.FinancialOperations", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<FinancialOperation> QueryOperations", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>()", program, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IFinanceService>(services => new FinanceService(", program, StringComparison.Ordinal);
     }
 
     [Fact]
