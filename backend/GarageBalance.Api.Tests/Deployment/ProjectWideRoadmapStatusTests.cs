@@ -1910,6 +1910,55 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void ContractorGreenExcelColumnsRemainDecisionUntilHeadersFilterTypesAndInteractionRulesAreApproved()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var sourceAnalysisText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "source-analysis.md"));
+        var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "contractor-green-columns-decision-template.md"));
+        var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить в контрагенты фильтры по отмеченным зеленым колонкам Excel", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[decision]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("точного списка зеленых заголовков", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("contractor-green-columns-decision-template.md", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("ContractorGreenExcelColumnsRemainDecisionUntilHeadersFilterTypesAndInteractionRulesAreApproved", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("Зеленые колонки в таблицах контрагентов означают поля, где нужны сортировка и фильтр", sourceAnalysisText, StringComparison.Ordinal);
+
+        Assert.Contains("Статус: требуется решение заказчика", templateText, StringComparison.Ordinal);
+        Assert.Contains("Точный заголовок Excel", templateText, StringComparison.Ordinal);
+        Assert.Contains("| Гаражи | `[заполнить]`", templateText, StringComparison.Ordinal);
+        Assert.Contains("| Поставщики | `[заполнить]`", templateText, StringComparison.Ordinal);
+        Assert.Contains("| Персонал | `[заполнить]`", templateText, StringComparison.Ordinal);
+        Assert.Contains("текст: содержит / начинается с / точное совпадение", templateText, StringComparison.Ordinal);
+        Assert.Contains("число или сумма: минимум / максимум / диапазон", templateText, StringComparison.Ordinal);
+        Assert.Contains("совместную работу с `Показать должников`", templateText, StringComparison.Ordinal);
+        Assert.Contains("применяются ли фильтры на сервере ко всему набору", templateText, StringComparison.Ordinal);
+        Assert.Contains("должны ли фильтры влиять на финансовый отчет и будущий экспорт", templateText, StringComparison.Ordinal);
+        Assert.Contains("не используются реальные строки Excel", templateText, StringComparison.Ordinal);
+        Assert.Contains("заполнена матрица без `[заполнить]` и `[decision]`", templateText, StringComparison.Ordinal);
+        Assert.Contains("заказчик явно подтвердил правила", templateText, StringComparison.Ordinal);
+
+        Assert.Contains("Показать должников", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("shows empty states for contractor debtor filters and empty staff", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("opens financial reports for suppliers and staff from contractors tables", frontendTestsText, StringComparison.Ordinal);
+        Assert.Contains("Раздельный фильтр должников в контрагентах", releaseNotesText, StringComparison.Ordinal);
+
+        Assert.Contains("ContractorGreenExcelColumnsRemainDecisionUntilHeadersFilterTypesAndInteractionRulesAreApproved", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContractorGreenExcelColumnsRemainDecisionUntilHeadersFilterTypesAndInteractionRulesAreApproved", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
