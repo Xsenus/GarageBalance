@@ -10,6 +10,7 @@ namespace GarageBalance.Api.Application.Dictionaries;
 
 public sealed class DictionaryService(
     GarageBalanceDbContext dbContext,
+    IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
     private const int DefaultListLimit = 100;
@@ -72,7 +73,7 @@ public sealed class DictionaryService(
     };
 
     public DictionaryService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new AuditEventWriter(dbContext))
+        : this(dbContext, new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -138,7 +139,7 @@ public sealed class DictionaryService(
 
         dbContext.Owners.Add(owner);
         AddAudit(actorUserId, "dictionary.owner_created", "owner", owner.Id, $"Создан владелец {owner.FullName}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
@@ -189,7 +190,7 @@ public sealed class DictionaryService(
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.owner_updated", "owner", owner.Id, $"Обновлен владелец {owner.FullName}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
@@ -210,7 +211,7 @@ public sealed class DictionaryService(
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.owner_archived", "owner", owner.Id, $"Архивирован владелец {owner.FullName}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
@@ -226,7 +227,7 @@ public sealed class DictionaryService(
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.owner_restored", "owner", owner.Id, $"Восстановлен владелец {owner.FullName}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
     }
 
@@ -394,7 +395,7 @@ public sealed class DictionaryService(
 
         dbContext.Garages.Add(garage);
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
@@ -462,7 +463,7 @@ public sealed class DictionaryService(
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
@@ -483,7 +484,7 @@ public sealed class DictionaryService(
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.garage_archived", "garage", garage.Id, $"Архивирован гараж N {garage.Number}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
@@ -504,7 +505,7 @@ public sealed class DictionaryService(
         garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.garage_restored", "garage", garage.Id, $"Восстановлен гараж N {garage.Number}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
@@ -585,7 +586,7 @@ public sealed class DictionaryService(
         var group = new SupplierGroup { Name = name };
         dbContext.SupplierGroups.Add(group);
         AddAudit(actorUserId, "dictionary.supplier_group_created", "supplier_group", group.Id, $"Создана группа поставщиков {group.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
@@ -626,7 +627,7 @@ public sealed class DictionaryService(
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_group_updated", "supplier_group", group.Id, $"Обновлена группа поставщиков {group.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
@@ -652,7 +653,7 @@ public sealed class DictionaryService(
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_group_archived", "supplier_group", group.Id, $"Архивирована группа поставщиков {group.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
@@ -673,7 +674,7 @@ public sealed class DictionaryService(
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_group_restored", "supplier_group", group.Id, $"Восстановлена группа поставщиков {group.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierGroupDto>.Success(new SupplierGroupDto(group.Id, group.Name, group.IsSystem, group.IsArchived));
     }
 
@@ -763,7 +764,7 @@ public sealed class DictionaryService(
 
         dbContext.Suppliers.Add(supplier);
         AddAudit(actorUserId, "dictionary.supplier_created", "supplier", supplier.Id, $"Создан поставщик {supplier.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
@@ -837,7 +838,7 @@ public sealed class DictionaryService(
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_updated", "supplier", supplier.Id, $"Обновлен поставщик {supplier.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
@@ -858,7 +859,7 @@ public sealed class DictionaryService(
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_archived", "supplier", supplier.Id, $"Архивирован поставщик {supplier.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
@@ -884,7 +885,7 @@ public sealed class DictionaryService(
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_restored", "supplier", supplier.Id, $"Восстановлен поставщик {supplier.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
     }
 
@@ -926,7 +927,7 @@ public sealed class DictionaryService(
         ApplySupplierContact(contact, request);
         dbContext.SupplierContacts.Add(contact);
         AddAudit(actorUserId, "dictionary.supplier_contact_created", "supplier_contact", contact.Id, $"Создан контакт {contact.FullName} поставщика {supplier.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
     }
 
@@ -957,7 +958,7 @@ public sealed class DictionaryService(
         var newValues = ToSupplierContactAuditValues(contact);
 
         AddAudit(actorUserId, "dictionary.supplier_contact_updated", "supplier_contact", contact.Id, $"Обновлен контакт {contact.FullName} поставщика {supplier.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
     }
 
@@ -978,7 +979,7 @@ public sealed class DictionaryService(
         contact.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_contact_archived", "supplier_contact", contact.Id, $"Архивирован контакт {contact.FullName} поставщика {contact.Supplier.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
     }
 
@@ -1011,7 +1012,7 @@ public sealed class DictionaryService(
         contact.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.supplier_contact_restored", "supplier_contact", contact.Id, $"Восстановлен контакт {contact.FullName} поставщика {contact.Supplier.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
     }
 
@@ -1036,7 +1037,7 @@ public sealed class DictionaryService(
         var department = new StaffDepartment { Name = name };
         dbContext.StaffDepartments.Add(department);
         AddAudit(actorUserId, "dictionary.staff_department_created", "staff_department", department.Id, $"Создан отдел {department.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
     }
 
@@ -1065,7 +1066,7 @@ public sealed class DictionaryService(
         department.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.staff_department_updated", "staff_department", department.Id, $"Обновлен отдел {department.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
     }
 
@@ -1090,7 +1091,7 @@ public sealed class DictionaryService(
         department.IsArchived = true;
         department.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "dictionary.staff_department_archived", "staff_department", department.Id, $"Архивирован отдел {department.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
     }
 
@@ -1110,7 +1111,7 @@ public sealed class DictionaryService(
         department.IsArchived = false;
         department.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "dictionary.staff_department_restored", "staff_department", department.Id, $"Восстановлен отдел {department.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffDepartmentDto>.Success(new StaffDepartmentDto(department.Id, department.Name, department.IsArchived));
     }
 
@@ -1156,7 +1157,7 @@ public sealed class DictionaryService(
 
         dbContext.StaffMembers.Add(member);
         AddAudit(actorUserId, "dictionary.staff_member_created", "staff_member", member.Id, $"Создан сотрудник {member.FullName}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
     }
 
@@ -1201,7 +1202,7 @@ public sealed class DictionaryService(
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.staff_member_updated", "staff_member", member.Id, $"Обновлен сотрудник {member.FullName}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
     }
 
@@ -1221,7 +1222,7 @@ public sealed class DictionaryService(
         member.IsArchived = true;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "dictionary.staff_member_archived", "staff_member", member.Id, $"Архивирован сотрудник {member.FullName}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
     }
 
@@ -1241,7 +1242,7 @@ public sealed class DictionaryService(
         member.IsArchived = false;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
         AddAudit(actorUserId, "dictionary.staff_member_restored", "staff_member", member.Id, $"Восстановлен сотрудник {member.FullName}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
     }
 
@@ -1327,7 +1328,7 @@ public sealed class DictionaryService(
 
         dbContext.IncomeTypes.Add(incomeType);
         AddAudit(actorUserId, "dictionary.income_type_created", "income_type", incomeType.Id, $"Создан вид поступления {incomeType.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
@@ -1372,7 +1373,7 @@ public sealed class DictionaryService(
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.income_type_updated", "income_type", incomeType.Id, $"Обновлен вид поступления {incomeType.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
@@ -1398,7 +1399,7 @@ public sealed class DictionaryService(
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.income_type_archived", "income_type", incomeType.Id, $"Архивирован вид поступления {incomeType.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
@@ -1419,7 +1420,7 @@ public sealed class DictionaryService(
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.income_type_restored", "income_type", incomeType.Id, $"Восстановлен вид поступления {incomeType.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
     }
 
@@ -1505,7 +1506,7 @@ public sealed class DictionaryService(
 
         dbContext.ExpenseTypes.Add(expenseType);
         AddAudit(actorUserId, "dictionary.expense_type_created", "expense_type", expenseType.Id, $"Создан вид выплаты {expenseType.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
@@ -1550,7 +1551,7 @@ public sealed class DictionaryService(
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.expense_type_updated", "expense_type", expenseType.Id, $"Обновлен вид выплаты {expenseType.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
@@ -1576,7 +1577,7 @@ public sealed class DictionaryService(
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.expense_type_archived", "expense_type", expenseType.Id, $"Архивирован вид выплаты {expenseType.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
@@ -1597,7 +1598,7 @@ public sealed class DictionaryService(
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.expense_type_restored", "expense_type", expenseType.Id, $"Восстановлен вид выплаты {expenseType.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
@@ -1697,7 +1698,7 @@ public sealed class DictionaryService(
 
         dbContext.Tariffs.Add(tariff);
         AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {FormatTariffAuditDetails(tariff)}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
@@ -1789,7 +1790,7 @@ public sealed class DictionaryService(
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
         AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {FormatTariffAuditDetails(tariff)}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
@@ -1810,7 +1811,7 @@ public sealed class DictionaryService(
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.tariff_archived", "tariff", tariff.Id, $"Архивирован тариф {FormatTariffAuditDetails(tariff)}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
@@ -1831,7 +1832,7 @@ public sealed class DictionaryService(
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.tariff_restored", "tariff", tariff.Id, $"Восстановлен тариф {FormatTariffAuditDetails(tariff)}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
@@ -1876,7 +1877,7 @@ public sealed class DictionaryService(
 
         dbContext.ChargeServiceSettings.Add(setting);
         AddAudit(actorUserId, "dictionary.charge_service_created", "charge_service", setting.Id, $"Создана настройка услуги {setting.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
     }
 
@@ -1917,7 +1918,7 @@ public sealed class DictionaryService(
         var newValues = ToChargeServiceAuditValues(setting);
 
         AddAudit(actorUserId, "dictionary.charge_service_updated", "charge_service", setting.Id, $"Изменена настройка услуги {setting.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
     }
 
@@ -1938,7 +1939,7 @@ public sealed class DictionaryService(
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.charge_service_archived", "charge_service", setting.Id, $"Архивирована настройка услуги {setting.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
     }
 
@@ -1959,7 +1960,7 @@ public sealed class DictionaryService(
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.charge_service_restored", "charge_service", setting.Id, $"Восстановлена настройка услуги {setting.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
     }
 
@@ -1996,7 +1997,7 @@ public sealed class DictionaryService(
 
         dbContext.IrregularPayments.Add(payment);
         AddAudit(actorUserId, "dictionary.irregular_payment_created", "irregular_payment", payment.Id, $"Создан нерегулярный платеж {payment.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
     }
 
@@ -2039,7 +2040,7 @@ public sealed class DictionaryService(
         payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.irregular_payment_updated", "irregular_payment", payment.Id, $"Обновлен нерегулярный платеж {payment.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
     }
 
@@ -2063,7 +2064,7 @@ public sealed class DictionaryService(
 
         var actionName = request.IsActive ? "активирован" : "деактивирован";
         AddAudit(actorUserId, "dictionary.irregular_payment_status_changed", "irregular_payment", payment.Id, $"Нерегулярный платеж {payment.Name} {actionName}.", NormalizeOptional(request.Reason), oldValues, newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
     }
 
@@ -2089,7 +2090,7 @@ public sealed class DictionaryService(
         payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.irregular_payment_archived", "irregular_payment", payment.Id, $"Удален нерегулярный платеж {payment.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
     }
 
@@ -2110,7 +2111,7 @@ public sealed class DictionaryService(
         payment.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.irregular_payment_restored", "irregular_payment", payment.Id, $"Восстановлен нерегулярный платеж {payment.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<IrregularPaymentDto>.Success(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
     }
 
@@ -2183,7 +2184,7 @@ public sealed class DictionaryService(
 
         dbContext.FeeCampaigns.Add(campaign);
         AddAudit(actorUserId, "dictionary.fee_campaign_created", "fee_campaign", campaign.Id, $"Объявлен сбор {campaign.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
     }
 
@@ -2235,7 +2236,7 @@ public sealed class DictionaryService(
         var newValues = ToFeeCampaignAuditValues(campaign);
 
         AddAudit(actorUserId, "dictionary.fee_campaign_updated", "fee_campaign", campaign.Id, $"Изменен сбор {campaign.Name}.", oldValues: oldValues, newValues: newValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
     }
 
@@ -2260,7 +2261,7 @@ public sealed class DictionaryService(
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.fee_campaign_archived", "fee_campaign", campaign.Id, $"Архивирован сбор {campaign.Name}.", archiveReason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
     }
 
@@ -2285,7 +2286,7 @@ public sealed class DictionaryService(
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.fee_campaign_restored", "fee_campaign", campaign.Id, $"Восстановлен сбор {campaign.Name}.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
     }
 
