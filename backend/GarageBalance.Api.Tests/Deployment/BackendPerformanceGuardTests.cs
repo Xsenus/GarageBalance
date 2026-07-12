@@ -166,11 +166,12 @@ public sealed class BackendPerformanceGuardTests
     public void FundOperationsAndReleaseLists_KeepNormalizedOutputBounds()
     {
         var fundSource = ReadApiSource("Application/Funds/FundService.cs");
+        var fundRepositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
         var releaseSource = ReadApiSource("Application/Releases/AppReleaseService.cs");
 
         Assert.Contains("var boundedLimit = Math.Clamp(limit, 1, 100)", fundSource, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(fundSource, ".Take(boundedLimit)") >= 2,
+            CountOccurrences(fundRepositorySource, ".Take(limit)") >= 2,
             "Fund operation lists must apply the same bound in PostgreSQL and SQLite branches.");
         Assert.Contains("private const int DefaultLimit = 10", releaseSource, StringComparison.Ordinal);
         Assert.Contains("private const int MaxLimit = 50", releaseSource, StringComparison.Ordinal);

@@ -15,7 +15,7 @@ public sealed class FundServiceTests
     public async Task GetFundsAsync_SeedsDefaultFunds()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
 
         var funds = await service.GetFundsAsync(CancellationToken.None);
 
@@ -32,7 +32,7 @@ public sealed class FundServiceTests
     public async Task CreateOperationAsync_DepositsMoneyAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Целевые взносы");
         await SeedIncomeAsync(database.Context, 2000m);
@@ -69,7 +69,7 @@ public sealed class FundServiceTests
     public async Task CreateOperationAsync_DoesNotDepositMoreThanAvailableDistributionAmount()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 2000m);
 
@@ -101,7 +101,7 @@ public sealed class FundServiceTests
     public async Task CreateOperationAsync_WithdrawReturnsMoneyToAvailableDistributionAmount()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
 
@@ -127,7 +127,7 @@ public sealed class FundServiceTests
     public async Task CreateOperationAsync_DoesNotWithdrawMoreThanBalance()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
 
         var result = await service.CreateOperationAsync(
@@ -146,7 +146,7 @@ public sealed class FundServiceTests
     public async Task GetOperationsAsync_ReturnsRecentOperationsAndCanIncludeCanceled()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 2000m);
         var first = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Первичное распределение"), null, CancellationToken.None);
@@ -170,7 +170,7 @@ public sealed class FundServiceTests
     public async Task UpdateOperationAsync_UpdatesOperationRecalculatesBalancesAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
@@ -214,7 +214,7 @@ public sealed class FundServiceTests
     public async Task UpdateOperationAsync_DoesNotWriteAuditWhenNothingChanged()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
         var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
@@ -236,7 +236,7 @@ public sealed class FundServiceTests
     public async Task UpdateOperationAsync_RejectsDepositIncreaseAboveAvailableDistribution()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
         var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
@@ -260,7 +260,7 @@ public sealed class FundServiceTests
     public async Task UpdateOperationAsync_RejectsAmountWhenActiveSequenceWouldBecomeNegative()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
         var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
@@ -286,7 +286,7 @@ public sealed class FundServiceTests
     public async Task UpdateOperationAsync_RejectsCanceledOperation()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
         var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
@@ -310,7 +310,7 @@ public sealed class FundServiceTests
     public async Task CancelOperationAsync_CancelsOperationRecalculatesBalanceAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
@@ -350,7 +350,7 @@ public sealed class FundServiceTests
     public async Task CancelOperationAsync_RejectsDepositWhenActiveWithdrawWouldBecomeNegative()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
         var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
@@ -375,7 +375,7 @@ public sealed class FundServiceTests
     public async Task RestoreOperationAsync_RestoresCanceledOperationRecalculatesBalanceAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
@@ -410,7 +410,7 @@ public sealed class FundServiceTests
     public async Task RestoreOperationAsync_RejectsCanceledWithdrawWhenSequenceWouldBecomeNegative()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = new FundService(database.Context, new AuditEventWriter(database.Context));
+        var service = CreateService(database.Context);
         var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
         await SeedIncomeAsync(database.Context, 1000m);
         var deposit = await service.CreateOperationAsync(targetFund.Id, new CreateFundOperationRequest("deposit", 700m, "Распределение"), null, CancellationToken.None);
@@ -426,6 +426,11 @@ public sealed class FundServiceTests
         Assert.Equal("fund_balance_insufficient", result.ErrorCode);
         Assert.True(await database.Context.FundOperations.AnyAsync(operation => operation.Id == withdraw.Value.Id && operation.IsCanceled));
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.operation_restored");
+    }
+
+    private static FundService CreateService(GarageBalanceDbContext context)
+    {
+        return new FundService(new EfFundRepository(context), new AuditEventWriter(context));
     }
 
     private static async Task SeedIncomeAsync(GarageBalanceDbContext context, decimal amount)

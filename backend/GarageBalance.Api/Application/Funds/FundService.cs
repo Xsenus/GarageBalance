@@ -1,12 +1,10 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Finance;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Funds;
 
-public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWriter auditEventWriter) : IFundService
+public sealed class FundService(IFundRepository repository, IAuditEventWriter auditEventWriter) : IFundService
 {
     private static readonly IReadOnlyList<DefaultFundDefinition> DefaultFunds =
     [
@@ -24,11 +22,7 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         await EnsureDefaultFundsAsync(cancellationToken);
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
 
-        var funds = await dbContext.Funds
-            .AsNoTracking()
-            .OrderBy(fund => fund.SortOrder)
-            .ThenBy(fund => fund.Name)
-            .ToListAsync(cancellationToken);
+        var funds = await repository.GetFundsAsync(cancellationToken);
 
         return funds.Select(fund => ToDto(fund, availableToDistribute)).ToList();
     }
@@ -36,35 +30,14 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
     public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
     {
         var boundedLimit = Math.Clamp(limit, 1, 100);
-        var query = dbContext.FundOperations
-            .AsNoTracking()
-            .Include(operation => operation.Fund)
-            .Where(operation => includeCanceled || !operation.IsCanceled);
-
-        List<FundOperation> operations;
-        if (IsSqliteProvider())
-        {
-            operations = (await query.ToListAsync(cancellationToken))
-                .OrderByDescending(operation => operation.CreatedAtUtc)
-                .ThenByDescending(operation => operation.Id)
-                .Take(boundedLimit)
-                .ToList();
-        }
-        else
-        {
-            operations = await query
-                .OrderByDescending(operation => operation.CreatedAtUtc)
-                .ThenByDescending(operation => operation.Id)
-                .Take(boundedLimit)
-                .ToListAsync(cancellationToken);
-        }
+        var operations = await repository.GetRecentOperationsAsync(boundedLimit, includeCanceled, cancellationToken);
 
         return operations.Select(ToDto).ToList();
     }
 
     public async Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var fund = await dbContext.Funds.SingleOrDefaultAsync(item => item.Id == fundId, cancellationToken);
+        var fund = await repository.FindFundForUpdateAsync(fundId, cancellationToken);
         if (fund is null)
         {
             return FundResult<FundOperationDto>.Failure("fund_not_found", "Фонд не найден.");
@@ -122,9 +95,9 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
 
         fund.Balance = balanceAfter;
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        dbContext.FundOperations.Add(operation);
+        repository.AddOperation(operation);
         AddAudit(fund, operation, actorUserId);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         operation.Fund = fund;
         return FundResult<FundOperationDto>.Success(ToDto(operation));
@@ -144,9 +117,7 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
             return FundResult<FundOperationDto>.Failure("fund_operation_amount_invalid", "Сумма операции фонда должна быть больше нуля.");
         }
 
-        var operation = await dbContext.FundOperations
-            .Include(item => item.Fund)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await repository.FindOperationForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_not_found", "Операция фонда не найдена.");
@@ -187,7 +158,7 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
         AddUpdateAudit(operation.Fund, operation, actorUserId, oldValues);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return FundResult<FundOperationDto>.Success(ToDto(operation));
     }
 
@@ -199,9 +170,7 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
             return FundResult<FundOperationDto>.Failure("fund_operation_cancel_reason_required", "Для отмены операции фонда нужна причина.");
         }
 
-        var operation = await dbContext.FundOperations
-            .Include(item => item.Fund)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await repository.FindOperationForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_not_found", "Операция фонда не найдена.");
@@ -222,15 +191,13 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         operation.Reason = AppendCancelReason(operation.Reason, reason);
         await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
         AddCancelAudit(operation.Fund, operation, actorUserId, reason);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return FundResult<FundOperationDto>.Success(ToDto(operation));
     }
 
     public async Task<FundResult<FundOperationDto>> RestoreOperationAsync(Guid operationId, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var operation = await dbContext.FundOperations
-            .Include(item => item.Fund)
-            .SingleOrDefaultAsync(item => item.Id == operationId, cancellationToken);
+        var operation = await repository.FindOperationForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_not_found", "Операция фонда не найдена.");
@@ -261,16 +228,15 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
         AddRestoreAudit(operation.Fund, operation, actorUserId);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return FundResult<FundOperationDto>.Success(ToDto(operation));
     }
 
     private async Task EnsureDefaultFundsAsync(CancellationToken cancellationToken)
     {
-        var existingNames = await dbContext.Funds
-            .Select(fund => fund.NormalizedName)
-            .ToListAsync(cancellationToken);
+        var existingNames = await repository.GetNormalizedFundNamesAsync(cancellationToken);
         var existing = existingNames.ToHashSet(StringComparer.Ordinal);
+        var added = false;
 
         foreach (var definition in DefaultFunds)
         {
@@ -280,7 +246,7 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
                 continue;
             }
 
-            dbContext.Funds.Add(new Fund
+            repository.AddFund(new Fund
             {
                 Name = definition.Name,
                 NormalizedName = normalizedName,
@@ -288,29 +254,20 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
                 AllowOperations = definition.AllowOperations,
                 IsSystem = true
             });
+            added = true;
         }
 
-        if (dbContext.ChangeTracker.HasChanges())
+        if (added)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
         }
     }
 
     private async Task<decimal> CalculateAvailableToDistributeAsync(CancellationToken cancellationToken)
     {
-        var incomeTotal = await dbContext.FinancialOperations
-            .AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var expenseTotal = await dbContext.FinancialOperations
-            .AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var allocatedFundTotal = await dbContext.Funds
-            .AsNoTracking()
-            .SumAsync(fund => (decimal?)fund.Balance, cancellationToken) ?? 0m;
+        var totals = await repository.GetTotalsAsync(cancellationToken);
 
-        return MoneyMath.RoundMoney(Math.Max(incomeTotal - expenseTotal - allocatedFundTotal, 0m));
+        return MoneyMath.RoundMoney(Math.Max(totals.IncomeTotal - totals.ExpenseTotal - totals.AllocatedFundTotal, 0m));
     }
 
     private async Task RecalculateFundBalancesAsync(Fund fund, CancellationToken cancellationToken)
@@ -414,28 +371,7 @@ public sealed class FundService(GarageBalanceDbContext dbContext, IAuditEventWri
 
     private async Task<List<FundOperation>> GetOperationsOrderedByBusinessTimeAsync(Guid fundId, bool trackChanges, CancellationToken cancellationToken)
     {
-        var query = dbContext.FundOperations
-            .Where(operation => operation.FundId == fundId);
-
-        if (!trackChanges)
-        {
-            query = query.AsNoTracking();
-        }
-
-        return IsSqliteProvider()
-            ? (await query.ToListAsync(cancellationToken))
-                .OrderBy(operation => operation.CreatedAtUtc)
-                .ThenBy(operation => operation.Id)
-                .ToList()
-            : await query
-                .OrderBy(operation => operation.CreatedAtUtc)
-                .ThenBy(operation => operation.Id)
-                .ToListAsync(cancellationToken);
-    }
-
-    private bool IsSqliteProvider()
-    {
-        return dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+        return (await repository.GetOperationsOrderedAsync(fundId, trackChanges, cancellationToken)).ToList();
     }
 
     private void AddAudit(Fund fund, FundOperation operation, Guid? actorUserId)
