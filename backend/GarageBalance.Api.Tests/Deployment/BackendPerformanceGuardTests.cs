@@ -81,6 +81,19 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization()
+    {
+        var source = ReadApiSource("Application/Import/ImportService.cs");
+
+        Assert.Matches(
+            BoundedQueryRegex(@"GetAccessImportCreatedRecordsAsync[\s\S]*?var limit = NormalizeLimit\(request\.Limit, 100, 500\)[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            source);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetAccessImportCreatedRecordsAsync[\s\S]*?else[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToList\(\)"),
+            source);
+    }
+
+    [Fact]
     public void AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Audit/AuditService.cs");

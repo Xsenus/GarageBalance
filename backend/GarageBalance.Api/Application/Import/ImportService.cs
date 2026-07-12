@@ -87,6 +87,7 @@ public sealed class ImportService(
 
     public async Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken)
     {
+        var limit = NormalizeLimit(request.Limit, 100, 500);
         var runExists = await dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
         if (!runExists)
         {
@@ -104,7 +105,7 @@ public sealed class ImportService(
                 .OrderByDescending(record => record.CreatedAtUtc)
                 .ThenBy(record => record.TargetEntityType)
                 .ThenBy(record => record.TargetEntityId)
-                .Take(request.Limit)
+                .Take(limit)
                 .ToListAsync(cancellationToken);
         }
         else
@@ -114,7 +115,7 @@ public sealed class ImportService(
                 .OrderByDescending(record => record.CreatedAtUtc)
                 .ThenBy(record => record.TargetEntityType, StringComparer.Ordinal)
                 .ThenBy(record => record.TargetEntityId, StringComparer.Ordinal)
-                .Take(request.Limit)
+                .Take(limit)
                 .ToList();
         }
 

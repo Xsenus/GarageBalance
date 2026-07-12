@@ -492,6 +492,44 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task GetAccessImportCreatedRecordsAsync_NormalizesDefaultAndMaximumLimits()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var dryRun = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("GSK archive.accdb", CreateAccessLikeStream("garage owner")), null, CancellationToken.None);
+        var run = Assert.IsType<AccessImportRunDto>(dryRun.Value);
+
+        database.Context.AccessImportCreatedRecords.AddRange(Enumerable.Range(1, 501).Select(index =>
+            new AccessImportCreatedRecord
+            {
+                AccessImportRunId = run.Id,
+                SourceEntityType = "Garage",
+                SourceExternalId = index.ToString(),
+                SourceRowHash = index.ToString("x64"),
+                TargetEntityType = "garage",
+                TargetEntityId = $"garage-{index}",
+                TargetDisplayName = $"Гараж {index}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddSeconds(index)
+            }));
+        await database.Context.SaveChangesAsync();
+
+        var defaultLimit = await service.GetAccessImportCreatedRecordsAsync(
+            run.Id,
+            new AccessImportCreatedRecordListRequest { Limit = 0 },
+            CancellationToken.None);
+        var maximumLimit = await service.GetAccessImportCreatedRecordsAsync(
+            run.Id,
+            new AccessImportCreatedRecordListRequest { Limit = 5_000 },
+            CancellationToken.None);
+
+        Assert.True(defaultLimit.Succeeded);
+        Assert.Equal(100, defaultLimit.Value!.Count);
+        Assert.True(maximumLimit.Succeeded);
+        Assert.Equal(500, maximumLimit.Value!.Count);
+        Assert.Equal("garage-501", maximumLimit.Value[0].TargetEntityId);
+    }
+
+    [Fact]
     public async Task ExportAccessImportRunReportAsync_ReturnsNotFoundForMissingRun()
     {
         await using var database = await TestDatabase.CreateAsync();
