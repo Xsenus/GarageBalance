@@ -71,6 +71,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetActiveByGroupAsync[\s\S]*?Where\(supplier => !supplier\.IsArchived && supplier\.GroupId == groupId\)[\s\S]*?OrderBy\(supplier => supplier\.Name\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            source);
+        Assert.Contains(".Select(supplier => supplier.StartingBalance)", source, StringComparison.Ordinal);
+        Assert.Contains(".SingleAsync(cancellationToken)", source, StringComparison.Ordinal);
     }
 
     [Fact]

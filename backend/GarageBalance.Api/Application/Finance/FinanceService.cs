@@ -12,6 +12,8 @@ namespace GarageBalance.Api.Application.Finance;
 public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
     IStaffMemberRepository staffMemberRepository,
+    ISupplierGroupRepository supplierGroupRepository,
+    ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
     IIncomeTypeRepository incomeTypeRepository,
     ITariffRepository tariffRepository,
@@ -73,7 +75,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -761,7 +763,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
         if (supplier is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
@@ -994,7 +996,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
         }
 
-        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
         if (supplier is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
@@ -1505,7 +1507,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_source_invalid", "Источник начисления поставщику должен быть manual или regular.");
         }
 
-        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
         if (supplier is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_not_found", "Поставщик для начисления не найден.");
@@ -1583,7 +1585,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_already_canceled", "Отмененное начисление поставщику нельзя изменить.");
         }
 
-        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(item => item.Id == request.SupplierId && !item.IsArchived, cancellationToken);
+        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
         if (supplier is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_not_found", "Поставщик для начисления не найден.");
@@ -2045,8 +2047,7 @@ public sealed class FinanceService(
         var documentNumber = NormalizeOptional(request.DocumentNumber);
         var comment = NormalizeOptional(request.Comment);
 
-        var group = await dbContext.SupplierGroups.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == request.SupplierGroupId && !item.IsArchived, cancellationToken);
+        var group = await supplierGroupRepository.FindActiveAsync(request.SupplierGroupId, cancellationToken);
         if (group is null)
         {
             return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("supplier_group_not_found", "Группа персонала не найдена.");
@@ -2058,10 +2059,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системный вид выплаты Зарплата не найден.");
         }
 
-        var suppliers = await dbContext.Suppliers
-            .Where(item => !item.IsArchived && item.GroupId == group.Id)
-            .OrderBy(item => item.Name)
-            .ToListAsync(cancellationToken);
+        var suppliers = await supplierRepository.GetActiveByGroupAsync(group.Id, cancellationToken);
         if (suppliers.Count == 0)
         {
             return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("supplier_group_empty", "В выбранной группе нет активных поставщиков или сотрудников.");
@@ -3357,10 +3355,7 @@ public sealed class FinanceService(
     private async Task<decimal> CalculateSupplierDebtBeforeExpenseAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var supplierId = operation.SupplierId!.Value;
-        var startingBalance = operation.Supplier?.StartingBalance ?? await dbContext.Suppliers
-            .Where(supplier => supplier.Id == supplierId)
-            .Select(supplier => supplier.StartingBalance)
-            .SingleAsync(cancellationToken);
+        var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
         var accrualTotal = await dbContext.SupplierAccruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= operation.AccountingMonth)
             .SumAsync(accrual => accrual.Amount, cancellationToken);
@@ -3379,10 +3374,7 @@ public sealed class FinanceService(
     private async Task<IReadOnlyList<PaymentAllocationDto>> CalculateSupplierPaymentAllocationsAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var supplierId = operation.SupplierId!.Value;
-        var startingBalance = operation.Supplier?.StartingBalance ?? await dbContext.Suppliers
-            .Where(supplier => supplier.Id == supplierId)
-            .Select(supplier => supplier.StartingBalance)
-            .SingleAsync(cancellationToken);
+        var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
         var previousExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(previous =>
                 !previous.IsCanceled &&

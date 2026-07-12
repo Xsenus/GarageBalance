@@ -8,6 +8,8 @@ public interface ISupplierRepository
     Task<SupplierPageData> GetPageAsync(Guid? groupId, string? normalizedSearch, bool includeArchived, int offset, int limit, CancellationToken cancellationToken);
     Task<Supplier?> FindActiveWithGroupAsync(Guid id, CancellationToken cancellationToken);
     Task<Supplier?> FindArchivedWithGroupAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Supplier>> GetActiveByGroupAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid groupId, string name, CancellationToken cancellationToken);
     void Add(Supplier supplier);
 }

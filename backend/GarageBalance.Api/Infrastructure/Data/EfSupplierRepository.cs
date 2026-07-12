@@ -51,6 +51,18 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .SingleOrDefaultAsync(supplier => supplier.Id == id && supplier.IsArchived, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Supplier>> GetActiveByGroupAsync(Guid groupId, CancellationToken cancellationToken) =>
+        await dbContext.Suppliers
+            .Where(supplier => !supplier.IsArchived && supplier.GroupId == groupId)
+            .OrderBy(supplier => supplier.Name)
+            .ToListAsync(cancellationToken);
+
+    public Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Suppliers.AsNoTracking()
+            .Where(supplier => supplier.Id == id)
+            .Select(supplier => supplier.StartingBalance)
+            .SingleAsync(cancellationToken);
+
     public Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid groupId, string name, CancellationToken cancellationToken)
     {
         return dbContext.Suppliers.AsNoTracking().AnyAsync(
