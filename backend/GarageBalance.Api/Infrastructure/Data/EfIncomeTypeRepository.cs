@@ -56,6 +56,15 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
     public Task<IncomeType?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
 
+    public Task<IncomeType?> FindFirstActiveByCodeAsync(string code, CancellationToken cancellationToken) =>
+        dbContext.IncomeTypes.FirstOrDefaultAsync(item => !item.IsArchived && item.Code == code, cancellationToken);
+
+    public Task<IncomeType?> FindFirstActiveByNameAsync(string name, CancellationToken cancellationToken) =>
+        dbContext.IncomeTypes.FirstOrDefaultAsync(item => !item.IsArchived && item.Name == name, cancellationToken);
+
+    public Task<IncomeType?> FindFirstArchivedByCodeOrNameAsync(string code, string name, CancellationToken cancellationToken) =>
+        dbContext.IncomeTypes.FirstOrDefaultAsync(item => item.IsArchived && (item.Code == code || item.Name == name), cancellationToken);
+
     public Task<IncomeType?> FindArchivedAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
 

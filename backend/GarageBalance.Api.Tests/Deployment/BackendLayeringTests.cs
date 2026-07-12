@@ -1105,7 +1105,24 @@ public sealed class BackendLayeringTests
         Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
         Assert.Contains(": IIncomeTypeRepository", implementation, StringComparison.Ordinal);
         Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("FindFirstActiveByCodeAsync", abstraction, StringComparison.Ordinal);
+        Assert.Contains("FindFirstActiveByNameAsync", abstraction, StringComparison.Ordinal);
+        Assert.Contains("FindFirstArchivedByCodeOrNameAsync", abstraction, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IIncomeTypeRepository, EfIncomeTypeRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FinanceIncomeTypeQueries_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        Assert.Contains("IIncomeTypeRepository incomeTypeRepository", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.FindActiveAsync(request.IncomeTypeId", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.FindFirstActiveByCodeAsync(DebtTransferIncomeTypeCode", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.FindFirstActiveByNameAsync(DebtTransferIncomeTypeName", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.FindFirstArchivedByCodeOrNameAsync", service, StringComparison.Ordinal);
+        Assert.Contains("incomeTypeRepository.Add(incomeType)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbContext.IncomeTypes", service, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1218,6 +1235,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен тридцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен тридцатый срез разделения backend-слоев", history, StringComparison.Ordinal);

@@ -13,6 +13,7 @@ public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
     IStaffMemberRepository staffMemberRepository,
     IExpenseTypeRepository expenseTypeRepository,
+    IIncomeTypeRepository incomeTypeRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -69,7 +70,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -615,7 +616,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("income_type_not_found", "Вид поступления не найден.");
@@ -908,7 +909,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("income_type_not_found", "Вид поступления не найден.");
@@ -1268,7 +1269,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
@@ -1428,7 +1429,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
         }
 
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
@@ -1718,7 +1719,7 @@ public sealed class FinanceService(
     public async Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var incomeType = await dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == request.IncomeTypeId && !item.IsArchived, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("income_type_not_found", "Вид начисления не найден.");
@@ -2455,9 +2456,8 @@ public sealed class FinanceService(
 
     private async Task<IncomeType> GetOrCreateDebtTransferIncomeTypeAsync(CancellationToken cancellationToken)
     {
-        var incomeType = await dbContext.IncomeTypes
-            .FirstOrDefaultAsync(item => !item.IsArchived && item.Code == DebtTransferIncomeTypeCode, cancellationToken)
-            ?? await dbContext.IncomeTypes.FirstOrDefaultAsync(item => !item.IsArchived && item.Name == DebtTransferIncomeTypeName, cancellationToken);
+        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(DebtTransferIncomeTypeCode, cancellationToken)
+            ?? await incomeTypeRepository.FindFirstActiveByNameAsync(DebtTransferIncomeTypeName, cancellationToken);
         if (incomeType is not null)
         {
             if (!incomeType.IsSystem || incomeType.Code != DebtTransferIncomeTypeCode)
@@ -2470,8 +2470,7 @@ public sealed class FinanceService(
             return incomeType;
         }
 
-        incomeType = await dbContext.IncomeTypes
-            .FirstOrDefaultAsync(item => item.IsArchived && (item.Code == DebtTransferIncomeTypeCode || item.Name == DebtTransferIncomeTypeName), cancellationToken);
+        incomeType = await incomeTypeRepository.FindFirstArchivedByCodeOrNameAsync(DebtTransferIncomeTypeCode, DebtTransferIncomeTypeName, cancellationToken);
         if (incomeType is not null)
         {
             incomeType.Name = DebtTransferIncomeTypeName;
@@ -2488,7 +2487,7 @@ public sealed class FinanceService(
             Code = DebtTransferIncomeTypeCode,
             IsSystem = true
         };
-        dbContext.IncomeTypes.Add(incomeType);
+        incomeTypeRepository.Add(incomeType);
         return incomeType;
     }
 
