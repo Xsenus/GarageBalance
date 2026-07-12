@@ -1,13 +1,11 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Workflows;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Workflows;
 
 public sealed class FormStateService(
-    GarageBalanceDbContext dbContext,
+    IFormStateRepository repository,
     IAuditEventWriter auditEventWriter) : IFormStateService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -21,9 +19,7 @@ public sealed class FormStateService(
             return null;
         }
 
-        var state = await dbContext.FormStates
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Scope == normalizedScope, cancellationToken);
+        var state = await repository.GetAsync(normalizedScope, cancellationToken);
 
         return state is null ? null : ToDto(state);
     }
@@ -47,7 +43,7 @@ public sealed class FormStateService(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var state = await dbContext.FormStates.SingleOrDefaultAsync(item => item.Scope == normalizedScope, cancellationToken);
+        var state = await repository.FindForUpdateAsync(normalizedScope, cancellationToken);
         var isCreated = state is null;
         var oldPayload = state?.PayloadJson;
         if (isCreated)
@@ -60,7 +56,7 @@ public sealed class FormStateService(
                 UpdatedAtUtc = now,
                 UpdatedByUserId = actorUserId
             };
-            dbContext.FormStates.Add(state);
+            repository.Add(state);
         }
         else
         {
@@ -87,7 +83,7 @@ public sealed class FormStateService(
             NewValues: oldPayload is null ? null : new Dictionary<string, object?> { ["payload"] = payloadJson },
             FieldLabels: new Dictionary<string, string> { ["payload"] = "Состояние формы" }));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return FormStateResult<FormStateDto>.Success(ToDto(state));
     }
 

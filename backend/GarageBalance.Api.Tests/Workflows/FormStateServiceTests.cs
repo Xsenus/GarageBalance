@@ -28,11 +28,14 @@ public sealed class FormStateServiceTests
             new UpsertFormStateRequest(secondPayload.RootElement, "Повторное сохранение формы платежей."),
             actorUserId,
             CancellationToken.None);
+        var loaded = await service.GetStateAsync(" payments-prototype ", CancellationToken.None);
 
         Assert.True(created.Succeeded);
         Assert.True(updated.Succeeded);
         Assert.Equal("150", updated.Value!.Payload.GetProperty("rows")[0].GetProperty("value").GetString());
         Assert.Equal(actorUserId, updated.Value.UpdatedByUserId);
+        Assert.NotNull(loaded);
+        Assert.Equal("150", loaded.Payload.GetProperty("rows")[0].GetProperty("value").GetString());
         Assert.Equal(2, await database.Context.AuditEvents.CountAsync());
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "workflows.form_state_created");
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "workflows.form_state_updated");
@@ -69,7 +72,7 @@ public sealed class FormStateServiceTests
 
     private static FormStateService CreateService(GarageBalanceDbContext context)
     {
-        return new FormStateService(context, new AuditEventWriter(context));
+        return new FormStateService(new EfFormStateRepository(context), new AuditEventWriter(context));
     }
 
 }
