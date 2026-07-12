@@ -1052,6 +1052,26 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void SupplierAccrualLists_DelegateToInfrastructureRepository()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "ISupplierAccrualRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfSupplierAccrualRepository.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+
+        Assert.Contains("interface ISupplierAccrualRepository", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": ISupplierAccrualRepository", implementation, StringComparison.Ordinal);
+        Assert.Contains("ISupplierAccrualRepository supplierAccrualRepository", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.GetPageAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("private IQueryable<SupplierAccrual> QuerySupplierAccruals", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplySupplierAccrualFilters", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<ISupplierAccrualRepository, EfSupplierAccrualRepository>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierGroupDictionary_DelegatesPersistenceQueriesToApplicationPort()
     {
         var repositoryRoot = FindRepositoryRoot();
