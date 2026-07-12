@@ -559,6 +559,27 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GarageRepository_ReturnsCompleteActiveBatchAndHistoricalStartingBalance()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
+        var first = new Garage { Number = "20", StartingBalance = 200m, Owner = owner };
+        var second = new Garage { Number = "10", StartingBalance = 100m, Owner = owner };
+        var archived = new Garage { Number = "05", StartingBalance = 500m, Owner = owner, IsArchived = true };
+        database.Context.AddRange(owner, first, second, archived);
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        var repository = new EfGarageRepository(database.Context);
+
+        var active = await repository.GetAllActiveWithOwnerAsync(CancellationToken.None);
+        var historicalStartingBalance = await repository.GetStartingBalanceAsync(archived.Id, CancellationToken.None);
+
+        Assert.Equal(["10", "20"], active.Select(garage => garage.Number));
+        Assert.All(active, garage => Assert.Equal("Иванов Иван", garage.Owner?.FullName));
+        Assert.Equal(500m, historicalStartingBalance);
+    }
+
+    [Fact]
     public async Task GetGaragesAsync_ReturnsCalculatedBalanceAndOverdueDebt()
     {
         await using var database = await TestDatabase.CreateAsync();

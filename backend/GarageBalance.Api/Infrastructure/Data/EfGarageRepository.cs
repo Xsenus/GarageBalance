@@ -80,6 +80,13 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         dbContext.Garages.Include(garage => garage.Owner)
             .SingleOrDefaultAsync(garage => garage.Id == id && garage.IsArchived, cancellationToken);
 
+    public async Task<IReadOnlyList<Garage>> GetAllActiveWithOwnerAsync(CancellationToken cancellationToken) =>
+        await dbContext.Garages
+            .Include(garage => garage.Owner)
+            .Where(garage => !garage.IsArchived)
+            .OrderBy(garage => garage.Number)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Garage>> GetActiveByIdsAsync(
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken) =>
@@ -87,6 +94,12 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
             .Where(garage => ids.Contains(garage.Id) && !garage.IsArchived)
             .OrderBy(garage => garage.Number)
             .ToListAsync(cancellationToken);
+
+    public Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Garages
+            .Where(garage => garage.Id == id)
+            .Select(garage => garage.StartingBalance)
+            .SingleAsync(cancellationToken);
 
     public Task<bool> ActiveNumberExistsAsync(Guid? ignoredId, string number, CancellationToken cancellationToken) =>
         dbContext.Garages.AsNoTracking().AnyAsync(

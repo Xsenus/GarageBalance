@@ -966,6 +966,27 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinanceGarageLookupsAndBatches_DelegateToExistingApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "IGarageRepository.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfGarageRepository.cs"));
+
+        Assert.Contains("IGarageRepository garageRepository", service, StringComparison.Ordinal);
+        Assert.True(
+            service.Split("garageRepository.FindActiveWithOwnerAsync", StringSplitOptions.None).Length - 1 >= 9,
+            "Finance workflows must share the active garage lookup instead of querying the DbSet directly.");
+        Assert.Equal(2, service.Split("garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)", StringSplitOptions.None).Length - 1);
+        Assert.Equal(2, service.Split("garageRepository.GetStartingBalanceAsync(garageId, cancellationToken)", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, service.Split("dbContext.Garages", StringSplitOptions.None).Length - 1);
+        Assert.Contains("GetAllActiveWithOwnerAsync", abstraction, StringComparison.Ordinal);
+        Assert.Contains("GetStartingBalanceAsync", abstraction, StringComparison.Ordinal);
+        Assert.Contains(".Where(garage => !garage.IsArchived)", implementation, StringComparison.Ordinal);
+        Assert.Contains(".OrderBy(garage => garage.Number)", implementation, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SupplierGroupDictionary_DelegatesPersistenceQueriesToApplicationPort()
     {
         var repositoryRoot = FindRepositoryRoot();

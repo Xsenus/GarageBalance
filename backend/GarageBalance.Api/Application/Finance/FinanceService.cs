@@ -13,6 +13,7 @@ namespace GarageBalance.Api.Application.Finance;
 public sealed class FinanceService(
     GarageBalanceDbContext dbContext,
     IStaffMemberRepository staffMemberRepository,
+    IGarageRepository garageRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
@@ -77,7 +78,7 @@ public sealed class FinanceService(
     };
 
     public FinanceService(GarageBalanceDbContext dbContext)
-        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
+        : this(dbContext, new EfStaffMemberRepository(dbContext), new EfGarageRepository(dbContext), new EfSupplierGroupRepository(dbContext), new EfSupplierRepository(dbContext), new EfExpenseTypeRepository(dbContext), new EfIncomeTypeRepository(dbContext), new EfTariffRepository(dbContext), new EfFeeCampaignRepository(dbContext), new EfChargeServiceSettingRepository(dbContext), new EfFundRepository(dbContext), new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext))
     {
     }
 
@@ -247,9 +248,7 @@ public sealed class FinanceService(
             return FinanceResult<GarageBalanceHistoryDto>.Failure("balance_history_period_too_large", $"Историю баланса можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
-        var garage = await dbContext.Garages.AsNoTracking()
-            .Include(item => item.Owner)
-            .SingleOrDefaultAsync(item => item.Id == garageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<GarageBalanceHistoryDto>.Failure("garage_not_found", "Гараж для истории баланса не найден.");
@@ -326,9 +325,7 @@ public sealed class FinanceService(
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("income_worksheet_period_too_large", $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
-        var garage = await dbContext.Garages.AsNoTracking()
-            .Include(item => item.Owner)
-            .SingleOrDefaultAsync(item => item.Id == garageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для формы поступлений не найден.");
@@ -617,7 +614,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
@@ -663,7 +660,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("debt_payment_amount_invalid", "Сумма оплаты входящего долга должна быть больше нуля.");
         }
 
-        var garage = await dbContext.Garages.AsNoTracking().SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для оплаты входящего долга не найден.");
@@ -906,7 +903,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
@@ -1266,7 +1263,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_source_invalid", "Источник начисления должен быть manual или regular.");
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
@@ -1324,7 +1321,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("debt_transfer_amount_invalid", "Сумма переноса должна быть больше нуля.");
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для переноса задолженности не найден.");
@@ -1426,7 +1423,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_already_canceled", "Отмененное начисление нельзя изменить.");
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
@@ -1746,11 +1743,7 @@ public sealed class FinanceService(
                 "Выбранный тариф не подходит для этого вида регулярного начисления.");
         }
 
-        var garages = await dbContext.Garages
-            .Include(garage => garage.Owner)
-            .Where(garage => !garage.IsArchived)
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
+        var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
 
@@ -1948,12 +1941,8 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса по сбору должна быть больше нуля для начисления.");
         }
 
-        var garages = campaign.AppliesToAllGarages
-            ? await dbContext.Garages
-                .Include(garage => garage.Owner)
-                .Where(garage => !garage.IsArchived)
-                .OrderBy(garage => garage.Number)
-                .ToListAsync(cancellationToken)
+        IReadOnlyList<Garage> garages = campaign.AppliesToAllGarages
+            ? await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)
             : campaign.ParticipantGarages
                 .Select(participant => participant.Garage)
                 .Where(garage => !garage.IsArchived)
@@ -2184,7 +2173,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
@@ -2253,7 +2242,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Отмененное показание нельзя изменить.");
         }
 
-        var garage = await dbContext.Garages.Include(item => item.Owner).SingleOrDefaultAsync(item => item.Id == request.GarageId && !item.IsArchived, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
@@ -3297,10 +3286,7 @@ public sealed class FinanceService(
     private async Task<decimal> CalculateGarageDebtBeforeIncomeAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var garageId = operation.GarageId!.Value;
-        var startingBalance = operation.Garage?.StartingBalance ?? await dbContext.Garages
-            .Where(garage => garage.Id == garageId)
-            .Select(garage => garage.StartingBalance)
-            .SingleAsync(cancellationToken);
+        var startingBalance = operation.Garage?.StartingBalance ?? await garageRepository.GetStartingBalanceAsync(garageId, cancellationToken);
         var accrualTotal = await dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= operation.AccountingMonth)
             .SumAsync(accrual => accrual.Amount, cancellationToken);
@@ -3319,10 +3305,7 @@ public sealed class FinanceService(
     private async Task<IReadOnlyList<PaymentAllocationDto>> CalculateGaragePaymentAllocationsAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var garageId = operation.GarageId!.Value;
-        var startingBalance = operation.Garage?.StartingBalance ?? await dbContext.Garages
-            .Where(garage => garage.Id == garageId)
-            .Select(garage => garage.StartingBalance)
-            .SingleAsync(cancellationToken);
+        var startingBalance = operation.Garage?.StartingBalance ?? await garageRepository.GetStartingBalanceAsync(garageId, cancellationToken);
         var previousIncomeTotal = await dbContext.FinancialOperations.AsNoTracking()
             .Where(previous =>
                 !previous.IsCanceled &&
