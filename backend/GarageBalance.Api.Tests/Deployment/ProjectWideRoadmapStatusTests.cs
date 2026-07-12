@@ -946,6 +946,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
         var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var meterReadingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "meterReadings", "MeterReadingsPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
         var scenarioLine = activeRoadmapLines.Single(line =>
@@ -970,7 +971,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GetConsolidatedReportAsync_ReturnsMonthlyTotalsAndGarageRows", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("MeterReadingCount", reportServiceTestsText, StringComparison.Ordinal);
 
-        Assert.Contains("MeterReadingsPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.Contains("MeterReadingsPrototypePanel", meterReadingsPanelText, StringComparison.Ordinal);
         Assert.Contains("createGarageIncomeRowsFromWorksheet", appText, StringComparison.Ordinal);
         Assert.Contains("shows meter readings prototype as a yearly garage table", appTestsText, StringComparison.Ordinal);
         Assert.Contains("creates meter reading and shows calculated consumption", appTestsText, StringComparison.Ordinal);
@@ -1220,6 +1221,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
         var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var meterReadingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "meterReadings", "MeterReadingsPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
         var serviceRulesLine = activeRoadmapLines.Single(line =>
@@ -1261,7 +1263,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("row.meterRequired && row.meter === null", appText, StringComparison.Ordinal);
         Assert.Contains("meterRequired: row.meterKind !== null && row.meterValue === null", appText, StringComparison.Ordinal);
         Assert.Contains("meter_reading", appText, StringComparison.Ordinal);
-        Assert.Contains("Подтвердить показание?", appText, StringComparison.Ordinal);
+        Assert.Contains("Подтвердить показание?", meterReadingsPanelText, StringComparison.Ordinal);
 
         Assert.Contains("calculationBase: 'meter_water'", appTestsText, StringComparison.Ordinal);
         Assert.Contains("calculationBase: 'meter_electricity'", appTestsText, StringComparison.Ordinal);

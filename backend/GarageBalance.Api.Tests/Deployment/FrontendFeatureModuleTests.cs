@@ -3,6 +3,41 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void MeterReadingsPanelRemainsInItsFeatureModuleWithSharedEditingHelpers()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var meterReadingsPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "meterReadings",
+            "MeterReadingsPanel.tsx"));
+        var editingHelpersText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "prototypeEditing.ts"));
+        var editingHelpersTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "prototypeEditing.test.ts"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { MeterReadingsPrototypePanel } from './features/meterReadings/MeterReadingsPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<MeterReadingsPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function MeterReadingsPrototypePanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("const meterReadingMonths", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("createMeterReadingCellKey", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function MeterReadingsPrototypePanel(", meterReadingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.createMeterReading", meterReadingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.updateMeterReading", meterReadingsPanelText, StringComparison.Ordinal);
+        Assert.Contains("export function handleEditableInputKeyDown", editingHelpersText, StringComparison.Ordinal);
+        Assert.Contains("export function formatPrototypeChangeValue", editingHelpersText, StringComparison.Ordinal);
+        Assert.Contains("commits an editable value", editingHelpersTestsText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/meterReadings/MeterReadingsPanel.tsx", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/shared/prototypeEditing.ts", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();

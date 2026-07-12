@@ -13,7 +13,8 @@ describe('accessible dynamic messages', () => {
   const settingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const fundsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'funds', 'FundsPanel.tsx'), 'utf8')
   const importPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'import', 'ImportPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource].join('\n')
+  const meterReadingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'meterReadings', 'MeterReadingsPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -91,13 +92,13 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('.audit-filter-grid select:focus')
     expect(appCss).toContain('.meter-readings-control[aria-invalid=\'true\']')
 
-    expect(appSource).toContain('function isValidMeterReadingYear(value: string)')
-    expect(appSource).toContain('return year >= 1900 && year <= 9999')
-    expect(appSource).toContain('aria-label="Год показаний"')
-    expect(appSource).toContain('aria-invalid={!yearIsValid}')
-    expect(appSource).toContain('inputMode="numeric"')
-    expect(appSource).toContain('maxLength={4}')
-    expect(appSource).toContain('Введите год четырьмя цифрами от 1900 до 9999.')
+    expect(meterReadingsPanelSource).toContain('function isValidMeterReadingYear(value: string)')
+    expect(meterReadingsPanelSource).toContain('return year >= 1900 && year <= 9999')
+    expect(meterReadingsPanelSource).toContain('aria-label="Год показаний"')
+    expect(meterReadingsPanelSource).toContain('aria-invalid={!yearIsValid}')
+    expect(meterReadingsPanelSource).toContain('inputMode="numeric"')
+    expect(meterReadingsPanelSource).toContain('maxLength={4}')
+    expect(meterReadingsPanelSource).toContain('Введите год четырьмя цифрами от 1900 до 9999.')
   })
 
   it('keeps select controls consistently styled and labeled', () => {
