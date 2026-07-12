@@ -1839,6 +1839,77 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void DictionaryReactTestsAreCompleteWhenListsFormsFiltersErrorsValidationArchivePagingAndPermissionsExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var workbenchTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "dictionaryWorkbench.test.ts"));
+        var validationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "validation.test.ts"));
+        var accessControlTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "accessControl.test.ts"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить React-тесты списков, форм, фильтров, ошибок и permission states", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("клиентскую валидацию без API", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("server pagination", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.read", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("dictionaries.write", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("tariffs.manage", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("DictionaryReactTestsAreCompleteWhenListsFormsFiltersErrorsValidationArchivePagingAndPermissionsExist", roadmapLine, StringComparison.Ordinal);
+
+        var workflowScenarios = new[]
+        {
+            "adds owner, garage, supplier group and supplier from protected workspace",
+            "edits supplier groups and accounting operation types from dictionary dialogs",
+            "confirms garage dictionary edits with owner label and money diff",
+            "confirms supplier dictionary edits with group label and money diff",
+            "confirms tariff dictionary edits with labels dates and electricity tier diff",
+            "closes owner dictionary editor without api call when nothing changed",
+            "does not call dictionary APIs when owner and garage forms fail client validation",
+            "does not call dictionary APIs when supplier and finance dictionary forms fail client validation",
+            "shows dictionary list truncation counter when there are more rows",
+            "announces empty dictionary lists",
+            "requests bounded dictionary lists from dictionaries workspace",
+            "searches garages by number or owner from dictionaries workspace",
+            "searches suppliers by name or inn from dictionaries workspace",
+            "searches supplier groups and operation types from dictionaries workspace",
+            "archives owner from dictionaries workspace",
+            "shows archived dictionary records and restores them after confirmation",
+            "shows a clear conflict message when archived garage restore collides with an active number",
+            "shows workspace loading errors inside the related panel",
+            "keeps dictionary and payment actions read-only without write permissions",
+            "allows tariff management without broad dictionary write permission"
+        };
+        foreach (var scenario in workflowScenarios)
+        {
+            Assert.Contains(scenario, appTestsText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("keeps dictionary sections grouped with their write permission", workbenchTestsText, StringComparison.Ordinal);
+        Assert.Contains("returns section options and write access based on section permission", workbenchTestsText, StringComparison.Ordinal);
+        Assert.Contains("getOwnerValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("getGarageValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("getSupplierGroupValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("getSupplierValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("getAccountingTypeValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("getTariffValidationErrors", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("keeps role permission matrix labels tied to known permissions", accessControlTestsText, StringComparison.Ordinal);
+        Assert.Contains("permission: permissions.dictionariesWrite", accessControlTestsText, StringComparison.Ordinal);
+        Assert.Contains("permission: permissions.tariffsManage", accessControlTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("DictionaryReactTestsAreCompleteWhenListsFormsFiltersErrorsValidationArchivePagingAndPermissionsExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("DictionaryReactTestsAreCompleteWhenListsFormsFiltersErrorsValidationArchivePagingAndPermissionsExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
