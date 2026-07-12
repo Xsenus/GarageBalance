@@ -5309,6 +5309,54 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'Тарифы' })).toBeInTheDocument()
   })
 
+  it('validates tariff rate effective date and electricity tiers before calling api', async () => {
+    const user = userEvent.setup()
+    const createTariff = vi.fn(async (_token, request) => createTariffDto({
+      name: request.name,
+      calculationBase: request.calculationBase,
+      rate: request.rate,
+      effectiveFrom: request.effectiveFrom,
+    }))
+    const dictionaryClient = createDictionaryClient({ createTariff })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
+    const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+
+    await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Электроэнергия')
+    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'meter_electricity')
+    await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '0')
+    await user.clear(within(tariffDialog).getByLabelText('Дата начала тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Первый порог электроэнергии'), '200')
+    await user.type(within(tariffDialog).getByLabelText('Второй порог электроэнергии'), '100')
+    await user.type(within(tariffDialog).getByLabelText('Первая ставка электроэнергии'), '1')
+    await user.type(within(tariffDialog).getByLabelText('Вторая ставка электроэнергии'), '2')
+    await user.type(within(tariffDialog).getByLabelText('Третья ставка электроэнергии'), '3')
+    fireEvent.submit(tariffDialog.querySelector('form')!)
+
+    expect(await within(tariffDialog).findByText('Проверьте запись')).toBeInTheDocument()
+    expect(within(tariffDialog).getByText('Ставка тарифа должна быть больше 0.')).toBeInTheDocument()
+    expect(within(tariffDialog).getByText('Второй порог электроэнергии должен быть больше первого.')).toBeInTheDocument()
+    expect(within(tariffDialog).getByText('Укажите дату начала тарифа.')).toBeInTheDocument()
+    expect(createTariff).not.toHaveBeenCalled()
+
+    await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
+    await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '4')
+    await user.type(within(tariffDialog).getByLabelText('Дата начала тарифа'), '2026-08-01')
+    await user.clear(within(tariffDialog).getByLabelText('Первый порог электроэнергии'))
+    await user.type(within(tariffDialog).getByLabelText('Первый порог электроэнергии'), '50')
+    await user.clear(within(tariffDialog).getByLabelText('Третья ставка электроэнергии'))
+    fireEvent.submit(tariffDialog.querySelector('form')!)
+
+    expect(await within(tariffDialog).findByText('Для трехтарифной электроэнергии заполните два порога и три ставки.')).toBeInTheDocument()
+    expect(createTariff).not.toHaveBeenCalled()
+  })
+
   it('creates electricity tariff with editable thresholds and three rates', async () => {
     const user = userEvent.setup()
     let createdRequest: unknown = null
@@ -8977,6 +9025,50 @@ describe('App', () => {
     expect(auditXlsxExportRequest?.search).toBe('import')
     expect(auditXlsxExportRequest?.limit).toBeUndefined()
     expect(await within(auditPanel).findByText('История изменений XLSX готова.')).toHaveAttribute('role', 'status')
+  })
+
+  it('shows tariff changes in central audit and opens tariffs workspace', async () => {
+    const user = userEvent.setup()
+    const tariffEvent = createAuditEvent({
+      id: 'audit-tariff-updated',
+      action: 'dictionary.tariff_updated',
+      entityType: 'tariff',
+      entityId: 'tariff-water',
+      entityDisplayName: 'Тариф воды',
+      summary: 'Изменен тариф воды.',
+      section: 'dictionary',
+      actionKind: 'update',
+      fieldName: 'Ставка',
+      oldValue: '50,00',
+      newValue: '55,00',
+      reason: 'Протокол собрания № 2',
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [tariffEvent],
+      getEvent: async () => tariffEvent,
+    })
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+
+    expect(await within(auditTable).findByText('Тариф')).toBeInTheDocument()
+    expect(within(auditTable).getByText('Тариф воды')).toBeInTheDocument()
+    await user.click(within(auditTable).getByRole('button', { name: 'Открыть' }))
+
+    const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    expect(within(detailDialog).getByText('dictionary.tariff_updated')).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText('Ставка').length).toBeGreaterThan(0)
+    expect(within(detailDialog).getByText('50,00')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('55,00')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Протокол собрания № 2')).toBeInTheDocument()
+    await user.click(within(detailDialog).getByRole('button', { name: 'Открыть раздел: Тарифы и сборы' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Тарифы и сборы' })).toBeInTheDocument()
   })
 
   it('filters audit journal by section action kind entity type actor quick filter and date range', async () => {

@@ -2128,6 +2128,52 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void TariffReactTestsAreCompleteWhenFormsValidationConfirmationsPermissionsAndCentralAuditExist()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var verificationText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "tariff-react-tests-verification.md"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var validationTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "validation.test.ts"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Добавить React-тесты форм тарифов, валидации и отображения истории", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("централизованной `Истории изменений`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("TariffReactTestsAreCompleteWhenFormsValidationConfirmationsPermissionsAndCentralAuditExist", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("auditEvent.entityType === 'tariff'", appText, StringComparison.Ordinal);
+        Assert.Contains("section: 'tariffsAndFees', label: 'Тарифы и сборы'", appText, StringComparison.Ordinal);
+
+        foreach (var scenario in new[]
+        {
+            "creates electricity tariff with editable thresholds and three rates",
+            "confirms tariff dictionary edits with labels dates and electricity tier diff",
+            "shows backend error when tariff effective date moves after existing accruals",
+            "validates tariff rate effective date and electricity tiers before calling api",
+            "allows tariff management without broad dictionary write permission",
+            "shows clear conflict message for $name restore conflicts",
+            "shows tariff changes in central audit and opens tariffs workspace",
+            "edits tariffs and one-time payments without local history access"
+        })
+        {
+            Assert.Contains(scenario, appTestsText, StringComparison.Ordinal);
+            Assert.Contains(scenario, verificationText, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("validates tariff tiers and transforms tariff forms", validationTestsText, StringComparison.Ordinal);
+        Assert.Contains("TariffReactTestsAreCompleteWhenFormsValidationConfirmationsPermissionsAndCentralAuditExist", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("TariffReactTestsAreCompleteWhenFormsValidationConfirmationsPermissionsAndCentralAuditExist", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
