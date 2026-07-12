@@ -8,7 +8,7 @@ public sealed class BackendPerformanceGuardTests
     [InlineData("Infrastructure/Data/EfAuditEventRepository.cs", @"OrderByDescending[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfUserManagementRepository.cs", @"OrderBy\(user => user\.[^)]+\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Finance/FinanceService.cs", @"\.Take\(NormalizeListLimit\(request\.Limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    [InlineData("Application/Import/ImportService.cs", @"else[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfImportRepository.cs", @"IsSqliteProvider[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportQuarantineRepository.cs", @"return await query[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Application/Dictionaries/DictionaryService.cs", @"\.Take\(NormalizeListLimit\(limit\)\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     public void ProductionListQueries_MaterializeBoundedResultSets(string relativePath, string boundedQueryPattern)
@@ -95,7 +95,7 @@ public sealed class BackendPerformanceGuardTests
     [Fact]
     public void ImportSqliteFallbacks_AreExplicitlyScopedToTestProviderAndStillApplyLimit()
     {
-        var source = ReadApiSource("Application/Import/ImportService.cs");
+        var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
 
         Assert.Contains("Microsoft.EntityFrameworkCore.Sqlite", source, StringComparison.Ordinal);
         Assert.True(
@@ -106,14 +106,16 @@ public sealed class BackendPerformanceGuardTests
     [Fact]
     public void ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization()
     {
-        var source = ReadApiSource("Application/Import/ImportService.cs");
+        var serviceSource = ReadApiSource("Application/Import/ImportService.cs");
+        var repositorySource = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
 
+        Assert.Contains("var limit = NormalizeLimit(request.Limit, 100, 500)", serviceSource, StringComparison.Ordinal);
         Assert.Matches(
-            BoundedQueryRegex(@"GetAccessImportCreatedRecordsAsync[\s\S]*?var limit = NormalizeLimit\(request\.Limit, 100, 500\)[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
-            source);
+            BoundedQueryRegex(@"GetCreatedRecordsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            repositorySource);
         Assert.Matches(
-            BoundedQueryRegex(@"GetAccessImportCreatedRecordsAsync[\s\S]*?else[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToList\(\)"),
-            source);
+            BoundedQueryRegex(@"GetCreatedRecordsAsync[\s\S]*?return \(await query\.ToListAsync\(cancellationToken\)\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToList\(\)"),
+            repositorySource);
     }
 
     [Fact]

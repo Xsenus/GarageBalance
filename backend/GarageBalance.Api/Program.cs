@@ -47,6 +47,7 @@ builder.Services.AddScoped<IDictionaryService, DictionaryService>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IFundService, FundService>();
+builder.Services.AddScoped<IImportRepository, EfImportRepository>();
 builder.Services.AddScoped<IImportService, ImportService>();
 builder.Services.AddScoped<IAccessImportReader, DisabledAccessImportReader>();
 builder.Services.AddScoped<IImportFingerprintRepository, EfImportFingerprintRepository>();

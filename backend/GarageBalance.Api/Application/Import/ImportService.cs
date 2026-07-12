@@ -3,13 +3,11 @@ using System.Text;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Import;
-using GarageBalance.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Application.Import;
 
 public sealed class ImportService(
-    GarageBalanceDbContext dbContext,
+    IImportRepository repository,
     IAccessImportReader accessImportReader,
     IAuditEventWriter auditEventWriter) : IImportService
 {
@@ -28,103 +26,39 @@ public sealed class ImportService(
     public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
     {
         var limit = NormalizeLimit(request.Limit, 50, 200);
-        var query = dbContext.AccessImportRuns.AsNoTracking();
-
-        List<AccessImportRun> runs;
-        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
-        {
-            runs = (await query.ToListAsync(cancellationToken))
-                .OrderByDescending(run => run.StartedAtUtc)
-                .ThenByDescending(run => run.Id)
-                .Take(limit)
-                .ToList();
-        }
-        else
-        {
-            runs = await query
-                .OrderByDescending(run => run.StartedAtUtc)
-                .ThenByDescending(run => run.Id)
-                .Take(limit)
-                .ToListAsync(cancellationToken);
-        }
-
+        var runs = await repository.GetRunsAsync(limit, cancellationToken);
         return runs.Select(ToDto).ToList();
     }
 
     public async Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)
     {
-        var runExists = await dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
+        var runExists = await repository.RunExistsAsync(runId, cancellationToken);
         if (!runExists)
         {
             return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
         }
 
         var limit = NormalizeLimit(request.Limit, 100, 500);
-        var query = dbContext.AccessImportRunLogEntries
-            .AsNoTracking()
-            .Where(entry => entry.AccessImportRunId == runId);
-
-        List<AccessImportRunLogEntry> entries;
-        if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
-        {
-            entries = (await query.ToListAsync(cancellationToken))
-                .OrderBy(entry => entry.CreatedAtUtc)
-                .ThenBy(entry => entry.Id)
-                .Take(limit)
-                .ToList();
-        }
-        else
-        {
-            entries = await query
-                .OrderBy(entry => entry.CreatedAtUtc)
-                .ThenBy(entry => entry.Id)
-                .Take(limit)
-                .ToListAsync(cancellationToken);
-        }
-
+        var entries = await repository.GetRunLogEntriesAsync(runId, limit, cancellationToken);
         return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success(entries.Select(ToLogEntryDto).ToList());
     }
 
     public async Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken)
     {
         var limit = NormalizeLimit(request.Limit, 100, 500);
-        var runExists = await dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
+        var runExists = await repository.RunExistsAsync(runId, cancellationToken);
         if (!runExists)
         {
             return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
         }
 
-        var query = dbContext.AccessImportCreatedRecords
-            .AsNoTracking()
-            .Where(record => record.AccessImportRunId == runId);
-
-        List<AccessImportCreatedRecord> records;
-        if (dbContext.Database.IsNpgsql())
-        {
-            records = await query
-                .OrderByDescending(record => record.CreatedAtUtc)
-                .ThenBy(record => record.TargetEntityType)
-                .ThenBy(record => record.TargetEntityId)
-                .Take(limit)
-                .ToListAsync(cancellationToken);
-        }
-        else
-        {
-            records = await query.ToListAsync(cancellationToken);
-            records = records
-                .OrderByDescending(record => record.CreatedAtUtc)
-                .ThenBy(record => record.TargetEntityType, StringComparer.Ordinal)
-                .ThenBy(record => record.TargetEntityId, StringComparer.Ordinal)
-                .Take(limit)
-                .ToList();
-        }
-
+        var records = await repository.GetCreatedRecordsAsync(runId, limit, cancellationToken);
         return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success(records.Select(ToCreatedRecordDto).ToList());
     }
 
     public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var run = await dbContext.AccessImportRuns.AsNoTracking().SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        var run = await repository.FindRunAsync(runId, false, cancellationToken);
         if (run is null)
         {
             return ImportResult<ImportReportFileDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
@@ -177,7 +111,7 @@ public sealed class ImportService(
                 ["warningCount"] = dto.WarningCount,
                 ["errorCount"] = dto.ErrorCount
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         return ImportResult<ImportReportFileDto>.Success(new ImportReportFileDto(
             fileName,
@@ -202,7 +136,7 @@ public sealed class ImportService(
             return ImportResult<AccessImportRunDto>.Failure("import_rollback_reason_too_long", "Причина rollback импорта превышает допустимую длину.");
         }
 
-        var run = await dbContext.AccessImportRuns.SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        var run = await repository.FindRunAsync(runId, true, cancellationToken);
         if (run is null)
         {
             return ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
@@ -245,7 +179,7 @@ public sealed class ImportService(
             RelatedDocumentNumber: run.OriginalFileName,
             Metadata: auditMetadata));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
 
@@ -271,7 +205,7 @@ public sealed class ImportService(
             return ImportResult<AccessImportRunDto>.Failure("import_apply_backup_confirmation_required", "Подтвердите, что перед фактическим импортом создан backup PostgreSQL.");
         }
 
-        var run = await dbContext.AccessImportRuns.SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        var run = await repository.FindRunAsync(runId, true, cancellationToken);
         if (run is null)
         {
             return ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
@@ -326,7 +260,7 @@ public sealed class ImportService(
             RelatedDocumentNumber: run.OriginalFileName,
             Metadata: auditMetadata));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
 
@@ -347,7 +281,7 @@ public sealed class ImportService(
             return ImportResult<AccessImportRunDto>.Failure("import_apply_cancel_reason_too_long", "Причина отмены заявки на импорт превышает допустимую длину.");
         }
 
-        var run = await dbContext.AccessImportRuns.SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        var run = await repository.FindRunAsync(runId, true, cancellationToken);
         if (run is null)
         {
             return ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
@@ -390,7 +324,7 @@ public sealed class ImportService(
             RelatedDocumentNumber: run.OriginalFileName,
             Metadata: auditMetadata));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
 
@@ -422,20 +356,7 @@ public sealed class ImportService(
 
         var bytes = buffer.ToArray();
         var contentSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        var sameContentQuery = dbContext.AccessImportRuns
-            .AsNoTracking()
-            .Where(item => item.ContentSha256 == contentSha256);
-        var previousRunWithSameContent = string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal)
-            ? (await sameContentQuery.ToListAsync(cancellationToken))
-                .OrderByDescending(item => item.StartedAtUtc)
-                .ThenByDescending(item => item.Id)
-                .Select(item => new { item.Id, item.OriginalFileName, item.StartedAtUtc })
-                .FirstOrDefault()
-            : await sameContentQuery
-                .OrderByDescending(item => item.StartedAtUtc)
-                .ThenByDescending(item => item.Id)
-                .Select(item => new { item.Id, item.OriginalFileName, item.StartedAtUtc })
-                .FirstOrDefaultAsync(cancellationToken);
+        var previousRunWithSameContent = await repository.FindPreviousRunByContentAsync(contentSha256, cancellationToken);
         var checks = BuildChecks(extension, bytes);
         if (previousRunWithSameContent is not null)
         {
@@ -474,7 +395,7 @@ public sealed class ImportService(
             ReportJson = JsonSerializer.Serialize(checks, JsonOptions)
         };
 
-        dbContext.AccessImportRuns.Add(run);
+        repository.AddRun(run);
         AddRunLog(run, "info", "file_received", $"Файл {fileName} получен для dry-run проверки.", new
         {
             fileName,
@@ -537,7 +458,7 @@ public sealed class ImportService(
                 ["warningCount"] = warnings,
                 ["errorCount"] = errors
             }));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
 
@@ -564,46 +485,18 @@ public sealed class ImportService(
             }
         }
 
-        var createdRecordsQuery = dbContext.AccessImportCreatedRecords
-            .AsNoTracking()
-            .Where(record => record.AccessImportRunId == run.Id);
-        var createdRecordCount = await createdRecordsQuery.CountAsync(cancellationToken);
-        var pendingRollbackRecordCount = await createdRecordsQuery
-            .CountAsync(record => record.RollbackStatus == "created", cancellationToken);
-        var sourceRowFingerprintCount = await createdRecordsQuery
-            .Select(record => record.SourceRowHash)
-            .Where(rowHash => rowHash != string.Empty)
-            .Distinct()
-            .CountAsync(cancellationToken);
-        var targetEntityTypes = await createdRecordsQuery
-            .Select(record => record.TargetEntityType)
-            .Where(targetEntityType => targetEntityType != string.Empty)
-            .Distinct()
-            .OrderBy(targetEntityType => targetEntityType)
-            .Take(10)
-            .ToListAsync(cancellationToken);
-        var sourceRowFingerprints = (await createdRecordsQuery
-                .OrderBy(record => record.TargetEntityType)
-                .ThenBy(record => record.TargetEntityId)
-                .Select(record => record.SourceRowHash)
-                .Where(rowHash => rowHash != string.Empty)
-                .Take(20)
-                .ToListAsync(cancellationToken))
-            .Distinct(StringComparer.Ordinal)
-            .Take(5)
-            .ToList();
-
-        metadata["importCreatedRecordCount"] = createdRecordCount;
-        metadata["importPendingRollbackRecordCount"] = pendingRollbackRecordCount;
-        metadata["sourceRowFingerprintCount"] = sourceRowFingerprintCount;
-        if (targetEntityTypes.Count > 0)
+        var auditData = await repository.GetAuditDataAsync(run.Id, cancellationToken);
+        metadata["importCreatedRecordCount"] = auditData.CreatedRecordCount;
+        metadata["importPendingRollbackRecordCount"] = auditData.PendingRollbackRecordCount;
+        metadata["sourceRowFingerprintCount"] = auditData.SourceRowFingerprintCount;
+        if (auditData.TargetEntityTypes.Count > 0)
         {
-            metadata["targetEntityTypes"] = string.Join(", ", targetEntityTypes);
+            metadata["targetEntityTypes"] = string.Join(", ", auditData.TargetEntityTypes);
         }
 
-        if (sourceRowFingerprints.Count > 0)
+        if (auditData.SourceRowFingerprints.Count > 0)
         {
-            metadata["sourceRowFingerprints"] = string.Join(", ", sourceRowFingerprints);
+            metadata["sourceRowFingerprints"] = string.Join(", ", auditData.SourceRowFingerprints);
         }
 
         return metadata;
@@ -611,7 +504,7 @@ public sealed class ImportService(
 
     private void AddRunLog(AccessImportRun run, string level, string stepCode, string message, object details)
     {
-        dbContext.AccessImportRunLogEntries.Add(new AccessImportRunLogEntry
+        repository.AddRunLogEntry(new AccessImportRunLogEntry
         {
             AccessImportRunId = run.Id,
             Level = level,

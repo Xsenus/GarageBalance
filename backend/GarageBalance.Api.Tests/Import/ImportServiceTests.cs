@@ -595,7 +595,7 @@ public sealed class ImportServiceTests
 
     private static ImportService CreateService(GarageBalanceDbContext context, IAccessImportReader? reader = null)
     {
-        return new ImportService(context, reader ?? new FakeAccessImportReader(), new AuditEventWriter(context));
+        return new ImportService(new EfImportRepository(context), reader ?? new FakeAccessImportReader(), new AuditEventWriter(context));
     }
 
     private static async Task AddImportCreatedRecordsAsync(GarageBalanceDbContext context, Guid runId)
