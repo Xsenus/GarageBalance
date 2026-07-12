@@ -131,6 +131,23 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FeeReportQuery_AggregatesTotalsAndGarageRowsInDatabase()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFeeReportQuery.cs");
+
+        Assert.True(
+            CountOccurrences(source, ".GroupBy(") >= 4,
+            "Fee report query must aggregate accrual totals, collected totals, garage accruals and garage payments in the database.");
+        Assert.True(
+            CountOccurrences(source, "group.Sum(") >= 4,
+            "Fee monetary totals must be summed before materialization.");
+        Assert.True(
+            CountOccurrences(source, "ToDictionaryAsync(") >= 2,
+            "Fee summary totals must be materialized as bounded dictionaries from grouped database results.");
+        Assert.Contains("group.Max(operation => (DateOnly?)operation.OperationDate)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportSqliteFallbacks_AreExplicitlyScopedToTestProviderAndStillApplyLimit()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");

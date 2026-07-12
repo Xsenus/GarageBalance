@@ -1254,6 +1254,7 @@ public sealed class ReportServiceTests
             new EfFundChangeReportQuery(context),
             new EfConsolidatedMonthlyReportQuery(context),
             new EfConsolidatedGarageReportQuery(context),
+            new EfFeeReportQuery(context),
             new AuditEventWriter(context));
     }
 

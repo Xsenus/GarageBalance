@@ -694,6 +694,54 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FeeReport_DelegatesPersistenceQueriesToApplicationPort()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Reports",
+            "ReportService.cs"));
+
+        Assert.Contains("IFeeReportQuery feeReportQuery", service, StringComparison.Ordinal);
+        Assert.Contains("feeReportQuery.GetActiveCampaignsAsync", service, StringComparison.Ordinal);
+        Assert.Contains("feeReportQuery.GetActiveIncomeTypesAsync", service, StringComparison.Ordinal);
+        Assert.Contains("feeReportQuery.GetFeeDataAsync", service, StringComparison.Ordinal);
+        Assert.Contains("BuildFeeGoal", service, StringComparison.Ordinal);
+        Assert.Contains("accrued - paid", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FeeReportQuery_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Application",
+            "Reports",
+            "IFeeReportQuery.cs"));
+        var implementation = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Data",
+            "EfFeeReportQuery.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+
+        Assert.Contains("interface IFeeReportQuery", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains("class EfFeeReportQuery", implementation, StringComparison.Ordinal);
+        Assert.Contains(": IFeeReportQuery", implementation, StringComparison.Ordinal);
+        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IFeeReportQuery, EfFeeReportQuery>()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BackendLayeringProgress_IsRecordedWithoutClosingRemainingApplicationServices()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -736,7 +784,10 @@ public sealed class BackendLayeringTests
         Assert.Contains("EfConsolidatedMonthlyReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("IConsolidatedGarageReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains("EfConsolidatedGarageReportQuery", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("IFeeReportQuery", layeringLine, StringComparison.Ordinal);
+        Assert.Contains("EfFeeReportQuery", layeringLine, StringComparison.Ordinal);
         Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
+        Assert.Contains("выполнен семнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен шестнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен пятнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
         Assert.Contains("выполнен четырнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);

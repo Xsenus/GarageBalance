@@ -13,6 +13,7 @@ public sealed class ReportService(
     IFundChangeReportQuery fundChangeReportQuery,
     IConsolidatedMonthlyReportQuery consolidatedMonthlyReportQuery,
     IConsolidatedGarageReportQuery consolidatedGarageReportQuery,
+    IFeeReportQuery feeReportQuery,
     IAuditEventWriter auditEventWriter) : IReportService
 {
     private const string IncomeReportAllRows = "all";
@@ -1077,12 +1078,7 @@ public sealed class ReportService(
     public async Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)
     {
         var variation = request.Variation?.Trim();
-        var campaigns = await dbContext.FeeCampaigns.AsNoTracking()
-            .Include(campaign => campaign.IncomeType)
-            .Where(campaign => !campaign.IsArchived && !campaign.IncomeType.IsArchived)
-            .OrderBy(campaign => campaign.StartsOn)
-            .ThenBy(campaign => campaign.Name)
-            .ToListAsync(cancellationToken);
+        var campaigns = (await feeReportQuery.GetActiveCampaignsAsync(cancellationToken)).ToList();
         var hasFeeCampaigns = campaigns.Count > 0;
 
         if (hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
@@ -1105,10 +1101,7 @@ public sealed class ReportService(
                 .DistinctBy(incomeType => incomeType.Id)
                 .OrderBy(incomeType => incomeType.Name)
                 .ToList()
-            : await dbContext.IncomeTypes.AsNoTracking()
-                .Where(incomeType => !incomeType.IsArchived)
-                .OrderBy(incomeType => incomeType.Name)
-                .ToListAsync(cancellationToken);
+            : (await feeReportQuery.GetActiveIncomeTypesAsync(cancellationToken)).ToList();
 
         if (!hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
         {
@@ -1127,26 +1120,13 @@ public sealed class ReportService(
             return ReportResult<FeeReportDto>.Success(emptyReport);
         }
 
-        var accrualTotals = await dbContext.Accruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId))
-            .GroupBy(accrual => accrual.IncomeTypeId)
-            .Select(group => new { IncomeTypeId = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
-            .ToDictionaryAsync(row => row.IncomeTypeId, row => row.Amount, cancellationToken);
-        var collectedTotals = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.IncomeTypeId.HasValue &&
-                incomeTypeIds.Contains(operation.IncomeTypeId.Value))
-            .GroupBy(operation => operation.IncomeTypeId!.Value)
-            .Select(group => new { IncomeTypeId = group.Key, Amount = group.Sum(operation => operation.Amount) })
-            .ToDictionaryAsync(row => row.IncomeTypeId, row => row.Amount, cancellationToken);
+        var feeData = await feeReportQuery.GetFeeDataAsync(incomeTypeIds, cancellationToken);
 
         var summaryRows = incomeTypes
             .Select(incomeType =>
             {
-                accrualTotals.TryGetValue(incomeType.Id, out var accrued);
-                collectedTotals.TryGetValue(incomeType.Id, out var collected);
+                feeData.AccrualTotals.TryGetValue(incomeType.Id, out var accrued);
+                feeData.CollectedTotals.TryGetValue(incomeType.Id, out var collected);
                 if (campaignByIncomeType.TryGetValue(incomeType.Id, out var campaign))
                 {
                     return new FeeReportSummaryRowDto(
@@ -1162,65 +1142,8 @@ public sealed class ReportService(
             .Where(row => row.FeeAmount != 0 || row.Collected != 0 || !string.IsNullOrWhiteSpace(variation))
             .ToList();
 
-        var accrualsByGarage = await dbContext.Accruals.AsNoTracking()
-            .Include(accrual => accrual.Garage)
-            .ThenInclude(garage => garage.Owner)
-            .Where(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId))
-            .GroupBy(accrual => new
-            {
-                accrual.GarageId,
-                accrual.Garage.Number,
-                OwnerLastName = accrual.Garage.Owner != null ? accrual.Garage.Owner.LastName : null,
-                OwnerFirstName = accrual.Garage.Owner != null ? accrual.Garage.Owner.FirstName : null,
-                OwnerMiddleName = accrual.Garage.Owner != null ? accrual.Garage.Owner.MiddleName : null,
-                accrual.IncomeTypeId
-            })
-            .Select(group => new
-            {
-                group.Key.GarageId,
-                GarageNumber = group.Key.Number,
-                group.Key.OwnerLastName,
-                group.Key.OwnerFirstName,
-                group.Key.OwnerMiddleName,
-                group.Key.IncomeTypeId,
-                Accrued = group.Sum(accrual => accrual.Amount)
-            })
-            .ToListAsync(cancellationToken);
-        var paymentsByGarage = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId.HasValue &&
-                operation.IncomeTypeId.HasValue &&
-                incomeTypeIds.Contains(operation.IncomeTypeId.Value))
-            .GroupBy(operation => new { GarageId = operation.GarageId!.Value, IncomeTypeId = operation.IncomeTypeId!.Value })
-            .Select(group => new
-            {
-                group.Key.GarageId,
-                group.Key.IncomeTypeId,
-                Paid = group.Sum(operation => operation.Amount),
-                LastPaymentDate = group.Max(operation => (DateOnly?)operation.OperationDate)
-            })
-            .ToListAsync(cancellationToken);
-        var allGarageIds = accrualsByGarage
-            .Select(row => row.GarageId)
-            .Concat(paymentsByGarage.Select(row => row.GarageId))
-            .Distinct()
-            .ToList();
-        var garageLookup = await dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
-            .Where(garage => allGarageIds.Contains(garage.Id))
-            .Select(garage => new
-            {
-                garage.Id,
-                garage.Number,
-                OwnerLastName = garage.Owner != null ? garage.Owner.LastName : null,
-                OwnerFirstName = garage.Owner != null ? garage.Owner.FirstName : null,
-                OwnerMiddleName = garage.Owner != null ? garage.Owner.MiddleName : null
-            })
-            .ToDictionaryAsync(row => row.Id, cancellationToken);
-        var accrualLookup = accrualsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
-        var paymentLookup = paymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
+        var accrualLookup = feeData.AccrualsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
+        var paymentLookup = feeData.PaymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
         var incomeTypeNames = incomeTypes.ToDictionary(
             incomeType => incomeType.Id,
             incomeType => campaignByIncomeType.TryGetValue(incomeType.Id, out var campaign) ? campaign.Name : incomeType.Name);
@@ -1231,12 +1154,12 @@ public sealed class ReportService(
             {
                 accrualLookup.TryGetValue(key, out var accrual);
                 paymentLookup.TryGetValue(key, out var payment);
-                garageLookup.TryGetValue(key.GarageId, out var garage);
+                feeData.GaragesById.TryGetValue(key.GarageId, out var garage);
                 var accrued = accrual?.Accrued ?? 0m;
                 var paid = payment?.Paid ?? 0m;
                 return new FeeReportGarageRowDto(
                     key.GarageId,
-                    accrual?.GarageNumber ?? garage?.Number ?? string.Empty,
+                    accrual?.GarageNumber ?? garage?.GarageNumber ?? string.Empty,
                     FormatOwnerName(
                         accrual?.OwnerLastName ?? garage?.OwnerLastName,
                         accrual?.OwnerFirstName ?? garage?.OwnerFirstName,
