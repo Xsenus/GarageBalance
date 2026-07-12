@@ -2025,6 +2025,56 @@ public sealed class ProjectWideRoadmapStatusTests
     }
 
     [Fact]
+    public void TariffEffectiveDateCalculationIsCompleteWhenEarlierMonthsFailEffectiveMonthSucceedsAndPostedSnapshotsStayImmutable()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var activeRoadmapLines = roadmapLines
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .ToArray();
+        var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
+        var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
+        var financeTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var dictionaryTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Dictionaries", "DictionaryServiceTests.cs"));
+        var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
+        var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
+
+        var roadmapLine = activeRoadmapLines.Single(line =>
+            line.Contains("Реализовать расчет только с даты действия тарифа", StringComparison.Ordinal));
+
+        Assert.StartsWith("- `[x]`", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("tariff_not_effective", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("TariffId", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("Автоматическая мутация", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("effective-dated версией", roadmapLine, StringComparison.Ordinal);
+        Assert.Contains("TariffEffectiveDateCalculationIsCompleteWhenEarlierMonthsFailEffectiveMonthSucceedsAndPostedSnapshotsStayImmutable", roadmapLine, StringComparison.Ordinal);
+
+        Assert.Contains("var month = MonthPeriod.Normalize(request.AccountingMonth)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("if (tariff.EffectiveFrom > month)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("\"tariff_not_effective\"", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffId = tariff.Id", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("BuildRegularAccrualComment(tariff, request.Comment)", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("earliestAccrualMonth", dictionaryServiceText, StringComparison.Ordinal);
+        Assert.Contains("tariff_effective_from_after_accrual", dictionaryServiceText, StringComparison.Ordinal);
+
+        Assert.Contains("GenerateRegularAccrualsAsync_AppliesTariffOnlyFromEffectiveMonth", financeTestsText, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal(\"tariff_not_effective\", beforeEffectiveDate.ErrorCode)", financeTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_KeepsExistingAccrualAmountAfterTariffUpdate", financeTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateTariffAsync_RejectsEffectiveDateAfterExistingRegularAccrual", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("UpdateTariffAsync_AllowsEffectiveDateOnExistingRegularAccrualMonth", dictionaryTestsText, StringComparison.Ordinal);
+        Assert.Contains("shows backend error when tariff effective date moves after existing accruals", frontendTestsText, StringComparison.Ordinal);
+
+        Assert.Contains("\"version\": \"0.66.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Регулярные начисления сохраняют снимок тарифа", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.207.0\"", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("Дата тарифа защищена после начислений", releaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("TariffEffectiveDateCalculationIsCompleteWhenEarlierMonthsFailEffectiveMonthSucceedsAndPostedSnapshotsStayImmutable", historyText, StringComparison.Ordinal);
+        Assert.Contains("Новая запись \"Что нового\" не добавлялась", historyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("TariffEffectiveDateCalculationIsCompleteWhenEarlierMonthsFailEffectiveMonthSucceedsAndPostedSnapshotsStayImmutable", releaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();

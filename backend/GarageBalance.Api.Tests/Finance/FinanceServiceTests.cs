@@ -1945,6 +1945,42 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_AppliesTariffOnlyFromEffectiveMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff
+        {
+            Name = "Членский тариф",
+            CalculationBase = "fixed",
+            Rate = 450m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = new FinanceService(database.Context);
+
+        var beforeEffectiveDate = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 7, 15), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var effectiveMonth = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 8, 31), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(beforeEffectiveDate.Succeeded);
+        Assert.Equal("tariff_not_effective", beforeEffectiveDate.ErrorCode);
+        Assert.True(effectiveMonth.Succeeded);
+        Assert.Equal(new DateOnly(2026, 8, 1), effectiveMonth.Value!.AccountingMonth);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(new DateOnly(2026, 8, 1), accrual.AccountingMonth);
+        Assert.Equal(450m, accrual.Amount);
+        Assert.Equal(tariff.Id, accrual.TariffId);
+        Assert.Contains("действует с 01.08.2026", accrual.Comment, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GenerateRegularCatalogAccrualsAsync_CreatesAccrualsFromLinkedChargeServices()
     {
         await using var database = await TestDatabase.CreateAsync();
