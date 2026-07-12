@@ -9897,7 +9897,7 @@ describe('App', () => {
     expect(incomeDateTo).toHaveValue(today)
     const incomeReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })
     expect(incomeReportTable).toBeInTheDocument()
-    expect(incomeReportTable).toHaveTextContent('10:24')
+    expect(incomeReportTable).toHaveTextContent('2026-06-10')
     expect(incomeReportTable).toHaveTextContent('1 500,00')
     expect(incomeReportTable).toHaveTextContent('Остаток долга после платежа')
     expect(incomeReportTable).toHaveTextContent('500,00')
