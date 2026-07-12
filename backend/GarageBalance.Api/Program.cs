@@ -46,6 +46,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
 builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
 builder.Services.AddScoped<ISupplierGroupRepository, EfSupplierGroupRepository>();
+builder.Services.AddScoped<ISupplierRepository, EfSupplierRepository>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IFundService, FundService>();
