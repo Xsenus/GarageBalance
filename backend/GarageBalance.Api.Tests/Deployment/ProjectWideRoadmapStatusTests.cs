@@ -3431,6 +3431,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "report-performance-verification.md"));
         var reportService = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Reports", "ReportService.cs"));
+        var expenseReportQuery = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfExpenseReportQuery.cs"));
         var performanceGuards = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Deployment", "BackendPerformanceGuardTests.cs"));
 
         var performanceLine = activeRoadmapLines.Single(line =>
@@ -3450,11 +3451,14 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.DoesNotContain("- `[x]` Проверить производительность отчетов", performanceLine, StringComparison.Ordinal);
 
         Assert.Contains("GetIncomeReportWithoutSearchAsync", reportService, StringComparison.Ordinal);
-        Assert.Contains("GetExpenseReportWithoutSearchAsync", reportService, StringComparison.Ordinal);
+        Assert.Contains("expenseReportQuery.GetRowsAsync", reportService, StringComparison.Ordinal);
         Assert.Contains("ApplyReportRowLimit", reportService, StringComparison.Ordinal);
         Assert.Contains(".Take(NormalizeReportLimit(limit.Value))", reportService, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", reportService, StringComparison.Ordinal);
         Assert.Contains("SumAsync(", reportService, StringComparison.Ordinal);
+        Assert.Contains("query.Take(limit.Value)", expenseReportQuery, StringComparison.Ordinal);
+        Assert.Contains("CountAsync(cancellationToken)", expenseReportQuery, StringComparison.Ordinal);
+        Assert.Contains("SumAsync(", expenseReportQuery, StringComparison.Ordinal);
         Assert.Contains("ScreenReportQueries_UseDatabaseLimitsForVisibleRows", performanceGuards, StringComparison.Ordinal);
 
         Assert.Contains("живого PostgreSQL-прогона", verification, StringComparison.Ordinal);

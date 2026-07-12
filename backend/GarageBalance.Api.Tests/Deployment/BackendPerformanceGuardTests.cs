@@ -52,21 +52,26 @@ public sealed class BackendPerformanceGuardTests
     {
         var source = ReadApiSource("Application/Reports/ReportService.cs");
         var garageSource = ReadApiSource("Infrastructure/Data/EfConsolidatedGarageReportQuery.cs");
+        var expenseSource = ReadApiSource("Infrastructure/Data/EfExpenseReportQuery.cs");
 
         Assert.Contains("GetIncomeReportWithoutSearchAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetExpenseReportWithoutSearchAsync", source, StringComparison.Ordinal);
+        Assert.Contains("expenseReportQuery.GetRowsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetRowsWithoutSearchAsync", garageSource, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(source, "ApplyReportRowLimit(") >= 6,
+            CountOccurrences(source, "ApplyReportRowLimit(") >= 3 &&
+            CountOccurrences(expenseSource, "ApplyLimit(") >= 4,
             "Remaining report visible rows must be bounded before materialization for income, expense, accrual and starting-balance segments.");
         Assert.True(
-            CountOccurrences(source, ".Take(NormalizeReportLimit(limit.Value))") >= 1,
+            CountOccurrences(source, ".Take(NormalizeReportLimit(limit.Value))") >= 1 &&
+            expenseSource.Contains("query.Take(limit.Value)", StringComparison.Ordinal),
             "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
         Assert.True(
-            CountOccurrences(source, "CountAsync(cancellationToken)") >= 6,
+            CountOccurrences(source, "CountAsync(cancellationToken)") >= 3 &&
+            CountOccurrences(expenseSource, "CountAsync(cancellationToken)") >= 3,
             "Report totals must keep total row counts without materializing every visible-row candidate.");
         Assert.True(
-            CountOccurrences(source, "SumAsync(") >= 6,
+            CountOccurrences(source, "SumAsync(") >= 3 &&
+            CountOccurrences(expenseSource, "SumAsync(") >= 3,
             "Report totals must be aggregated in the database instead of being derived only from materialized rows.");
         Assert.Matches(
             BoundedQueryRegex(@"GetRowsWithoutSearchAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ApplyLimit\(query, limit\)\.ToListAsync\(cancellationToken\)"),

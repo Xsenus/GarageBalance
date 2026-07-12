@@ -14,6 +14,7 @@ public sealed class ReportService(
     IConsolidatedMonthlyReportQuery consolidatedMonthlyReportQuery,
     IConsolidatedGarageReportQuery consolidatedGarageReportQuery,
     IFeeReportQuery feeReportQuery,
+    IExpenseReportQuery expenseReportQuery,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IReportService
 {
@@ -530,154 +531,24 @@ public sealed class ReportService(
             return ReportResult<ExpenseReportDto>.Failure("row_mode_invalid", "Режим строк отчета по выплатам неизвестен.");
         }
 
-        var supplierIds = request.SupplierIds.ToHashSet();
-        var expenseTypeIds = request.ExpenseTypeIds.ToHashSet();
-        if (string.IsNullOrWhiteSpace(request.Search))
-        {
-            return await GetExpenseReportWithoutSearchAsync(request, dateFrom, dateTo, rowMode, supplierIds, expenseTypeIds, cancellationToken);
-        }
-
-        var rows = new List<ExpenseReportRowDto>();
-
-        if (rowMode is ExpenseReportAllRows or ExpenseReportAccrualRows)
-        {
-            if (expenseTypeIds.Count == 0)
-            {
-                var suppliersQuery = dbContext.Suppliers.AsNoTracking()
-                    .Where(supplier => !supplier.IsArchived && supplier.StartingBalance != 0);
-
-                if (supplierIds.Count > 0)
-                {
-                    suppliersQuery = suppliersQuery.Where(supplier => supplierIds.Contains(supplier.Id));
-                }
-
-                var startingBalanceRows = await suppliersQuery
-                    .OrderBy(supplier => supplier.Name)
-                    .ToListAsync(cancellationToken);
-
-                rows.AddRange(startingBalanceRows.Select(supplier => new ExpenseReportRowDto(
-                    StartingBalanceRows,
-                    dateFrom,
-                    dateFrom,
-                    supplier.Id,
-                    supplier.Name,
-                    Guid.Empty,
-                    "Стартовый баланс",
-                    supplier.StartingBalance,
-                    0m,
-                    supplier.StartingBalance,
-                    null,
-                    "Начальное обязательство перед поставщиком")));
-            }
-
-            var accrualsQuery = dbContext.SupplierAccruals.AsNoTracking()
-                .Include(accrual => accrual.Supplier)
-                .Include(accrual => accrual.ExpenseType)
-                .Where(accrual =>
-                    !accrual.IsCanceled &&
-                    accrual.AccountingMonth >= dateFrom &&
-                    accrual.AccountingMonth <= dateTo);
-
-            if (supplierIds.Count > 0)
-            {
-                accrualsQuery = accrualsQuery.Where(accrual => supplierIds.Contains(accrual.SupplierId));
-            }
-
-            if (expenseTypeIds.Count > 0)
-            {
-                accrualsQuery = accrualsQuery.Where(accrual => expenseTypeIds.Contains(accrual.ExpenseTypeId));
-            }
-
-            var accrualRows = await accrualsQuery
-                .OrderBy(accrual => accrual.AccountingMonth)
-                .ThenBy(accrual => accrual.Supplier.Name)
-                .ToListAsync(cancellationToken);
-
-            rows.AddRange(accrualRows.Select(accrual => new ExpenseReportRowDto(
-                ExpenseReportAccrualRows,
-                accrual.AccountingMonth,
-                accrual.AccountingMonth,
-                accrual.SupplierId,
-                accrual.Supplier.Name,
-                accrual.ExpenseTypeId,
-                accrual.ExpenseType.Name,
-                accrual.Amount,
-                0m,
-                accrual.Amount,
-                accrual.DocumentNumber,
-                accrual.Comment)));
-        }
-
-        if (rowMode is ExpenseReportAllRows or ExpenseReportPaymentRows)
-        {
-            var paymentsQuery = dbContext.FinancialOperations.AsNoTracking()
-                .Include(operation => operation.Supplier)
-                .Include(operation => operation.ExpenseType)
-                .Where(operation =>
-                    !operation.IsCanceled &&
-                    operation.OperationKind == FinancialOperationKinds.Expense &&
-                    operation.SupplierId != null &&
-                    operation.ExpenseTypeId != null &&
-                    operation.OperationDate >= dateFrom &&
-                    operation.OperationDate <= dateTo);
-
-            if (supplierIds.Count > 0)
-            {
-                paymentsQuery = paymentsQuery.Where(operation => operation.SupplierId != null && supplierIds.Contains(operation.SupplierId.Value));
-            }
-
-            if (expenseTypeIds.Count > 0)
-            {
-                paymentsQuery = paymentsQuery.Where(operation => operation.ExpenseTypeId != null && expenseTypeIds.Contains(operation.ExpenseTypeId.Value));
-            }
-
-            var paymentRows = await paymentsQuery
-                .OrderBy(operation => operation.OperationDate)
-                .ThenBy(operation => operation.Supplier!.Name)
-                .ToListAsync(cancellationToken);
-
-            rows.AddRange(paymentRows.Select(operation => new ExpenseReportRowDto(
-                ExpenseReportPaymentRows,
-                operation.OperationDate,
-                operation.AccountingMonth,
-                operation.SupplierId!.Value,
-                operation.Supplier!.Name,
-                operation.ExpenseTypeId!.Value,
-                operation.ExpenseType!.Name,
-                0m,
-                operation.Amount,
-                -operation.Amount,
-                operation.DocumentNumber,
-                operation.Comment)));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var normalizedSearch = request.Search.Trim();
-            rows = rows
-                .Where(row =>
-                    row.SupplierName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    row.ExpenseTypeName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    (row.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
-                .ToList();
-        }
-
-        rows = rows
-            .OrderBy(row => row.Date)
-            .ThenBy(row => row.SupplierName)
-            .ThenBy(row => row.RowType)
-            .ToList();
-
-        var rowCount = rows.Count;
-        var visibleRows = ApplyRowLimit(rows, request.Limit);
+        int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var data = await expenseReportQuery.GetRowsAsync(
+            dateFrom,
+            dateTo,
+            rowMode,
+            request.SupplierIds.ToHashSet(),
+            request.ExpenseTypeIds.ToHashSet(),
+            request.Search,
+            limit,
+            cancellationToken);
         var report = new ExpenseReportDto(
             dateFrom,
             dateTo,
-            rows.Sum(row => row.AccrualAmount),
-            rows.Sum(row => row.ExpenseAmount),
-            rows.Sum(row => row.Difference),
-            rowCount,
-            visibleRows);
+            data.AccrualTotal,
+            data.ExpenseTotal,
+            data.AccrualTotal - data.ExpenseTotal,
+            data.RowCount,
+            data.Rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -1704,173 +1575,6 @@ public sealed class ReportService(
             cancellationToken);
 
         return ReportResult<IncomeReportDto>.Success(report);
-    }
-
-    private async Task<ReportResult<ExpenseReportDto>> GetExpenseReportWithoutSearchAsync(
-        ExpenseReportRequest request,
-        DateOnly dateFrom,
-        DateOnly dateTo,
-        string rowMode,
-        HashSet<Guid> supplierIds,
-        HashSet<Guid> expenseTypeIds,
-        CancellationToken cancellationToken)
-    {
-        var rows = new List<ExpenseReportRowDto>();
-        var accrualTotal = 0m;
-        var expenseTotal = 0m;
-        var rowCount = 0;
-
-        if (rowMode is ExpenseReportAllRows or ExpenseReportAccrualRows)
-        {
-            if (expenseTypeIds.Count == 0)
-            {
-                var startingBalanceQuery = dbContext.Suppliers.AsNoTracking()
-                    .Where(supplier => !supplier.IsArchived && supplier.StartingBalance != 0);
-
-                if (supplierIds.Count > 0)
-                {
-                    startingBalanceQuery = startingBalanceQuery.Where(supplier => supplierIds.Contains(supplier.Id));
-                }
-
-                accrualTotal += await startingBalanceQuery.SumAsync(supplier => supplier.StartingBalance, cancellationToken);
-                rowCount += await startingBalanceQuery.CountAsync(cancellationToken);
-                var startingBalanceRows = await ApplyReportRowLimit(startingBalanceQuery.OrderBy(supplier => supplier.Name), request.Limit)
-                    .ToListAsync(cancellationToken);
-
-                rows.AddRange(startingBalanceRows.Select(supplier => new ExpenseReportRowDto(
-                    StartingBalanceRows,
-                    dateFrom,
-                    dateFrom,
-                    supplier.Id,
-                    supplier.Name,
-                    Guid.Empty,
-                    "Стартовый баланс",
-                    supplier.StartingBalance,
-                    0m,
-                    supplier.StartingBalance,
-                    null,
-                    "Начальное обязательство перед поставщиком")));
-            }
-
-            var accrualsQuery = dbContext.SupplierAccruals.AsNoTracking()
-                .Include(accrual => accrual.Supplier)
-                .Include(accrual => accrual.ExpenseType)
-                .Where(accrual =>
-                    !accrual.IsCanceled &&
-                    accrual.AccountingMonth >= dateFrom &&
-                    accrual.AccountingMonth <= dateTo);
-
-            if (supplierIds.Count > 0)
-            {
-                accrualsQuery = accrualsQuery.Where(accrual => supplierIds.Contains(accrual.SupplierId));
-            }
-
-            if (expenseTypeIds.Count > 0)
-            {
-                accrualsQuery = accrualsQuery.Where(accrual => expenseTypeIds.Contains(accrual.ExpenseTypeId));
-            }
-
-            accrualTotal += await accrualsQuery.SumAsync(accrual => accrual.Amount, cancellationToken);
-            rowCount += await accrualsQuery.CountAsync(cancellationToken);
-            var accrualRows = await ApplyReportRowLimit(
-                    accrualsQuery
-                        .OrderBy(accrual => accrual.AccountingMonth)
-                        .ThenBy(accrual => accrual.Supplier.Name),
-                    request.Limit)
-                .ToListAsync(cancellationToken);
-
-            rows.AddRange(accrualRows.Select(accrual => new ExpenseReportRowDto(
-                ExpenseReportAccrualRows,
-                accrual.AccountingMonth,
-                accrual.AccountingMonth,
-                accrual.SupplierId,
-                accrual.Supplier.Name,
-                accrual.ExpenseTypeId,
-                accrual.ExpenseType.Name,
-                accrual.Amount,
-                0m,
-                accrual.Amount,
-                accrual.DocumentNumber,
-                accrual.Comment)));
-        }
-
-        if (rowMode is ExpenseReportAllRows or ExpenseReportPaymentRows)
-        {
-            var paymentsQuery = dbContext.FinancialOperations.AsNoTracking()
-                .Include(operation => operation.Supplier)
-                .Include(operation => operation.ExpenseType)
-                .Where(operation =>
-                    !operation.IsCanceled &&
-                    operation.OperationKind == FinancialOperationKinds.Expense &&
-                    operation.SupplierId != null &&
-                    operation.ExpenseTypeId != null &&
-                    operation.OperationDate >= dateFrom &&
-                    operation.OperationDate <= dateTo);
-
-            if (supplierIds.Count > 0)
-            {
-                paymentsQuery = paymentsQuery.Where(operation => operation.SupplierId != null && supplierIds.Contains(operation.SupplierId.Value));
-            }
-
-            if (expenseTypeIds.Count > 0)
-            {
-                paymentsQuery = paymentsQuery.Where(operation => operation.ExpenseTypeId != null && expenseTypeIds.Contains(operation.ExpenseTypeId.Value));
-            }
-
-            expenseTotal += await paymentsQuery.SumAsync(operation => operation.Amount, cancellationToken);
-            rowCount += await paymentsQuery.CountAsync(cancellationToken);
-            var paymentRows = await ApplyReportRowLimit(
-                    paymentsQuery
-                        .OrderBy(operation => operation.OperationDate)
-                        .ThenBy(operation => operation.Supplier!.Name),
-                    request.Limit)
-                .ToListAsync(cancellationToken);
-
-            rows.AddRange(paymentRows.Select(operation => new ExpenseReportRowDto(
-                ExpenseReportPaymentRows,
-                operation.OperationDate,
-                operation.AccountingMonth,
-                operation.SupplierId!.Value,
-                operation.Supplier!.Name,
-                operation.ExpenseTypeId!.Value,
-                operation.ExpenseType!.Name,
-                0m,
-                operation.Amount,
-                -operation.Amount,
-                operation.DocumentNumber,
-                operation.Comment)));
-        }
-
-        var visibleRows = ApplyRowLimit(
-            rows
-                .OrderBy(row => row.Date)
-                .ThenBy(row => row.SupplierName)
-                .ThenBy(row => row.RowType)
-                .ToList(),
-            request.Limit);
-
-        var report = new ExpenseReportDto(
-            dateFrom,
-            dateTo,
-            accrualTotal,
-            expenseTotal,
-            accrualTotal - expenseTotal,
-            rowCount,
-            visibleRows);
-
-        await AddReportAuditAsync(
-            request.ActorUserId,
-            "reports.expense_generated",
-            "Отчет по выплатам",
-            "generated",
-            report.DateFrom,
-            report.DateTo,
-            report.RowCount,
-            request.Search,
-            BuildExpenseReportMetadata(request, rowMode, report.Rows.Count),
-            cancellationToken);
-
-        return ReportResult<ExpenseReportDto>.Success(report);
     }
 
     private async Task AddReportExportAuditAsync(
