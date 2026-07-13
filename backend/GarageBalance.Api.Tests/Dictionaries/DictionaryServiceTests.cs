@@ -1209,7 +1209,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public void DemoTariffCatalogMigration_SeedsOnlyEmptyCatalogWithStageEightValuesAndAudit()
+    public void DemoTariffCatalogMigration_SeedsOnlyEmptyCatalogWithCustomerFormValuesAndAudit()
     {
         var migration = File.ReadAllText(Path.Combine(
             FindApiProjectRoot(),
@@ -1220,15 +1220,28 @@ public sealed class DictionaryServiceTests
 
         Assert.Contains("NOT EXISTS (SELECT 1 FROM tariffs)", migration, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS (SELECT 1 FROM charge_service_settings)", migration, StringComparison.Ordinal);
+        Assert.Contains("NOT EXISTS (SELECT 1 FROM irregular_payments)", migration, StringComparison.Ordinal);
         Assert.Contains("docs/stage-8-demo-test-data.json", migration, StringComparison.Ordinal);
         Assert.Contains("'Тариф на воду', 'meter_water', 45.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Электроэнергия', 'meter_electricity', 6.2000", migration, StringComparison.Ordinal);
         Assert.Contains("'Сумма членского взноса', 'fixed', 500.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Сумма целевого взноса', 'fixed', 1200.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Ставка за вывоз мусора', 'people', 300.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Наружное освещение', 'fixed', 300.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Электрики', 'fixed', 500.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Бухгалтерия', 'fixed', 700.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Руководство', 'fixed', 900.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Вступительный взнос', 5000.00", migration, StringComparison.Ordinal);
+        Assert.Contains("'Подключение канализации', 10000.00", migration, StringComparison.Ordinal);
+        Assert.Contains("'Подключение линии электросети', 15000.00", migration, StringComparison.Ordinal);
+        Assert.Contains("'Штраф за то', 500.00", migration, StringComparison.Ordinal);
+        Assert.Contains("'Штраф за это', 1000.00", migration, StringComparison.Ordinal);
         Assert.Contains("dictionary.demo_tariff_catalog_seeded", migration, StringComparison.Ordinal);
         Assert.Contains("Перед реальным учетом проверьте и замените ставку", migration, StringComparison.Ordinal);
         Assert.Equal(4, CountOccurrences(migration, "Демонстрационные данные этапа 8."));
+        Assert.Equal(5, CountOccurrences(migration, "Демонстрационные данные из формы ГСК."));
         Assert.Contains("DELETE FROM charge_service_settings", migration, StringComparison.Ordinal);
+        Assert.Contains("DELETE FROM irregular_payments", migration, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM tariffs", migration, StringComparison.Ordinal);
         Assert.Contains("FROM accruals", migration, StringComparison.Ordinal);
     }

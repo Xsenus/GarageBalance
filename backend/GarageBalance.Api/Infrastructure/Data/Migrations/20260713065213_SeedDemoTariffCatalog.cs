@@ -15,7 +15,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                 BEGIN
                     IF NOT EXISTS (SELECT 1 FROM tariffs)
                        AND NOT EXISTS (SELECT 1 FROM charge_service_settings)
+                       AND NOT EXISTS (SELECT 1 FROM irregular_payments)
                        AND EXISTS (SELECT 1 FROM income_types WHERE "Code" = 'water' AND "IsArchived" = FALSE)
+                       AND EXISTS (SELECT 1 FROM income_types WHERE "Code" = 'trash' AND "IsArchived" = FALSE)
                        AND EXISTS (SELECT 1 FROM income_types WHERE "Code" = 'electricity' AND "IsArchived" = FALSE)
                        AND EXISTS (SELECT 1 FROM income_types WHERE "Code" = 'membership' AND "IsArchived" = FALSE)
                        AND EXISTS (SELECT 1 FROM income_types WHERE "Code" = 'target' AND "IsArchived" = FALSE)
@@ -49,6 +51,36 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                                 DATE '2026-07-01', 'Демонстрационные данные этапа 8. Перед реальным учетом проверьте и замените ставку.',
                                 FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
                                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+                            ),
+                            (
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185105', 'Ставка за вывоз мусора', 'people', 300.0000,
+                                DATE '2026-01-01', 'Демонстрационные данные из формы ГСК. Перед реальным учетом проверьте и замените ставку.',
+                                FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
+                                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+                            ),
+                            (
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185106', 'Наружное освещение', 'fixed', 300.0000,
+                                DATE '2026-01-01', 'Демонстрационные данные из формы ГСК. Перед реальным учетом проверьте и замените ставку.',
+                                FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
+                                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+                            ),
+                            (
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185107', 'Электрики', 'fixed', 500.0000,
+                                DATE '2026-01-01', 'Демонстрационные данные из формы ГСК. Перед реальным учетом проверьте и замените ставку.',
+                                FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
+                                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+                            ),
+                            (
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185108', 'Бухгалтерия', 'fixed', 700.0000,
+                                DATE '2026-01-01', 'Демонстрационные данные из формы ГСК. Перед реальным учетом проверьте и замените ставку.',
+                                FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
+                                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+                            ),
+                            (
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185109', 'Руководство', 'fixed', 900.0000,
+                                DATE '2026-01-01', 'Демонстрационные данные из формы ГСК. Перед реальным учетом проверьте и замените ставку.',
+                                FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
+                                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
                             );
 
                         INSERT INTO charge_service_settings (
@@ -79,7 +111,27 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                                 (SELECT "Id" FROM income_types WHERE "Code" = 'target' AND "IsArchived" = FALSE LIMIT 1),
                                 '8a92bf70-9339-4bbc-8e5d-a05cda185104', FALSE, FALSE, 'руб.', FALSE,
                                 TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'
+                            ),
+                            (
+                                'f0d7ed2e-ec55-42b4-8a79-01b37c287105', 'Мусор', TRUE, 1, 1, NULL, NULL, 30,
+                                (SELECT "Id" FROM income_types WHERE "Code" = 'trash' AND "IsArchived" = FALSE LIMIT 1),
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185105', FALSE, FALSE, 'чел.', FALSE,
+                                TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'
+                            ),
+                            (
+                                'f0d7ed2e-ec55-42b4-8a79-01b37c287106', 'Наружное освещение', TRUE, 12, 1, 31, 12, 0,
+                                NULL, NULL, FALSE, FALSE, 'руб.', FALSE,
+                                TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'
                             );
+
+                        INSERT INTO irregular_payments (
+                            "Id", "Name", "Amount", "IsActive", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc")
+                        VALUES
+                            ('c865fd0a-ae14-4de6-83ef-b5d692327101', 'Вступительный взнос', 5000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
+                            ('c865fd0a-ae14-4de6-83ef-b5d692327102', 'Подключение канализации', 10000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
+                            ('c865fd0a-ae14-4de6-83ef-b5d692327103', 'Подключение линии электросети', 15000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
+                            ('c865fd0a-ae14-4de6-83ef-b5d692327104', 'Штраф за то', 500.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
+                            ('c865fd0a-ae14-4de6-83ef-b5d692327105', 'Штраф за это', 1000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z');
 
                         INSERT INTO audit_events (
                             "Id", "CreatedAtUtc", "Action", "Section", "ActionKind", "EntityType", "EntityId",
@@ -88,8 +140,8 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                             '55af4e19-59d8-4b2e-99f8-744412b16285', TIMESTAMPTZ '2026-07-13T06:52:13Z',
                             'dictionary.demo_tariff_catalog_seeded', 'dictionary', 'create', 'demo_tariff_catalog',
                             'stage-8', 'Демонстрационные тарифы',
-                            'Добавлены демонстрационные тарифы и настройки услуг для показа пустой установки.',
-                            '{"source":"docs/stage-8-demo-test-data.json","tariffCount":4,"serviceCount":4}'
+                            'Добавлены демонстрационные тарифы, настройки услуг и нерегулярные платежи для показа пустой установки.',
+                            '{"sources":["docs/stage-8-demo-test-data.json","customer tariff form screenshot"],"tariffCount":9,"serviceCount":6,"irregularPaymentCount":5}'
                         );
                     END IF;
                 END $$;
@@ -105,7 +157,18 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     'f0d7ed2e-ec55-42b4-8a79-01b37c287101',
                     'f0d7ed2e-ec55-42b4-8a79-01b37c287102',
                     'f0d7ed2e-ec55-42b4-8a79-01b37c287103',
-                    'f0d7ed2e-ec55-42b4-8a79-01b37c287104'
+                    'f0d7ed2e-ec55-42b4-8a79-01b37c287104',
+                    'f0d7ed2e-ec55-42b4-8a79-01b37c287105',
+                    'f0d7ed2e-ec55-42b4-8a79-01b37c287106'
+                );
+
+                DELETE FROM irregular_payments
+                WHERE "Id" IN (
+                    'c865fd0a-ae14-4de6-83ef-b5d692327101',
+                    'c865fd0a-ae14-4de6-83ef-b5d692327102',
+                    'c865fd0a-ae14-4de6-83ef-b5d692327103',
+                    'c865fd0a-ae14-4de6-83ef-b5d692327104',
+                    'c865fd0a-ae14-4de6-83ef-b5d692327105'
                 );
 
                 DELETE FROM tariffs
@@ -113,7 +176,12 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     '8a92bf70-9339-4bbc-8e5d-a05cda185101',
                     '8a92bf70-9339-4bbc-8e5d-a05cda185102',
                     '8a92bf70-9339-4bbc-8e5d-a05cda185103',
-                    '8a92bf70-9339-4bbc-8e5d-a05cda185104'
+                    '8a92bf70-9339-4bbc-8e5d-a05cda185104',
+                    '8a92bf70-9339-4bbc-8e5d-a05cda185105',
+                    '8a92bf70-9339-4bbc-8e5d-a05cda185106',
+                    '8a92bf70-9339-4bbc-8e5d-a05cda185107',
+                    '8a92bf70-9339-4bbc-8e5d-a05cda185108',
+                    '8a92bf70-9339-4bbc-8e5d-a05cda185109'
                 )
                 AND NOT EXISTS (
                     SELECT 1

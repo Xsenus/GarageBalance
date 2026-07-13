@@ -648,6 +648,7 @@ describe('App', () => {
     const irregularPaymentListRequests: Array<{ includeArchived?: boolean }> = []
     const restoredIrregularPaymentIds: string[] = []
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 1250 })
+    const lightingTariff = createTariff({ id: 'tariff-lighting', name: 'Наружное освещение', calculationBase: 'fixed', rate: 300 })
     const electricityTariff = createTariff({
       id: 'tariff-electricity',
       name: 'Электроэнергия',
@@ -674,7 +675,7 @@ describe('App', () => {
       unitName: 'руб.',
     })
     const dictionaryClient = createDictionaryClient({
-      getTariffs: async () => [waterTariff, electricityTariff],
+      getTariffs: async () => [waterTariff, electricityTariff, lightingTariff],
       getChargeServiceSettings: async () => [membershipSetting],
       getIrregularPayments: async (_token, _search, _limit, includeArchived) => {
         irregularPaymentListRequests.push({ includeArchived })
@@ -736,6 +737,7 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const waterRateInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
     expect(waterRateInput).toHaveValue('1250')
+    expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300')
 
     await user.clear(waterRateInput)
     await user.type(waterRateInput, '1300{Enter}')
