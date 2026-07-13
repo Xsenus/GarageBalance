@@ -2541,13 +2541,19 @@ public sealed class DictionaryService(
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)
     {
-        var result = new List<IrregularPaymentDto>(payments.Count);
-        foreach (var payment in payments)
-        {
-            result.Add(await ToIrregularPaymentDtoAsync(payment, cancellationToken));
-        }
+        var usedNames = await irregularPaymentRepository.GetUsedNamesAsync(
+            payments.Select(payment => payment.Name).Distinct(StringComparer.Ordinal).ToArray(),
+            cancellationToken);
 
-        return result;
+        return payments
+            .Select(payment => new IrregularPaymentDto(
+                payment.Id,
+                payment.Name,
+                payment.Amount,
+                payment.IsActive,
+                payment.IsArchived,
+                usedNames.Contains(payment.Name)))
+            .ToList();
     }
 
     private async Task<IrregularPaymentDto> ToIrregularPaymentDtoAsync(IrregularPayment payment, CancellationToken cancellationToken)

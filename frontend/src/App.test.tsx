@@ -2371,6 +2371,51 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByLabelText('Вода: Старый тариф без БД: значение')).not.toBeInTheDocument()
   })
 
+  it('shows table-shaped tariff skeletons and hides empty messages while critical data is loading', async () => {
+    const user = userEvent.setup()
+    let resolveTariffs!: (value: TariffDto[]) => void
+    const tariffsPromise = new Promise<TariffDto[]>((resolve) => { resolveTariffs = resolve })
+    const dictionaryClient = createDictionaryClient({ getTariffs: async () => tariffsPromise })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем тарифы и услуги' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем нерегулярные платежи' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем объявленные сборы' })).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Тарифы и услуги пока не настроены.')).not.toBeInTheDocument()
+
+    await act(async () => resolveTariffs([]))
+    expect(await within(tariffsPanel).findByText('Тарифы и услуги пока не настроены.')).toBeInTheDocument()
+  })
+
+  it('does not make tariff tables wait for auxiliary garage references', async () => {
+    const user = userEvent.setup()
+    let resolveGarages!: (value: GarageDto[]) => void
+    const garagesPromise = new Promise<GarageDto[]>((resolve) => { resolveGarages = resolve })
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => garagesPromise,
+      getTariffs: async () => [createTariff({ id: 'fast-water', name: 'Быстрый тариф', calculationBase: 'meter_water', rate: 42 })],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    expect(await within(tariffsPanel).findByLabelText('Вода: Быстрый тариф: значение')).toHaveValue('42')
+    expect(within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })).toBeDisabled()
+
+    await act(async () => resolveGarages([]))
+    await waitFor(() => expect(within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })).toBeEnabled())
+  })
+
   it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {
     const user = userEvent.setup()
     vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'contractors-prototype'

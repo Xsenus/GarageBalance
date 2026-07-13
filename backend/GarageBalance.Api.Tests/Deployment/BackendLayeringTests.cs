@@ -1458,6 +1458,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("irregularPaymentRepository.FindActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("irregularPaymentRepository.FindArchivedAsync", service, StringComparison.Ordinal);
         Assert.Contains("irregularPaymentRepository.IsUsedAsync", service, StringComparison.Ordinal);
+        Assert.Contains("irregularPaymentRepository.GetUsedNamesAsync", service, StringComparison.Ordinal);
         Assert.Contains("irregularPaymentRepository.Add", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.IrregularPayments", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.Accruals", service, StringComparison.Ordinal);

@@ -701,6 +701,18 @@ h1 {
   background: #f4f6f8;
 }
 
+.contractors-sheet-skeleton {
+  min-width: 760px;
+}
+
+.contractors-table-empty {
+  grid-column: 1 / -1;
+  justify-content: center !important;
+  min-height: 66px;
+  color: #667085;
+  text-align: center !important;
+}
+
 .contractors-sheet-row-actions {
   display: flex;
   align-items: center;
@@ -3502,6 +3514,59 @@ h1 {
   margin-top: 4px;
   overflow-wrap: anywhere;
   padding-top: 10px;
+}
+
+.empty-state--spacious {
+  margin: 0;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.loading-skeleton {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  background: #eaecf0;
+}
+
+.loading-skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(var(--skeleton-columns, 1), minmax(0, 1fr));
+  gap: 24px;
+  min-height: 46px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.loading-skeleton-line {
+  display: block;
+  width: min(100%, 240px);
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef1f5 20%, #f8fafc 45%, #eef1f5 70%);
+  background-size: 240% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.loading-skeleton-line:nth-child(2n) {
+  width: min(72%, 150px);
+}
+
+.loading-skeleton--compact .loading-skeleton-row {
+  min-height: 39px;
+  padding-block: 8px;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-skeleton-line {
+    animation: none;
+  }
 }
 
 .dictionary-panel-v2 {

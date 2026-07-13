@@ -144,6 +144,8 @@ Use icons for navigation and actions where appropriate. Keep dense tables readab
 
 For important flows, design loading, empty, error, validation, and permission-denied states from the start.
 
+Use one loading pattern throughout the application. Initial screen, form, card, and table loads must render a shared skeleton that follows the final content shape and keeps the layout stable; do not show a bare `Загрузка...` / `Загружаем...` paragraph in place of content. Use a compact progress indicator inside the affected button only for short submit/save actions. Loading UI must expose a concise `role="status"` announcement with `aria-live="polite"`, keep decorative skeleton bars hidden from assistive technologies, honor `prefers-reduced-motion`, prevent conflicting actions, and never show an empty-state message until loading has finished. Empty table states must use the shared empty-state presentation with comfortable vertical padding instead of an unstyled hint directly under the header.
+
 React functionality must be covered by tests. Add component, hook, service, and integration-style tests for visible behavior, validation, permissions, filters, tables, reports, dialogs, imports, and error states. Any user-facing change should include or update frontend tests unless it is documentation-only.
 
 Do not merge untested UI paths for money, permissions, imports, reports, or data editing. Use stable selectors or accessible roles/names in tests so the tests describe the user's real workflow.

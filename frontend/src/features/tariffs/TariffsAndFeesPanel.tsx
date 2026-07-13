@@ -7,6 +7,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { FinanceClient } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
@@ -489,7 +490,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
-  const [tariffsLoading, setTariffsLoading] = useState(false)
+  const [tariffsLoading, setTariffsLoading] = useState(true)
+  const [tariffReferencesLoading, setTariffReferencesLoading] = useState(true)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
@@ -506,22 +508,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       setTariffsLoading(true)
       setTariffPersistenceError(null)
       try {
-        const [loadedTariffs, loadedIncomeTypes, loadedIrregularPayments, loadedChargeServices, loadedFeeCampaigns, loadedGarages] = await Promise.all([
+        const [loadedTariffs, loadedIrregularPayments, loadedChargeServices, loadedFeeCampaigns] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
         if (!ignore) {
           const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices)
           const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows([], loadedIrregularPayments, true)
           setBackendTariffs(loadedTariffs)
-          setBackendIncomeTypes(loadedIncomeTypes)
           setBackendChargeServices(loadedChargeServices)
           setFeeCampaigns(loadedFeeCampaigns)
-          setFeeCampaignGarageOptions(loadedGarages)
           setTariffRows(mergedRows)
           setOneTimeRows(mergedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
@@ -539,6 +537,30 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
 
     void loadTariffsAndFees()
+
+    async function loadTariffReferences() {
+      setTariffReferencesLoading(true)
+      try {
+        const [loadedIncomeTypes, loadedGarages] = await Promise.all([
+          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        ])
+        if (!ignore) {
+          setBackendIncomeTypes(loadedIncomeTypes)
+          setFeeCampaignGarageOptions(loadedGarages)
+        }
+      } catch (caught: unknown) {
+        if (!ignore) {
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить данные для форм тарифов и сборов.')
+        }
+      } finally {
+        if (!ignore) {
+          setTariffReferencesLoading(false)
+        }
+      }
+    }
+
+    void loadTariffReferences()
 
     return () => {
       ignore = true
@@ -1478,16 +1500,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       <div className="contractors-heading">
         <div>
           <h1>Тарифы и сборы</h1>
-          {tariffsLoading ? <p className="form-hint" role="status">Загружаем тарифы...</p> : null}
           {!canManageTariffs ? <p className="form-hint">Режим просмотра: для изменения тарифов нужно право tariffs.manage.</p> : null}
           {tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
         </div>
         <div className="contractors-actions">
-          <button className="secondary-button" type="button" onClick={() => setModal('service')}>
+          <button className="secondary-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>
             <Plus size={17} />
             <span>Добавить услугу</span>
           </button>
-          <button className="primary-button contractors-primary-action" type="button" onClick={() => setModal('fee')}>
+          <button className="primary-button contractors-primary-action" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('fee')}>
             <Plus size={17} />
             <span>Объявить сбор</span>
           </button>
@@ -1503,7 +1524,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
             </div>
-            {tariffRows.map((row) => {
+            {tariffsLoading ? <LoadingSkeleton className="contractors-sheet-skeleton" label="Загружаем тарифы и услуги" rows={6} columns={5} /> : null}
+            {!tariffsLoading ? tariffRows.map((row) => {
               const serviceSetting = row.backendServiceSettingId
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
@@ -1688,14 +1710,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 ) : null}
               </Fragment>
               )
-            })}
+            }) : null}
             {tariffRows.length === 0 && !tariffsLoading ? (
               <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
-                <span role="cell">Тарифы и услуги пока не настроены.</span>
-                <span role="cell" />
-                <span role="cell" />
-                <span role="cell" />
-                <span role="cell" />
+                <span className="contractors-table-empty" role="cell">Тарифы и услуги пока не настроены.</span>
               </div>
             ) : null}
           </div>
@@ -1708,7 +1726,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Основание</span>
                 <span>Сумма, руб.</span>
               </div>
-              {oneTimeRows.map((row) => (
+              {tariffsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем нерегулярные платежи" rows={4} columns={2} /> : null}
+              {!tariffsLoading ? oneTimeRows.map((row) => (
                 <div
                   aria-label={`Нерегулярный платеж ${row.name}`}
                   className={[
@@ -1741,8 +1760,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                 </div>
-              ))}
-              {oneTimeRows.length === 0 && !tariffsLoading ? <p className="form-hint">Нерегулярные платежи пока не настроены.</p> : null}
+              )) : null}
+              {oneTimeRows.length === 0 && !tariffsLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
             </section>
 
             <section className="contractors-mini-table" aria-label="Объявленные сборы">
@@ -1756,7 +1775,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Период</span>
                 <span>Действия</span>
               </div>
-              {feeCampaigns.map((campaign) => (
+              {tariffsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем объявленные сборы" rows={4} columns={6} /> : null}
+              {!tariffsLoading ? feeCampaigns.map((campaign) => (
                 <div
                   aria-label={`Объявленный сбор ${campaign.name}`}
                   className={[
@@ -1802,8 +1822,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                 </div>
-              ))}
-              {feeCampaigns.length === 0 && !tariffsLoading ? <p className="form-hint">Объявленные сборы пока не настроены.</p> : null}
+              )) : null}
+              {feeCampaigns.length === 0 && !tariffsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
             </section>
           </div>
       </>
