@@ -898,12 +898,19 @@ public sealed class DictionaryService(
         return members.Select(ToStaffMemberDto).ToList();
     }
 
-    public async Task<PagedResult<StaffMemberDto>> GetStaffMembersPageAsync(Guid? departmentId, string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    public async Task<PagedResult<StaffMemberDto>> GetStaffMembersPageAsync(Guid? departmentId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        var page = await staffMemberRepository.GetPageAsync(departmentId, normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        var normalizedSortBy = sortBy?.Trim() switch
+        {
+            "department" => "department",
+            "rate" => "rate",
+            _ => "fullName"
+        };
+        var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
+        var page = await staffMemberRepository.GetPageAsync(departmentId, normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
         return new PagedResult<StaffMemberDto>(page.Items.Select(ToStaffMemberDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 

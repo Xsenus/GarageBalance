@@ -996,12 +996,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  async function loadStaffPage(offset = staffPage.offset, limit = staffPage.limit) {
+  async function loadStaffPage(
+    offset = staffPage.offset,
+    limit = staffPage.limit,
+    sort: ContractorSortState = contractorSort.section === 'staff'
+      ? contractorSort
+      : { section: 'staff', key: 'fullName', direction: 'asc' },
+  ) {
     setContractorPageLoading((current) => ({ ...current, staff: true }))
     setEmployeeContextMenu(null)
     try {
       const page = dictionaryClient.getStaffMembersPage
-        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true)
+        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction)
         : createFallbackPage(await dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true), offset, limit)
       setStaff(page.items.map(createStaffRowFromDto))
       setStaffPage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
@@ -1572,16 +1578,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   const changeContractorSort = (section: ContractorSortableSection, key: ContractorSortKey) => {
-    setContractorSort((currentSort) => {
-      if (currentSort.section === section && currentSort.key === key) {
-        return {
-          ...currentSort,
-          direction: currentSort.direction === 'asc' ? 'desc' : 'asc',
-        }
-      }
-
-      return { section, key, direction: 'asc' }
-    })
+    const nextSort: ContractorSortState = contractorSort.section === section && contractorSort.key === key
+      ? { ...contractorSort, direction: contractorSort.direction === 'asc' ? 'desc' : 'asc' }
+      : { section, key, direction: 'asc' }
+    setContractorSort(nextSort)
+    if (section === 'staff') {
+      void loadStaffPage(0, staffPage.limit, nextSort)
+    }
   }
 
   const renderContractorSortHeader = (section: ContractorSortableSection, key: ContractorSortKey, label: string) => {

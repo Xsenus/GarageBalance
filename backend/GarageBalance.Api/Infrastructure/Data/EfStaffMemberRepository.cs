@@ -15,13 +15,22 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<StaffMemberPageData> GetPageAsync(Guid? departmentId, string? normalizedSearch, bool includeArchived, int offset, int limit, CancellationToken cancellationToken)
+    public async Task<StaffMemberPageData> GetPageAsync(Guid? departmentId, string? normalizedSearch, bool includeArchived, int offset, int limit, string sortBy, bool sortDescending, CancellationToken cancellationToken)
     {
         var query = ApplyFilters(departmentId, normalizedSearch, includeArchived);
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(member => member.Department.Name)
-            .ThenBy(member => member.FullName)
+        if (sortBy == "rate" && IsSqliteProvider())
+        {
+            var filteredItems = await query.ToListAsync(cancellationToken);
+            var sortedItems = sortDescending
+                ? filteredItems.OrderByDescending(member => member.Rate).ThenBy(member => member.Id)
+                : filteredItems.OrderBy(member => member.Rate).ThenBy(member => member.Id);
+            return new StaffMemberPageData(sortedItems.Skip(offset).Take(limit).ToList(), totalCount);
+        }
+
+        var orderedQuery = ApplyPageSorting(query, sortBy, sortDescending);
+        var items = await orderedQuery
+            .ThenBy(member => member.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -64,4 +73,20 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
 
         return query;
     }
+
+    private static IOrderedQueryable<StaffMember> ApplyPageSorting(IQueryable<StaffMember> query, string sortBy, bool descending)
+    {
+        return (sortBy, descending) switch
+        {
+            ("department", true) => query.OrderByDescending(member => member.Department.Name),
+            ("department", false) => query.OrderBy(member => member.Department.Name),
+            ("rate", true) => query.OrderByDescending(member => member.Rate),
+            ("rate", false) => query.OrderBy(member => member.Rate),
+            (_, true) => query.OrderByDescending(member => member.FullName),
+            _ => query.OrderBy(member => member.FullName)
+        };
+    }
+
+    private bool IsSqliteProvider() =>
+        dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 }

@@ -881,8 +881,10 @@ public sealed class DictionaryServiceTests
                 CancellationToken.None);
         }
 
-        var page = await service.GetStaffMembersPageAsync(department.Value!.Id, null, 10, 5, CancellationToken.None);
-        var filtered = await service.GetStaffMembersPageAsync(null, "29", 0, 25, CancellationToken.None);
+        var page = await service.GetStaffMembersPageAsync(department.Value!.Id, null, 10, 5, "fullName", "asc", CancellationToken.None);
+        var filtered = await service.GetStaffMembersPageAsync(null, "29", 0, 25, "fullName", "asc", CancellationToken.None);
+        var highestRate = await service.GetStaffMembersPageAsync(null, null, 0, 1, "rate", "desc", CancellationToken.None);
+        var safeFallback = await service.GetStaffMembersPageAsync(null, null, 0, 1, "unsupported", "desc", CancellationToken.None);
 
         Assert.Equal(30, page.TotalCount);
         Assert.Equal(10, page.Offset);
@@ -893,6 +895,8 @@ public sealed class DictionaryServiceTests
         Assert.Single(filtered.Items);
         Assert.Equal("Сотрудник 29", filtered.Items[0].FullName);
         Assert.Equal(1, filtered.TotalCount);
+        Assert.Equal("Сотрудник 30", highestRate.Items[0].FullName);
+        Assert.Equal("Сотрудник 30", safeFallback.Items[0].FullName);
     }
 
     [Fact]

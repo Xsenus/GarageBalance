@@ -410,9 +410,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("staff-members/page")]
     [ProducesResponseType<PagedResult<StaffMemberDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<StaffMemberDto>>> GetStaffMembersPage([FromQuery] Guid? departmentId, [FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<StaffMemberDto>>> GetStaffMembersPage([FromQuery] Guid? departmentId, [FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetStaffMembersPageAsync(departmentId, search, offset, limit, cancellationToken, includeArchived));
+        return Ok(await dictionaryService.GetStaffMembersPageAsync(departmentId, search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]

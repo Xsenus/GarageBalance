@@ -299,7 +299,7 @@ export type DictionaryClient = {
   archiveStaffDepartment(accessToken: string, id: string, reason: string): Promise<void>
   restoreStaffDepartment(accessToken: string, id: string): Promise<StaffDepartmentDto>
   getStaffMembers(accessToken: string, departmentId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<StaffMemberDto[]>
-  getStaffMembersPage?(accessToken: string, departmentId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<StaffMemberDto>>
+  getStaffMembersPage?(accessToken: string, departmentId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string): Promise<PagedResult<StaffMemberDto>>
   createStaffMember(accessToken: string, request: UpsertStaffMemberRequest): Promise<StaffMemberDto>
   updateStaffMember(accessToken: string, id: string, request: UpsertStaffMemberRequest): Promise<StaffMemberDto>
   archiveStaffMember(accessToken: string, id: string, reason: string): Promise<void>
@@ -496,8 +496,8 @@ export const dictionariesApi: DictionaryClient = {
   getStaffMembers(accessToken, departmentId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/staff-members', { departmentId, search, limit, includeArchived: includeArchived || undefined }))
   },
-  getStaffMembersPage(accessToken, departmentId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members/page', { departmentId, search, offset, limit, includeArchived: includeArchived || undefined }))
+  getStaffMembersPage(accessToken, departmentId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members/page', { departmentId, search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }))
   },
   createStaffMember(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/staff-members', { method: 'POST', body: JSON.stringify(request) })

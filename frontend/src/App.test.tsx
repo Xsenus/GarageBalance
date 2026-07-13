@@ -1551,7 +1551,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
     const supplierPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
-    const staffPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
+    const staffPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
     const supplierGroup = createGroup({ id: 'group-page', name: 'Коммунальные услуги' })
     const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
       garagePageRequests.push({ offset, limit, includeArchived })
@@ -1573,8 +1573,8 @@ describe('App', () => {
         limit,
       }
     })
-    const getStaffMembersPage = vi.fn(async (_token: string, _departmentId?: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
-      staffPageRequests.push({ offset, limit, includeArchived })
+    const getStaffMembersPage = vi.fn(async (_token: string, _departmentId?: string, _search?: string, offset = 0, limit = 25, includeArchived = false, sortBy?: string, sortDirection?: string) => {
+      staffPageRequests.push({ offset, limit, includeArchived, sortBy, sortDirection })
       const fullName = offset === 0 ? 'Сотрудник 1' : 'Сотрудник 26'
       return {
         items: [createStaffMember({ id: `staff-page-${offset}`, fullName, departmentName: 'Бухгалтерия' })],
@@ -1621,10 +1621,15 @@ describe('App', () => {
     expect(within(staffPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
     expect(within(contractorsPanel).getByText('Сотрудник 1')).toBeInTheDocument()
     await user.click(within(staffPagination).getByRole('button', { name: 'Вперед' }))
-    await waitFor(() => expect(staffPageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true }))
+    await waitFor(() => expect(staffPageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true, sortBy: 'fullName', sortDirection: 'asc' }))
     expect(await within(contractorsPanel).findByText('Сотрудник 26')).toBeInTheDocument()
     expect(within(staffPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
     expect(within(staffPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
+    const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
+    await user.click(within(staffTable).getByRole('button', { name: 'Ставка' }))
+    await waitFor(() => expect(staffPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'rate', sortDirection: 'asc' }))
+    await user.click(within(staffTable).getByRole('button', { name: 'Ставка' }))
+    await waitFor(() => expect(staffPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'rate', sortDirection: 'desc' }))
   })
 
   it('confirms contractor staff edits with department and rate diff', async () => {
