@@ -14,6 +14,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
+import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
 
@@ -3062,15 +3063,17 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
             <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
-            <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
-            <FormField label="Услуга">
-              <select aria-label="Услуга поставщика" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value })}>
-                <option value="">Выберите услугу</option>
-                {availableServices.map((service) => (
-                  <option value={service} key={service}>{service}</option>
-                ))}
-              </select>
-            </FormField>
+            <div className="contractors-supplier-primary-grid">
+              <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
+              <FormField label="Услуга">
+                <SelectControl
+                  aria-label="Услуга поставщика"
+                  value={form.service}
+                  options={[{ value: '', label: 'Выберите услугу' }, ...availableServices.map((service) => ({ value: service, label: service }))]}
+                  onChange={(service) => setForm({ ...form, service })}
+                />
+              </FormField>
+            </div>
             <div className="contractors-modal-grid contractors-supplier-lookup-grid">
               <FormField label="ИНН">
                 <div className="suggestion-combobox">
@@ -3109,43 +3112,43 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                 {partySuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{partySuggestionStatus}</small> : null}
               </FormField>
               <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt || 'Нет'} readOnly /></FormField>
+              <FormField label="Юр. адрес">
+                <div className="suggestion-combobox">
+                  <input
+                    aria-label="Юридический адрес поставщика"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={addressSuggestionsOpen}
+                    aria-controls="supplier-address-suggestions"
+                    autoComplete="off"
+                    value={form.legalAddress}
+                    onFocus={() => setAddressSuggestionsOpen(addressSuggestions.length > 0)}
+                    onBlur={() => setAddressSuggestionsOpen(false)}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      addressInputTouched.current = true
+                      setForm({ ...form, legalAddress: value })
+                      if (value.trim().length < 2) {
+                        setAddressSuggestions([])
+                        setAddressSuggestionsOpen(false)
+                        setAddressSuggestionStatus('')
+                      }
+                    }}
+                  />
+                  {addressSuggestionsOpen ? (
+                    <div className="suggestion-options" id="supplier-address-suggestions" role="listbox" aria-label="Адреса DaData">
+                      {addressSuggestions.map((suggestion) => (
+                        <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectAddressSuggestion(suggestion)}>
+                          <strong>{suggestion.value}</strong>
+                          {suggestion.postalCode ? <span>Индекс {suggestion.postalCode}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {addressSuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{addressSuggestionStatus}</small> : null}
+              </FormField>
             </div>
-            <FormField label="Юр. адрес">
-              <div className="suggestion-combobox">
-                <input
-                  aria-label="Юридический адрес поставщика"
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-expanded={addressSuggestionsOpen}
-                  aria-controls="supplier-address-suggestions"
-                  autoComplete="off"
-                  value={form.legalAddress}
-                  onFocus={() => setAddressSuggestionsOpen(addressSuggestions.length > 0)}
-                  onBlur={() => setAddressSuggestionsOpen(false)}
-                  onChange={(event) => {
-                    const value = event.target.value
-                    addressInputTouched.current = true
-                    setForm({ ...form, legalAddress: value })
-                    if (value.trim().length < 2) {
-                      setAddressSuggestions([])
-                      setAddressSuggestionsOpen(false)
-                      setAddressSuggestionStatus('')
-                    }
-                  }}
-                />
-                {addressSuggestionsOpen ? (
-                  <div className="suggestion-options" id="supplier-address-suggestions" role="listbox" aria-label="Адреса DaData">
-                    {addressSuggestions.map((suggestion) => (
-                      <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectAddressSuggestion(suggestion)}>
-                        <strong>{suggestion.value}</strong>
-                        {suggestion.postalCode ? <span>Индекс {suggestion.postalCode}</span> : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              {addressSuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{addressSuggestionStatus}</small> : null}
-            </FormField>
             <div className="contractors-contacts-toolbar">
               <span>Контакты</span>
               <button className="secondary-button" type="button" onClick={addContact}>Добавить контакт</button>
@@ -3181,11 +3184,11 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                 </div>
               ))}
             </div>
-            <div className="contractors-modal-grid">
+            <div className="contractors-supplier-footer-grid">
               <FormField label="Телефон"><input aria-label="Телефон поставщика" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
               <FormField label="Почта"><input aria-label="Почта поставщика" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
+              <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
-            <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
                 <FileText size={16} />

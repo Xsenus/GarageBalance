@@ -67,11 +67,20 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps the garage editor wide, compact and responsive', () => {
-    expect(normalizedAppCss).toContain('.contractors-dialog--garage {\n  width: min(1120px, calc(100vw - 48px));')
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--garage {\n  width: min(1120px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .contractors-modal-form {\n  gap: 10px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-details,\n.contractors-garage-form-notes {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-garage-form-notes textarea {\n  min-height: 64px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-details,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')
+  })
+
+  it('keeps the supplier editor wide, compact and responsive', () => {
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--supplier {\n  width: min(1280px, calc(100vw - 48px));')
+    expect(normalizedAppCss).toContain('.contractors-dialog--supplier .contractors-modal-form {\n  gap: 9px;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(180px, 0.65fr) minmax(180px, 0.65fr) minmax(320px, 1.7fr);')
+    expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.8fr) minmax(320px, 1.5fr);')
+    expect(normalizedAppCss).toContain('.contractors-contacts-preview--editable {\n  min-height: 196px;\n  max-height: 280px;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid {\n    grid-template-columns: 1fr;')
   })
 
   it('centers fund action columns', () => {
