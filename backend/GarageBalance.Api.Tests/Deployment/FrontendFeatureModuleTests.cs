@@ -94,6 +94,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("aria-label=\"Пагинация гаражей\"", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.updateSupplier", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getSuppliersPage", featureText, StringComparison.Ordinal);
+        Assert.Contains("isSupplierServerSortKey", featureText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Пагинация поставщиков\"", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getStaffMembersPage", featureText, StringComparison.Ordinal);
         Assert.Contains("sort.key, sort.direction", featureText, StringComparison.Ordinal);

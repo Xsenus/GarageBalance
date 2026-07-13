@@ -26,13 +26,23 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         bool includeArchived,
         int offset,
         int limit,
+        string sortBy,
+        bool sortDescending,
         CancellationToken cancellationToken)
     {
         var query = ApplyFilters(groupId, normalizedSearch, includeArchived);
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(supplier => supplier.Group.Name)
-            .ThenBy(supplier => supplier.Name)
+        if (sortBy == "debt" && IsSqliteProvider())
+        {
+            var filteredItems = await query.ToListAsync(cancellationToken);
+            var sortedItems = sortDescending
+                ? filteredItems.OrderByDescending(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id)
+                : filteredItems.OrderBy(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id);
+            return new SupplierPageData(sortedItems.Skip(offset).Take(limit).ToList(), totalCount);
+        }
+
+        var items = await ApplyPageSorting(query, sortBy, sortDescending)
+            .ThenBy(supplier => supplier.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -99,4 +109,20 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
 
         return query;
     }
+
+    private static IOrderedQueryable<Supplier> ApplyPageSorting(IQueryable<Supplier> query, string sortBy, bool descending)
+    {
+        return (sortBy, descending) switch
+        {
+            ("name", true) => query.OrderByDescending(supplier => supplier.Name),
+            ("name", false) => query.OrderBy(supplier => supplier.Name),
+            ("debt", true) => query.OrderByDescending(supplier => supplier.StartingBalance),
+            ("debt", false) => query.OrderBy(supplier => supplier.StartingBalance),
+            (_, true) => query.OrderByDescending(supplier => supplier.Group.Name),
+            _ => query.OrderBy(supplier => supplier.Group.Name)
+        };
+    }
+
+    private bool IsSqliteProvider() =>
+        dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 }

@@ -165,6 +165,7 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
 type ContractorSupplierSortKey = 'name' | 'service' | 'contactPerson' | 'phone' | 'email' | 'debt'
+type ContractorSupplierServerSortKey = Extract<ContractorSupplierSortKey, 'name' | 'service' | 'debt'>
 type ContractorStaffSortKey = 'fullName' | 'department' | 'rate'
 type ContractorSupplierColumnKey = ContractorSupplierSortKey | 'actions'
 type ContractorStaffColumnKey = ContractorStaffSortKey | 'actions'
@@ -296,6 +297,10 @@ function compareContractorSuppliers(left: ContractorSupplierRow, right: Contract
   }
 
   return comparePrototypeText(left[key], right[key])
+}
+
+function isSupplierServerSortKey(key: ContractorSortKey): key is ContractorSupplierServerSortKey {
+  return key === 'name' || key === 'service' || key === 'debt'
 }
 
 function compareContractorStaff(left: ContractorStaffRow, right: ContractorStaffRow, key: ContractorStaffSortKey) {
@@ -978,12 +983,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  async function loadSupplierPage(offset = supplierPage.offset, limit = supplierPage.limit) {
+  async function loadSupplierPage(
+    offset = supplierPage.offset,
+    limit = supplierPage.limit,
+    sort: ContractorSortState = contractorSort.section === 'suppliers' && isSupplierServerSortKey(contractorSort.key)
+      ? contractorSort
+      : { section: 'suppliers', key: 'service', direction: 'asc' },
+  ) {
     setContractorPageLoading((current) => ({ ...current, suppliers: true }))
     setSupplierContextMenu(null)
     try {
       const page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction)
         : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true), offset, limit)
       const nextSuppliers = page.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContacts))
       setSuppliers(nextSuppliers)
@@ -1584,6 +1595,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setContractorSort(nextSort)
     if (section === 'staff') {
       void loadStaffPage(0, staffPage.limit, nextSort)
+    } else if (section === 'suppliers' && isSupplierServerSortKey(key)) {
+      void loadSupplierPage(0, supplierPage.limit, nextSort)
     }
   }
 

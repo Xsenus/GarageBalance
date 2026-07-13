@@ -283,7 +283,7 @@ export type DictionaryClient = {
   archiveSupplierGroup(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplierGroup(accessToken: string, id: string): Promise<SupplierGroupDto>
   getSuppliers(accessToken: string, groupId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierDto[]>
-  getSuppliersPage?(accessToken: string, groupId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<SupplierDto>>
+  getSuppliersPage?(accessToken: string, groupId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string): Promise<PagedResult<SupplierDto>>
   createSupplier(accessToken: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   updateSupplier(accessToken: string, id: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   archiveSupplier(accessToken: string, id: string, reason: string): Promise<void>
@@ -448,8 +448,8 @@ export const dictionariesApi: DictionaryClient = {
   getSuppliers(accessToken, groupId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/suppliers', { groupId, search, limit, includeArchived: includeArchived || undefined }))
   },
-  getSuppliersPage(accessToken, groupId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers/page', { groupId, search, offset, limit, includeArchived: includeArchived || undefined }))
+  getSuppliersPage(accessToken, groupId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers/page', { groupId, search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }))
   },
   createSupplier(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/suppliers', { method: 'POST', body: JSON.stringify(request) })

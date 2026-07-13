@@ -5,7 +5,7 @@ namespace GarageBalance.Api.Application.Dictionaries;
 public interface ISupplierRepository
 {
     Task<IReadOnlyList<Supplier>> GetListAsync(Guid? groupId, string? normalizedSearch, bool includeArchived, int limit, CancellationToken cancellationToken);
-    Task<SupplierPageData> GetPageAsync(Guid? groupId, string? normalizedSearch, bool includeArchived, int offset, int limit, CancellationToken cancellationToken);
+    Task<SupplierPageData> GetPageAsync(Guid? groupId, string? normalizedSearch, bool includeArchived, int offset, int limit, string sortBy, bool sortDescending, CancellationToken cancellationToken);
     Task<Supplier?> FindActiveWithGroupAsync(Guid id, CancellationToken cancellationToken);
     Task<Supplier?> FindArchivedWithGroupAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Supplier>> GetActiveByGroupAsync(Guid groupId, CancellationToken cancellationToken);

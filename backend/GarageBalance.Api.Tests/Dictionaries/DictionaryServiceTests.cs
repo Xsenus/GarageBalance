@@ -977,6 +977,11 @@ public sealed class DictionaryServiceTests
         var supplier = Assert.Single(result);
         Assert.Equal("Водоканал", supplier.Name);
         Assert.Equal("Коммунальные услуги", supplier.GroupName);
+
+        var highestDebt = await service.GetSuppliersPageAsync(null, null, 0, 1, "debt", "desc", CancellationToken.None);
+        var safeFallback = await service.GetSuppliersPageAsync(null, null, 0, 1, "unsupported", "asc", CancellationToken.None);
+        Assert.Equal("Водоканал", highestDebt.Items[0].Name);
+        Assert.Equal("Альфа-Банк", safeFallback.Items[0].Name);
     }
 
     [Fact]

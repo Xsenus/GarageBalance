@@ -1550,7 +1550,7 @@ describe('App', () => {
   it('pages garages, suppliers and staff through server dictionary pages', async () => {
     const user = userEvent.setup()
     const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
-    const supplierPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
+    const supplierPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
     const staffPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
     const supplierGroup = createGroup({ id: 'group-page', name: 'Коммунальные услуги' })
     const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
@@ -1563,8 +1563,8 @@ describe('App', () => {
         limit,
       }
     })
-    const getSuppliersPage = vi.fn(async (_token: string, _groupId?: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
-      supplierPageRequests.push({ offset, limit, includeArchived })
+    const getSuppliersPage = vi.fn(async (_token: string, _groupId?: string, _search?: string, offset = 0, limit = 25, includeArchived = false, sortBy?: string, sortDirection?: string) => {
+      supplierPageRequests.push({ offset, limit, includeArchived, sortBy, sortDirection })
       const name = offset === 0 ? 'Поставщик 1' : 'Поставщик 26'
       return {
         items: [createSupplier({ id: `supplier-page-${offset}`, name, groupId: supplierGroup.id, groupName: supplierGroup.name })],
@@ -1611,10 +1611,15 @@ describe('App', () => {
     expect(within(supplierPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
     expect(within(contractorsPanel).getByText('Поставщик 1')).toBeInTheDocument()
     await user.click(within(supplierPagination).getByRole('button', { name: 'Вперед' }))
-    await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true }))
+    await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true, sortBy: 'service', sortDirection: 'asc' }))
     expect(await within(contractorsPanel).findByText('Поставщик 26')).toBeInTheDocument()
     expect(within(supplierPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
     expect(within(supplierPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
+    const supplierTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
+    await user.click(within(supplierTable).getByRole('button', { name: 'Задолженность' }))
+    await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'debt', sortDirection: 'asc' }))
+    await user.click(within(supplierTable).getByRole('button', { name: 'Задолженность' }))
+    await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'debt', sortDirection: 'desc' }))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
     const staffPagination = within(contractorsPanel).getByRole('navigation', { name: 'Пагинация персонала' })

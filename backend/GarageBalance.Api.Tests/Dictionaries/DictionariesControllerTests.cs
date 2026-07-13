@@ -19,6 +19,7 @@ public sealed class DictionariesControllerTests
         await controller.GetGarages("12", 41, true, CancellationToken.None);
         await controller.GetSupplierGroups("group", 42, true, CancellationToken.None);
         await controller.GetSuppliers(groupId, "water", 43, true, CancellationToken.None);
+        await controller.GetSuppliersPage(groupId, "water", 25, 10, "debt", "desc", true, CancellationToken.None);
         await controller.GetIncomeTypes("income", 44, true, CancellationToken.None);
         await controller.GetExpenseTypes("expense", 45, true, CancellationToken.None);
         await controller.GetTariffs("meter", 46, true, CancellationToken.None);
@@ -29,6 +30,7 @@ public sealed class DictionariesControllerTests
         Assert.Equal(("12", 41, true), service.LastGarageListRequest);
         Assert.Equal(("group", 42, true), service.LastSupplierGroupListRequest);
         Assert.Equal((groupId, "water", 43, true), service.LastSupplierListRequest);
+        Assert.Equal((groupId, "water", 25, 10, "debt", "desc", true), service.LastSupplierPageRequest);
         Assert.Equal(("income", 44, true), service.LastIncomeTypeListRequest);
         Assert.Equal(("expense", 45, true), service.LastExpenseTypeListRequest);
         Assert.Equal(("meter", 46, true), service.LastTariffListRequest);
@@ -1528,6 +1530,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
+        public (Guid? GroupId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastSupplierPageRequest { get; private set; }
         public (Guid? SupplierId, string? Search, int? Limit, bool IncludeArchived) LastSupplierContactListRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastStaffDepartmentListRequest { get; private set; }
         public (Guid? DepartmentId, string? Search, int? Limit, bool IncludeArchived) LastStaffMemberListRequest { get; private set; }
@@ -1715,8 +1718,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<SupplierDto>>([]);
         }
 
-        public Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+        public Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
         {
+            LastSupplierPageRequest = (groupId, search, offset, limit, sortBy, sortDirection, includeArchived);
             return Task.FromResult(new PagedResult<SupplierDto>([], 0, offset ?? 0, limit ?? 100));
         }
 

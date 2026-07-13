@@ -221,9 +221,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("suppliers/page")]
     [ProducesResponseType<PagedResult<SupplierDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<SupplierDto>>> GetSuppliersPage([FromQuery] Guid? groupId, [FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<SupplierDto>>> GetSuppliersPage([FromQuery] Guid? groupId, [FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetSuppliersPageAsync(groupId, search, offset, limit, cancellationToken, includeArchived));
+        return Ok(await dictionaryService.GetSuppliersPageAsync(groupId, search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
