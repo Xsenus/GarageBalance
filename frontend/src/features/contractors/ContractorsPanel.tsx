@@ -437,6 +437,7 @@ function createOwnerRequestFromGarage(row: ContractorGarageRow): UpsertOwnerRequ
     middleName: parsedName.middleName,
     phone: row.phone.trim(),
     address: row.address.trim(),
+    meterNotes: row.meters.trim(),
   }
 }
 
@@ -494,7 +495,10 @@ async function resolveGarageOwner(
   const request = createOwnerRequestFromGarage(row)
 
   if (existing) {
-    const shouldUpdate = existing.phone !== (request.phone || null) || existing.address !== (request.address || null) || normalizeOwnerName(existing.fullName) !== ownerName
+    const shouldUpdate = existing.phone !== (request.phone || null)
+      || existing.address !== (request.address || null)
+      || existing.meterNotes !== (request.meterNotes || null)
+      || normalizeOwnerName(existing.fullName) !== ownerName
     if (!shouldUpdate) {
       return existing
     }
@@ -2083,7 +2087,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onDelete={deleteGarage} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog item={modal.item} services={supplierServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
@@ -2515,6 +2519,7 @@ function getGaragePrototypeChanges(previous: ContractorGarageRow, next: Contract
     createPrototypeChangeEntry('Владелец', previous.owner, next.owner),
     createPrototypeChangeEntry('Телефон', previous.phone, next.phone),
     createPrototypeChangeEntry('Адрес', previous.address, next.address),
+    createPrototypeChangeEntry('Счётчики', previous.meters, next.meters),
     createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
   ])
 }
@@ -2683,18 +2688,12 @@ function SupplierContactRestoreConfirmationDialog({
   )
 }
 
-function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onDelete: (item: ContractorGarageRow, reason?: string) => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+function GaragePrototypeDialog({ item, onClose, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
-  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
-  const [deleteReason, setDeleteReason] = useState('')
   useRestoreFocusOnClose(true)
-  useRestoreFocusOnClose(Boolean(deleteConfirmationOpen))
-  const dialogRef = useFocusTrap<HTMLElement>(!deleteConfirmationOpen && saveChanges.length === 0)
-  const deleteDialogRef = useFocusTrap<HTMLElement>(deleteConfirmationOpen)
-  const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(deleteConfirmationOpen)
-  useEscapeKey(!deleteConfirmationOpen && saveChanges.length === 0, onClose)
-  useEscapeKey(deleteConfirmationOpen, () => closeDeleteConfirmation())
+  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
+  useEscapeKey(saveChanges.length === 0, onClose)
 
   function saveAndClose() {
     onSave(form)
@@ -2719,42 +2718,32 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
     setSaveChanges(changes)
   }
 
-  function closeDeleteConfirmation() {
-    setDeleteConfirmationOpen(false)
-    setDeleteReason('')
-  }
-
-  function confirmGarageDelete() {
-    if (!item || !deleteReason.trim()) {
-      return
-    }
-
-    onDelete(item, deleteReason.trim())
-    closeDeleteConfirmation()
-    onClose()
-  }
-
   return (
     <>
       <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide contractors-dialog--garage" role="dialog" aria-modal="true" aria-labelledby="garage-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму гаража" onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
-            <div className="contractors-modal-grid">
-              <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
-              <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance || '0'} readOnly /></FormField>
-              <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-              <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
-              <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
-              <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
-              <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" value={form.initialElectricity} onChange={(event) => setForm({ ...form, initialElectricity: event.target.value })} /></FormField>
+            <div className="contractors-garage-form-columns">
+              <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
+                <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
+                <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
+                <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+              </div>
+              <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
+                <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance || '0'} readOnly /></FormField>
+                <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
+                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
+                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" value={form.initialElectricity} onChange={(event) => setForm({ ...form, initialElectricity: event.target.value })} /></FormField>
+              </div>
             </div>
             <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
             <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
             <FormField label="Адрес"><input aria-label="Адрес гаража" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></FormField>
+            <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
             <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
@@ -2763,7 +2752,6 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
               </button>
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
               <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
-              {item ? <button className="danger-button" type="button" onClick={() => setDeleteConfirmationOpen(true)}>Удалить гараж</button> : null}
             </div>
           </form>
         </section>
@@ -2771,41 +2759,6 @@ function GaragePrototypeDialog({ item, onClose, onDelete, onOpenFinancialReport,
 
       {item && saveChanges.length > 0 ? (
         <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения гаража" />
-      ) : null}
-
-      {item && deleteConfirmationOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeDeleteConfirmation}>
-          <section ref={deleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-delete-title" aria-describedby="garage-delete-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Удаление</p>
-                <h3 id="garage-delete-title">Удалить гараж?</h3>
-                <p>{`Гараж ${item.number || 'без номера'}`}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления гаража" onClick={closeDeleteConfirmation}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="garage-delete-description">Гараж будет скрыт из рабочего списка контрагентов. Укажите причину, чтобы действие можно было проверить позже.</p>
-            <label className="field-label" htmlFor="garage-delete-reason">Причина удаления</label>
-            <textarea
-              id="garage-delete-reason"
-              aria-label="Причина удаления гаража"
-              maxLength={1000}
-              value={deleteReason}
-              onChange={(event) => setDeleteReason(event.target.value)}
-              placeholder="Например: дубликат карточки"
-              required
-            />
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteConfirmation}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmGarageDelete} disabled={!deleteReason.trim()}>
-                <Trash2 size={16} />
-                <span>Удалить</span>
-              </button>
-            </div>
-          </section>
-        </div>
       ) : null}
     </>
   )

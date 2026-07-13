@@ -932,6 +932,7 @@ describe('App', () => {
       firstName: 'Иван',
       phone: '+7 900 000-00-01',
       address: 'ГСК, ряд 1',
+      meterNotes: 'Вода № 15, электричество № 27',
     })
     const contractorGarage = createGarage({
       id: '11111111-1111-4111-8111-111111111111',
@@ -947,6 +948,7 @@ describe('App', () => {
       initialElectricityMeterValue: 49,
     })
     let savedGarageStartingBalance: number | null = null
+    let savedGarageMeterNotes: string | null = null
     let archivedGarageReason: string | null = null
     let archivedSupplierReason: string | null = null
     let deletedSupplierContactReason: string | null = null
@@ -962,6 +964,18 @@ describe('App', () => {
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
+      updateOwner: async (_token, id, request) => {
+        savedGarageMeterNotes = request.meterNotes ?? null
+        return createOwner({
+          id,
+          lastName: request.lastName,
+          firstName: request.firstName,
+          middleName: request.middleName ?? null,
+          phone: request.phone ?? null,
+          address: request.address ?? null,
+          meterNotes: request.meterNotes ?? null,
+        })
+      },
       updateGarage: async (_token, id, request) => {
         savedGarageStartingBalance = request.startingBalance
         return createGarage({
@@ -1120,30 +1134,27 @@ describe('App', () => {
     expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveValue('5\u00A0300')
     expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveAttribute('readonly')
     expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveValue('1\u00A0300 руб.')
-    expect(within(garageDialog).getByLabelText('Стартовое значение счетчика воды')).toBeInTheDocument()
-    expect(within(garageDialog).getByLabelText('Стартовое значение счетчика электричества')).toBeInTheDocument()
-    expect(within(garageDialog).queryByLabelText('Счетчики гаража')).not.toBeInTheDocument()
+    const garageFinancialFields = within(garageDialog).getByRole('group', { name: 'Финансовые показатели гаража' })
+    expect(within(garageFinancialFields).getByLabelText('Баланс гаража')).toBeInTheDocument()
+    expect(within(garageFinancialFields).getByLabelText('Просроченная задолженность гаража')).toBeInTheDocument()
+    expect(within(garageFinancialFields).getByLabelText('Стартовое значение счетчика воды')).toBeInTheDocument()
+    expect(within(garageFinancialFields).getByLabelText('Стартовое значение счетчика электричества')).toBeInTheDocument()
+    expect(garageDialog).toHaveClass('contractors-dialog--garage')
+    expect(within(garageDialog).getByLabelText('Счетчики гаража')).toHaveValue('Вода № 15, электричество № 27')
     expect(within(garageDialog).getByRole('button', { name: 'Открыть фин. отчет' })).toHaveClass('contractors-report-button')
-    const deleteGarageFromCardButton = within(garageDialog).getByRole('button', { name: 'Удалить гараж' })
-    await user.click(deleteGarageFromCardButton)
-    const deleteGarageFromCardDialog = await screen.findByRole('dialog', { name: 'Удалить гараж?' })
-    expect(within(deleteGarageFromCardDialog).getByText('Гараж 1')).toBeInTheDocument()
-    const deleteGarageFromCardCancelButton = within(deleteGarageFromCardDialog).getByRole('button', { name: 'Отмена' })
-    const deleteGarageFromCardConfirmButton = within(deleteGarageFromCardDialog).getByRole('button', { name: 'Удалить' })
-    expect(deleteGarageFromCardConfirmButton).toBeDisabled()
-    expect(Boolean(deleteGarageFromCardCancelButton.compareDocumentPosition(deleteGarageFromCardConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
-    await waitFor(() => expect(deleteGarageFromCardCancelButton).toHaveFocus())
-    await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Удалить гараж?' })).not.toBeInTheDocument()
-    await waitFor(() => expect(deleteGarageFromCardButton).toHaveFocus())
+    expect(within(garageDialog).queryByRole('button', { name: 'Удалить гараж' })).not.toBeInTheDocument()
     await user.clear(within(garageDialog).getByLabelText('Владелец гаража'))
     await user.type(within(garageDialog).getByLabelText('Владелец гаража'), 'Новый владелец')
+    await user.clear(within(garageDialog).getByLabelText('Счетчики гаража'))
+    await user.type(within(garageDialog).getByLabelText('Счетчики гаража'), 'Вода № 31, электричество № 44')
     const garageSaveButton = within(garageDialog).getByRole('button', { name: /Сохранить/i })
     await user.click(garageSaveButton)
     const garageChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения гаража' })
     expect(within(garageChangeDialog).getByText('Гараж 1')).toBeInTheDocument()
     expect(within(garageChangeDialog).getByText('Владелец')).toBeInTheDocument()
     expect(within(garageChangeDialog).getByText('Иванов Иван -> Новый владелец')).toBeInTheDocument()
+    expect(within(garageChangeDialog).getByText('Счётчики')).toBeInTheDocument()
+    expect(within(garageChangeDialog).getByText('Вода № 15, электричество № 27 -> Вода № 31, электричество № 44')).toBeInTheDocument()
     const garageChangeCancelButton = within(garageChangeDialog).getByRole('button', { name: 'Отмена' })
     const garageChangeSaveButton = within(garageChangeDialog).getByRole('button', { name: 'Сохранить' })
     expect(Boolean(garageChangeCancelButton.compareDocumentPosition(garageChangeSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
@@ -1156,6 +1167,7 @@ describe('App', () => {
     await user.click(within(reopenedGarageChangeDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
     expect(savedGarageStartingBalance).toBe(100)
+    expect(savedGarageMeterNotes).toBe('Вода № 31, электричество № 44')
 
     const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
     const garageRow = within(garagesTable).getByText('Новый владелец').closest('[role="row"]')!
