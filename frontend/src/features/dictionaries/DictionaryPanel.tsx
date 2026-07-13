@@ -15,7 +15,8 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, formatNullableNumber, formatTariffRateSummary, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { createEmptyPage, createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
 import { createTariffFormFromDto, getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from '../../shared/validation'
@@ -690,13 +691,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
     void loadPage(activeSection, 0, value).finally(() => setLoading(false))
   }
 
-  function movePage(direction: -1 | 1) {
-    const navigation = getPageNavigation(activePage)
-    const nextOffset = direction === -1 ? navigation.previousOffset : navigation.nextOffset
-    setLoading(true)
-    void loadPage(activeSection, nextOffset, activePage.limit).finally(() => setLoading(false))
-  }
-
   function getRows(): DictionaryRecord[] {
     if (activeSection === 'owners') return owners
     if (activeSection === 'garages') return garages
@@ -973,8 +967,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
   }
 
   const rows = getRows()
-  const visibleRange = getPageVisibleRange(activePage)
-  const pageNavigation = getPageNavigation(activePage)
 
   return (
     <section className="dictionary-panel dictionary-panel-v2" aria-label="Справочники">
@@ -1046,17 +1038,20 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
             {!loading && rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">В этом справочнике пока нет записей</p> : null}
           </div>
 
-          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация справочника">
-            <span role="status" aria-live="polite">Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}</span>
-            <label>
-              Строк
-              <select aria-label="Количество строк справочника" value={activePage.limit} onChange={(event) => changePageSize(Number(event.target.value))}>
-                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-              </select>
-            </label>
-            <button className="ghost-button" type="button" disabled={loading || !pageNavigation.canGoPrevious} onClick={() => movePage(-1)}>Назад</button>
-            <button className="ghost-button" type="button" disabled={loading || !pageNavigation.canGoNext} onClick={() => movePage(1)}>Вперед</button>
-          </div>
+          <TablePagination
+            ariaLabel="Пагинация справочника"
+            totalCount={activePage.totalCount}
+            offset={activePage.offset}
+            limit={activePage.limit}
+            visibleCount={rows.length}
+            disabled={loading}
+            pageSizeLabel="Количество строк справочника"
+            onPageChange={(page) => {
+              setLoading(true)
+              void loadPage(activeSection, (page - 1) * activePage.limit, activePage.limit).finally(() => setLoading(false))
+            }}
+            onPageSizeChange={changePageSize}
+          />
         </div>
       </div>
 

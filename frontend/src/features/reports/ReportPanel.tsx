@@ -7,7 +7,9 @@ import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto,
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
-import { getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { createClientPage, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { Pagination } from '../../shared/PageNavigator'
+import { TablePagination } from '../../shared/TablePagination'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
@@ -104,6 +106,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
+  const [consolidatedPageNumber, setConsolidatedPageNumber] = useState(1)
+  const [consolidatedPageSize, setConsolidatedPageSize] = useState(25)
   const [consolidatedIncomeBreakdown, setConsolidatedIncomeBreakdown] = useState<IncomeReportDto | null>(null)
   const [consolidatedExpenseBreakdown, setConsolidatedExpenseBreakdown] = useState<ExpenseReportDto | null>(null)
   const [garageReport, setGarageReport] = useState<GarageDetailReportDto | null>(null)
@@ -127,6 +131,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [bankDepositReportLoading, setBankDepositReportLoading] = useState(false)
   const [bankDepositReportError, setBankDepositReportError] = useState<string | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
+  const [feeSummaryPageNumber, setFeeSummaryPageNumber] = useState(1)
+  const [feeSummaryPageSize, setFeeSummaryPageSize] = useState(25)
+  const [feeDetailPageNumber, setFeeDetailPageNumber] = useState(1)
+  const [feeDetailPageSize, setFeeDetailPageSize] = useState(25)
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
   const [feeDetailMode, setFeeDetailMode] = useState<'debtors' | 'all'>('debtors')
   const [garageAccrualsGrouped, setGarageAccrualsGrouped] = useState(false)
@@ -691,15 +699,29 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           index === 0 ? formatMoney(endingBalance) : '',
         ]
       })
+      const consolidatedPage = createClientPage(reportRows, consolidatedPageNumber, consolidatedPageSize)
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
           {renderReportTable(
             'Консолидированный отчет',
             ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
-            reportRows,
+            consolidatedPage.items,
             consolidatedReport ? ['ИТОГО', '', formatMoney(consolidatedReport.incomeTotal), '', formatMoney(consolidatedReport.expenseTotal), formatMoney(consolidatedReport.balance), formatMoney(consolidatedReport.debt), formatMoney(consolidatedReport.balance)] : undefined,
           )}
+          <TablePagination
+            ariaLabel="Пагинация консолидированного отчета"
+            totalCount={consolidatedPage.totalCount}
+            offset={consolidatedPage.offset}
+            limit={consolidatedPage.limit}
+            visibleCount={consolidatedPage.items.length}
+            pageSizeLabel="Количество строк консолидированного отчета"
+            onPageChange={setConsolidatedPageNumber}
+            onPageSizeChange={(limit) => {
+              setConsolidatedPageNumber(1)
+              setConsolidatedPageSize(limit)
+            }}
+          />
         </ReportWorkbookSheet>
       )
     }
@@ -739,7 +761,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         limit: garageReport?.limit ?? garagePageRequest.limit,
       }
       const garageVisibleRange = getPageVisibleRange(garagePage)
-      const garageNavigation = getPageNavigation(garagePage)
       return (
         <ReportWorkbookSheet title="Отчёт по гаражам">
           {renderMonthlyFilter('garages', {
@@ -801,8 +822,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={!garageNavigation.canGoPrevious || garageReportLoading} onClick={() => setGaragePageRequest((current) => ({ ...current, offset: garageNavigation.previousOffset }))}>Назад</button>
-            <button className="ghost-button" type="button" disabled={!garageNavigation.canGoNext || garageReportLoading} onClick={() => setGaragePageRequest((current) => ({ ...current, offset: garageNavigation.nextOffset }))}>Вперед</button>
+            <Pagination currentPage={Math.floor(garagePage.offset / garagePage.limit) + 1} totalPages={Math.max(1, Math.ceil(garagePage.totalCount / garagePage.limit))} disabled={garageReportLoading} showQuickJump onPageChange={(page) => setGaragePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} />
           </div>
         </ReportWorkbookSheet>
       )
@@ -824,7 +844,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         limit: payoutReport?.limit ?? payoutPageRequest.limit,
       }
       const payoutVisibleRange = getPageVisibleRange(payoutPage)
-      const payoutNavigation = getPageNavigation(payoutPage)
       return (
         <ReportWorkbookSheet title="Отчёт по выплатам">
           {renderMonthlyFilter('payouts', {
@@ -872,8 +891,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={!payoutNavigation.canGoPrevious || payoutReportLoading} onClick={() => setPayoutPageRequest((current) => ({ ...current, offset: payoutNavigation.previousOffset }))}>Назад</button>
-            <button className="ghost-button" type="button" disabled={!payoutNavigation.canGoNext || payoutReportLoading} onClick={() => setPayoutPageRequest((current) => ({ ...current, offset: payoutNavigation.nextOffset }))}>Вперед</button>
+            <Pagination currentPage={Math.floor(payoutPage.offset / payoutPage.limit) + 1} totalPages={Math.max(1, Math.ceil(payoutPage.totalCount / payoutPage.limit))} disabled={payoutReportLoading} showQuickJump onPageChange={(page) => setPayoutPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} />
           </div>
         </ReportWorkbookSheet>
       )
@@ -895,7 +913,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         limit: incomeReport?.limit ?? incomePageRequest.limit,
       }
       const incomeVisibleRange = getPageVisibleRange(incomePage)
-      const incomeNavigation = getPageNavigation(incomePage)
       return (
         <ReportWorkbookSheet title="Отчет по поступлениям">
           {renderDateFilter('income', {
@@ -939,8 +956,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={!incomeNavigation.canGoPrevious || incomeReportLoading} onClick={() => setIncomePageRequest((current) => ({ ...current, offset: incomeNavigation.previousOffset }))}>Назад</button>
-            <button className="ghost-button" type="button" disabled={!incomeNavigation.canGoNext || incomeReportLoading} onClick={() => setIncomePageRequest((current) => ({ ...current, offset: incomeNavigation.nextOffset }))}>Вперед</button>
+            <Pagination currentPage={Math.floor(incomePage.offset / incomePage.limit) + 1} totalPages={Math.max(1, Math.ceil(incomePage.totalCount / incomePage.limit))} disabled={incomeReportLoading} showQuickJump onPageChange={(page) => setIncomePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} />
           </div>
         </ReportWorkbookSheet>
       )
@@ -961,7 +977,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         limit: cashPaymentReport?.limit ?? cashPaymentPageRequest.limit,
       }
       const cashPaymentVisibleRange = getPageVisibleRange(cashPaymentPage)
-      const cashPaymentNavigation = getPageNavigation(cashPaymentPage)
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
@@ -991,8 +1006,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={!cashPaymentNavigation.canGoPrevious || cashPaymentReportLoading} onClick={() => setCashPaymentPageRequest((current) => ({ ...current, offset: cashPaymentNavigation.previousOffset }))}>Назад</button>
-            <button className="ghost-button" type="button" disabled={!cashPaymentNavigation.canGoNext || cashPaymentReportLoading} onClick={() => setCashPaymentPageRequest((current) => ({ ...current, offset: cashPaymentNavigation.nextOffset }))}>Вперед</button>
+            <Pagination currentPage={Math.floor(cashPaymentPage.offset / cashPaymentPage.limit) + 1} totalPages={Math.max(1, Math.ceil(cashPaymentPage.totalCount / cashPaymentPage.limit))} disabled={cashPaymentReportLoading} showQuickJump onPageChange={(page) => setCashPaymentPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} />
           </div>
         </ReportWorkbookSheet>
       )
@@ -1011,7 +1025,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         limit: bankDepositReport?.limit ?? bankDepositPageRequest.limit,
       }
       const bankDepositVisibleRange = getPageVisibleRange(bankDepositPage)
-      const bankDepositNavigation = getPageNavigation(bankDepositPage)
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
@@ -1041,15 +1054,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={!bankDepositNavigation.canGoPrevious || bankDepositReportLoading} onClick={() => setBankDepositPageRequest((current) => ({ ...current, offset: bankDepositNavigation.previousOffset }))}>Назад</button>
-            <button className="ghost-button" type="button" disabled={!bankDepositNavigation.canGoNext || bankDepositReportLoading} onClick={() => setBankDepositPageRequest((current) => ({ ...current, offset: bankDepositNavigation.nextOffset }))}>Вперед</button>
+            <Pagination currentPage={Math.floor(bankDepositPage.offset / bankDepositPage.limit) + 1} totalPages={Math.max(1, Math.ceil(bankDepositPage.totalCount / bankDepositPage.limit))} disabled={bankDepositReportLoading} showQuickJump onPageChange={(page) => setBankDepositPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} />
           </div>
         </ReportWorkbookSheet>
       )
     }
 
     if (activeReportTab === 'fees') {
-      const summaryRows = feeReport?.summaryRows.map((row) => [
+      const feeSummaryPage = createClientPage(feeReport?.summaryRows ?? [], feeSummaryPageNumber, feeSummaryPageSize)
+      const summaryRows = feeSummaryPage.items.map((row) => [
         <button
           className="link-button"
           type="button"
@@ -1065,11 +1078,12 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         row.goal,
         formatMoney(row.feeAmount),
         formatMoney(row.collected),
-      ]) ?? []
+      ])
       const feeDetailRows = (feeDetailMode === 'debtors'
         ? feeReport?.garageRows.filter((row) => row.debt > 0)
         : feeReport?.garageRows) ?? []
-      const feeDetailTableRows = feeDetailRows.map((row) => [
+      const feeDetailPage = createClientPage(feeDetailRows, feeDetailPageNumber, feeDetailPageSize)
+      const feeDetailTableRows = feeDetailPage.items.map((row) => [
         row.garageNumber,
         row.ownerName ?? '',
         formatMoney(row.accrued),
@@ -1100,6 +1114,19 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               summaryRows.length > 0 ? summaryRows : [[feeVariationLabel, 'Данных по сбору нет', '', '']],
               feeReport ? ['ИТОГО', '', formatMoney(feeReport.accruedTotal), formatMoney(feeReport.collectedTotal)] : undefined,
             )}
+            <TablePagination
+              ariaLabel="Пагинация отчета по сборам"
+              totalCount={feeSummaryPage.totalCount}
+              offset={feeSummaryPage.offset}
+              limit={feeSummaryPage.limit}
+              visibleCount={feeSummaryPage.items.length}
+              pageSizeLabel="Количество строк отчета по сборам"
+              onPageChange={setFeeSummaryPageNumber}
+              onPageSizeChange={(limit) => {
+                setFeeSummaryPageNumber(1)
+                setFeeSummaryPageSize(limit)
+              }}
+            />
             <div className="report-workbook-side-summary" aria-label="Детализация сбора">
               <dl>
                 <div><dt>{feeReport?.variation ?? feeVariationLabel}</dt><dd>{formatMoney(feeReport?.accruedTotal ?? 0)}</dd></div>
@@ -1130,6 +1157,19 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                     ['Гараж', 'Владелец', 'Начислено', 'Оплачено', 'Дата', 'Задолженность'],
                     feeDetailTableRows.length > 0 ? feeDetailTableRows : [feeDetailEmptyRow],
                   )}
+                  <TablePagination
+                    ariaLabel="Пагинация детализации сбора"
+                    totalCount={feeDetailPage.totalCount}
+                    offset={feeDetailPage.offset}
+                    limit={feeDetailPage.limit}
+                    visibleCount={feeDetailPage.items.length}
+                    pageSizeLabel="Количество строк детализации сбора"
+                    onPageChange={setFeeDetailPageNumber}
+                    onPageSizeChange={(limit) => {
+                      setFeeDetailPageNumber(1)
+                      setFeeDetailPageSize(limit)
+                    }}
+                  />
                 </div>
               ) : null}
             </div>
@@ -1158,7 +1198,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       limit: fundChangeReport?.limit ?? fundChangePageRequest.limit,
     }
     const fundVisibleRange = getPageVisibleRange(fundPage)
-    const fundNavigation = getPageNavigation(fundPage)
 
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
@@ -1190,8 +1229,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
             </select>
           </label>
-          <button className="ghost-button" type="button" disabled={!fundNavigation.canGoPrevious || fundChangeReportLoading} onClick={() => setFundChangePageRequest((current) => ({ ...current, offset: fundNavigation.previousOffset }))}>Назад</button>
-          <button className="ghost-button" type="button" disabled={!fundNavigation.canGoNext || fundChangeReportLoading} onClick={() => setFundChangePageRequest((current) => ({ ...current, offset: fundNavigation.nextOffset }))}>Вперед</button>
+          <Pagination currentPage={Math.floor(fundPage.offset / fundPage.limit) + 1} totalPages={Math.max(1, Math.ceil(fundPage.totalCount / fundPage.limit))} disabled={fundChangeReportLoading} showQuickJump onPageChange={(page) => setFundChangePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} />
         </div>
       </ReportWorkbookSheet>
     )

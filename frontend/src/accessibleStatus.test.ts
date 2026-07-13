@@ -150,7 +150,7 @@ describe('accessible dynamic messages', () => {
     expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
     expect(financePanelSource).toContain('aria-label="Вид выплаты"')
     expect(financePanelSource).toContain('aria-label="Тариф для регулярного начисления"')
-    expect(financePanelSource).toContain("aria-label={getFinanceToolbarLabel('pageSize')}")
+    expect(financePanelSource).toContain("pageSizeLabel={getFinanceToolbarLabel('pageSize')}")
   })
 
   it('keeps text inputs and textareas consistently styled and labeled', () => {

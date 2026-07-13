@@ -2028,7 +2028,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("dictionaryClient.getTariffsPage", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("onContextMenu={(event) => openContextMenu(event, activeSection, item)}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("В этом справочнике пока нет записей", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
-        Assert.Contains("Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("<TablePagination", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("label: 'История изменений'", frontendAppShellText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Раздел истории изменений\"", auditPanelText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Тип объекта истории изменений\"", auditPanelText, StringComparison.Ordinal);

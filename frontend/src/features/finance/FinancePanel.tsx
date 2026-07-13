@@ -17,7 +17,8 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { getPageVisibleRange } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 
 type AccrualBreakdown =
@@ -2030,7 +2031,6 @@ export function FinancePanel({
 
   const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
   const financeVisibleRange = getPageVisibleRange(financePage)
-  const financeNavigation = getPageNavigation(financePage)
 
   return (
     <section className={showAllGarageOperations ? 'finance-panel finance-panel--show-overview' : 'finance-panel'} aria-label={getFinancePanelLabel('section')}>
@@ -2141,17 +2141,18 @@ export function FinancePanel({
             {renderFinanceTable()}
             {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
           </div>
-          <div className="dictionary-pagination" role="navigation" aria-label={getFinanceToolbarLabel('pagination')}>
-            <span role="status" aria-live="polite">{formatFinanceVisibleRange(financeVisibleRange, financePage.totalCount)}</span>
-            <label>
-              {getFinanceToolbarLabel('rows')}
-              <select aria-label={getFinanceToolbarLabel('pageSize')} value={financePage.limit} onChange={(event) => void loadFinanceWorkbench(activeFinanceSection, 0, Number(event.target.value))}>
-                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-              </select>
-            </label>
-            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoPrevious} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.previousOffset, financePage.limit)}>{getFinanceToolbarLabel('previousPage')}</button>
-            <button className="ghost-button" type="button" disabled={loading || !financeNavigation.canGoNext} onClick={() => void loadFinanceWorkbench(activeFinanceSection, financeNavigation.nextOffset, financePage.limit)}>{getFinanceToolbarLabel('nextPage')}</button>
-          </div>
+          <TablePagination
+            ariaLabel={getFinanceToolbarLabel('pagination')}
+            totalCount={financePage.totalCount}
+            offset={financePage.offset}
+            limit={financePage.limit}
+            visibleCount={getActiveFinanceRowsCount()}
+            disabled={loading}
+            statusText={formatFinanceVisibleRange(financeVisibleRange, financePage.totalCount)}
+            pageSizeLabel={getFinanceToolbarLabel('pageSize')}
+            onPageChange={(page) => void loadFinanceWorkbench(activeFinanceSection, (page - 1) * financePage.limit, financePage.limit)}
+            onPageSizeChange={(limit) => void loadFinanceWorkbench(activeFinanceSection, 0, limit)}
+          />
         </div>
       </div>
 

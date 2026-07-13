@@ -15,6 +15,8 @@ import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
+import { createClientPage } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getCompatibleRegularTariffs } from '../../shared/validation'
 
 const tariffsFormStateScope = 'tariffs-and-fees-prototype'
@@ -464,11 +466,15 @@ type TariffsPrototypeSavedState = {
 export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
+  const [tariffPageNumber, setTariffPageNumber] = useState(1)
+  const [tariffPageSize, setTariffPageSize] = useState(25)
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
+  const [feeCampaignPageNumber, setFeeCampaignPageNumber] = useState(1)
+  const [feeCampaignPageSize, setFeeCampaignPageSize] = useState(10)
   const [feeCampaignSavingId, setFeeCampaignSavingId] = useState<string | null>(null)
   const [feeCampaignEditTarget, setFeeCampaignEditTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveTarget, setFeeCampaignArchiveTarget] = useState<FeeCampaignDto | null>(null)
@@ -484,6 +490,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [thresholdDeleteTarget, setThresholdDeleteTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteReason, setThresholdDeleteReason] = useState('')
   const [oneTimeRows, setOneTimeRows] = useState<ContractorOneTimeRow[]>([])
+  const [oneTimePageNumber, setOneTimePageNumber] = useState(1)
+  const [oneTimePageSize, setOneTimePageSize] = useState(10)
   const [tariffDrafts, setTariffDrafts] = useState<Record<string, Partial<ContractorTariffRow>>>({})
   const [oneTimeDrafts, setOneTimeDrafts] = useState<Record<string, Partial<ContractorOneTimeRow>>>({})
   const [formStateLoaded, setFormStateLoaded] = useState(false)
@@ -1476,6 +1484,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const lastElectricityThresholdRowId = [...tariffRows]
     .reverse()
     .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
+  const tariffPage = createClientPage(tariffRows, tariffPageNumber, tariffPageSize)
+  const oneTimePage = createClientPage(oneTimeRows, oneTimePageNumber, oneTimePageSize)
+  const feeCampaignPage = createClientPage(feeCampaigns, feeCampaignPageNumber, feeCampaignPageSize)
 
   function formatFeeCampaignParticipantSummary(campaign: FeeCampaignDto) {
     if (campaign.appliesToAllGarages) {
@@ -1525,7 +1536,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <span role="columnheader">По счетчику</span>
             </div>
             {tariffsLoading ? <LoadingSkeleton className="contractors-sheet-skeleton" label="Загружаем тарифы и услуги" rows={6} columns={5} /> : null}
-            {!tariffsLoading ? tariffRows.map((row) => {
+            {!tariffsLoading ? tariffPage.items.map((row, pageIndex) => {
               const serviceSetting = row.backendServiceSettingId
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
@@ -1543,7 +1554,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   role="row"
                 >
                   <span role="cell">
-                    {row.group ? <strong>{row.group}</strong> : null}
+                    {row.group || pageIndex === 0 ? <strong>{row.group ?? row.category}</strong> : null}
                     {row.threshold ? (
                       <input
                         aria-label={`${row.category}: ${row.title}: наименование`}
@@ -1717,6 +1728,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               </div>
             ) : null}
           </div>
+          <TablePagination
+            ariaLabel="Пагинация тарифов и услуг"
+            totalCount={tariffPage.totalCount}
+            offset={tariffPage.offset}
+            limit={tariffPage.limit}
+            visibleCount={tariffPage.items.length}
+            disabled={tariffsLoading}
+            pageSizeLabel="Количество строк тарифов и услуг"
+            onPageChange={setTariffPageNumber}
+            onPageSizeChange={(limit) => {
+              setTariffPageNumber(1)
+              setTariffPageSize(limit)
+            }}
+          />
 
           <div className="contractors-bottom-grid">
             <section className="contractors-mini-table" aria-label="Нерегулярные платежи">
@@ -1727,7 +1752,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Сумма, руб.</span>
               </div>
               {tariffsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем нерегулярные платежи" rows={4} columns={2} /> : null}
-              {!tariffsLoading ? oneTimeRows.map((row) => (
+              {!tariffsLoading ? oneTimePage.items.map((row) => (
                 <div
                   aria-label={`Нерегулярный платеж ${row.name}`}
                   className={[
@@ -1762,6 +1787,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 </div>
               )) : null}
               {oneTimeRows.length === 0 && !tariffsLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
+              <TablePagination
+                ariaLabel="Пагинация нерегулярных платежей"
+                totalCount={oneTimePage.totalCount}
+                offset={oneTimePage.offset}
+                limit={oneTimePage.limit}
+                visibleCount={oneTimePage.items.length}
+                disabled={tariffsLoading}
+                pageSizeLabel="Количество строк нерегулярных платежей"
+                onPageChange={setOneTimePageNumber}
+                onPageSizeChange={(limit) => {
+                  setOneTimePageNumber(1)
+                  setOneTimePageSize(limit)
+                }}
+              />
             </section>
 
             <section className="contractors-mini-table" aria-label="Объявленные сборы">
@@ -1776,7 +1815,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Действия</span>
               </div>
               {tariffsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем объявленные сборы" rows={4} columns={6} /> : null}
-              {!tariffsLoading ? feeCampaigns.map((campaign) => (
+              {!tariffsLoading ? feeCampaignPage.items.map((campaign) => (
                 <div
                   aria-label={`Объявленный сбор ${campaign.name}`}
                   className={[
@@ -1824,6 +1863,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 </div>
               )) : null}
               {feeCampaigns.length === 0 && !tariffsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
+              <TablePagination
+                ariaLabel="Пагинация объявленных сборов"
+                totalCount={feeCampaignPage.totalCount}
+                offset={feeCampaignPage.offset}
+                limit={feeCampaignPage.limit}
+                visibleCount={feeCampaignPage.items.length}
+                disabled={tariffsLoading}
+                pageSizeLabel="Количество строк объявленных сборов"
+                onPageChange={setFeeCampaignPageNumber}
+                onPageSizeChange={(limit) => {
+                  setFeeCampaignPageNumber(1)
+                  setFeeCampaignPageSize(limit)
+                }}
+              />
             </section>
           </div>
       </>

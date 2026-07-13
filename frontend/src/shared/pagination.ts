@@ -15,6 +15,14 @@ export function createFallbackPage<TItem>(items: TItem[], offset: number, limit:
   return { items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit }
 }
 
+export function createClientPage<TItem>(items: TItem[], pageNumber: number, limit: number): PagedItems<TItem> {
+  const safeLimit = Math.max(1, limit)
+  const totalPages = Math.max(1, Math.ceil(items.length / safeLimit))
+  const safePageNumber = Math.min(Math.max(1, pageNumber), totalPages)
+  const offset = (safePageNumber - 1) * safeLimit
+  return { items: items.slice(offset, offset + safeLimit), totalCount: items.length, offset, limit: safeLimit }
+}
+
 export function getPageVisibleRange(page: PagedItems<unknown>) {
   if (page.totalCount === 0 || page.items.length === 0) {
     return { from: 0, to: 0 }

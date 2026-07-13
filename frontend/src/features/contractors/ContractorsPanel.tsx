@@ -12,7 +12,8 @@ import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { Pagination } from '../../shared/PageNavigator'
-import { createFallbackPage, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { createClientPage, createFallbackPage, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
@@ -739,6 +740,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [staff, setStaff] = useState<ContractorStaffRow[]>([])
   const [staffPage, setStaffPage] = useState<ContractorPageState>(createContractorPageState)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>([])
+  const [departmentPageNumber, setDepartmentPageNumber] = useState(1)
+  const [departmentPageSize, setDepartmentPageSize] = useState(10)
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [supplierServices, setSupplierServices] = useState<string[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
@@ -1711,6 +1714,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     const sortKey = contractorSort.key as ContractorStaffSortKey
     return rows.sort((left, right) => applyContractorSortDirection(compareContractorStaff(left, right, sortKey), contractorSort.direction))
   }, [staff, contractorSort])
+  const departmentPage = createClientPage(departments, departmentPageNumber, departmentPageSize)
   const garageVisibleRange = getPageVisibleRange({ ...garagePage, items: garages })
   const supplierVisibleRange = getPageVisibleRange({ ...supplierPage, items: suppliers })
   const staffVisibleRange = getPageVisibleRange({ ...staffPage, items: staff })
@@ -1929,7 +1933,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span className="contractors-directory-header-cell" role="columnheader">Статус</span>
                 <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
               </div>
-              {departments.map((department) => (
+              {departmentPage.items.map((department) => (
                 <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
                   <span role="cell">{department.name}</span>
                   <span role="cell" className="contractors-directory-cell--center">{department.isDeleted ? 'Удален' : 'Активен'}</span>
@@ -1957,6 +1961,19 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </div>
               ) : null}
             </div>
+            <TablePagination
+              ariaLabel="Пагинация отделов"
+              totalCount={departmentPage.totalCount}
+              offset={departmentPage.offset}
+              limit={departmentPage.limit}
+              visibleCount={departmentPage.items.length}
+              pageSizeLabel="Количество строк отделов"
+              onPageChange={setDepartmentPageNumber}
+              onPageSizeChange={(limit) => {
+                setDepartmentPageNumber(1)
+                setDepartmentPageSize(limit)
+              }}
+            />
           </section>
 
           <section className="contractors-directory-card" aria-label="Персонал">
