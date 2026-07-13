@@ -4087,6 +4087,7 @@ describe('App', () => {
     expect(within(fundsPanel).getByRole('table', { name: 'Фонды и собранные суммы' })).toBeInTheDocument()
     expect(await within(fundsPanel).findByText('Электроэнергия')).toBeInTheDocument()
     const withdrawElectricityButton = within(fundsPanel).getByRole('button', { name: 'Изъять из фонда Электроэнергия' })
+    expect(withdrawElectricityButton.closest('td')).toHaveClass('funds-table-action-column')
     expect(withdrawElectricityButton).toHaveAttribute('data-tooltip', 'Изъять')
     expect(withdrawElectricityButton).toHaveAttribute('title', 'Изъять из фонда Электроэнергия')
     await user.click(withdrawElectricityButton)
@@ -4097,6 +4098,7 @@ describe('App', () => {
     await waitFor(() => expect(withdrawElectricityButton).toHaveFocus())
 
     const depositTargetButton = within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Целевые взносы' })
+    expect(depositTargetButton.closest('td')).toHaveClass('funds-table-action-column')
     expect(depositTargetButton).toHaveAttribute('data-tooltip', 'Пополнить')
     await user.click(depositTargetButton)
     const depositDialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })

@@ -404,8 +404,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <tr>
               <th scope="col">Фонд</th>
               <th scope="col">Собранная сумма</th>
-              <th scope="col">Изъятие</th>
-              <th scope="col">Пополнение</th>
+              <th className="funds-table-action-column" scope="col">Изъятие</th>
+              <th className="funds-table-action-column" scope="col">Пополнение</th>
             </tr>
           </thead>
           <tbody>
@@ -413,14 +413,14 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               <tr key={row.id}>
                 <td>{row.name}</td>
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
-                <td>
+                <td className="funds-table-action-column">
                   {row.actions === false ? null : (
                     <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row)}>
                       <Minus size={16} aria-hidden="true" />
                     </button>
                   )}
                 </td>
-                <td>
+                <td className="funds-table-action-column">
                   {row.actions === false ? null : (
                     <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row)}>
                       <Plus size={16} aria-hidden="true" />

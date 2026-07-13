@@ -3162,6 +3162,10 @@ h1 {
   font-weight: 700;
 }
 
+.funds-table .funds-table-action-column {
+  text-align: center;
+}
+
 .funds-action-button {
   position: relative;
   display: inline-grid;

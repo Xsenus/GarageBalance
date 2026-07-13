@@ -55,4 +55,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: repeat(2, minmax(190px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })
+
+  it('centers fund action columns', () => {
+    expect(normalizedAppCss).toContain('.funds-table .funds-table-action-column {\n  text-align: center;')
+  })
 })
