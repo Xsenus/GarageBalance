@@ -167,6 +167,30 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task GetOperationsPageAsync_ReturnsBoundedServerPageAndTotalCount()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).First(fund => fund.AllowOperations);
+        await SeedIncomeAsync(database.Context, 5000m);
+        for (var index = 0; index < 3; index++)
+        {
+            Assert.True((await service.CreateOperationAsync(
+                targetFund.Id,
+                new CreateFundOperationRequest("deposit", 100m, $"Распределение {index + 1}"),
+                null,
+                CancellationToken.None)).Succeeded);
+        }
+
+        var page = await service.GetOperationsPageAsync(offset: 1, limit: 1, includeCanceled: true, CancellationToken.None);
+
+        Assert.Equal(3, page.TotalCount);
+        Assert.Single(page.Items);
+        Assert.Equal(1, page.Offset);
+        Assert.Equal(1, page.Limit);
+    }
+
+    [Fact]
     public async Task UpdateOperationAsync_UpdatesOperationRecalculatesBalancesAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

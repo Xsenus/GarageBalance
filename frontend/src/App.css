@@ -3437,7 +3437,6 @@ h1 {
 
 .dictionary-form select,
 .dictionary-modal-form select,
-.dictionary-pagination select,
 .report-filter select,
 .balance-history-filters select,
 .audit-filter-grid select {
@@ -3483,7 +3482,6 @@ h1 {
 
 .dictionary-form select:disabled,
 .dictionary-modal-form select:disabled,
-.dictionary-pagination select:disabled,
 .report-filter select:disabled,
 .balance-history-filters select:disabled,
 .audit-filter-grid select:disabled {
@@ -3959,7 +3957,6 @@ h1 {
 }
 
 .dictionary-toolbar input,
-.dictionary-pagination select,
 .dictionary-modal-form input,
 .dictionary-modal-form select,
 .dictionary-modal-form textarea {
@@ -3975,8 +3972,7 @@ h1 {
 
 .dictionary-modal-form input:focus,
 .dictionary-modal-form select:focus,
-.dictionary-modal-form textarea:focus,
-.dictionary-pagination select:focus {
+.dictionary-modal-form textarea:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }

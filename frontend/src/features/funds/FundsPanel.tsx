@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -8,6 +8,8 @@ import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../
 import { FormField } from '../../shared/FormField'
 import { formatDateTime, formatMoney } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 type FundPrototypeRow = {
   id: string
   name: string
@@ -60,7 +62,7 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
 
 export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
-  const [operationRows, setOperationRows] = useState<FundOperationDto[]>([])
+  const [operationPage, setOperationPage] = useState(() => createEmptyPage<FundOperationDto>(25))
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationEdit, setOperationEdit] = useState<FundOperationEditDraft | null>(null)
@@ -96,6 +98,16 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   useEscapeKey(Boolean(operationReverse) && !savingOperation, () => closeFundOperationReverse())
   useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
+  const getOperationsPage = useCallback(async (pageNumber: number, limit: number) => {
+    const offset = (pageNumber - 1) * limit
+    if (fundsClient.getOperationsPage) {
+      return fundsClient.getOperationsPage(auth.accessToken, { offset, limit, includeCanceled: true })
+    }
+
+    const operations = await fundsClient.getOperations(auth.accessToken, { limit: 100, includeCanceled: true })
+    return createFallbackPage(operations, offset, limit)
+  }, [auth.accessToken, fundsClient])
+
   useEffect(() => {
     let cancelled = false
 
@@ -105,11 +117,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       try {
         const [funds, operations] = await Promise.all([
           fundsClient.getFunds(auth.accessToken),
-          fundsClient.getOperations(auth.accessToken, { limit: 20, includeCanceled: true }),
+          getOperationsPage(1, 25),
         ])
         if (!cancelled) {
           setRows(funds.map(mapFundDtoToPrototypeRow))
-          setOperationRows(operations)
+          setOperationPage(operations)
           setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
         }
       } catch (error: unknown) {
@@ -128,15 +140,28 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     return () => {
       cancelled = true
     }
-  }, [auth.accessToken, fundsClient])
+  }, [auth.accessToken, fundsClient, getOperationsPage])
+
+  async function changeOperationsPage(pageNumber: number, limit = operationPage.limit) {
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      setOperationPage(await getOperationsPage(pageNumber, limit))
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить операции фондов.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   async function refreshFundsPanel() {
+    const currentPageNumber = Math.floor(operationPage.offset / operationPage.limit) + 1
     const [funds, operations] = await Promise.all([
       fundsClient.getFunds(auth.accessToken),
-      fundsClient.getOperations(auth.accessToken, { limit: 20, includeCanceled: true }),
+      getOperationsPage(currentPageNumber, operationPage.limit),
     ])
     setRows(funds.map(mapFundDtoToPrototypeRow))
-    setOperationRows(operations)
+    setOperationPage(operations)
     setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
   }
 
@@ -433,7 +458,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             </tr>
           </thead>
           <tbody>
-            {operationRows.length > 0 ? operationRows.map((fundOperation) => (
+            {operationPage.items.length > 0 ? operationPage.items.map((fundOperation) => (
               <tr key={fundOperation.id}>
                 <td>{formatDateTime(fundOperation.createdAtUtc)}</td>
                 <td>{fundOperation.fundName}</td>
@@ -474,6 +499,17 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             ) : null}
           </tbody>
         </table>
+        <TablePagination
+          ariaLabel="Пагинация операций фондов"
+          totalCount={operationPage.totalCount}
+          offset={operationPage.offset}
+          limit={operationPage.limit}
+          visibleCount={operationPage.items.length}
+          disabled={isLoading}
+          pageSizeLabel="Количество операций фондов"
+          onPageChange={(pageNumber) => void changeOperationsPage(pageNumber)}
+          onPageSizeChange={(limit) => void changeOperationsPage(1, limit)}
+        />
       </div>
 
       {operation ? (

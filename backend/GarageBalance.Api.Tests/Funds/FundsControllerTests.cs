@@ -27,6 +27,23 @@ public sealed class FundsControllerTests
     }
 
     [Fact]
+    public async Task GetOperationsPage_PassesPaginationQueryToService()
+    {
+        var operation = CreateOperation(isCanceled: true);
+        var page = new FundOperationPageDto([operation], 31, 10, 10);
+        var service = new FakeFundService { OperationsPage = page };
+        var controller = CreateController(service);
+
+        var result = await controller.GetOperationsPage(offset: 10, limit: 10, includeCanceled: true, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(page, ok.Value);
+        Assert.Equal(10, service.LastOperationsOffset);
+        Assert.Equal(10, service.LastOperationsPageLimit);
+        Assert.True(service.LastOperationsPageIncludeCanceled);
+    }
+
+    [Fact]
     public async Task UpdateOperation_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -203,9 +220,13 @@ public sealed class FundsControllerTests
         public Guid? LastRestoredOperationId { get; private set; }
         public int? LastOperationsLimit { get; private set; }
         public bool? LastOperationsIncludeCanceled { get; private set; }
+        public int? LastOperationsOffset { get; private set; }
+        public int? LastOperationsPageLimit { get; private set; }
+        public bool? LastOperationsPageIncludeCanceled { get; private set; }
         public UpdateFundOperationRequest? LastUpdateRequest { get; private set; }
         public CancelFundOperationRequest? LastCancelRequest { get; private set; }
         public IReadOnlyList<FundOperationDto> Operations { get; init; } = [];
+        public FundOperationPageDto OperationsPage { get; init; } = new([], 0, 0, 25);
         public FundResult<FundOperationDto> UpdateOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> CancelOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> RestoreOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
@@ -220,6 +241,14 @@ public sealed class FundsControllerTests
             LastOperationsLimit = limit;
             LastOperationsIncludeCanceled = includeCanceled;
             return Task.FromResult(Operations);
+        }
+
+        public Task<FundOperationPageDto> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken)
+        {
+            LastOperationsOffset = offset;
+            LastOperationsPageLimit = limit;
+            LastOperationsPageIncludeCanceled = includeCanceled;
+            return Task.FromResult(OperationsPage);
         }
 
         public Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

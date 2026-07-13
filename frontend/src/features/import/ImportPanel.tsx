@@ -8,6 +8,8 @@ import { FormField } from '../../shared/FormField'
 import { FormError } from '../../shared/formFeedback'
 import { formatDateTime, formatImportCheckStatus, formatImportCreatedRecordRollbackStatus, formatImportLogLevel, formatImportReaderStatus, formatImportRunCheckSummary, formatImportRunStatus } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { createClientPage } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 
 const importQuarantineScreenRequestLimit = 50
 const importCreatedRecordsScreenRequestLimit = 100
@@ -23,6 +25,14 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
   const [activeImportTab, setActiveImportTab] = useState<ImportTab>('checks')
+  const [logPageNumber, setLogPageNumber] = useState(1)
+  const [logPageSize, setLogPageSize] = useState(10)
+  const [createdPageNumber, setCreatedPageNumber] = useState(1)
+  const [createdPageSize, setCreatedPageSize] = useState(10)
+  const [historyPageNumber, setHistoryPageNumber] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(10)
+  const [quarantinePageNumber, setQuarantinePageNumber] = useState(1)
+  const [quarantinePageSize, setQuarantinePageSize] = useState(10)
   const [loading, setLoading] = useState(true)
   const [loadingLog, setLoadingLog] = useState(false)
   const [loadingCreatedRecords, setLoadingCreatedRecords] = useState(false)
@@ -68,10 +78,10 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const applyCancelDialogRef = useFocusTrap<HTMLElement>(Boolean(applyCancelTarget))
   const rollbackReasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(rollbackTarget))
   const rollbackDialogRef = useFocusTrap<HTMLElement>(Boolean(rollbackTarget))
-  const visibleRunLogEntries = runLogEntries.slice(0, 10)
-  const visibleCreatedRecords = createdRecords.slice(0, 10)
-  const visibleRuns = runs.slice(0, 8)
-  const visibleQuarantineItems = quarantineItems.slice(0, 8)
+  const logPage = createClientPage(runLogEntries, logPageNumber, logPageSize)
+  const createdPage = createClientPage(createdRecords, createdPageNumber, createdPageSize)
+  const historyPage = createClientPage(runs, historyPageNumber, historyPageSize)
+  const quarantinePage = createClientPage(quarantineItems, quarantinePageNumber, quarantinePageSize)
   const importTabs: Array<{ key: ImportTab; label: string; meta: string }> = [
     { key: 'checks', label: 'Проверки', meta: currentRun ? formatImportRunCheckSummary(currentRun) : 'ожидают запуска' },
     { key: 'log', label: 'Лог', meta: loadingLog ? 'загрузка' : `${runLogEntries.length} строк` },
@@ -128,6 +138,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         return
       }
 
+      setLogPageNumber(1)
       setLoadingLog(true)
       try {
         const entries = await importClient.getAccessRunLog(auth.accessToken, currentRun.id)
@@ -161,6 +172,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         return
       }
 
+      setCreatedPageNumber(1)
       setLoadingCreatedRecords(true)
       try {
         const records = await importClient.getAccessCreatedRecords(auth.accessToken, currentRun.id, importCreatedRecordsScreenRequestLimit)
@@ -547,112 +559,118 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         ) : null}
 
         {activeImportTab === 'log' ? (
-        <div className="operation-list import-table import-table--log" role="table" aria-label="Лог запуска Access">
-          <div className="operation-row header" role="row">
-            <span role="columnheader">Шаг</span>
-            <span role="columnheader">Уровень</span>
-            <span role="columnheader">Сообщение</span>
-          </div>
-          {loadingLog ? <p className="empty-state" role="status" aria-live="polite">Загрузка лога...</p> : null}
-          {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
-          {visibleRunLogEntries.map((entry) => (
-            <div className="operation-row" role="row" key={entry.id}>
-              <span role="cell">
-                <strong>{entry.stepCode}</strong>
-                <small>{formatDateTime(entry.createdAtUtc)}</small>
-              </span>
-              <span role="cell" className={entry.level === 'info' ? 'status-active' : entry.level === 'warning' ? 'warning-text' : 'status-disabled'}>
-                {formatImportLogLevel(entry.level)}
-              </span>
-              <span role="cell">{entry.message}</span>
+        <>
+          <div className="operation-list import-table import-table--log" role="table" aria-label="Лог запуска Access">
+            <div className="operation-row header" role="row">
+              <span role="columnheader">Шаг</span>
+              <span role="columnheader">Уровень</span>
+              <span role="columnheader">Сообщение</span>
             </div>
-          ))}
-          {runLogEntries.length > visibleRunLogEntries.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleRunLogEntries.length} из {runLogEntries.length} строк лога</p> : null}
-        </div>
+            {loadingLog ? <p className="empty-state" role="status" aria-live="polite">Загрузка лога...</p> : null}
+            {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
+            {logPage.items.map((entry) => (
+              <div className="operation-row" role="row" key={entry.id}>
+                <span role="cell">
+                  <strong>{entry.stepCode}</strong>
+                  <small>{formatDateTime(entry.createdAtUtc)}</small>
+                </span>
+                <span role="cell" className={entry.level === 'info' ? 'status-active' : entry.level === 'warning' ? 'warning-text' : 'status-disabled'}>
+                  {formatImportLogLevel(entry.level)}
+                </span>
+                <span role="cell">{entry.message}</span>
+              </div>
+            ))}
+          </div>
+          <TablePagination ariaLabel="Пагинация лога импорта" totalCount={logPage.totalCount} offset={logPage.offset} limit={logPage.limit} visibleCount={logPage.items.length} disabled={loadingLog} pageSizeLabel="Количество строк лога импорта" onPageChange={setLogPageNumber} onPageSizeChange={(limit) => { setLogPageSize(limit); setLogPageNumber(1) }} />
+        </>
         ) : null}
 
         {activeImportTab === 'history' ? (
-        <div className="operation-list import-table import-table--history" role="table" aria-label="История импорта Access">
-          <div className="operation-row header" role="row">
-            <span role="columnheader">Файл</span>
-            <span role="columnheader">Статус</span>
-            <span role="columnheader">Проверки</span>
+        <>
+          <div className="operation-list import-table import-table--history" role="table" aria-label="История импорта Access">
+            <div className="operation-row header" role="row">
+              <span role="columnheader">Файл</span>
+              <span role="columnheader">Статус</span>
+              <span role="columnheader">Проверки</span>
+            </div>
+            {runs.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Истории импорта пока нет</p> : null}
+            {historyPage.items.map((run) => (
+              <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
+                <span role="cell">
+                  <strong>{run.originalFileName}</strong>
+                  <small>{run.summary}</small>
+                </span>
+                <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' || run.status === 'import_requested' || run.status === 'import_request_cancelled' ? 'warning-text' : 'status-disabled'}>
+                  {formatImportRunStatus(run.status)}
+                </span>
+                <span role="cell">{formatImportRunCheckSummary(run)}</span>
+              </button>
+            ))}
           </div>
-          {runs.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Истории импорта пока нет</p> : null}
-          {visibleRuns.map((run) => (
-            <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
-              <span role="cell">
-                <strong>{run.originalFileName}</strong>
-                <small>{run.summary}</small>
-              </span>
-              <span role="cell" className={run.status === 'completed' ? 'status-active' : run.status === 'rollback_requested' || run.status === 'import_requested' || run.status === 'import_request_cancelled' ? 'warning-text' : 'status-disabled'}>
-                {formatImportRunStatus(run.status)}
-              </span>
-              <span role="cell">
-                {formatImportRunCheckSummary(run)}
-              </span>
-            </button>
-          ))}
-          {runs.length > visibleRuns.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleRuns.length} из {runs.length} запусков</p> : null}
-        </div>
+          <TablePagination ariaLabel="Пагинация истории импорта" totalCount={historyPage.totalCount} offset={historyPage.offset} limit={historyPage.limit} visibleCount={historyPage.items.length} pageSizeLabel="Количество запусков импорта" onPageChange={setHistoryPageNumber} onPageSizeChange={(limit) => { setHistoryPageSize(limit); setHistoryPageNumber(1) }} />
+        </>
         ) : null}
 
         {activeImportTab === 'created' ? (
-        <div className="operation-list import-table import-table--created" role="table" aria-label="Созданные импортом записи Access">
-          <div className="operation-row header" role="row">
-            <span role="columnheader">Созданная запись</span>
-            <span role="columnheader">Источник</span>
-            <span role="columnheader">Rollback</span>
-          </div>
-          {loadingCreatedRecords ? <p className="empty-state" role="status" aria-live="polite">Загрузка созданных записей...</p> : null}
-          {!loadingCreatedRecords && createdRecords.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
-          {visibleCreatedRecords.map((record) => (
-            <div className="operation-row" role="row" key={record.id}>
-              <span role="cell">
-                <strong>{record.targetDisplayName ?? record.targetEntityId}</strong>
-                <small>{record.targetEntityType} · {formatDateTime(record.createdAtUtc)}</small>
-              </span>
-              <span role="cell">
-                <strong>{record.sourceEntityType}{record.sourceExternalId ? ` #${record.sourceExternalId}` : ''}</strong>
-                <small>{record.sourceSystem} · {record.sourceRowHash.slice(0, 12)}</small>
-              </span>
-              <span role="cell" className={record.rollbackStatus === 'created' ? 'warning-text' : record.rollbackStatus === 'rolled_back' ? 'status-disabled' : 'status-active'}>
-                {formatImportCreatedRecordRollbackStatus(record.rollbackStatus)}
-              </span>
+        <>
+          <div className="operation-list import-table import-table--created" role="table" aria-label="Созданные импортом записи Access">
+            <div className="operation-row header" role="row">
+              <span role="columnheader">Созданная запись</span>
+              <span role="columnheader">Источник</span>
+              <span role="columnheader">Rollback</span>
             </div>
-          ))}
-          {createdRecords.length > visibleCreatedRecords.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleCreatedRecords.length} из {createdRecords.length} созданных записей</p> : null}
-        </div>
+            {loadingCreatedRecords ? <p className="empty-state" role="status" aria-live="polite">Загрузка созданных записей...</p> : null}
+            {!loadingCreatedRecords && createdRecords.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
+            {createdPage.items.map((record) => (
+              <div className="operation-row" role="row" key={record.id}>
+                <span role="cell">
+                  <strong>{record.targetDisplayName ?? record.targetEntityId}</strong>
+                  <small>{record.targetEntityType} · {formatDateTime(record.createdAtUtc)}</small>
+                </span>
+                <span role="cell">
+                  <strong>{record.sourceEntityType}{record.sourceExternalId ? ` #${record.sourceExternalId}` : ''}</strong>
+                  <small>{record.sourceSystem} · {record.sourceRowHash.slice(0, 12)}</small>
+                </span>
+                <span role="cell" className={record.rollbackStatus === 'created' ? 'warning-text' : record.rollbackStatus === 'rolled_back' ? 'status-disabled' : 'status-active'}>
+                  {formatImportCreatedRecordRollbackStatus(record.rollbackStatus)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <TablePagination ariaLabel="Пагинация созданных импортом записей" totalCount={createdPage.totalCount} offset={createdPage.offset} limit={createdPage.limit} visibleCount={createdPage.items.length} disabled={loadingCreatedRecords} pageSizeLabel="Количество созданных импортом записей" onPageChange={setCreatedPageNumber} onPageSizeChange={(limit) => { setCreatedPageSize(limit); setCreatedPageNumber(1) }} />
+        </>
         ) : null}
 
         {activeImportTab === 'quarantine' ? (
-        <div className="operation-list import-table import-table--quarantine" role="table" aria-label="Карантин импорта Access">
-          <div className="operation-row header" role="row">
-            <span role="columnheader">Строка</span>
-            <span role="columnheader">Причина</span>
-            <span role="columnheader">Действие</span>
-          </div>
-          {quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
-          {visibleQuarantineItems.map((item) => (
-            <div className="operation-row" role="row" key={item.id}>
-              <span role="cell">
-                <strong>{item.entityType}{item.externalId ? ` #${item.externalId}` : ''}</strong>
-                <small>{item.sourceSystem} · {item.rowHash.slice(0, 12)}</small>
-              </span>
-              <span role="cell" className={item.severity === 'warning' ? 'warning-text' : 'status-disabled'}>
-                <strong>{item.reasonCode}</strong>
-                <small>{item.reasonMessage}</small>
-              </span>
-              <span role="cell">
-                <button className="secondary-button" type="button" title={`Закрыть строку карантина ${item.entityType}${item.externalId ? ` #${item.externalId}` : ''}`} data-tooltip="Закрыть" disabled={resolvingQuarantineId === item.id} onClick={() => openQuarantineResolveDialog(item)}>
-                  <Save size={16} />
-                  <span>Закрыть</span>
-                </button>
-              </span>
+        <>
+          <div className="operation-list import-table import-table--quarantine" role="table" aria-label="Карантин импорта Access">
+            <div className="operation-row header" role="row">
+              <span role="columnheader">Строка</span>
+              <span role="columnheader">Причина</span>
+              <span role="columnheader">Действие</span>
             </div>
-          ))}
-          {quarantineItems.length > visibleQuarantineItems.length ? <p className="empty-state" role="status" aria-live="polite">Показано {visibleQuarantineItems.length} из {quarantineItems.length} строк карантина</p> : null}
-        </div>
+            {quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
+            {quarantinePage.items.map((item) => (
+              <div className="operation-row" role="row" key={item.id}>
+                <span role="cell">
+                  <strong>{item.entityType}{item.externalId ? ` #${item.externalId}` : ''}</strong>
+                  <small>{item.sourceSystem} · {item.rowHash.slice(0, 12)}</small>
+                </span>
+                <span role="cell" className={item.severity === 'warning' ? 'warning-text' : 'status-disabled'}>
+                  <strong>{item.reasonCode}</strong>
+                  <small>{item.reasonMessage}</small>
+                </span>
+                <span role="cell">
+                  <button className="secondary-button" type="button" title={`Закрыть строку карантина ${item.entityType}${item.externalId ? ` #${item.externalId}` : ''}`} data-tooltip="Закрыть" disabled={resolvingQuarantineId === item.id} onClick={() => openQuarantineResolveDialog(item)}>
+                    <Save size={16} />
+                    <span>Закрыть</span>
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+          <TablePagination ariaLabel="Пагинация карантина импорта" totalCount={quarantinePage.totalCount} offset={quarantinePage.offset} limit={quarantinePage.limit} visibleCount={quarantinePage.items.length} pageSizeLabel="Количество строк карантина импорта" onPageChange={setQuarantinePageNumber} onPageSizeChange={(limit) => { setQuarantinePageSize(limit); setQuarantinePageNumber(1) }} />
+        </>
         ) : null}
       </div>
       {applyTarget ? (

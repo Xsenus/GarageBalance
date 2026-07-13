@@ -23,6 +23,12 @@ public sealed record FundOperationDto(
     DateTimeOffset CreatedAtUtc,
     bool IsCanceled);
 
+public sealed record FundOperationPageDto(
+    IReadOnlyList<FundOperationDto> Items,
+    int TotalCount,
+    int Offset,
+    int Limit);
+
 public sealed record CreateFundOperationRequest(
     [Required, MaxLength(20)] string OperationKind,
     [Range(0.01, 999999999)] decimal Amount,

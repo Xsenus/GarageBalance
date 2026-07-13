@@ -35,6 +35,15 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
         return operations.Select(ToDto).ToList();
     }
 
+    public async Task<FundOperationPageDto> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken)
+    {
+        var boundedOffset = Math.Max(0, offset);
+        var boundedLimit = Math.Clamp(limit, 1, 100);
+        var page = await repository.GetOperationsPageAsync(boundedOffset, boundedLimit, includeCanceled, cancellationToken);
+
+        return new FundOperationPageDto(page.Items.Select(ToDto).ToList(), page.TotalCount, boundedOffset, boundedLimit);
+    }
+
     public async Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var fund = await repository.FindFundForUpdateAsync(fundId, cancellationToken);

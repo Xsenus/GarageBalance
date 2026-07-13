@@ -25,6 +25,13 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return Ok(await fundService.GetOperationsAsync(limit, includeCanceled, cancellationToken));
     }
 
+    [HttpGet("operations/page")]
+    [ProducesResponseType<FundOperationPageDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FundOperationPageDto>> GetOperationsPage([FromQuery] int offset = 0, [FromQuery] int limit = 25, [FromQuery] bool includeCanceled = false, CancellationToken cancellationToken = default)
+    {
+        return Ok(await fundService.GetOperationsPageAsync(offset, limit, includeCanceled, cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("{fundId:guid}/operations")]
     [ProducesResponseType<FundOperationDto>(StatusCodes.Status201Created)]

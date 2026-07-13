@@ -21,6 +21,13 @@ export type FundOperationDto = {
   isCanceled: boolean
 }
 
+export type FundOperationPageDto = {
+  items: FundOperationDto[]
+  totalCount: number
+  offset: number
+  limit: number
+}
+
 export type CreateFundOperationRequest = {
   operationKind: 'deposit' | 'withdraw'
   amount: number
@@ -39,6 +46,7 @@ export type CancelFundOperationRequest = {
 export type FundsClient = {
   getFunds(accessToken: string): Promise<FundDto[]>
   getOperations(accessToken: string, query?: { limit?: number; includeCanceled?: boolean }): Promise<FundOperationDto[]>
+  getOperationsPage?(accessToken: string, query?: { offset?: number; limit?: number; includeCanceled?: boolean }): Promise<FundOperationPageDto>
   createOperation(accessToken: string, fundId: string, request: CreateFundOperationRequest): Promise<FundOperationDto>
   updateOperation(accessToken: string, operationId: string, request: UpdateFundOperationRequest): Promise<FundOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFundOperationRequest): Promise<FundOperationDto>
@@ -80,6 +88,13 @@ export const fundsApi: FundsClient = {
     const queryString = search.toString()
     const suffix = queryString ? `?${queryString}` : ''
     return requestJson(accessToken, `/api/funds/operations${suffix}`)
+  },
+  getOperationsPage(accessToken, query = {}) {
+    const search = new URLSearchParams()
+    search.set('offset', String(query.offset ?? 0))
+    search.set('limit', String(query.limit ?? 25))
+    search.set('includeCanceled', String(query.includeCanceled ?? false))
+    return requestJson(accessToken, `/api/funds/operations/page?${search.toString()}`)
   },
   createOperation(accessToken, fundId, request) {
     return requestJson(accessToken, `/api/funds/${fundId}/operations`, { method: 'POST', body: JSON.stringify(request) })

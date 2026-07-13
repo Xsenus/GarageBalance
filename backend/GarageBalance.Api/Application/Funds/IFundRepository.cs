@@ -6,6 +6,7 @@ public interface IFundRepository
 {
     Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken);
+    Task<FundOperationPageData> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<Fund?> FindFundForUpdateAsync(Guid fundId, CancellationToken cancellationToken);
     Task<FundOperation?> FindOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken);
     Task<IReadOnlyList<string>> GetNormalizedFundNamesAsync(CancellationToken cancellationToken);
@@ -18,3 +19,5 @@ public interface IFundRepository
 }
 
 public sealed record FundTotalsData(decimal IncomeTotal, decimal ExpenseTotal, decimal AllocatedFundTotal);
+
+public sealed record FundOperationPageData(IReadOnlyList<FundOperation> Items, int TotalCount);

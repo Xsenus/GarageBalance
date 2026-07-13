@@ -115,7 +115,6 @@ describe('accessible dynamic messages', () => {
     const singleSelectContainers = [
       '.dictionary-form select',
       '.dictionary-modal-form select',
-      '.dictionary-pagination select',
       '.report-filter select',
       '.balance-history-filters select',
       '.audit-filter-grid select',

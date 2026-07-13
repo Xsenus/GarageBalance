@@ -38,6 +38,39 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<FundOperationPageData> GetOperationsPageAsync(
+        int offset,
+        int limit,
+        bool includeCanceled,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.FundOperations.AsNoTracking()
+            .Include(operation => operation.Fund)
+            .Where(operation => includeCanceled || !operation.IsCanceled);
+
+        if (IsSqliteProvider())
+        {
+            var operations = await query.ToListAsync(cancellationToken);
+            return new FundOperationPageData(
+                operations.OrderByDescending(operation => operation.CreatedAtUtc)
+                    .ThenByDescending(operation => operation.Id)
+                    .Skip(offset)
+                    .Take(limit)
+                    .ToList(),
+                operations.Count);
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(operation => operation.CreatedAtUtc)
+            .ThenByDescending(operation => operation.Id)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return new FundOperationPageData(items, totalCount);
+    }
+
     public Task<Fund?> FindFundForUpdateAsync(Guid fundId, CancellationToken cancellationToken)
     {
         return dbContext.Funds.SingleOrDefaultAsync(fund => fund.Id == fundId, cancellationToken);
