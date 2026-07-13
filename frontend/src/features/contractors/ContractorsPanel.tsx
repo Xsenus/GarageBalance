@@ -152,7 +152,7 @@ type ContractorModal =
   | { type: 'supplier'; item?: ContractorSupplierRow }
   | { type: 'service' }
   | { type: 'employee'; item?: ContractorStaffRow }
-  | { type: 'department' }
+  | { type: 'department'; item?: ContractorDepartmentRow }
 
 type ContractorRestoreTarget =
   | { type: 'garage'; item: ContractorGarageRow }
@@ -767,6 +767,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [employeeContextMenu, setEmployeeContextMenu] = useState<{ row: ContractorStaffRow; x: number; y: number } | null>(null)
   const [employeeDeleteTarget, setEmployeeDeleteTarget] = useState<ContractorStaffRow | null>(null)
   const [employeeDeleteReason, setEmployeeDeleteReason] = useState('')
+  const [departmentContextMenu, setDepartmentContextMenu] = useState<{ row: ContractorDepartmentRow; x: number; y: number } | null>(null)
   const [departmentDeleteTarget, setDepartmentDeleteTarget] = useState<ContractorDepartmentRow | null>(null)
   const [departmentDeleteReason, setDepartmentDeleteReason] = useState('')
   const openedInitialTargetRef = useRef<string | null>(null)
@@ -800,6 +801,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   useEscapeKey(Boolean(supplierDeleteTarget), () => closeSupplierDeleteDialog())
   useEscapeKey(Boolean(employeeContextMenu), () => setEmployeeContextMenu(null))
   useEscapeKey(Boolean(employeeDeleteTarget), () => closeEmployeeDeleteDialog())
+  useEscapeKey(Boolean(departmentContextMenu), () => setDepartmentContextMenu(null))
   useEscapeKey(Boolean(departmentDeleteTarget), () => closeDepartmentDeleteDialog())
 
   useEffect(() => {
@@ -1515,6 +1517,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   function openDepartmentDeleteDialog(row: ContractorDepartmentRow) {
+    setDepartmentContextMenu(null)
     setDepartmentDeleteTarget(row)
     setDepartmentDeleteReason('')
   }
@@ -1539,7 +1542,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   function restoreDepartment(row: ContractorDepartmentRow) {
+    setDepartmentContextMenu(null)
     setRestoreTarget({ type: 'department', item: row })
+  }
+
+  function openDepartmentContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorDepartmentRow) {
+    event.preventDefault()
+    setDepartmentContextMenu({ row, x: event.clientX, y: event.clientY })
+  }
+
+  function openDepartmentEditor(row: ContractorDepartmentRow) {
+    setDepartmentContextMenu(null)
+    setModal({ type: 'department', item: row })
   }
 
   function openEmployeeFinancialReport(row: ContractorStaffRow) {
@@ -1590,17 +1604,32 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setRestoreTarget(null)
   }
 
-  const saveDepartment = async (departmentName: string) => {
+  const saveDepartment = async (department: ContractorDepartmentRow) => {
+    const currentDepartment = departments.find((item) => item.id === department.id)
+    const normalizedName = department.name.trim() || 'Новый отдел'
+
     try {
-      const savedDepartment = await dictionaryClient.createStaffDepartment(auth.accessToken, { name: departmentName.trim() })
-      setDepartments((currentDepartments) => [...currentDepartments, createStaffDepartmentRowFromDto(savedDepartment)])
+      const savedDepartment = currentDepartment && isBackendDictionaryId(department.id)
+        ? await dictionaryClient.updateStaffDepartment(auth.accessToken, department.id, { name: normalizedName })
+        : await dictionaryClient.createStaffDepartment(auth.accessToken, { name: normalizedName })
+      const nextDepartment = createStaffDepartmentRowFromDto(savedDepartment)
+      setDepartments((currentDepartments) => currentDepartment
+        ? currentDepartments.map((item) => (item.id === department.id ? nextDepartment : item))
+        : [...currentDepartments, nextDepartment])
+      if (currentDepartment && currentDepartment.name !== nextDepartment.name) {
+        setStaff((currentStaff) => currentStaff.map((employee) => employee.department === currentDepartment.name
+          ? { ...employee, department: nextDepartment.name }
+          : employee))
+      }
       return
     } catch (error) {
       setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить отдел.')
     }
 
-    const nextDepartment = { id: `department-${Date.now()}`, name: departmentName }
-    setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
+    if (!currentDepartment) {
+      const nextDepartment = { id: `department-${Date.now()}`, name: normalizedName }
+      setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
+    }
   }
 
   const saveService = (serviceName: string) => {
@@ -1901,7 +1930,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
               </div>
               {departments.map((department) => (
-                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id}>
+                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
                   <span role="cell">{department.name}</span>
                   <span role="cell" className="contractors-directory-cell--center">{department.isDeleted ? 'Удален' : 'Активен'}</span>
                   <span role="cell" className="contractors-row-actions">
@@ -1910,9 +1939,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                         <RotateCcw size={16} />
                       </button>
                     ) : (
-                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
-                        <Trash2 size={16} />
-                      </button>
+                      <>
+                        <button className="icon-button" type="button" aria-label={`Изменить отдел ${department.name}`} title="Изменить" onClick={() => openDepartmentEditor(department)}>
+                          <Pencil size={16} />
+                        </button>
+                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </>
                     )}
                   </span>
                 </div>
@@ -2090,11 +2124,41 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
+      {departmentContextMenu ? (
+        <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setDepartmentContextMenu(null)}>
+          <div
+            className="context-menu contractors-context-menu"
+            role="menu"
+            aria-label={`Действия отдела ${departmentContextMenu.row.name}`}
+            style={{ left: departmentContextMenu.x, top: departmentContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {departmentContextMenu.row.isDeleted ? (
+              <button type="button" role="menuitem" onClick={() => restoreDepartment(departmentContextMenu.row)}>
+                <RotateCcw size={16} />
+                <span>Восстановить</span>
+              </button>
+            ) : (
+              <>
+                <button type="button" role="menuitem" onClick={() => openDepartmentEditor(departmentContextMenu.row)}>
+                  <Pencil size={16} />
+                  <span>Изменить</span>
+                </button>
+                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openDepartmentDeleteDialog(departmentContextMenu.row)}>
+                  <Trash2 size={16} />
+                  <span>Удалить</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={supplierServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
-      {modal?.type === 'department' ? <DepartmentPrototypeDialog onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
+      {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 
       {garageFinancialReportTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeGarageFinancialReport}>
@@ -2768,6 +2832,12 @@ function GaragePrototypeDialog({ item, onClose, onOpenFinancialReport, onSave }:
   )
 }
 
+function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: ContractorDepartmentRow) {
+  return compactPrototypeChanges([
+    createPrototypeChangeEntry('Наименование', previous.name, next.name),
+  ])
+}
+
 function SupplierPrototypeDialog({ accessToken, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: string[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
   const [form, setForm] = useState<ContractorSupplierRow>(item ?? { ...createEmptySupplierPrototype(), service: services[0] ?? '' })
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
@@ -3252,31 +3322,56 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
   )
 }
 
-function DepartmentPrototypeDialog({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
-  const [name, setName] = useState('')
+function DepartmentPrototypeDialog({ item, onClose, onSave }: { item?: ContractorDepartmentRow; onClose: () => void; onSave: (department: ContractorDepartmentRow) => void }) {
+  const [form, setForm] = useState<ContractorDepartmentRow>(() => item ?? { id: `department-${Date.now()}`, name: '', isDeleted: false })
+  const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   useRestoreFocusOnClose(true)
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
+  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
+  useEscapeKey(saveChanges.length === 0, onClose)
+
+  function saveAndClose() {
+    onSave(form)
+    setSaveChanges([])
+    onClose()
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!item) {
+      saveAndClose()
+      return
+    }
+
+    const changes = getDepartmentPrototypeChanges(item, form)
+    if (changes.length === 0) {
+      onClose()
+      return
+    }
+
+    setSaveChanges(changes)
+  }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="department-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <h3 id="department-dialog-title">Новый отдел</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму отдела" onClick={onClose}><X size={18} /></button>
-        </div>
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onSave(name || 'Новый отдел')
-          onClose()
-        }}>
-          <FormField label="Наименование"><input aria-label="Наименование отдела" value={name} onChange={(event) => setName(event.target.value)} /></FormField>
-          <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit">Ок</button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
+    <>
+      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="department-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-dialog-header">
+            <h3 id="department-dialog-title">{item ? form.name : 'Новый отдел'}</h3>
+            <button className="icon-button" type="button" aria-label="Закрыть форму отдела" onClick={onClose}><X size={18} /></button>
           </div>
-        </form>
-      </section>
-    </div>
+          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+            <FormField label="Наименование"><input aria-label="Наименование отдела" maxLength={200} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
+            <div className="detail-dialog-actions">
+              <button className="secondary-button" type="submit"><Save size={17} /><span>{item ? 'Сохранить' : 'Ок'}</span></button>
+              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      {item && saveChanges.length > 0 ? (
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Отдел'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения отдела" />
+      ) : null}
+    </>
   )
 }
