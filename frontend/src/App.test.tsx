@@ -11077,7 +11077,7 @@ describe('App', () => {
     expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
   })
 
-  it('allows administrators to create draft release notes and publish them', async () => {
+  it('hides manual release editing controls while allowing draft publication', async () => {
     const user = userEvent.setup()
     let storedReleases = [
       createAppRelease({
@@ -11091,19 +11091,6 @@ describe('App', () => {
     const releaseClient = createReleaseClient({
       getReleases: async () => storedReleases.filter((release) => release.isPublished !== false),
       getManageableReleases: async () => storedReleases,
-      createRelease: async (_token, request) => {
-        const created = createAppRelease({
-          releaseId: request.releaseId ?? 'created-release',
-          version: request.version,
-          publishedAt: request.publishedAt ?? '2026-07-09T14:00:00+07:00',
-          title: request.title,
-          summary: request.summary,
-          items: request.items,
-          isPublished: request.isPublished ?? false,
-        })
-        storedReleases = [created, ...storedReleases]
-        return created
-      },
       publishRelease: async (_token, releaseId) => {
         const published = storedReleases.find((release) => release.releaseId === releaseId)
         if (!published) {
@@ -11123,22 +11110,13 @@ describe('App', () => {
 
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
     expect(await within(releasePanel).findByText('Черновик')).toBeInTheDocument()
-
-    await user.click(within(releasePanel).getByRole('button', { name: 'Добавить запись' }))
-    const editor = within(releasePanel).getByRole('form', { name: 'Новая запись Что нового' })
-    await user.type(within(editor).getByLabelText('Версия записи Что нового'), '0.485.0')
-    await user.type(within(editor).getByLabelText('Заголовок записи Что нового'), 'Управление обновлениями')
-    await user.type(within(editor).getByLabelText('Краткое описание записи Что нового'), 'Администратор может готовить записи.')
-    await user.type(within(editor).getByLabelText('Текст пункта обновления 1'), 'Добавлена форма записи в разделе Что нового.')
-    await user.click(within(editor).getByRole('button', { name: 'Сохранить' }))
-
-    expect(await within(releasePanel).findByText('Черновик добавлен.')).toBeInTheDocument()
-    expect(within(releasePanel).getByText('Управление обновлениями')).toBeInTheDocument()
+    expect(within(releasePanel).queryByRole('button', { name: 'Добавить запись' })).not.toBeInTheDocument()
+    expect(within(releasePanel).queryByRole('button', { name: 'Изменить' })).not.toBeInTheDocument()
 
     await user.click(within(releasePanel).getAllByRole('button', { name: 'Опубликовать' })[0])
 
-    expect(await within(releasePanel).findByText(/Запись 0\.485\.0 опубликована\./)).toBeInTheDocument()
-    expect(within(releasePanel).getByText(/v0\.485\.0/)).toBeInTheDocument()
+    expect(await within(releasePanel).findByText(/Запись 0\.484\.0 опубликована\./)).toBeInTheDocument()
+    expect(within(releasePanel).getByText(/v0\.484\.0/)).toBeInTheDocument()
   })
 
   it('shows workspace loading errors inside the related panel', async () => {

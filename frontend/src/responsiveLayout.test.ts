@@ -59,4 +59,10 @@ describe('responsive layout styles', () => {
   it('centers fund action columns', () => {
     expect(normalizedAppCss).toContain('.funds-table .funds-table-action-column {\n  text-align: center;')
   })
+
+  it('lays out release notes as an adaptive card grid', () => {
+    expect(normalizedAppCss).toContain('.release-list {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('@media (max-width: 1280px) {\n  .release-list {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('@media (max-width: 720px) {\n  .release-list {\n    grid-template-columns: minmax(0, 1fr);')
+  })
 })

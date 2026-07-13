@@ -7,6 +7,8 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { FormError } from '../../shared/formFeedback'
 import { formatReleaseDate } from '../../shared/formatters'
 
+const showManualReleaseEditing = false
+
 export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClient: ReleaseClient }) {
   const [releases, setReleases] = useState<AppReleaseDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -167,7 +169,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
         </div>
         <div className="release-heading-actions">
           <span>{releases.length} версий</span>
-          {canManageReleases ? (
+          {canManageReleases && showManualReleaseEditing ? (
             <button className="secondary-button" type="button" onClick={openCreateEditor}>
               <Plus size={17} />
               <span>Добавить запись</span>
@@ -262,10 +264,12 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
               </ul>
               {canManageReleases ? (
                 <div className="inline-actions release-entry__actions">
-                  <button className="ghost-button" type="button" onClick={() => openEditEditor(release)} disabled={saving}>
-                    <Pencil size={16} />
-                    <span>Изменить</span>
-                  </button>
+                  {showManualReleaseEditing ? (
+                    <button className="ghost-button" type="button" onClick={() => openEditEditor(release)} disabled={saving}>
+                      <Pencil size={16} />
+                      <span>Изменить</span>
+                    </button>
+                  ) : null}
                   {release.isPublished === false ? (
                     <button className="secondary-button" type="button" onClick={() => void publishRelease(release)} disabled={saving}>
                       <BookOpenCheck size={16} />
