@@ -97,6 +97,22 @@ export type IntegrationSecretSettingDto = {
   hasProtectedValue: boolean
 }
 
+export type DadataPartySuggestionDto = {
+  value: string
+  unrestrictedValue: string | null
+  inn: string | null
+  kpp: string | null
+  ogrn: string | null
+  legalAddress: string | null
+}
+
+export type DadataAddressSuggestionDto = {
+  value: string
+  unrestrictedValue: string | null
+  fiasId: string | null
+  postalCode: string | null
+}
+
 export type IntegrationClient = {
   getOneCFreshStatus(accessToken: string): Promise<OneCFreshIntegrationStatusDto>
   previewOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncPreviewDto>
@@ -105,6 +121,8 @@ export type IntegrationClient = {
   getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
   registerReceiptPrintingAction(accessToken: string, operationId: string, request: ReceiptPrintingActionRequest): Promise<ReceiptPrintingActionDto>
   updateProtectedSetting(accessToken: string, provider: string, settingKey: string, plaintextValue: string): Promise<IntegrationSecretSettingDto>
+  suggestParties(accessToken: string, query: string, count?: number): Promise<DadataPartySuggestionDto[]>
+  suggestAddresses(accessToken: string, query: string, count?: number): Promise<DadataAddressSuggestionDto[]>
 }
 
 export const integrationsApi: IntegrationClient = {
@@ -151,6 +169,12 @@ export const integrationsApi: IntegrationClient = {
         body: JSON.stringify({ plaintextValue }),
       },
     )
+  },
+  suggestParties(accessToken, query, count = 8) {
+    return requestJson<DadataPartySuggestionDto[]>(accessToken, `/api/suggestions/parties?query=${encodeURIComponent(query)}&count=${count}`)
+  },
+  suggestAddresses(accessToken, query, count = 8) {
+    return requestJson<DadataAddressSuggestionDto[]>(accessToken, `/api/suggestions/addresses?query=${encodeURIComponent(query)}&count=${count}`)
   },
 }
 

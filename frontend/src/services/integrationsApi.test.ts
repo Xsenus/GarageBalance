@@ -128,4 +128,20 @@ describe('integrationsApi', () => {
       headers: expect.any(Headers),
     })
   })
+
+  it('requests encoded DaData suggestions through the protected backend proxy', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ value: 'ООО Ромашка', inn: '5400' }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ value: 'г Новосибирск, ул Ленина', fiasId: 'fias-1' }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const parties = await integrationsApi.suggestParties('token', '54/00', 5)
+    const addresses = await integrationsApi.suggestAddresses('token', 'Ленина 1', 6)
+
+    expect(parties[0]?.inn).toBe('5400')
+    expect(addresses[0]?.fiasId).toBe('fias-1')
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/suggestions/parties?query=54%2F00&count=5', { headers: expect.any(Headers) })
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/suggestions/addresses?query=%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%201&count=6', { headers: expect.any(Headers) })
+    expect((fetchMock.mock.calls[0][1].headers as Headers).get('Authorization')).toBe('Bearer token')
+  })
 })

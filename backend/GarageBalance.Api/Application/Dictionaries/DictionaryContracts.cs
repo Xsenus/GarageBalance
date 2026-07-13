@@ -70,7 +70,8 @@ public sealed record SupplierDto(
     string? Email,
     decimal StartingBalance,
     string? Comment,
-    bool IsArchived);
+    bool IsArchived,
+    decimal Debt = 0);
 
 public sealed record UpsertSupplierRequest(
     [Required, MaxLength(240)] string Name,

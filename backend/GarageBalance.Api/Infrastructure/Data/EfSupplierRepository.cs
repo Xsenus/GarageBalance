@@ -36,7 +36,10 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         {
             var filteredItems = await query.ToListAsync(cancellationToken);
             var primaryContacts = await GetPrimaryContactsAsync(filteredItems.Select(supplier => supplier.Id).ToArray(), cancellationToken);
-            var sortedItems = ApplySqlitePageSorting(filteredItems, primaryContacts, sortBy, sortDescending)
+            var debtTotals = sortBy == "debt"
+                ? await GetDebtTotalsAsync(filteredItems.Select(supplier => supplier.Id).ToArray(), cancellationToken)
+                : new Dictionary<Guid, decimal>();
+            var sortedItems = ApplySqlitePageSorting(filteredItems, primaryContacts, debtTotals, sortBy, sortDescending)
                 .Skip(offset)
                 .Take(limit)
                 .ToList();
@@ -75,6 +78,33 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .Where(supplier => supplier.Id == id)
             .Select(supplier => supplier.StartingBalance)
             .SingleAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, decimal>> GetDebtTotalsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, decimal>();
+        }
+
+        var startingBalances = await dbContext.Suppliers.AsNoTracking()
+            .Where(supplier => ids.Contains(supplier.Id))
+            .Select(supplier => new { supplier.Id, supplier.StartingBalance })
+            .ToDictionaryAsync(item => item.Id, item => item.StartingBalance, cancellationToken);
+        var accruals = await dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => ids.Contains(accrual.SupplierId) && !accrual.IsCanceled)
+            .GroupBy(accrual => accrual.SupplierId)
+            .Select(group => new { SupplierId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToDictionaryAsync(item => item.SupplierId, item => item.Amount, cancellationToken);
+        var payments = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => operation.SupplierId != null && ids.Contains(operation.SupplierId.Value) && !operation.IsCanceled && operation.OperationKind == "expense")
+            .GroupBy(operation => operation.SupplierId!.Value)
+            .Select(group => new { SupplierId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToDictionaryAsync(item => item.SupplierId, item => item.Amount, cancellationToken);
+
+        return startingBalances.ToDictionary(
+            item => item.Key,
+            item => item.Value + accruals.GetValueOrDefault(item.Key) - payments.GetValueOrDefault(item.Key));
+    }
 
     public Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid groupId, string name, CancellationToken cancellationToken)
     {
@@ -119,8 +149,14 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         {
             ("name", true) => query.OrderByDescending(supplier => supplier.Name),
             ("name", false) => query.OrderBy(supplier => supplier.Name),
-            ("debt", true) => query.OrderByDescending(supplier => supplier.StartingBalance),
-            ("debt", false) => query.OrderBy(supplier => supplier.StartingBalance),
+            ("debt", true) => query.OrderByDescending(supplier =>
+                supplier.StartingBalance
+                + (dbContext.SupplierAccruals.Where(accrual => accrual.SupplierId == supplier.Id && !accrual.IsCanceled).Sum(accrual => (decimal?)accrual.Amount) ?? 0m)
+                - (dbContext.FinancialOperations.Where(operation => operation.SupplierId == supplier.Id && !operation.IsCanceled && operation.OperationKind == "expense").Sum(operation => (decimal?)operation.Amount) ?? 0m)),
+            ("debt", false) => query.OrderBy(supplier =>
+                supplier.StartingBalance
+                + (dbContext.SupplierAccruals.Where(accrual => accrual.SupplierId == supplier.Id && !accrual.IsCanceled).Sum(accrual => (decimal?)accrual.Amount) ?? 0m)
+                - (dbContext.FinancialOperations.Where(operation => operation.SupplierId == supplier.Id && !operation.IsCanceled && operation.OperationKind == "expense").Sum(operation => (decimal?)operation.Amount) ?? 0m)),
             ("contactPerson", true) => query.OrderByDescending(supplier => dbContext.SupplierContacts
                 .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
                 .OrderByDescending(contact => contact.Status == "Работает")
@@ -184,6 +220,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     private static IOrderedEnumerable<Supplier> ApplySqlitePageSorting(
         IReadOnlyList<Supplier> suppliers,
         IReadOnlyDictionary<Guid, SupplierPrimaryContactData> primaryContacts,
+        IReadOnlyDictionary<Guid, decimal> debtTotals,
         string sortBy,
         bool descending)
     {
@@ -194,8 +231,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         if (sortBy == "debt")
         {
             return descending
-                ? suppliers.OrderByDescending(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id)
-                : suppliers.OrderBy(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id);
+                ? suppliers.OrderByDescending(supplier => debtTotals.GetValueOrDefault(supplier.Id, supplier.StartingBalance)).ThenBy(supplier => supplier.Id)
+                : suppliers.OrderBy(supplier => debtTotals.GetValueOrDefault(supplier.Id, supplier.StartingBalance)).ThenBy(supplier => supplier.Id);
         }
 
         return descending

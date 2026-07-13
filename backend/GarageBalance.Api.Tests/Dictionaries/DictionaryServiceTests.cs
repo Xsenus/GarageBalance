@@ -1048,6 +1048,64 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetSuppliersAsync_CalculatesDebtFromStartingBalanceAccrualsAndPayments()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var first = await service.CreateSupplierAsync(new UpsertSupplierRequest("Первый", group.Value!.Id, null, null, null, null, null, 100m, null), null, CancellationToken.None);
+        var second = await service.CreateSupplierAsync(new UpsertSupplierRequest("Второй", group.Value.Id, null, null, null, null, null, 500m, null), null, CancellationToken.None);
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Услуги", "supplier_services"), null, CancellationToken.None);
+
+        database.Context.SupplierAccruals.AddRange(
+            new SupplierAccrual
+            {
+                SupplierId = first.Value!.Id,
+                ExpenseTypeId = expenseType.Value!.Id,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 900m,
+                Source = "manual"
+            },
+            new SupplierAccrual
+            {
+                SupplierId = first.Value.Id,
+                ExpenseTypeId = expenseType.Value.Id,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 999m,
+                Source = "manual",
+                IsCanceled = true
+            });
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                SupplierId = first.Value.Id,
+                ExpenseTypeId = expenseType.Value.Id,
+                OperationDate = new DateOnly(2026, 7, 15),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 250m
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                SupplierId = first.Value.Id,
+                ExpenseTypeId = expenseType.Value.Id,
+                OperationDate = new DateOnly(2026, 7, 16),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 999m,
+                IsCanceled = true
+            });
+        await database.Context.SaveChangesAsync();
+
+        var suppliers = await service.GetSuppliersAsync(group.Value.Id, null, CancellationToken.None);
+        var debtPage = await service.GetSuppliersPageAsync(group.Value.Id, null, 0, 1, "debt", "desc", CancellationToken.None);
+
+        Assert.Equal(750m, Assert.Single(suppliers, item => item.Id == first.Value.Id).Debt);
+        Assert.Equal(500m, Assert.Single(suppliers, item => item.Id == second.Value!.Id).Debt);
+        Assert.Equal(first.Value.Id, Assert.Single(debtPage.Items).Id);
+    }
+
+    [Fact]
     public async Task RestoreSupplierAsync_RejectsArchivedSupplierGroup()
     {
         await using var database = await TestDatabase.CreateAsync();

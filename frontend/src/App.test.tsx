@@ -1109,7 +1109,22 @@ describe('App', () => {
         return garageFinancialReport
       },
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const suggestParties = vi.fn(async () => [{
+      value: 'ООО Новый подрядчик',
+      unrestrictedValue: 'ООО Новый подрядчик',
+      inn: '5400000000',
+      kpp: '540001001',
+      ogrn: '1000000000000',
+      legalAddress: '630000, г Новосибирск, ул Ленина, д 1',
+    }])
+    const suggestAddresses = vi.fn(async () => [{
+      value: 'г Новосибирск, ул Советская, д 2',
+      unrestrictedValue: '630000, г Новосибирск, ул Советская, д 2',
+      fiasId: 'fias-address-1',
+      postalCode: '630000',
+    }])
+    const integrationClient = createIntegrationClient({ suggestParties, suggestAddresses })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -1279,8 +1294,26 @@ describe('App', () => {
 
     await user.click(addSupplierButton)
     supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    expect(supplierDialog).toHaveClass('contractors-dialog--supplier')
+    const innInput = within(supplierDialog).getByLabelText('ИНН поставщика')
+    await user.type(innInput, '5400')
+    await waitFor(() => expect(suggestParties).toHaveBeenCalledWith('token', '5400'))
+    await user.click(await within(supplierDialog).findByRole('option', { name: /ООО Новый подрядчик/ }))
+    expect(within(supplierDialog).getByLabelText('Наименование поставщика')).toHaveValue('ООО Новый подрядчик')
+    expect(innInput).toHaveValue('5400000000')
+    const legalAddressInput = within(supplierDialog).getByLabelText('Юридический адрес поставщика')
+    expect(legalAddressInput).toHaveValue('630000, г Новосибирск, ул Ленина, д 1')
+    await user.clear(legalAddressInput)
+    await user.type(legalAddressInput, 'Советская')
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская'))
+    await user.click(await within(supplierDialog).findByRole('option', { name: /Советская, д 2/ }))
+    expect(legalAddressInput).toHaveValue('630000, г Новосибирск, ул Советская, д 2')
+    await user.clear(within(supplierDialog).getByLabelText('Наименование поставщика'))
     await user.type(within(supplierDialog).getByLabelText('Наименование поставщика'), 'Новый подрядчик')
     await user.selectOptions(within(supplierDialog).getByLabelText('Услуга поставщика'), 'Уборка территории')
+    await user.type(within(supplierDialog).getByLabelText('Телефон поставщика'), '+7 900 555-44-33')
+    await user.type(within(supplierDialog).getByLabelText('Почта поставщика'), 'supplier@example.test')
+    expect(within(supplierDialog).getByLabelText('Задолженность поставщика')).toHaveAttribute('readonly')
     await user.click(within(supplierDialog).getByRole('button', { name: 'Добавить контакт' }))
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: ФИО'), 'Смирнов С.С.')
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: должность'), 'Менеджер')
@@ -1905,9 +1938,9 @@ describe('App', () => {
     const thirdOwner = createOwner({ id: 'owner-garage-27', lastName: 'Сидорова', firstName: 'Анна' })
     const supplierGroup = createGroup({ id: 'supplier-group-services', name: 'Услуги' })
     const suppliers = [
-      createSupplier({ id: 'supplier-energy', name: 'Энергосбыт', groupId: supplierGroup.id, groupName: 'Электроэнергия', startingBalance: 39000 }),
+      createSupplier({ id: 'supplier-energy', name: 'Энергосбыт', groupId: supplierGroup.id, groupName: 'Электроэнергия', startingBalance: 39000, debt: 39000 }),
       createSupplier({ id: 'supplier-legal', name: 'Правовой центр', groupId: supplierGroup.id, groupName: 'Юридические услуги', startingBalance: 0 }),
-      createSupplier({ id: 'supplier-waste', name: 'ЭкоВывоз', groupId: supplierGroup.id, groupName: 'Вывоз мусора', startingBalance: 15000 }),
+      createSupplier({ id: 'supplier-waste', name: 'ЭкоВывоз', groupId: supplierGroup.id, groupName: 'Вывоз мусора', startingBalance: 15000, debt: 15000 }),
     ]
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [firstOwner, secondOwner, thirdOwner],
@@ -4539,12 +4572,23 @@ describe('App', () => {
     expect(receiptPanel).not.toHaveTextContent('usb-private-connection')
     expect(receiptPanel).not.toHaveTextContent('private-receipt-template')
     expect(within(receiptPanel).getByLabelText('Статус печати чеков и квитанций')).toHaveTextContent('2 / 2')
+    const dadataPanel = screen.getByRole('region', { name: 'Подсказки DaData' })
+    const dadataApiKeyInput = within(dadataPanel).getByLabelText('Новый API-ключ DaData')
+    expect(dadataApiKeyInput).toHaveAttribute('type', 'password')
+    expect(dadataApiKeyInput).toHaveAttribute('autocomplete', 'new-password')
+    await user.type(dadataApiKeyInput, 'private-dadata-key')
+    await user.click(within(dadataPanel).getByRole('button', { name: 'Сохранить API-ключ' }))
+
+    await waitFor(() => expect(updateProtectedSetting).toHaveBeenCalledTimes(4))
+    expect(dadataApiKeyInput).toHaveValue('')
+    expect(dadataPanel).not.toHaveTextContent('private-dadata-key')
     expect(saved).toEqual([
       { provider: 'OneCFresh', settingKey: 'RefreshToken', plaintextValue: 'private-one-c-token' },
       { provider: 'ReceiptPrinting', settingKey: 'DeviceConnection', plaintextValue: 'usb-private-connection' },
       { provider: 'ReceiptPrinting', settingKey: 'ReceiptTemplate', plaintextValue: 'private-receipt-template' },
+      { provider: 'DaData', settingKey: 'ApiKey', plaintextValue: 'private-dadata-key' },
     ])
-    expect(await screen.findByText(/Защищенная настройка ReceiptPrinting:ReceiptTemplate сохранена/)).toHaveAttribute('role', 'status')
+    expect(await screen.findByText(/Защищенная настройка DaData:ApiKey сохранена/)).toHaveAttribute('role', 'status')
   })
 
   it('hides protected integration setting forms without user management permission', async () => {
@@ -4565,6 +4609,7 @@ describe('App', () => {
     const receiptPanel = await screen.findByRole('region', { name: 'Печать чеков и квитанций' })
     expect(within(oneCPanel).queryByLabelText('Защищенная настройка 1C Fresh')).not.toBeInTheDocument()
     expect(within(receiptPanel).queryByLabelText('Защищенные настройки печати')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Подсказки DaData' })).not.toBeInTheDocument()
     expect(updateProtectedSetting).not.toHaveBeenCalled()
   })
 
@@ -11814,6 +11859,8 @@ function createIntegrationClient(overrides: Partial<IntegrationClient> = {}): In
     previewOneCFreshSync: async () => createOneCFreshPreview(),
     startOneCFreshSync: async () => createOneCFreshSync(),
     retryOneCFreshSync: async () => createOneCFreshSync(),
+    suggestParties: async () => [],
+    suggestAddresses: async () => [],
     getReceiptPrintingStatus: async () => createReceiptPrintingStatus(),
     registerReceiptPrintingAction: async (_token, operationId, request) => createReceiptPrintingAction({
       financialOperationId: operationId,
@@ -12815,6 +12862,7 @@ function createSupplier(overrides: Partial<SupplierDto>): SupplierDto {
     phone: null,
     email: null,
     startingBalance: 0,
+    debt: 0,
     comment: null,
     isArchived: false,
     ...overrides,

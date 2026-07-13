@@ -16,6 +16,7 @@ using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Import;
+using GarageBalance.Api.Infrastructure.Integrations;
 using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -97,6 +98,10 @@ builder.Services.AddScoped<IOneCFreshSyncService, OneCFreshSyncService>();
 builder.Services.AddScoped<IReceiptPrintingAdapter, DisabledReceiptPrintingAdapter>();
 builder.Services.AddScoped<IReceiptPrintingRepository, EfReceiptPrintingRepository>();
 builder.Services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
+builder.Services.AddHttpClient<IDadataSuggestionService, DadataSuggestionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>();

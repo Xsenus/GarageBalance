@@ -158,6 +158,24 @@ public sealed class IntegrationSecretSettingsServiceTests
         Assert.DoesNotContain("one-c-secret", setting.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task UpsertSecretAsync_AcceptsDadataApiKeyAsProtectedSetting()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var saved = await service.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("DaData", "ApiKey", "private-dadata-key"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var restored = await service.GetSecretAsync("dadata", "apikey", CancellationToken.None);
+
+        Assert.True(saved.Succeeded);
+        Assert.Equal("DaData.ApiKey", saved.Value!.Purpose);
+        Assert.True(restored.Succeeded);
+        Assert.Equal("private-dadata-key", restored.Value);
+    }
+
     private static IntegrationSecretSettingsService CreateService(GarageBalanceDbContext context)
     {
         var provider = new EphemeralDataProtectionProvider();

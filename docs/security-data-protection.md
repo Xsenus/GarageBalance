@@ -10,7 +10,7 @@
 | Рабочие данные ГСК | номера гаражей, тарифы, виды поступлений/выплат, суммы начислений, платежи, поставщики | Доступ только по permissions, audit действий, no-store cache для API | справочники, финансы, отчеты |
 | Персональные данные | ФИО владельцев, телефоны, адреса, email пользователей, контактные лица поставщиков | Минимизация выдачи, masking в audit/logs, доступ по ролям, не отправлять в issue/чат без обезличивания | `owners`, `app_users`, `suppliers` |
 | Импортные данные | `.accdb`/`.mdb`, dry-run report, SHA-256 файла, quarantine/error bucket, строки с ошибками | Хранить вне Git, ограниченный доступ, checksum вместо лишнего копирования, удалить raw-файлы после приемки | `access_import_runs`, private import folders |
-| Секреты и токены | JWT signing key, connection string с паролем, будущие токены 1C Fresh, ключи фискального оборудования/API | Только env/user-secrets/deployment secrets; хранение чувствительных настроек и токенов интеграций шифровать перед записью в БД | `Jwt__SigningKey`, `.env`, будущие integration settings |
+| Секреты и токены | JWT signing key, connection string с паролем, токены 1C Fresh, ключ DaData, ключи фискального оборудования/API | Только env/user-secrets/deployment secrets; хранение чувствительных настроек и токенов интеграций шифровать перед записью в БД | `Jwt__SigningKey`, `.env`, integration settings |
 | Диагностические данные | application logs, nginx/systemd/docker logs, stack traces, export logs | Перед передачей маскировать email, token, secret, api_key, password, Bearer, длинные номера; не прикладывать дампы целиком | troubleshooting, deploy, support |
 
 ## Поля Повышенной Защиты
@@ -21,7 +21,7 @@
 - `FinancialOperation.Amount`, `DocumentNumber`, `Comment`, `CancelReason` - финансовые сведения и возможные персональные комментарии; видимость по permissions, запись действий в audit.
 - `Accrual.Comment`, `SupplierAccrual.Comment`, `MeterReading.Comment` - комментарии могут содержать ручные пояснения оператора, поэтому считаются чувствительными.
 - `AccessImportRun.OriginalFileName`, `ContentSha256`, `ReportJson` - данные импорта; raw-файл не хранить в Git и не отдавать через публичные endpoints.
-- `Jwt:SigningKey`, `Jwt__SigningKey`, `ConnectionStrings:Default`, `OneCFresh:RefreshToken` и настройки печати - секреты контура, хранить только вне репозитория; runtime-настройки интеграций сохранять в БД только через encryption at rest.
+- `Jwt:SigningKey`, `Jwt__SigningKey`, `ConnectionStrings:Default`, `OneCFresh:RefreshToken`, `DaData:ApiKey` и настройки печати - секреты контура, хранить только вне репозитория; runtime-настройки интеграций сохранять в БД только через encryption at rest.
 
 ## Правила Хранения Импорта
 
@@ -46,7 +46,7 @@
 3. Rotation ключей должен иметь план: новый ключ для новых записей, безопасная миграция старых значений и audit-событие администраторского действия.
 4. Логи ошибок шифрования не должны содержать plaintext секретов.
 5. Тесты должны проверять, что секретное значение не возвращается из API, не попадает в audit summary и не пишется в release/debug output.
-6. Для интеграционных секретов использовать `ISensitiveDataProtector` и `IIntegrationSecretSettingsService`: сохранять в `integration_secret_settings` только значения с префиксом `gb:protected:v1:`, разрешать только allowlist `OneCFresh:RefreshToken`, `ReceiptPrinting:DeviceConnection`, `ReceiptPrinting:ReceiptTemplate`, разделять значения по purpose и настраивать постоянный `DataProtection:KeysPath`. API изменения доступен только с `users.manage`, возвращает metadata без plaintext; UI очищает введенное значение после сохранения и не умеет читать его обратно.
+6. Для интеграционных секретов использовать `ISensitiveDataProtector` и `IIntegrationSecretSettingsService`: сохранять в `integration_secret_settings` только значения с префиксом `gb:protected:v1:`, разрешать только allowlist `OneCFresh:RefreshToken`, `ReceiptPrinting:DeviceConnection`, `ReceiptPrinting:ReceiptTemplate`, `DaData:ApiKey`, разделять значения по purpose и настраивать постоянный `DataProtection:KeysPath`. API изменения доступен только с `users.manage`, возвращает metadata без plaintext; UI очищает введенное значение после сохранения и не умеет читать его обратно.
 
 ## Acceptance-Критерии
 

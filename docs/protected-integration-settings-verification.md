@@ -4,7 +4,7 @@
 
 ## Backend
 
-- [x] `IntegrationSecretCatalog` разрешает только `OneCFresh:RefreshToken`, `ReceiptPrinting:DeviceConnection`, `ReceiptPrinting:ReceiptTemplate`.
+- [x] `IntegrationSecretCatalog` разрешает только `OneCFresh:RefreshToken`, `ReceiptPrinting:DeviceConnection`, `ReceiptPrinting:ReceiptTemplate`, `DaData:ApiKey`.
 - [x] `IntegrationSecretSettingsService` отклоняет неизвестные ключи, шифрует plaintext через отдельный purpose и хранит только `gb:protected:v1:` ciphertext.
 - [x] `PUT /api/integrations/settings/{provider}/{settingKey}` защищен `users.manage`, принимает новое значение и возвращает только metadata.
 - [x] Audit показывает provider, key, purpose и состояние `задано/обновлено`, но не plaintext.
@@ -16,6 +16,7 @@
 - [x] Поля очищаются после успешного сохранения; сохраненное значение нельзя прочитать обратно.
 - [x] Статус сразу обновляет число настроенных параметров по metadata.
 - [x] Пользователь без `users.manage` видит разрешенный статус интеграции, но не формы управления секретами.
+- [x] API-ключ DaData задается администратором в разделе «Настройки», не возвращается в браузер после записи и используется только backend-прокси подсказок организаций и адресов.
 
 ## Проверки
 

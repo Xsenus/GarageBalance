@@ -32,6 +32,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
   const [oneCFreshToken, setOneCFreshToken] = useState('')
   const [receiptDeviceConnection, setReceiptDeviceConnection] = useState('')
   const [receiptTemplate, setReceiptTemplate] = useState('')
+  const [dadataApiKey, setDadataApiKey] = useState('')
   const [protectedSettingSaving, setProtectedSettingSaving] = useState<string | null>(null)
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
@@ -458,6 +459,28 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
               <p className="form-hint">Сохраненные значения не возвращаются из API и после записи очищаются из формы.</p>
             </form>
           ) : null}
+        </section>
+      ) : null}
+      {canManageIntegrationSettings ? (
+        <section className="password-panel" aria-label="Подсказки DaData">
+          <div>
+            <p className="eyebrow">Интеграции</p>
+            <h2>DaData</h2>
+            <p>Ключ используется для подсказок организаций по ИНН и адресов в карточке поставщика.</p>
+          </div>
+          <form className="dictionary-form" aria-label="Защищенная настройка DaData" onSubmit={(event) => {
+            event.preventDefault()
+            void saveProtectedSetting('DaData', 'ApiKey', dadataApiKey, () => setDadataApiKey(''))
+          }}>
+            <FormField label="API-ключ DaData">
+              <input aria-label="Новый API-ключ DaData" type="password" autoComplete="new-password" value={dadataApiKey} onChange={(event) => setDadataApiKey(event.target.value)} />
+            </FormField>
+            <p className="form-hint">Сохраненный ключ нельзя просмотреть: администратор может только заменить его новым.</p>
+            <button className="secondary-button" type="submit" disabled={protectedSettingSaving !== null}>
+              <ShieldCheck size={16} />
+              <span>{protectedSettingSaving === 'DaData:ApiKey' ? 'Сохраняем...' : 'Сохранить API-ключ'}</span>
+            </button>
+          </form>
         </section>
       ) : null}
       {protectedSettingError ? <FormError>{protectedSettingError}</FormError> : null}

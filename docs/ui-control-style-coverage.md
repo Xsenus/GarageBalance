@@ -45,7 +45,7 @@
 | Пользователи | Таблица, editor dialog, role select, password input, delete/restore confirmations | Confirmation diff и restore focus покрыты тестами |
 | Справочники | Forms, archive/restore dialogs, table/list actions, date/select/money controls | Общий editor и confirmation flow покрыт, отдельные будущие модели еще открыты |
 | Тарифы и сборы-прототип | Editable cells, add service/fee dialogs, threshold action, one-time delete/restore | Стиль приведен к общим dialogs/buttons; backend-модель сборов остается открытой |
-| Контрагенты-прототип | Tabs `Гаражи`/`Поставщики`/`Персонал`, dialogs per section, delete/restore confirmations, нумерованная server pagination | Все три таблицы используют единый `PageNavigator`; карточка гаража разделяет основные и финансовые поля, сохраняет сведения о счётчиках, а удаление доступно только в таблице; backend-модели контактов/персонала еще открыты |
+| Контрагенты-прототип | Tabs `Гаражи`/`Поставщики`/`Персонал`, dialogs per section, delete/restore confirmations, нумерованная server pagination, editable combobox-подсказки DaData | Все три таблицы используют единый `PageNavigator`; карточка гаража разделяет основные и финансовые поля; карточка поставщика расширена, показывает не менее трех контактов, отдельные телефон и почту, расчетную задолженность и единообразные подсказки по ИНН/адресу с сохранением ручного ввода; удаление доступно только в таблице |
 | Показания-прототип | Year input, type select, editable table cells, confirmation dialog | Нужна backend-модель истории и сохранения показаний по гаражам |
 | Платежи-прототип | Payments table, add accrual/payment/bank dialogs, full payment dialog | Требуется дальнейшее удаление лишней информации и привязка к backend-логике |
 | Управление фондами-прототип | Fund table, deposit/withdraw dialogs | Confirmation UI есть, backend/audit для фондов остается открытым |
@@ -64,6 +64,7 @@
 - Высокие dialogs должны прокручиваться внутри viewport, а header/actions оставаться доступными.
 - `focusHooks` покрывают Escape, focus-on-open, focus-trap и восстановление фокуса.
 - `PageNavigator` покрыт тестами диапазонов страниц, стрелок, нумерованных кнопок, быстрого перехода и disabled-состояния; workflow контрагентов проверяет запрос второй серверной страницы.
+- Editable combobox для ИНН и адреса поставщика сохраняет общий стиль input, использует роли `combobox`/`listbox`/`option`, не запускает поиск при простом открытии карточки и не блокирует ручной ввод при недоступности DaData.
 - Основные workflow-тесты открывают и проверяют dialogs тарифов, контрагентов, показаний, платежей, фондов, пользователей, справочников, отчетов, импорта и истории.
 
 ## Открытые Хвосты

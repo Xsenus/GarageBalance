@@ -523,7 +523,8 @@ public sealed class DictionaryService(
     {
         var normalizedSearch = NormalizeSearch(search);
         var suppliers = await supplierRepository.GetListAsync(groupId, normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
-        return suppliers.Select(ToSupplierDto).ToList();
+        var debtTotals = await supplierRepository.GetDebtTotalsAsync(suppliers.Select(item => item.Id).ToArray(), cancellationToken);
+        return suppliers.Select(item => ToSupplierDto(item, debt: debtTotals.GetValueOrDefault(item.Id, item.StartingBalance))).ToList();
     }
 
     public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
@@ -542,7 +543,8 @@ public sealed class DictionaryService(
         };
         var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
         var page = await supplierRepository.GetPageAsync(groupId, normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
-        return new PagedResult<SupplierDto>(page.Items.Select(item => ToSupplierDto(item.Supplier, item.PrimaryContact)).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
+        var debtTotals = await supplierRepository.GetDebtTotalsAsync(page.Items.Select(item => item.Supplier.Id).ToArray(), cancellationToken);
+        return new PagedResult<SupplierDto>(page.Items.Select(item => ToSupplierDto(item.Supplier, item.PrimaryContact, debtTotals.GetValueOrDefault(item.Supplier.Id, item.Supplier.StartingBalance))).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync(UpsertSupplierRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -2467,7 +2469,7 @@ public sealed class DictionaryService(
             overdueDebt ?? Math.Max(calculatedBalance, 0m));
     }
 
-    private static SupplierDto ToSupplierDto(Supplier supplier)
+    private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {
         return new SupplierDto(
             supplier.Id,
@@ -2481,12 +2483,13 @@ public sealed class DictionaryService(
             supplier.Email,
             supplier.StartingBalance,
             supplier.Comment,
-            supplier.IsArchived);
+            supplier.IsArchived,
+            debt ?? supplier.StartingBalance);
     }
 
-    private static SupplierDto ToSupplierDto(Supplier supplier, SupplierPrimaryContactData? primaryContact)
+    private static SupplierDto ToSupplierDto(Supplier supplier, SupplierPrimaryContactData? primaryContact, decimal? debt = null)
     {
-        return ToSupplierDto(supplier) with
+        return ToSupplierDto(supplier, debt) with
         {
             ContactPerson = primaryContact?.FullName ?? supplier.ContactPerson,
             Phone = primaryContact?.Phone ?? supplier.Phone,

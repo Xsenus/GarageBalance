@@ -45,6 +45,7 @@ export type SupplierDto = {
   phone: string | null
   email: string | null
   startingBalance: number
+  debt: number
   comment: string | null
   isArchived: boolean
 }
