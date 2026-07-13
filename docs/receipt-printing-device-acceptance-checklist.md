@@ -4,7 +4,7 @@ This checklist is used only after the receipt printing scenario, responsible par
 
 ## Source Context
 
-- `docs/project-roadmap.md`: Stage 10 acceptance item `Проверить печать на реальном или тестовом устройстве`.
+- `docs/archive/project-roadmap.md`: Stage 10 acceptance item `Проверить печать на реальном или тестовом устройстве`.
 - `docs/receipt-printing-design.md`: target adapter boundary, statuses, audit events, and frontend expectations.
 - `docs/receipt-printing-scenario-decision-template.md`: selected internal, fiscal, or mixed scenario.
 - `docs/receipt-printing-equipment-decision-template.md`: selected device, local printer, browser/PDF print, emulator, or external service.

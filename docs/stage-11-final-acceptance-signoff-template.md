@@ -4,7 +4,7 @@ Use this template only when the customer is ready to accept the final deployment
 
 ## Source Context
 
-- `docs/project-roadmap.md`: Stage 11 item `Получить финальную приемку и закрыть этап актом/автоматической приемкой`.
+- `docs/archive/project-roadmap.md`: Stage 11 item `Получить финальную приемку и закрыть этап актом/автоматической приемкой`.
 - `docs/local-pc-install-checklist.md`: local PC installation evidence.
 - `docs/vps-deployment-checklist.md`: VPS/domain/TLS deployment evidence.
 - `docs/postgres-backup-restore.md`: backup, restore-check, and scheduled backup evidence.

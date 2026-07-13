@@ -34,17 +34,19 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 - before the final response and before committing, perform an explicit process audit by command line for workspace-related `dotnet`, `testhost`, `node`, Vitest, Vite, Playwright, database, watcher, and dev-server processes; stop every process started for the task, run `dotnet build-server shutdown` when .NET checks were used, and verify that no task-owned process remains; do not stop shared Codex/MCP servers, language servers, IDE processes, or user-started services, and record any intentionally retained process with its purpose in the final response;
 - clean up temporary artifacts created during the work, such as generated previews, screenshots, scratch exports, copied customer files, temporary reports, migration scripts used only for inspection, logs, caches, and local analysis folders; keep an artifact only when the user explicitly asked for it, it is intentionally part of the deliverable, or it is required for a committed test fixture/documentation example;
 - check local database behavior whenever a local PostgreSQL/database environment is available; if it is unavailable, state that honestly in the roadmap history and final response, and use the closest safe substitute such as migration SQL generation, EF/integration tests, or the VPS test environment when appropriate;
-- update the relevant roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains;
+- update the relevant active roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains; if there is no active roadmap outside `docs/archive/`, skip this step and do not create a replacement roadmap unless the user asks for one;
 - add an end-user "Что нового" entry when the change is visible to cooperative staff/admins or changes business rules, permissions, integrations, data handling, reports, imports, or visible defects;
 - if no release note is required because the change is infrastructure-only or documentation-only, leave the release file unchanged and mention the reason when useful;
 - after successful verification of an implementation task, make logical commits with Russian commit messages unless the user explicitly asked not to commit yet; never treat a commit as permission to push;
 - do not push until the user explicitly asks for push.
 
-When the user asks to check whether the last task is done, inspect the current code, docs, tests, roadmap, and release notes before deciding. If anything is missing, finish it before moving to the next task.
+When the user asks to check whether the last task is done, inspect the current code, active docs, tests, active roadmap when one exists, and release notes before deciding. Archived roadmaps must not be used to expand or resume the task unless the user explicitly orders work from the archive.
 
 ## Roadmaps
 
-Roadmaps live in `docs/` as human-readable Markdown documents. Before starting any implementation that belongs to a roadmap, open the relevant roadmap and update statuses as the work progresses.
+Active roadmaps live directly in `docs/` as human-readable Markdown documents. Before starting implementation that the user explicitly tied to an active roadmap, open that roadmap and update statuses as the work progresses.
+
+Everything under `docs/archive/` is frozen archive material. Do not edit, move, rename, reformat, update statuses or history, calculate it as active progress, implement its checklist items, or use it to broaden a chat task. Do not change production code or tests merely to satisfy an archived roadmap. Existing tests may read the frozen snapshot only for historical regression evidence; a failure involving archived evidence does not authorize changing the archive or implementing an archived item. Reading an archived file is allowed only when the user explicitly asks to inspect or execute that archive, or when a current task needs a historical fact that cannot be obtained from active sources. Work from an archived roadmap may resume only after the user explicitly names the archived roadmap or item and orders its execution. Until then, archived `[ ]`, `[~]`, `[!]`, `[decision]`, and `[acceptance]` markers are historical records, not pending work.
 
 Use these status markers consistently:
 
@@ -67,9 +69,9 @@ Every roadmap must include:
 
 When the user asks to create or prepare a roadmap, make it a full execution roadmap, not a short plan. It must be checkable by the same status markers, broken into backend, frontend, data/migrations, tests, documentation, deployment, and acceptance work where relevant. If the roadmap is large or spans several modules, create a separate `docs/*-roadmap.md` file and add a reference or history entry in the main project roadmap. Future agents must be able to open the roadmap, continue from the current statuses, and update each item as work is completed.
 
-Always update `История выполнения` when you complete, verify, defer, or unblock meaningful work. Each entry must explain what was done, why it was done, how it was checked, and what remains.
+Always update `История выполнения` in the relevant active roadmap when you complete, verify, defer, or unblock meaningful roadmap work. If no active roadmap exists, do not update archived history and do not create a roadmap solely to log the task.
 
-When reporting roadmap status to the user, include a percentage summary: how many checkable items are completed, in progress, not started, blocked, waiting for decisions, and waiting for acceptance. Calculate the percentage from the active roadmap checklist, excluding the `История выполнения` log entries so historical records do not inflate progress.
+When reporting an active roadmap status to the user, include a percentage summary: how many checkable items are completed, in progress, not started, blocked, waiting for decisions, and waiting for acceptance. Calculate the percentage only from the active roadmap checklist, excluding `docs/archive/` and the `История выполнения` log entries so archived and historical records do not inflate progress.
 
 Do not mark a roadmap item as `[x]` until the related code, tests, encoding checks, database checks, and documentation updates required by that item are complete.
 

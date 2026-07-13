@@ -4,7 +4,7 @@
 
 ## Source Context
 
-- `docs/project-roadmap.md`: Stage 10 требует уточнить обязательные реквизиты печатной квитанции/чека для внутреннего учета.
+- `docs/archive/project-roadmap.md`: Stage 10 требует уточнить обязательные реквизиты печатной квитанции/чека для внутреннего учета.
 - `docs/receipt-printing-design.md`: минимальная внутренняя квитанция уже описана как проектная основа, но обязательность каждого поля требует решения заказчика.
 - `docs/receipt-printing-scenario-decision-template.md`: юридический сценарий выбирается отдельно.
 - `docs/receipt-printing-obligation-decision-template.md`: ответственное лицо и перечень операций выбираются отдельно.

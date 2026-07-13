@@ -4,7 +4,7 @@
 
 ## Source Materials
 
-- `docs/project-roadmap.md` - Stage 2 и история выполнения.
+- `docs/archive/project-roadmap.md` - Stage 2 и история выполнения.
 - `docs/data-model-erd.md` - текущие сущности и связи PostgreSQL-модели.
 - `backend/GarageBalance.Api/Infrastructure/Data/Migrations/20260623152000_DefaultAccountingTypes.cs` - стартовые системные виды поступлений и выплат.
 - `backend/GarageBalance.Api/Application/Dictionaries/DictionaryService.cs` - текущие правила создания, изменения, архивирования и восстановления.

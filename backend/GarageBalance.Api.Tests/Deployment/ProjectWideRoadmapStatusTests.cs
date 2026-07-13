@@ -6,7 +6,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void UsersObjectCoverageIsMarkedCompleteWhenAuthAndUserAuditFlowsAreCovered()
     {
         var usersLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Пользователи: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Пользователи:", usersLine, StringComparison.Ordinal);
@@ -23,7 +23,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void CurrentSafeRestoreButtonsAreMarkedCompleteWhenBackendUiCoverageIsDocumented()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -63,7 +63,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void CurrentRestoreConflictChecksAreMarkedCompleteWhenBusinessRulesAreCovered()
     {
         var restoreConflictLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("Восстановление проверяет конфликты уникальности", StringComparison.Ordinal));
@@ -88,7 +88,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void UpdateRequestDiffCoverageIsMarkedCompleteWhenCurrentServicesWriteOldAndNewValues()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -120,7 +120,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void RolesAndPermissionsAuditContextIsMarkedCompleteWhenAssignmentsAndPermissionMatrixWriteOldAndNewSets()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -149,7 +149,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void NoOpUpdateCoverageIsMarkedCompleteWhenCurrentServicesSkipFalseAuditEvents()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -177,7 +177,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void FinancialAuditContextCoverageIsMarkedCompleteWhenCurrentFinanceAndFundEventsHaveMoneyAndRelatedContext()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -213,7 +213,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void TariffAndAccrualAuditContextIsMarkedCompleteWhenRatesPeriodsThresholdsAndAccrualFieldsAreCovered()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -250,7 +250,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DefaultDeletionRuleIsMarkedCompleteWhenSoftArchiveCancelAndPolicyCoverageExist()
     {
         var deletionRuleLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("Удаление по умолчанию", StringComparison.Ordinal) &&
@@ -274,7 +274,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DangerousActionsConfirmationRuleIsMarkedCompleteWhenFrontendBackendAndCoverageAgree()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -307,7 +307,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DangerousBackendReasonRulesAreMarkedCompleteWhenCurrentRequestsAreProtected()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -348,7 +348,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ConfirmationInventoryIsMarkedCompleteWhenCurrentFlowsAndDialogPolicyAreCovered()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -379,7 +379,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void EditSaveConfirmationRulesAreMarkedCompleteWhenDiffAndNoOpCoverageExist()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var topRuleLines = activeRoadmapLines
@@ -429,7 +429,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void UnifiedUiControlStyleRuleIsMarkedCompleteWhenMilestoneAndCoverageAgree()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var topRuleLines = activeRoadmapLines
@@ -467,7 +467,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OwnersObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var ownersLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Владельцы: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Владельцы:", ownersLine, StringComparison.Ordinal);
@@ -483,7 +483,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void GaragesObjectCoverageIsMarkedCompleteWhenCreateUpdateArchiveRestoreFlowsAreCovered()
     {
         var garagesLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Гаражи: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Гаражи:", garagesLine, StringComparison.Ordinal);
@@ -500,7 +500,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void SuppliersObjectCoverageIsMarkedCompleteWhenAuditRestoreAndDuplicateFlowsAreCovered()
     {
         var suppliersLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Поставщики: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Поставщики:", suppliersLine, StringComparison.Ordinal);
@@ -519,7 +519,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void TariffsAndServicesObjectCoverageIsMarkedCompleteWhenAuditArchiveRestoreFlowsAreCovered()
     {
         var tariffsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Тарифы и услуги: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Тарифы и услуги:", tariffsLine, StringComparison.Ordinal);
@@ -540,7 +540,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void MeterReadingsObjectCoverageIsMarkedCompleteWhenAuditCancelRestoreAndWorkflowFlowsAreCovered()
     {
         var meterReadingsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Показания счетчиков: ввод", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Показания счетчиков:", meterReadingsLine, StringComparison.Ordinal);
@@ -559,7 +559,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OwnerPaymentsObjectCoverageIsMarkedCompleteWhenIncomeDebtRestoreAndFullPaymentFlowsAreCovered()
     {
         var ownerPaymentsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Платежи владельцев: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Платежи владельцев:", ownerPaymentsLine, StringComparison.Ordinal);
@@ -578,7 +578,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void FullPaymentAcceptanceScenarioIsMarkedCompleteWhenRoadmapCodeTestsAndReleaseNotesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -628,7 +628,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportAcceptanceScenarioIsInProgressWhenDryRunReportQuarantineAndApplyRequestExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -693,7 +693,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void BackendUnitTestingMatrixIsInProgressWhenFinanceTariffMeterDebtBalanceAndDateCoverageExists()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -740,7 +740,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void BalanceModelRoadmapItemRequiresBusinessDecisionForManualCorrectionsAndOverpaymentClosure()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -794,7 +794,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void MonthlyAccrualRowsRoadmapItemIsCompleteWhenAccrualTablesTransferIndexesAndUiTestsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -863,7 +863,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void IncomeExcelScenarioRoadmapItemIsCompleteWhenWorksheetPaymentCellCashAndHistoryAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -938,7 +938,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void MeterReadingOperatorScenarioIsCompleteWhenYearTableWorksheetAccrualsDebtAndReportsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -989,13 +989,13 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ThinControllerArchitectureIsCompleteWhenAllControllersUseApplicationAbstractionsAndPolicyTests()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "thin-controller-architecture-verification.md"));
-        var projectWideRoadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"))
+        var projectWideRoadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var thinnessTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Controllers", "ControllerThinnessTests.cs"));
@@ -1037,7 +1037,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void BusinessCalculationsRemainInServicesAndDomainWhenControllersForbidDomainHelpers()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1091,7 +1091,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DatabaseQueryBoundariesAreCompleteForCurrentListsReportsImportsFundsAndReleases()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1150,12 +1150,12 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AuditContractIsCompleteForCurrentMutatingServicesWhileFutureAdaptersRemainOpen()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
-        var projectWideRoadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"))
+        var projectWideRoadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "audit-contract-verification.md"));
@@ -1217,7 +1217,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void IncomeServiceRulesRoadmapItemRequiresBusinessDecisionForCurrentMonthEarlyPaymentWaterAndAnnualStopRules()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1286,7 +1286,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ExpenseExcelScenarioRoadmapItemRequiresBusinessDecisionForRolloverZeroingAndManualCostEntry()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1351,7 +1351,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void BackendFinanceTestCoverageRoadmapItemIsCompleteWhenCalculationsDebtsPermissionsAndAuditAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1419,7 +1419,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void PaymentAllocationOpenQuestionRemainsDecisionUntilDebtOverpaymentAndCarryForwardRulesAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1484,14 +1484,14 @@ public sealed class ProjectWideRoadmapStatusTests
     public void GarageOwnerChangeOpenQuestionRemainsDecisionUntilHistoryBalanceAndDataRulesAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var templateText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "garage-owner-change-decision-template.md"));
         var balanceChecklistText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "balance-model-decision-checklist.md"));
-        var historyRoadmapText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"));
+        var historyRoadmapText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
         var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
 
         var openQuestionLine = activeRoadmapLines.Single(line =>
@@ -1551,7 +1551,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void LocalBackupStrategyOpenQuestionRemainsDecisionUntilStorageRetentionAndRestoreOwnershipAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1614,7 +1614,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void SharedTestBuildersAndFixturesAreCompleteWhenCommonDatabaseBuilderTestsAndAdoptionExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1673,7 +1673,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void SystemDictionariesRoadmapItemRemainsDecisionUntilClassificationOperationsCodesAndImportRulesAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1751,7 +1751,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StaffDepartmentsAndMembersAreCompleteWhenModelsCrudFinanceReportsAuditUiTestsAndReleaseExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1885,7 +1885,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void SupplierAndPersonnelGroupsAreCompleteWhenEditableCrudAuditUiTestsAndReleaseExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -1974,7 +1974,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DictionaryWorkspaceUiIsCompleteWhenSubgroupsSearchStatesPagingContextCrudAndCentralAuditExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2059,7 +2059,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DictionaryBackendCrudTestsAreCompleteWhenServicesControllersValidationDuplicatesPoliciesAndForbiddenExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2133,7 +2133,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void DictionaryReactTestsAreCompleteWhenListsFormsFiltersErrorsValidationArchivePagingAndPermissionsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2204,7 +2204,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ContractorGreenExcelColumnsRemainDecisionUntilHeadersFilterTypesAndInteractionRulesAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2253,7 +2253,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void EffectiveDatedTariffsAreCompleteWhenVersionsSnapshotsAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2322,7 +2322,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void TariffEffectiveDateCalculationIsCompleteWhenEarlierMonthsFailEffectiveMonthSucceedsAndPostedSnapshotsStayImmutable()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2372,7 +2372,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void TariffBackendTestsAreCompleteWhenAllBasesVersionsSnapshotsValidationDuplicatesAndAuditAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2425,7 +2425,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void TariffReactTestsAreCompleteWhenFormsValidationConfirmationsPermissionsAndCentralAuditExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2472,7 +2472,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ExternalSecretConfigurationIsCompleteWhenUserSecretsEnvironmentDeploymentAndPersistentKeysExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2518,7 +2518,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ProtectedIntegrationSettingsAreCompleteWhenAllowlistEncryptionAdminApiUiAuditAndPersistentKeysExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2574,7 +2574,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ContractorCardsAreCompleteWhenNormalizedModelsCrudFinancialReportsSoftDeleteAuditUiTestsAndReleasesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2708,7 +2708,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void FrontendPaymentTestCoverageRoadmapItemIsCompleteWhenTablesDialogsPaymentsWarningsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2761,7 +2761,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void IncomeReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2828,7 +2828,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ExpenseReportRoadmapItemIsCompleteWhenFiltersRowModesExportsAndUiTestsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2894,7 +2894,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void XlsxExportRoadmapItemIsCompleteWhenCurrentReportWorkbooksRoutesAndUiClientsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -2972,7 +2972,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void PdfExportRoadmapItemIsCompleteWhenCurrentReportDocumentsRoutesAndUiClientsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3048,7 +3048,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ExportFileNameRoadmapItemIsCompleteWhenPeriodAndSnapshotReportsUseStableNames()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3111,7 +3111,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReportExportFiltersAndPermissionsRoadmapItemIsCompleteWhenExportsShareScreenContracts()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3251,7 +3251,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void BackendReportTestsRoadmapItemIsCompleteWhenRequestsFiltersTotalsAndPermissionsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3361,7 +3361,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void FrontendReportTestsRoadmapItemIsCompleteWhenFiltersStatesExportsAndErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3470,7 +3470,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageSevenReportPerformanceCheckRequiresRealPostgresAcceptance()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3523,7 +3523,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AdditionalReportsOpenQuestionRemainsDecisionUntilCustomerConfirmsThreeReportSlotsAndAcceptanceCriteria()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3588,7 +3588,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageSevenReportExtendedAcceptanceRuleIsMarkedCompleteWhenSourceMonthlyChecklistAndRoadmapSeparateManualAcceptance()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3626,7 +3626,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AcceptanceTestingMatrixRequiresManualRealDataLocalInstallAndDeploymentChecks()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3681,7 +3681,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessReaderRoadmapItemRemainsBlockedUntilAceOrConversionSmokeReadExists()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3722,7 +3722,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessReaderOpenRiskRemainsBlockedUntilPrivateSmokeReadOrConversionIsRecorded()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3766,7 +3766,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void RolesFirstAdminOpenQuestionRemainsDecisionUntilCustomerRoleMatrixAndAdminOwnerAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3825,7 +3825,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessWorkingCopyRoadmapItemRemainsBlockedUntilPrivateCopyChecksumAndPrivacyCheckExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3866,7 +3866,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessSchemaInventoryRoadmapItemRemainsBlockedUntilPrivateReaderAndSafeInventoryExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3916,7 +3916,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessPreImportBaselineRoadmapItemRemainsBlockedUntilSafeCountsAndChecksumsExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -3964,7 +3964,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessPostgreSqlMappingRoadmapItemRemainsBlockedUntilFieldLevelInventoryMappingExists()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4018,7 +4018,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessFormsQueriesDecisionRoadmapItemRequiresInventoryAndBusinessApproval()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4063,7 +4063,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessDryRunImportRoadmapItemRemainsBlockedUntilLiveReaderCountsAndReportExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4114,7 +4114,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessTransferRoadmapItemRemainsBlockedUntilLiveReaderMappingAndReconciliationExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4172,7 +4172,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportIdempotencyRoadmapItemRemainsBlockedUntilTransferUsesFingerprintRegistry()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4230,7 +4230,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportQuarantineRoadmapItemRemainsBlockedUntilTransferRegistersMalformedRows()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4295,7 +4295,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportReconciliationReportRoadmapItemRemainsBlockedUntilLiveTransferBaselineAndReportExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4358,7 +4358,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportBackendTestsRoadmapItemRemainsBlockedUntilMappingTransferAndPostgresCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4420,7 +4420,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportFrontendTestsRoadmapItemRemainsBlockedUntilTransferWizardAndReconciliationUiExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -4478,7 +4478,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void SupplierAndStaffPayoutsObjectCoverageIsMarkedCompleteWhenExpenseRestoreAndLimitFlowsAreCovered()
     {
         var payoutsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Выплаты поставщикам и персоналу: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Выплаты поставщикам и персоналу:", payoutsLine, StringComparison.Ordinal);
@@ -4497,7 +4497,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OwnerAccrualsObjectCoverageIsMarkedCompleteWhenManualRegularMeterCancelAndRestoreFlowsAreCovered()
     {
         var ownerAccrualsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Начисления владельцам: ручные", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Начисления владельцам:", ownerAccrualsLine, StringComparison.Ordinal);
@@ -4517,7 +4517,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void SupplierAndSalaryAccrualsObjectCoverageIsMarkedCompleteWhenManualSalaryCancelAndRestoreFlowsAreCovered()
     {
         var supplierAccrualsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Начисления поставщикам и зарплаты: создание", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Начисления поставщикам и зарплаты:", supplierAccrualsLine, StringComparison.Ordinal);
@@ -4535,7 +4535,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void FundsObjectCoverageIsMarkedCompleteWhenFundOperationsAuditCancelRestoreAndLimitsAreCovered()
     {
         var fundsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Фонды: пополнение", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Фонды:", fundsLine, StringComparison.Ordinal);
@@ -4554,7 +4554,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void CashAndBankObjectCoverageIsMarkedCompleteWhenBankDepositFundOperationsAndReportsAreCovered()
     {
         var cashAndBankLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Касса и банк: сдача", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[x]` Касса и банк:", cashAndBankLine, StringComparison.Ordinal);
@@ -4574,7 +4574,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ChangeHistoryBackendStorageRuleIsMarkedCompleteWhenAuditEventsArePersistedInPostgreSql()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -4610,7 +4610,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ChangeHistoryContractCoverageIsMarkedCompleteWhenStructuredFieldsAndIndexesAreCovered()
     {
         var changeHistoryLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("ChangeHistoryEvent", StringComparison.Ordinal));
@@ -4637,7 +4637,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ChangeHistoryMinimumVisibleFieldsCoverageIsMarkedCompleteWhenDtoUiCsvAndStorageAreCovered()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
         var definitionOfDoneLines = activeRoadmapLines
@@ -4686,7 +4686,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ChangeHistoryServiceTestCoverageIsMarkedCompleteWhenAuditServiceScenariosAreCovered()
     {
         var serviceTestsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("service tests: diff", StringComparison.Ordinal));
@@ -4710,7 +4710,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
             .ToArray();
 
@@ -4752,7 +4752,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
             .ToArray();
 
@@ -4779,7 +4779,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
             .ToArray();
 
@@ -4794,7 +4794,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("dictionaries.read", quickLinksLine, StringComparison.Ordinal);
         Assert.Contains("App.test.tsx", quickLinksLine, StringComparison.Ordinal);
         Assert.Contains("future deep links", quickLinksLine, StringComparison.Ordinal);
-        Assert.Contains(nameof(ChangeHistoryObjectQuickLinksAreMarkedCompleteWhenContractorCardsOpenFromAuditDetails), File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md")), StringComparison.Ordinal);
+        Assert.Contains(nameof(ChangeHistoryObjectQuickLinksAreMarkedCompleteWhenContractorCardsOpenFromAuditDetails), File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4802,7 +4802,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
             .ToArray();
 
@@ -4835,7 +4835,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         const string historyHeader = "## \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f";
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, historyHeader, StringComparison.Ordinal))
             .ToArray();
 
@@ -4868,7 +4868,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ChangeHistoryControllerTestCoverageIsMarkedCompleteWhenAuditControllerContractIsCovered()
     {
         var controllerTestsLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.StartsWith("- `[x]`", StringComparison.Ordinal) &&
                 line.Contains("controller tests: success", StringComparison.Ordinal));
@@ -4898,7 +4898,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ChangeHistoryLeftMenuNamingDecisionIsMarkedCompleteWhenCustomerLabelIsUsed()
     {
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## РСЃС‚РѕСЂРёСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ", StringComparison.Ordinal))
             .ToArray();
 
@@ -4933,7 +4933,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -4994,7 +4994,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -5091,7 +5091,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -5193,7 +5193,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshErrorRetryConflictHandlingIsMarkedCompleteWhenBackendUiTestsAndReleaseNotesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5283,7 +5283,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshPreviewModeIsMarkedCompleteWhenEndpointAuditUiTestsAndReleaseNotesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5397,7 +5397,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshSyncDesignIsMarkedCompleteWhenModelStatusesJournalAndPreviewAreDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5443,7 +5443,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshBackendCoverageIsMarkedCompleteWhenClientMappingRetryErrorsAndPermissionsAreTested()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5504,7 +5504,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void IntegrationTestingMatrixIsMarkedCompleteWhenOneCFreshSecretsAndReceiptAdapterErrorsAreCovered()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5578,7 +5578,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshReactCoverageIsMarkedCompleteWhenSettingsLaunchStatusesAndErrorsAreTested()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5586,7 +5586,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var reactCoverageLine = activeRoadmapLines.Single(line =>
             line.Contains("Добавить React-тесты настроек, запуска, статусов и ошибок", StringComparison.Ordinal));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
-        var projectWideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"));
+        var projectWideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         Assert.StartsWith("- `[x]`", reactCoverageLine, StringComparison.Ordinal);
         Assert.Contains("App.test.tsx", reactCoverageLine, StringComparison.Ordinal);
@@ -5618,7 +5618,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshContourAcceptanceRemainsAcceptanceUntilRealContourChecklistIsCompleted()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5670,7 +5670,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshDataScopeOpenQuestionRemainsDecisionUntilDirectionDictionariesDocumentsAndConflictRulesAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5743,7 +5743,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingDesignIsMarkedCompleteWhenFormsAdapterAuditPermissionsAndTestsAreDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5765,7 +5765,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "Application",
             "Integrations",
             "ReceiptPrintingService.cs"));
-        var projectWideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-wide-history-and-safety-roadmap.md"));
+        var projectWideText = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         Assert.StartsWith("- `[x]`", designLine, StringComparison.Ordinal);
         Assert.Contains("docs/receipt-printing-design.md", designLine, StringComparison.Ordinal);
@@ -5812,7 +5812,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingScenarioDecisionRemainsDecisionUntilOwnerSelectsInternalOrFiscalReceipt()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5878,7 +5878,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingScenarioOpenQuestionRemainsDecisionUntilOwnerSelectsInternalOrFiscalReceipt()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5933,7 +5933,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingEquipmentDecisionRemainsDecisionUntilDeviceConnectionAndAcceptanceEvidenceAreSelected()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -5997,7 +5997,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingObligationDecisionRemainsDecisionUntilResponsiblePartyAndOperationScopeAreSelected()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6059,7 +6059,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingRequisitesDecisionRemainsDecisionUntilMandatoryFieldsAndDataMinimizationAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6122,7 +6122,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingScenarioImplementationRemainsBlockedUntilBusinessDecisionsAreApproved()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6169,7 +6169,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingDeviceAcceptanceRemainsAcceptanceUntilRealDeviceOrApprovedMethodIsVerified()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6237,7 +6237,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingJournalIsMarkedCompleteWhenAuditStatusesErrorsAndClientCoverageExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6309,7 +6309,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingReprintCopyMarkIsMarkedCompleteWhenBackendUiAuditAndReleaseNotesExist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6375,7 +6375,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -6425,7 +6425,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AuthenticatedStartScreenIsMarkedCompleteWhenLoginOpensWorkspaceDashboardWithoutLandingPage()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6470,7 +6470,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -6516,7 +6516,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -6597,7 +6597,7 @@ public sealed class ProjectWideRoadmapStatusTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var activeRoadmapLines = File
-            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
 
@@ -6657,7 +6657,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageEightAcceptanceAndFullTestRunStatusesAreConsistent()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6731,7 +6731,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageEightInfrastructureChecksRemainBlockedWithoutRequiredLocalTools()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6799,7 +6799,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenDockerfilesRemainBlockedWithoutDockerCliButHaveStaticCoverage()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6843,7 +6843,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenDockerComposeRemainsBlockedWithoutDockerCliButHasFinalLocalStructure()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6886,7 +6886,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenLocalPcInstallGuideRemainsBlockedUntilLiveLocalInstallButHasCompleteChecklist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6931,7 +6931,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenVpsDeploymentGuideRemainsBlockedUntilLiveDeployButHasCompleteChecklist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -6978,7 +6978,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenPostgresBackupRestoreRemainsBlockedWithoutLocalPostgresButHasScriptsDocsAndOwnerFix()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7026,7 +7026,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenRegularLocalBackupRemainsBlockedUntilTaskSchedulerRunButHasScriptDocsAndChecklist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7069,7 +7069,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenMigrationVerificationRemainsBlockedWithoutLocalPostgresButHasChecklistAndScript()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7114,7 +7114,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenFullBackendFrontendTestRunIsMarkedCompleteWhenCurrentVerificationCommandsPass()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7155,7 +7155,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenFinalPerformanceCheckRemainsBlockedWithoutRealPostgresDataAndHasChecklist()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7190,7 +7190,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenFinalReleaseNoteIsMarkedCompleteWhenReleaseEntryWarnsAboutAcceptanceGates()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7225,7 +7225,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenFinalAcceptanceRemainsAcceptanceUntilCustomerSignoffAndLiveGatesAreRecorded()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7287,7 +7287,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void StageElevenRecoveryCheckRemainsBlockedWithoutLocalPostgresAndHasRunbook()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();
@@ -7321,7 +7321,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void AccessImportObjectCoverageKeepsPartialStatusUntilRealImportAndRollbackAreImplemented()
     {
         var importLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Импорт Access: dry-run", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[~]` Импорт Access:", importLine, StringComparison.Ordinal);
@@ -7338,7 +7338,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void OneCFreshCoverageKeepsPartialStatusUntilRealSyncAndConflictResolutionAreImplemented()
     {
         var integrationLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("1C Fresh и будущие интеграции:", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[~]` 1C Fresh и будущие интеграции:", integrationLine, StringComparison.Ordinal);
@@ -7355,7 +7355,7 @@ public sealed class ProjectWideRoadmapStatusTests
     public void ReceiptPrintingCoverageKeepsPartialStatusUntilRealDeviceAndAcceptanceAreImplemented()
     {
         var receiptLine = File
-            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"))
+            .ReadAllLines(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"))
             .Single(line => line.Contains("Печать чеков/квитанций:", StringComparison.Ordinal));
 
         Assert.StartsWith("- `[~]` Печать чеков/квитанций:", receiptLine, StringComparison.Ordinal);

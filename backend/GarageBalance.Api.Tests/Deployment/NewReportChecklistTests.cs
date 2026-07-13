@@ -27,7 +27,8 @@ public sealed class NewReportChecklistTests
         Assert.Contains("npm run test -- --runInBand", document, StringComparison.Ordinal);
         Assert.Contains("dotnet format --verify-no-changes", document, StringComparison.Ordinal);
         Assert.Contains("releases.json", document, StringComparison.Ordinal);
-        Assert.Contains("docs/project-roadmap.md", document, StringComparison.Ordinal);
+        Assert.Contains("Архивный roadmap не обновлять", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("docs/archive/project-roadmap.md", document, StringComparison.Ordinal);
         Assert.Contains("UTF-8/no BOM", document, StringComparison.Ordinal);
     }
 

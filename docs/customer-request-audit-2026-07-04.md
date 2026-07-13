@@ -14,9 +14,9 @@
 - `backend/GarageBalance.Api/Controllers/DictionariesController.cs`
 - `backend/GarageBalance.Api/Controllers/FinanceController.cs`
 - `backend/GarageBalance.Api/Application/Dictionaries/DictionaryService.cs`
-- `docs/project-roadmap.md`
+- `docs/archive/project-roadmap.md`
 - `docs/form-workflow-coverage.md`
-- `docs/project-wide-history-and-safety-roadmap.md`
+- `docs/archive/project-wide-history-and-safety-roadmap.md`
 - `backend/GarageBalance.Api/AppReleases/releases.json`
 
 ## Сводка

@@ -116,7 +116,7 @@ public sealed class UiControlStyleCoverageDocumentationTests
     [Fact]
     public void ProjectWideRoadmapPointsToUiControlStyleCoverageDocument()
     {
-        var roadmap = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+        var roadmap = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         Assert.Contains("docs/ui-control-style-coverage.md", roadmap, StringComparison.Ordinal);
         Assert.DoesNotContain("- `[ ]` Найти все кнопки, input, textarea, select, date/month controls, tabs, dialogs и проверить стили.", roadmap, StringComparison.Ordinal);

@@ -4,7 +4,7 @@
 
 ## Source Context
 
-- `docs/project-roadmap.md`: Stage 1 уже содержит проектирование пользователей, bootstrap первого администратора и развитие granular permissions.
+- `docs/archive/project-roadmap.md`: Stage 1 уже содержит проектирование пользователей, bootstrap первого администратора и развитие granular permissions.
 - `docs/admin-operations-guide.md`: администратор создает первого пользователя при пустой базе и управляет сотрудниками.
 - `docs/local-pc-install-checklist.md`: локальная установка требует создания первого администратора или входа существующим пользователем.
 - Acceptance matrix требует сверки реальных ролей заказчика перед финальным закрытием.

@@ -118,7 +118,7 @@ public sealed class AuditEventCoverageDocumentationTests
     public void ProjectWideRoadmapReferencesCompletedBackendAuditInventory()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         Assert.Contains(
             "- `[x]` Найти все backend audit-события и составить таблицу",

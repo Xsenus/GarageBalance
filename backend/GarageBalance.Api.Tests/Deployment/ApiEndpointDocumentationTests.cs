@@ -28,7 +28,7 @@ public sealed class ApiEndpointDocumentationTests
     [InlineData("/api/reports/expense/export/pdf")]
     public void ProjectRoadmapDocumentsAuditWritingExportsAsPost(string route)
     {
-        var roadmap = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "project-roadmap.md"));
+        var roadmap = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-roadmap.md"));
 
         Assert.Contains($"POST {route}", roadmap, StringComparison.Ordinal);
         Assert.DoesNotContain($"GET {route}", roadmap, StringComparison.Ordinal);
@@ -38,7 +38,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsInventoryStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string inventoryStatusLine =
             "Обновить этот roadmap по итогам инвентаризации: готовые пункты отмечены `[x]`, частично готовые оставлены `[~]`, спорные бизнес-решения оставлены `[decision]`, отсутствующая работа оставлена `[ ]`, ручная приемка оставлена `[acceptance]`.";
@@ -55,7 +55,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone7ConfirmationStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         string[] completedConfirmationLines =
         [
@@ -83,7 +83,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9SettingsStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string settingsCoverageLine =
             "Настройки: все системные настройки, интеграционные настройки, protected/secret поля с маскированием.";
@@ -103,7 +103,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9ContractorsStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string milestoneLine =
             "Контрагенты: гаражи, поставщики, персонал, restore, confirmations, style audit.";
@@ -118,7 +118,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9TariffsAndFeesStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string milestoneLine =
             "Тарифы и сборы: история через общий экран, restore удаленных строк, confirmations, style audit.";
@@ -133,7 +133,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9MeterReadingsStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string milestoneLine =
             "Показания: история через общий экран, confirmations, restore/отмена, style audit.";
@@ -153,7 +153,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9PaymentsStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string milestoneLine =
             "Платежи: история через общий экран, confirmations, restore/обратные операции, style audit.";
@@ -173,7 +173,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9FundsStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string milestoneLine =
             "Управление фондами: история, confirmations, restore/обратные операции, style audit.";
@@ -188,7 +188,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsMilestone9ReportsStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string milestoneLine =
             "Отчеты: история формирования/экспорта, быстрый переход из общей истории, style audit.";
@@ -203,7 +203,7 @@ public sealed class ApiEndpointDocumentationTests
     public void ProjectWideHistoryRoadmapDocumentsImportRollbackConfirmationStatusSync()
     {
         var roadmap = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "docs", "project-wide-history-and-safety-roadmap.md"));
+            Path.Combine(FindRepositoryRoot(), "docs", "archive", "project-wide-history-and-safety-roadmap.md"));
 
         const string rollbackConfirmationLine =
             "Отмена импорта/rollback требует confirmation.";

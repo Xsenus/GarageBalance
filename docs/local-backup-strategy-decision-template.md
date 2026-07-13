@@ -7,7 +7,7 @@
 - `docs/postgres-backup-restore.md` - команды backup, restore-check и регистрация ежедневной задачи.
 - `docs/local-pc-install-checklist.md` - требования к локальной установке и запрет хранить единственную копию на том же диске.
 - `docs/admin-operations-guide.md` - действия администратора и ежемесячная проверка восстановления.
-- `docs/project-roadmap.md` - открытое решение и история выполнения.
+- `docs/archive/project-roadmap.md` - открытое решение и история выполнения.
 
 ## Decision Record
 

@@ -1579,7 +1579,7 @@ public sealed class BackendLayeringTests
     public void BackendLayering_IsCompleteWhenApplicationHasNoInfrastructureOrEfDependencies()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"));
+        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
         var activeRoadmapLines = roadmapLines
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .ToArray();

@@ -4,7 +4,7 @@
 
 ## Source Context
 
-- `docs/project-roadmap.md`: Stage 9 оставляет параметры API, направление обмена и состав документов в `[decision]`.
+- `docs/archive/project-roadmap.md`: Stage 9 оставляет параметры API, направление обмена и состав документов в `[decision]`.
 - `docs/one-c-fresh-sync-design.md`: модель синхронизации уже предусматривает preview, retry, conflict handling, journal и запрет plaintext secrets.
 - `docs/one-c-fresh-contour-acceptance-checklist.md`: приемка на контуре требует подтвержденных параметров API, направления обмена и состава документов.
 

@@ -4,7 +4,7 @@
 
 ## Source Materials Considered
 
-- `docs/project-roadmap.md`, этап 10: печать чеков и квитанций.
+- `docs/archive/project-roadmap.md`, этап 10: печать чеков и квитанций.
 - Текущие backend-контракты `ReceiptPrintingAdapter`, `ReceiptPrintingService`, `ReceiptPrintingContracts` и `IntegrationsController`.
 - Текущий frontend: статус печати в настройках и действия печати/отмены/повторной печати в истории платежей гаража.
 - Правила проекта: финансовые и интеграционные действия требуют backend-audit, защищенного хранения параметров интеграций и явных прав.
