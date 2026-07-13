@@ -2015,11 +2015,11 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GetOwnersPageAsync", serviceTestsText, StringComparison.Ordinal);
         Assert.Contains("dictionarySectionGroups", frontendWorkbenchText, StringComparison.Ordinal);
         Assert.Contains("getDictionaryTableHeaders", frontendWorkbenchText, StringComparison.Ordinal);
-        Assert.Contains("dictionaryClient.getOwnersPage", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("dictionaryClient.getTariffsPage", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("onContextMenu={(event) => openContextMenu(event, activeSection, item)}", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("В этом справочнике пока нет записей", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getOwnersPage", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getTariffsPage", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("onContextMenu={(event) => openContextMenu(event, activeSection, item)}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("В этом справочнике пока нет записей", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("label: 'История изменений'", frontendAppText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Раздел истории изменений\"", auditPanelText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Тип объекта истории изменений\"", auditPanelText, StringComparison.Ordinal);
@@ -6367,7 +6367,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("sidebarToggleLabel", appText, StringComparison.Ordinal);
         Assert.Contains("const navigation: NavigationItem[]", appText, StringComparison.Ordinal);
         Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appText, StringComparison.Ordinal);
-        Assert.Contains("aria-label={`Поиск: ${activeOption.label}`}", appText, StringComparison.Ordinal);
+        Assert.Contains("aria-label={`Поиск: ${activeOption.label}`}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("role=\"dialog\"", appText, StringComparison.Ordinal);
         Assert.Contains("role=\"table\"", appText, StringComparison.Ordinal);
         Assert.Contains("dictionary-data-table", appText, StringComparison.Ordinal);
@@ -6528,7 +6528,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Загружаем историю обновлений", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("Пока нет опубликованных изменений", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("Пользователей пока нет", userManagementPanelText, StringComparison.Ordinal);
-        Assert.Contains("В этом справочнике пока нет записей", appText, StringComparison.Ordinal);
+        Assert.Contains("В этом справочнике пока нет записей", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("Проверок пока нет", importPanelText, StringComparison.Ordinal);
 
         Assert.Contains("shows login errors without opening protected workspace", appTestsText, StringComparison.Ordinal);

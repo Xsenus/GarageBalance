@@ -18,7 +18,8 @@ describe('accessible dynamic messages', () => {
   const reportPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
   const userManagementPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'users', 'UserManagementPanel.tsx'), 'utf8')
   const dictionaryListSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'DictionaryList.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource].join('\n')
+  const dictionaryPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'dictionaries', 'DictionaryPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -221,13 +222,13 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('border-radius: 5px;')
     expect(appCss).toContain('outline: 3px solid rgba(46, 144, 250, 0.18);')
 
-    const checkboxOpeningTags = [...appSource.matchAll(/<input\b(?=[\s\S]*?\btype="checkbox")[\s\S]*?>/g)].map(
+    const checkboxOpeningTags = [...workspaceSource.matchAll(/<input\b(?=[\s\S]*?\btype="checkbox")[\s\S]*?>/g)].map(
       (match) => match[0],
     )
 
     expect(checkboxOpeningTags.length).toBeGreaterThan(0)
     expect(checkboxOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
-    expect(appSource).toContain('Показывать архивные')
+    expect(dictionaryPanelSource).toContain('Показывать архивные')
     expect(appSource).toContain('Регулярные платежи')
     expect(appSource).toContain('Пороговая тарификация')
   })
@@ -460,10 +461,10 @@ describe('accessible dynamic messages', () => {
     ]
 
     for (const className of destructiveStyleClasses) {
-      expect(appSource).toContain(className)
+      expect(workspaceSource).toContain(className)
     }
 
-    const buttonSources = [...appSource.matchAll(/<button\b[\s\S]*?<\/button>/g)]
+    const buttonSources = [...workspaceSource.matchAll(/<button\b[\s\S]*?<\/button>/g)]
       .map((match) => match[0])
       .filter((buttonSource) => destructiveLabels.some((label) => buttonSource.includes(label)))
 

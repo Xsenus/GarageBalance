@@ -3,18 +3,45 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
-    public void DictionaryListRemainsInSharedUi()
+    public void DictionaryPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
-        var dictionaryListText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx"));
+        var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
         var roadmapLine = File
             .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { DictionaryList } from './shared/DictionaryList'", appText, StringComparison.Ordinal);
-        Assert.Contains("<DictionaryList", appText, StringComparison.Ordinal);
+        Assert.Contains("import { DictionaryPanelV2 } from './features/dictionaries/DictionaryPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<DictionaryPanelV2", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function DictionaryPanelV2(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type DictionaryEditorState", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("getDictionaryRestoreErrorMessage", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function DictionaryPanelV2(", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.createGarage", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.updateSupplier", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.archiveTariff", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.restoreGarage", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.getGarageBalanceHistory", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/dictionaries/DictionaryPanel.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DictionaryListRemainsInSharedUi()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var dictionaryListText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx"));
+        var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { DictionaryList } from '../../shared/DictionaryList'", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("<DictionaryList", dictionaryPanelText, StringComparison.Ordinal);
         Assert.DoesNotContain("function DictionaryList(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type DictionaryListItem", appText, StringComparison.Ordinal);
 
