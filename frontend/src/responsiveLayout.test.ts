@@ -66,6 +66,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })
 
+  it('keeps the garage editor wide, compact and responsive', () => {
+    expect(normalizedAppCss).toContain('.contractors-dialog--garage {\n  width: min(1120px, calc(100vw - 48px));')
+    expect(normalizedAppCss).toContain('.contractors-dialog--garage .contractors-modal-form {\n  gap: 10px;')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-details,\n.contractors-garage-form-notes {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-notes textarea {\n  min-height: 64px;')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-details,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')
+  })
+
   it('centers fund action columns', () => {
     expect(normalizedAppCss).toContain('.funds-table .funds-table-action-column {\n  text-align: center;')
   })
