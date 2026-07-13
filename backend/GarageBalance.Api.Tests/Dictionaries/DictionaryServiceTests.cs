@@ -970,7 +970,10 @@ public sealed class DictionaryServiceTests
         var utilityGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var bankGroup = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Банки"), null, CancellationToken.None);
         await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", utilityGroup.Value!.Id, "5401", null, "Мария", null, null, 100, null), null, CancellationToken.None);
-        await service.CreateSupplierAsync(new UpsertSupplierRequest("Альфа-Банк", bankGroup.Value!.Id, "7728", null, "Ольга", null, null, 0, null), null, CancellationToken.None);
+        var bankSupplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Альфа-Банк", bankGroup.Value!.Id, "7728", null, "Ольга", null, null, 0, null), null, CancellationToken.None);
+        var waterSupplier = Assert.Single(await service.GetSuppliersAsync(utilityGroup.Value.Id, "5401", CancellationToken.None));
+        await service.CreateSupplierContactAsync(new UpsertSupplierContactRequest(waterSupplier.Id, "Яковлев Яков", null, "+7 999", "z@example.test", "Работает", null), null, CancellationToken.None);
+        await service.CreateSupplierContactAsync(new UpsertSupplierContactRequest(bankSupplier.Value!.Id, "Анна Алексеева", null, "+7 111", "a@example.test", "Работает", null), null, CancellationToken.None);
 
         var result = await service.GetSuppliersAsync(utilityGroup.Value.Id, "5401", CancellationToken.None);
 
@@ -980,8 +983,13 @@ public sealed class DictionaryServiceTests
 
         var highestDebt = await service.GetSuppliersPageAsync(null, null, 0, 1, "debt", "desc", CancellationToken.None);
         var safeFallback = await service.GetSuppliersPageAsync(null, null, 0, 1, "unsupported", "asc", CancellationToken.None);
+        var primaryContact = await service.GetSuppliersPageAsync(null, null, 0, 1, "contactPerson", "asc", CancellationToken.None);
         Assert.Equal("Водоканал", highestDebt.Items[0].Name);
         Assert.Equal("Альфа-Банк", safeFallback.Items[0].Name);
+        Assert.Equal("Альфа-Банк", primaryContact.Items[0].Name);
+        Assert.Equal("Анна Алексеева", primaryContact.Items[0].ContactPerson);
+        Assert.Equal("+7 111", primaryContact.Items[0].Phone);
+        Assert.Equal("a@example.test", primaryContact.Items[0].Email);
     }
 
     [Fact]

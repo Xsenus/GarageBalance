@@ -179,8 +179,11 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfSupplierRepository.cs");
 
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
-        Assert.Contains("sortBy == \"debt\" && IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("IsSqliteProvider() && sortBy is \"debt\" or \"contactPerson\" or \"phone\" or \"email\"", source, StringComparison.Ordinal);
         Assert.Contains("ApplyPageSorting(query, sortBy, sortDescending)", source, StringComparison.Ordinal);
+        Assert.Contains("supplierIds.Contains(contact.SupplierId) && !contact.IsArchived", source, StringComparison.Ordinal);
+        Assert.Contains("contact.Status == \"Работает\"", source, StringComparison.Ordinal);
+        Assert.Contains("SupplierPrimaryContactData", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);

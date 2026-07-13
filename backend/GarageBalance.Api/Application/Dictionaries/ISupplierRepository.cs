@@ -14,4 +14,8 @@ public interface ISupplierRepository
     void Add(Supplier supplier);
 }
 
-public sealed record SupplierPageData(IReadOnlyList<Supplier> Items, int TotalCount);
+public sealed record SupplierPageData(IReadOnlyList<SupplierPageItem> Items, int TotalCount);
+
+public sealed record SupplierPageItem(Supplier Supplier, SupplierPrimaryContactData? PrimaryContact);
+
+public sealed record SupplierPrimaryContactData(string FullName, string? Phone, string? Email);

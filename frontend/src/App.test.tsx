@@ -1620,6 +1620,8 @@ describe('App', () => {
     await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'debt', sortDirection: 'asc' }))
     await user.click(within(supplierTable).getByRole('button', { name: 'Задолженность' }))
     await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'debt', sortDirection: 'desc' }))
+    await user.click(within(supplierTable).getByRole('button', { name: 'Контактное лицо' }))
+    await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'contactPerson', sortDirection: 'asc' }))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
     const staffPagination = within(contractorsPanel).getByRole('navigation', { name: 'Пагинация персонала' })

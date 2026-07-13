@@ -533,11 +533,14 @@ public sealed class DictionaryService(
         {
             "name" => "name",
             "debt" => "debt",
+            "contactPerson" => "contactPerson",
+            "phone" => "phone",
+            "email" => "email",
             _ => "service"
         };
         var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
         var page = await supplierRepository.GetPageAsync(groupId, normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
-        return new PagedResult<SupplierDto>(page.Items.Select(ToSupplierDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
+        return new PagedResult<SupplierDto>(page.Items.Select(item => ToSupplierDto(item.Supplier, item.PrimaryContact)).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync(UpsertSupplierRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -2477,6 +2480,16 @@ public sealed class DictionaryService(
             supplier.StartingBalance,
             supplier.Comment,
             supplier.IsArchived);
+    }
+
+    private static SupplierDto ToSupplierDto(Supplier supplier, SupplierPrimaryContactData? primaryContact)
+    {
+        return ToSupplierDto(supplier) with
+        {
+            ContactPerson = primaryContact?.FullName ?? supplier.ContactPerson,
+            Phone = primaryContact?.Phone ?? supplier.Phone,
+            Email = primaryContact?.Email ?? supplier.Email
+        };
     }
 
     private static SupplierContactDto ToSupplierContactDto(SupplierContact contact)

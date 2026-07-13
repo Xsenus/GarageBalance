@@ -165,7 +165,7 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
 type ContractorSupplierSortKey = 'name' | 'service' | 'contactPerson' | 'phone' | 'email' | 'debt'
-type ContractorSupplierServerSortKey = Extract<ContractorSupplierSortKey, 'name' | 'service' | 'debt'>
+type ContractorSupplierServerSortKey = ContractorSupplierSortKey
 type ContractorStaffSortKey = 'fullName' | 'department' | 'rate'
 type ContractorSupplierColumnKey = ContractorSupplierSortKey | 'actions'
 type ContractorStaffColumnKey = ContractorStaffSortKey | 'actions'
@@ -239,9 +239,9 @@ function normalizeSupplierPrototype(supplier: ContractorSupplierRow): Contractor
 
   return {
     ...supplier,
-    contactPerson: primaryContact?.fullName ?? '',
-    phone: primaryContact?.phone ?? '',
-    email: primaryContact?.email ?? '',
+    contactPerson: primaryContact?.fullName ?? supplier.contactPerson,
+    phone: primaryContact?.phone ?? supplier.phone,
+    email: primaryContact?.email ?? supplier.email,
   }
 }
 
@@ -300,7 +300,7 @@ function compareContractorSuppliers(left: ContractorSupplierRow, right: Contract
 }
 
 function isSupplierServerSortKey(key: ContractorSortKey): key is ContractorSupplierServerSortKey {
-  return key === 'name' || key === 'service' || key === 'debt'
+  return key === 'name' || key === 'service' || key === 'contactPerson' || key === 'phone' || key === 'email' || key === 'debt'
 }
 
 function compareContractorStaff(left: ContractorStaffRow, right: ContractorStaffRow, key: ContractorStaffSortKey) {

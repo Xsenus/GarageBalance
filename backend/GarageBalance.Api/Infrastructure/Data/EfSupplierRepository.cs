@@ -32,13 +32,15 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     {
         var query = ApplyFilters(groupId, normalizedSearch, includeArchived);
         var totalCount = await query.CountAsync(cancellationToken);
-        if (sortBy == "debt" && IsSqliteProvider())
+        if (IsSqliteProvider() && sortBy is "debt" or "contactPerson" or "phone" or "email")
         {
             var filteredItems = await query.ToListAsync(cancellationToken);
-            var sortedItems = sortDescending
-                ? filteredItems.OrderByDescending(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id)
-                : filteredItems.OrderBy(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id);
-            return new SupplierPageData(sortedItems.Skip(offset).Take(limit).ToList(), totalCount);
+            var primaryContacts = await GetPrimaryContactsAsync(filteredItems.Select(supplier => supplier.Id).ToArray(), cancellationToken);
+            var sortedItems = ApplySqlitePageSorting(filteredItems, primaryContacts, sortBy, sortDescending)
+                .Skip(offset)
+                .Take(limit)
+                .ToList();
+            return CreatePageData(sortedItems, primaryContacts, totalCount);
         }
 
         var items = await ApplyPageSorting(query, sortBy, sortDescending)
@@ -46,7 +48,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
-        return new SupplierPageData(items, totalCount);
+        var pageContacts = await GetPrimaryContactsAsync(items.Select(supplier => supplier.Id).ToArray(), cancellationToken);
+        return CreatePageData(items, pageContacts, totalCount);
     }
 
     public Task<Supplier?> FindActiveWithGroupAsync(Guid id, CancellationToken cancellationToken)
@@ -110,7 +113,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         return query;
     }
 
-    private static IOrderedQueryable<Supplier> ApplyPageSorting(IQueryable<Supplier> query, string sortBy, bool descending)
+    private IOrderedQueryable<Supplier> ApplyPageSorting(IQueryable<Supplier> query, string sortBy, bool descending)
     {
         return (sortBy, descending) switch
         {
@@ -118,10 +121,93 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             ("name", false) => query.OrderBy(supplier => supplier.Name),
             ("debt", true) => query.OrderByDescending(supplier => supplier.StartingBalance),
             ("debt", false) => query.OrderBy(supplier => supplier.StartingBalance),
+            ("contactPerson", true) => query.OrderByDescending(supplier => dbContext.SupplierContacts
+                .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .Select(contact => contact.FullName)
+                .FirstOrDefault()),
+            ("contactPerson", false) => query.OrderBy(supplier => dbContext.SupplierContacts
+                .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .Select(contact => contact.FullName)
+                .FirstOrDefault()),
+            ("phone", true) => query.OrderByDescending(supplier => dbContext.SupplierContacts
+                .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .Select(contact => contact.Phone)
+                .FirstOrDefault()),
+            ("phone", false) => query.OrderBy(supplier => dbContext.SupplierContacts
+                .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .Select(contact => contact.Phone)
+                .FirstOrDefault()),
+            ("email", true) => query.OrderByDescending(supplier => dbContext.SupplierContacts
+                .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .Select(contact => contact.Email)
+                .FirstOrDefault()),
+            ("email", false) => query.OrderBy(supplier => dbContext.SupplierContacts
+                .Where(contact => contact.SupplierId == supplier.Id && !contact.IsArchived)
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .Select(contact => contact.Email)
+                .FirstOrDefault()),
             (_, true) => query.OrderByDescending(supplier => supplier.Group.Name),
             _ => query.OrderBy(supplier => supplier.Group.Name)
         };
     }
+
+    private async Task<IReadOnlyDictionary<Guid, SupplierPrimaryContactData>> GetPrimaryContactsAsync(IReadOnlyCollection<Guid> supplierIds, CancellationToken cancellationToken)
+    {
+        if (supplierIds.Count == 0)
+        {
+            return new Dictionary<Guid, SupplierPrimaryContactData>();
+        }
+
+        var contacts = await dbContext.SupplierContacts.AsNoTracking()
+            .Where(contact => supplierIds.Contains(contact.SupplierId) && !contact.IsArchived)
+            .OrderByDescending(contact => contact.Status == "Работает")
+            .ThenBy(contact => contact.FullName)
+            .ToListAsync(cancellationToken);
+        return contacts
+            .GroupBy(contact => contact.SupplierId)
+            .ToDictionary(
+                group => group.Key,
+                group => new SupplierPrimaryContactData(group.First().FullName, group.First().Phone, group.First().Email));
+    }
+
+    private static IOrderedEnumerable<Supplier> ApplySqlitePageSorting(
+        IReadOnlyList<Supplier> suppliers,
+        IReadOnlyDictionary<Guid, SupplierPrimaryContactData> primaryContacts,
+        string sortBy,
+        bool descending)
+    {
+        string? ContactValue(Supplier supplier) => primaryContacts.GetValueOrDefault(supplier.Id) is { } contact
+            ? sortBy switch { "phone" => contact.Phone, "email" => contact.Email, _ => contact.FullName }
+            : null;
+
+        if (sortBy == "debt")
+        {
+            return descending
+                ? suppliers.OrderByDescending(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id)
+                : suppliers.OrderBy(supplier => supplier.StartingBalance).ThenBy(supplier => supplier.Id);
+        }
+
+        return descending
+            ? suppliers.OrderByDescending(ContactValue).ThenBy(supplier => supplier.Id)
+            : suppliers.OrderBy(ContactValue).ThenBy(supplier => supplier.Id);
+    }
+
+    private static SupplierPageData CreatePageData(
+        IReadOnlyList<Supplier> suppliers,
+        IReadOnlyDictionary<Guid, SupplierPrimaryContactData> primaryContacts,
+        int totalCount) =>
+        new(suppliers.Select(supplier => new SupplierPageItem(supplier, primaryContacts.GetValueOrDefault(supplier.Id))).ToList(), totalCount);
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
