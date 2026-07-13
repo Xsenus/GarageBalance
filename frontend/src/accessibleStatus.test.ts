@@ -17,7 +17,8 @@ describe('accessible dynamic messages', () => {
   const auditPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'audit', 'AuditPanel.tsx'), 'utf8')
   const reportPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
   const userManagementPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'users', 'UserManagementPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource].join('\n')
+  const dictionaryListSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'DictionaryList.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -49,9 +50,9 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps dictionary disclosure controls linked to their list', () => {
-    expect(appSource).toContain('<ul className="dictionary-list" id={listId}>')
+    expect(dictionaryListSource).toContain('<ul className="dictionary-list" id={listId}>')
 
-    const disclosureControlLines = appSource
+    const disclosureControlLines = dictionaryListSource
       .split(/\r?\n/)
       .map((line, index) => ({ index: index + 1, line: line.trim() }))
       .filter(({ line }) => line.includes('setShowAllItems((value) => !value)'))

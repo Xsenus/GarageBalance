@@ -3,6 +3,30 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void DictionaryListRemainsInSharedUi()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var dictionaryListText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { DictionaryList } from './shared/DictionaryList'", appText, StringComparison.Ordinal);
+        Assert.Contains("<DictionaryList", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function DictionaryList(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type DictionaryListItem", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function DictionaryList(", dictionaryListText, StringComparison.Ordinal);
+        Assert.Contains("aria-controls={listId}", dictionaryListText, StringComparison.Ordinal);
+        Assert.Contains("aria-expanded={showAllItems}", dictionaryListText, StringComparison.Ordinal);
+        Assert.Contains("pendingArchive.onArchive(reason)", dictionaryListText, StringComparison.Ordinal);
+        Assert.Contains("useFocusTrap<HTMLElement>", dictionaryListText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/shared/DictionaryList.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UserManagementPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
