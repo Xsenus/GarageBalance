@@ -6522,7 +6522,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("function AccessNotice", appText, StringComparison.Ordinal);
         Assert.Contains("Раздел недоступен", appText, StringComparison.Ordinal);
         Assert.Contains("Требуется право:", appText, StringComparison.Ordinal);
-        Assert.Contains("role=\"alert\"", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"alert\"", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("className=\"empty-state\"", appText, StringComparison.Ordinal);
         Assert.Contains("role=\"status\" aria-live=\"polite\"", appText, StringComparison.Ordinal);
         Assert.Contains("Загружаем историю обновлений", releasePanelText, StringComparison.Ordinal);

@@ -3,6 +3,23 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void TariffsAndFeesPanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx"));
+        Assert.Contains("import { TariffsAndFeesPrototypePanel } from './features/tariffs/TariffsAndFeesPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<TariffsAndFeesPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function TariffsAndFeesPrototypePanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type TariffPrototypePendingChange", appText, StringComparison.Ordinal);
+        Assert.Contains("export function TariffsAndFeesPrototypePanel(", featureText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.createChargeServiceSetting", featureText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.createFeeCampaign", featureText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.generateFeeCampaignAccruals", featureText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/tariffs/TariffsAndFeesPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-roadmap.md")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DictionaryPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
