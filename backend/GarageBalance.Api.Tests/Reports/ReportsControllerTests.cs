@@ -72,6 +72,57 @@ public sealed class ReportsControllerTests
     }
 
     [Fact]
+    public async Task GetGarageReport_ReturnsOkAndPassesPagingAndGrouping()
+    {
+        var report = CreateGarageReport();
+        var reportService = new FakeReportService
+        {
+            GarageResult = ReportResult<GarageDetailReportDto>.Success(report)
+        };
+        var actorUserId = Guid.NewGuid();
+        var controller = new ReportsController(reportService);
+        controller.ControllerContext.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())]))
+        };
+
+        var result = await controller.GetGarageReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), "12", true, 25, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(report, ok.Value);
+        Assert.Equal("12", reportService.GarageRequest?.Search);
+        Assert.True(reportService.GarageRequest?.GroupAccruals);
+        Assert.Equal(25, reportService.GarageRequest?.Limit);
+        Assert.Equal(50, reportService.GarageRequest?.Offset);
+        Assert.Equal(actorUserId, reportService.GarageRequest?.ActorUserId);
+    }
+
+    [Fact]
+    public void GetGarageReport_UsesExpectedGetRoute()
+    {
+        var method = typeof(ReportsController).GetMethod(nameof(ReportsController.GetGarageReport));
+
+        Assert.NotNull(method);
+        var getAttribute = Assert.Single(method.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true).Cast<HttpGetAttribute>());
+        Assert.Equal("garages", getAttribute.Template);
+    }
+
+    [Fact]
+    public async Task GetGarageReport_ReturnsBadRequestForInvalidPeriod()
+    {
+        var controller = new ReportsController(new FakeReportService
+        {
+            GarageResult = ReportResult<GarageDetailReportDto>.Failure("period_invalid", "Период неверный.")
+        });
+
+        var result = await controller.GetGarageReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null, false, null, null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("period_invalid", problem.Title);
+    }
+
+    [Fact]
     public async Task ExportConsolidatedReportXlsx_ReturnsFile()
     {
         var content = new byte[] { 1, 2, 3 };
@@ -700,6 +751,23 @@ public sealed class ReportsControllerTests
             [new GarageReportRowDto(Guid.NewGuid(), "12", "Иванов Иван", 1500m, 2000m, 500m, 0)]);
     }
 
+    private static GarageDetailReportDto CreateGarageReport()
+    {
+        var month = new DateOnly(2026, 6, 1);
+        var garageId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
+        return new GarageDetailReportDto(
+            month,
+            month,
+            2000m,
+            1500m,
+            500m,
+            1,
+            [new GarageDetailReportRowDto(month, garageId, "12", "Иванов Иван", incomeTypeId, "Членский взнос", 2000m, 1500m, 500m)],
+            0,
+            25);
+    }
+
     private static IncomeReportDto CreateIncomeReport()
     {
         var garageId = Guid.NewGuid();
@@ -822,6 +890,9 @@ public sealed class ReportsControllerTests
         public ReportResult<ConsolidatedReportDto> Result { get; init; } = ReportResult<ConsolidatedReportDto>.Failure("not_configured", "Not configured.");
         public ConsolidatedReportRequest? ConsolidatedRequest { get; private set; }
 
+        public ReportResult<GarageDetailReportDto> GarageResult { get; init; } = ReportResult<GarageDetailReportDto>.Failure("not_configured", "Not configured.");
+        public GarageReportRequest? GarageRequest { get; private set; }
+
         public ReportResult<ReportExportFileDto> ConsolidatedXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<ReportExportFileDto> ConsolidatedPdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
@@ -872,6 +943,12 @@ public sealed class ReportsControllerTests
         {
             ConsolidatedRequest = request;
             return Task.FromResult(Result);
+        }
+
+        public Task<ReportResult<GarageDetailReportDto>> GetGarageReportAsync(GarageReportRequest request, CancellationToken cancellationToken)
+        {
+            GarageRequest = request;
+            return Task.FromResult(GarageResult);
         }
 
         public Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)

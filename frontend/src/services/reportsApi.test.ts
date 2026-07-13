@@ -42,7 +42,7 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(14, '/api/reports/fund-changes/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%84%D0%BE%D0%BD%D0%B4', postRequest())
   })
 
-  it('loads paged income, expense, cash, bank and fund reports with other dedicated filtered endpoints', async () => {
+  it('loads paged garage, income, expense, cash, bank and fund reports with other dedicated filtered endpoints', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -52,6 +52,7 @@ describe('reportsApi', () => {
     await reportsApi.getBankDepositReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'банк', offset: 20, limit: 20 })
     await reportsApi.getFeeReport('token', { variation: 'Сбор на ворота', limit: 20 })
     await reportsApi.getFundChangeReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', offset: 20, limit: 20 })
+    await reportsApi.getGarageReport('token', { monthFrom: '2026-06-01', monthTo: '2026-07-01', search: '12', groupAccruals: true, offset: 20, limit: 20 })
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/income?dateFrom=2026-06-01&dateTo=2026-06-30&search=12&rowMode=payments&limit=20&offset=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/expense?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%92%D0%BE%D0%B4%D0%BE%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB&rowMode=payments&limit=20&offset=20', getRequest())
@@ -59,6 +60,7 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/bank-deposits?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%B1%D0%B0%D0%BD%D0%BA&offset=20&limit=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(5, '/api/reports/fees?variation=%D0%A1%D0%B1%D0%BE%D1%80+%D0%BD%D0%B0+%D0%B2%D0%BE%D1%80%D0%BE%D1%82%D0%B0&limit=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(6, '/api/reports/fund-changes?dateFrom=2026-06-01&dateTo=2026-06-30&offset=20&limit=20', getRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(7, '/api/reports/garages?monthFrom=2026-06-01&monthTo=2026-07-01&search=12&groupAccruals=true&offset=20&limit=20', getRequest())
   })
 })
 

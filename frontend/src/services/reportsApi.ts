@@ -20,6 +20,30 @@ export type GarageReportRowDto = {
   meterReadingCount: number
 }
 
+export type GarageDetailReportRowDto = {
+  accountingMonth: string
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  incomeTypeId: string | null
+  incomeTypeName: string
+  accrualAmount: number
+  incomeAmount: number
+  difference: number
+}
+
+export type GarageDetailReportDto = {
+  periodFrom: string
+  periodTo: string
+  accrualTotal: number
+  incomeTotal: number
+  difference: number
+  rowCount: number
+  rows: GarageDetailReportRowDto[]
+  offset: number
+  limit: number
+}
+
 export type ConsolidatedReportDto = {
   periodFrom: string
   periodTo: string
@@ -204,6 +228,10 @@ export type FeeReportDto = {
 
 export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number }): Promise<ConsolidatedReportDto>
+  getGarageReport(
+    accessToken: string,
+    params?: { monthFrom?: string; monthTo?: string; search?: string; groupAccruals?: boolean; offset?: number; limit?: number },
+  ): Promise<GarageDetailReportDto>
   exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
   exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
   getIncomeReport(
@@ -461,6 +489,29 @@ function buildConsolidatedReportQuery(params: Parameters<ReportClient['getConsol
   return searchParams.toString()
 }
 
+function buildGarageReportQuery(params: Parameters<ReportClient['getGarageReport']>[1] = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.monthFrom) {
+    searchParams.set('monthFrom', params.monthFrom)
+  }
+  if (params.monthTo) {
+    searchParams.set('monthTo', params.monthTo)
+  }
+  if (params.search) {
+    searchParams.set('search', params.search)
+  }
+  if (params.groupAccruals !== undefined) {
+    searchParams.set('groupAccruals', String(params.groupAccruals))
+  }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
+  }
+  if (params.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+  return searchParams.toString()
+}
+
 function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseReport']>[1] = {}) {
   const searchParams = new URLSearchParams()
   if (params.dateFrom) {
@@ -565,6 +616,10 @@ export const reportsApi: ReportClient = {
   getConsolidatedReport(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)
     return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`)
+  },
+  getGarageReport(accessToken, params = {}) {
+    const query = buildGarageReportQuery(params)
+    return requestJson(accessToken, `/api/reports/garages${query ? `?${query}` : ''}`)
   },
   exportConsolidatedReportXlsx(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)

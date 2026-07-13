@@ -103,6 +103,7 @@ builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>(
 builder.Services.AddScoped<IFundChangeReportQuery, EfFundChangeReportQuery>();
 builder.Services.AddScoped<IConsolidatedMonthlyReportQuery, EfConsolidatedMonthlyReportQuery>();
 builder.Services.AddScoped<IConsolidatedGarageReportQuery, EfConsolidatedGarageReportQuery>();
+builder.Services.AddScoped<IGarageReportQuery, EfGarageReportQuery>();
 builder.Services.AddScoped<IFeeReportQuery, EfFeeReportQuery>();
 builder.Services.AddScoped<IExpenseReportQuery, EfExpenseReportQuery>();
 builder.Services.AddScoped<IIncomeReportQuery, EfIncomeReportQuery>();

@@ -1126,6 +1126,7 @@ public sealed class ProjectWideRoadmapStatusTests
         {
             "FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization",
             "ScreenReportQueries_UseDatabaseLimitsForVisibleRows",
+            "GarageReportScreenQuery_AggregatesCountsTotalsAndPageInDatabase",
             "CashPaymentScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization",
             "BankDepositScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization",
             "ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization",
@@ -1136,6 +1137,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.All(requiredPerformanceGuards, guard => Assert.Contains(guard, performanceTestsText, StringComparison.Ordinal));
         Assert.Contains("GetIncomeReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetExpenseReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetGarageReportAsync_AppliesPageAfterAggregationWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetCashPaymentReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetBankDepositReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
 
@@ -3276,6 +3278,11 @@ public sealed class ProjectWideRoadmapStatusTests
             "GetConsolidatedReportAsync_FiltersGarageRowsByOwnerOrGarage",
             "GetConsolidatedReportAsync_NormalizesReportPeriodToMonthStarts",
             "GetConsolidatedReportAsync_ReturnsErrorForInvalidPeriod",
+            "GetGarageReportAsync_AppliesPageAfterAggregationWithoutChangingTotals",
+            "GetGarageReportAsync_GroupsServicesBeforeCountingAndPaging",
+            "GetGarageReportAsync_AppliesGarageSearchBeforeTotals",
+            "GetGarageReportAsync_ReturnsErrorForInvalidPeriod",
+            "GetGarageReportAsync_ReturnsEmptyPageForPeriodWithoutData",
             "GetIncomeReportAsync_ReturnsAccrualAndPaymentRows",
             "GetIncomeReportAsync_AppliesPageWithoutChangingTotals",
             "GetIncomeReportAsync_ReturnsDebtAfterEachPayment",
@@ -3316,6 +3323,9 @@ public sealed class ProjectWideRoadmapStatusTests
             "ExportReportActions_UsePostBecauseExportsWriteAuditEvents",
             "GetConsolidatedReport_ReturnsOk",
             "GetConsolidatedReport_ReturnsBadRequestForInvalidPeriod",
+            "GetGarageReport_ReturnsOkAndPassesPagingAndGrouping",
+            "GetGarageReport_UsesExpectedGetRoute",
+            "GetGarageReport_ReturnsBadRequestForInvalidPeriod",
             "GetIncomeReport_ReturnsOk",
             "GetIncomeReport_ReturnsBadRequestForInvalidPeriod",
             "GetExpenseReport_ReturnsOk",
@@ -3373,6 +3383,8 @@ public sealed class ProjectWideRoadmapStatusTests
         {
             "shows report workbook tabs with Excel-like filters and tables",
             "shows daily, fee and fund report filters with quick period buttons",
+            "paginates and groups garage report rows on the server",
+            "shows loading and error states for the paged garage report",
             "shows loading and error states for the paged payout report",
             "shows loading and error states for the paged income report",
             "keeps report export errors visible without announcing a ready file",
@@ -3404,12 +3416,13 @@ public sealed class ProjectWideRoadmapStatusTests
         foreach (var expectedApiCoverage in new[]
         {
             "downloads report exports through POST because the backend records audit events",
-            "loads paged income, expense, cash, bank and fund reports with other dedicated filtered endpoints",
+            "loads paged garage, income, expense, cash, bank and fund reports with other dedicated filtered endpoints",
             "monthFrom=2026-06-01&monthTo=2026-06-01&search=12",
             "garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1",
             "income?dateFrom=2026-06-01&dateTo=2026-06-30&search=12&rowMode=payments&limit=20&offset=20",
             "supplierIds=supplier-1&expenseTypeIds=expense-1",
             "expense?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%92%D0%BE%D0%B4%D0%BE%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB&rowMode=payments&limit=20&offset=20",
+            "garages?monthFrom=2026-06-01&monthTo=2026-07-01&search=12&groupAccruals=true&offset=20&limit=20",
             "cash-payments/export/xlsx",
             "cash-payments?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA&offset=20&limit=20",
             "bank-deposits/export/pdf",
@@ -3423,6 +3436,7 @@ public sealed class ProjectWideRoadmapStatusTests
         }
 
         Assert.Contains("Пагинация отчета по изменению фондов", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Пагинация отчета по гаражам", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Пагинация отчета по выплатам", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Пагинация отчета по поступлениям", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Пагинация отчета по оплатам из кассы", appTestsText, StringComparison.Ordinal);

@@ -7,6 +7,15 @@ public sealed record ConsolidatedReportRequest(
     int? Limit = null,
     Guid? ActorUserId = null);
 
+public sealed record GarageReportRequest(
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo,
+    string? Search,
+    bool GroupAccruals,
+    int? Limit = null,
+    int? Offset = null,
+    Guid? ActorUserId = null);
+
 public sealed record IncomeReportRequest(
     DateOnly? DateFrom,
     DateOnly? DateTo,
@@ -93,6 +102,28 @@ public sealed record GarageReportRowDto(
     decimal AccrualTotal,
     decimal Debt,
     int MeterReadingCount);
+
+public sealed record GarageDetailReportDto(
+    DateOnly PeriodFrom,
+    DateOnly PeriodTo,
+    decimal AccrualTotal,
+    decimal IncomeTotal,
+    decimal Difference,
+    int RowCount,
+    IReadOnlyList<GarageDetailReportRowDto> Rows,
+    int Offset,
+    int Limit);
+
+public sealed record GarageDetailReportRowDto(
+    DateOnly AccountingMonth,
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    Guid? IncomeTypeId,
+    string IncomeTypeName,
+    decimal AccrualAmount,
+    decimal IncomeAmount,
+    decimal Difference);
 
 public sealed record IncomeReportDto(
     DateOnly DateFrom,

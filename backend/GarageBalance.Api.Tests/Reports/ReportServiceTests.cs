@@ -115,6 +115,120 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetGarageReportAsync_AppliesPageAfterAggregationWithoutChangingTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 800m, "manual", "Корректировка"), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "1", null), null, CancellationToken.None);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.GetGarageReportAsync(
+            new GarageReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, false, 1, 1, actorUserId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(3000m, result.Value!.AccrualTotal);
+        Assert.Equal(1500m, result.Value.IncomeTotal);
+        Assert.Equal(1500m, result.Value.Difference);
+        Assert.Equal(2, result.Value.RowCount);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("21", row.GarageNumber);
+        Assert.Equal(1000m, row.AccrualAmount);
+        Assert.Equal(0m, row.IncomeAmount);
+        Assert.Contains(database.Context.AuditEvents, auditEvent =>
+            auditEvent.Action == "reports.garages_generated" &&
+            auditEvent.ActorUserId == actorUserId &&
+            auditEvent.RelatedAccountingMonth == "2026-06");
+    }
+
+    [Fact]
+    public async Task GetGarageReportAsync_GroupsServicesBeforeCountingAndPaging()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.FirstGarage.StartingBalance = 100m;
+        await database.Context.SaveChangesAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "1", null), null, CancellationToken.None);
+
+        var result = await service.GetGarageReportAsync(
+            new GarageReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null, true, 25, 0),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, result.Value!.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("ИТОГО", row.IncomeTypeName);
+        Assert.Null(row.IncomeTypeId);
+        Assert.Equal(2100m, row.AccrualAmount);
+        Assert.Equal(1500m, row.IncomeAmount);
+        Assert.Equal(600m, row.Difference);
+    }
+
+    [Fact]
+    public async Task GetGarageReportAsync_AppliesGarageSearchBeforeTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1000m, "regular", null), null, CancellationToken.None);
+
+        var result = await service.GetGarageReportAsync(
+            new GarageReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), "Петров Петр", false, 25, 0),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1000m, result.Value!.AccrualTotal);
+        Assert.Equal(1, result.Value.RowCount);
+        Assert.Equal("21", Assert.Single(result.Value.Rows).GarageNumber);
+    }
+
+    [Fact]
+    public async Task GetGarageReportAsync_ReturnsErrorForInvalidPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetGarageReportAsync(
+            new GarageReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), null, false),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("period_invalid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetGarageReportAsync_ReturnsEmptyPageForPeriodWithoutData()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetGarageReportAsync(
+            new GarageReportRequest(new DateOnly(2027, 1, 1), new DateOnly(2027, 1, 1), null, false),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0m, result.Value!.AccrualTotal);
+        Assert.Equal(0m, result.Value.IncomeTotal);
+        Assert.Equal(0, result.Value.RowCount);
+        Assert.Empty(result.Value.Rows);
+        Assert.Equal(0, result.Value.Offset);
+        Assert.Equal(25, result.Value.Limit);
+    }
+
+    [Fact]
     public async Task ExportConsolidatedReportXlsxAsync_ReturnsWorkbookWithMonthlyAndGarageRows()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1308,6 +1422,7 @@ public sealed class ReportServiceTests
             new EfFundChangeReportQuery(context),
             new EfConsolidatedMonthlyReportQuery(context),
             new EfConsolidatedGarageReportQuery(context),
+            new EfGarageReportQuery(context),
             new EfFeeReportQuery(context),
             new EfExpenseReportQuery(context),
             new EfIncomeReportQuery(context),

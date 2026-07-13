@@ -25,7 +25,7 @@ import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, Creat
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
-import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
+import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
 
@@ -10384,6 +10384,81 @@ describe('App', () => {
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
   })
 
+  it('paginates and groups garage report rows on the server', async () => {
+    const user = userEvent.setup()
+    const garageRequests: Array<{ offset?: number; limit?: number; groupAccruals?: boolean }> = []
+    const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
+      garageRequests.push({ offset: params?.offset, limit: params?.limit, groupAccruals: params?.groupAccruals })
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      const grouped = params?.groupAccruals ?? false
+      const row = createGarageDetailReport().rows[0]
+      return createGarageDetailReport({
+        rowCount: 30,
+        offset,
+        limit,
+        rows: [{
+          ...row,
+          garageId: grouped ? 'garage-grouped' : offset === 0 ? 'garage-1' : 'garage-26',
+          garageNumber: grouped ? '77' : offset === 0 ? '12' : '26',
+          incomeTypeId: grouped ? null : row.incomeTypeId,
+          incomeTypeName: grouped ? 'ИТОГО' : offset === 0 ? 'Членский взнос' : 'Электроэнергия',
+        }],
+      })
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
+
+    const garageTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
+    expect(await within(garageTable).findByText('Членский взнос')).toBeInTheDocument()
+    expect(within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по гаражам' })).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Вперед' }))
+    expect(await within(garageTable).findByText('Электроэнергия')).toBeInTheDocument()
+    expect(garageTable).toHaveTextContent('26')
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
+    expect(await within(garageTable).findByText('77')).toBeInTheDocument()
+    expect(garageTable).not.toHaveTextContent('Услуга')
+    expect(garageRequests).toEqual(expect.arrayContaining([
+      { offset: 0, limit: 25, groupAccruals: false },
+      { offset: 25, limit: 25, groupAccruals: false },
+      { offset: 0, limit: 25, groupAccruals: true },
+    ]))
+  })
+
+  it('shows loading and error states for the paged garage report', async () => {
+    const user = userEvent.setup()
+    let rejectGarages: (reason?: unknown) => void = () => {}
+    const garagePromise = new Promise<GarageDetailReportDto>((_resolve, reject) => {
+      rejectGarages = reject
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReport: async () => garagePromise })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
+
+    expect(await within(reportsPanel).findByText('Загружаем отчет по гаражам...')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по гаражам')).toBeDisabled()
+
+    await act(async () => {
+      rejectGarages(new Error('Отчет по гаражам временно недоступен'))
+      await garagePromise.catch(() => undefined)
+    })
+
+    expect(await within(reportsPanel).findByText('Отчет по гаражам временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('Загружаем отчет по гаражам...')).not.toBeInTheDocument()
+  })
+
   it('shows loading and error states for the paged payout report', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
@@ -11671,6 +11746,20 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
         })
       }
       return report
+    },
+    getGarageReport: async (_token, params) => {
+      const search = params?.search?.toLowerCase() ?? ''
+      return createGarageDetailReport({
+        rows: createGarageDetailReport().rows.map((row) => ({
+          ...row,
+          garageId: search.includes('99') ? 'garage-99' : row.garageId,
+          garageNumber: search.includes('99') ? '99' : row.garageNumber,
+          incomeTypeId: params?.groupAccruals ? null : row.incomeTypeId,
+          incomeTypeName: params?.groupAccruals ? 'ИТОГО' : row.incomeTypeName,
+        })),
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      })
     },
     exportConsolidatedReportXlsx: async () => new Blob(['consolidated xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportConsolidatedReportPdf: async () => new Blob(['consolidated pdf'], { type: 'application/pdf' }),
@@ -13189,6 +13278,33 @@ function createConsolidatedReport(overrides: Partial<ConsolidatedReportDto> = {}
         meterReadingCount: 1,
       },
     ],
+    ...overrides,
+  }
+}
+
+function createGarageDetailReport(overrides: Partial<GarageDetailReportDto> = {}): GarageDetailReportDto {
+  return {
+    periodFrom: '2026-06-01',
+    periodTo: '2026-06-01',
+    accrualTotal: 2000,
+    incomeTotal: 1500,
+    difference: 500,
+    rowCount: 1,
+    rows: [
+      {
+        accountingMonth: '2026-06-01',
+        garageId: 'garage-1',
+        garageNumber: '12',
+        ownerName: 'Иванов Иван',
+        incomeTypeId: 'income-type-1',
+        incomeTypeName: 'Членский взнос',
+        accrualAmount: 2000,
+        incomeAmount: 1500,
+        difference: 500,
+      },
+    ],
+    offset: 0,
+    limit: 25,
     ...overrides,
   }
 }

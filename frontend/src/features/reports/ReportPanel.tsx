@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, SupplierDto } from '../../services/dictionariesApi'
-import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
+import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
@@ -26,15 +26,6 @@ type ReportDateRange = {
 type ReportNamedAmountRow = {
   name: string
   amount: number
-}
-
-type ReportGarageServiceRow = {
-  monthLabel: string
-  garageNumber: string
-  serviceName: string
-  accrualAmount: number
-  incomeAmount: number
-  debt: number
 }
 
 const dictionaryScreenRequestLimit = 100
@@ -84,49 +75,6 @@ function aggregateExpensePaymentsByName(report: ExpenseReportDto | null): Report
     .sort((left, right) => left.name.localeCompare(right.name, 'ru'))
 }
 
-function aggregateGarageIncomeReportRows(report: IncomeReportDto | null): ReportGarageServiceRow[] {
-  const totals = new Map<string, ReportGarageServiceRow>()
-  report?.rows.forEach((row) => {
-    const key = `${row.accountingMonth}|${row.garageNumber}|${row.incomeTypeName}`
-    const current = totals.get(key) ?? {
-      monthLabel: formatMonth(row.accountingMonth),
-      garageNumber: row.garageNumber,
-      serviceName: row.incomeTypeName,
-      accrualAmount: 0,
-      incomeAmount: 0,
-      debt: 0,
-    }
-    current.accrualAmount += row.accrualAmount
-    current.incomeAmount += row.incomeAmount
-    current.debt = current.accrualAmount - current.incomeAmount
-    totals.set(key, current)
-  })
-  return Array.from(totals.values())
-    .sort((left, right) => left.monthLabel.localeCompare(right.monthLabel, 'ru') || left.garageNumber.localeCompare(right.garageNumber, 'ru') || left.serviceName.localeCompare(right.serviceName, 'ru'))
-}
-
-function aggregateGarageIncomeRowsByGarage(rows: ReportGarageServiceRow[]): ReportGarageServiceRow[] {
-  const totals = new Map<string, ReportGarageServiceRow>()
-  rows.forEach((row) => {
-    const key = `${row.monthLabel}|${row.garageNumber}`
-    const current = totals.get(key) ?? {
-      monthLabel: row.monthLabel,
-      garageNumber: row.garageNumber,
-      serviceName: 'ИТОГО',
-      accrualAmount: 0,
-      incomeAmount: 0,
-      debt: 0,
-    }
-    current.accrualAmount += row.accrualAmount
-    current.incomeAmount += row.incomeAmount
-    current.debt = current.accrualAmount - current.incomeAmount
-    totals.set(key, current)
-  })
-
-  return Array.from(totals.values())
-    .sort((left, right) => left.monthLabel.localeCompare(right.monthLabel, 'ru') || left.garageNumber.localeCompare(right.garageNumber, 'ru'))
-}
-
 export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
@@ -158,8 +106,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
   const [consolidatedIncomeBreakdown, setConsolidatedIncomeBreakdown] = useState<IncomeReportDto | null>(null)
   const [consolidatedExpenseBreakdown, setConsolidatedExpenseBreakdown] = useState<ExpenseReportDto | null>(null)
-  const [garageReport, setGarageReport] = useState<ConsolidatedReportDto | null>(null)
-  const [garageIncomeDetailReport, setGarageIncomeDetailReport] = useState<IncomeReportDto | null>(null)
+  const [garageReport, setGarageReport] = useState<GarageDetailReportDto | null>(null)
+  const [garagePageRequest, setGaragePageRequest] = useState({ offset: 0, limit: 25 })
+  const [garageReportLoading, setGarageReportLoading] = useState(false)
+  const [garageReportError, setGarageReportError] = useState<string | null>(null)
   const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
   const [payoutPageRequest, setPayoutPageRequest] = useState({ offset: 0, limit: 25 })
   const [payoutReportLoading, setPayoutReportLoading] = useState(false)
@@ -230,8 +180,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       setReportDataError(null)
       try {
         const consolidatedFilter = monthlyFilters.consolidated
-        const garageFilterRange = monthlyFilters.garages
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedFees] = await Promise.all([
+        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
@@ -249,18 +198,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             rowMode: 'payments',
             limit: 500,
           }),
-          reportClient.getConsolidatedReport(auth.accessToken, {
-            monthFrom: getReportMonthStart(garageFilterRange.monthFrom),
-            monthTo: getReportMonthStart(garageFilterRange.monthTo),
-            search: garageFilter.trim() || undefined,
-            limit: 100,
-          }),
-          reportClient.getIncomeReport(auth.accessToken, {
-            dateFrom: getReportMonthStart(garageFilterRange.monthFrom),
-            dateTo: getReportMonthEnd(garageFilterRange.monthTo),
-            search: garageFilter.trim() || undefined,
-            limit: 500,
-          }),
           reportClient.getFeeReport(auth.accessToken, {
             variation: feeVariationFilter.trim() || undefined,
             limit: 100,
@@ -274,8 +211,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         setConsolidatedReport(loadedConsolidated)
         setConsolidatedIncomeBreakdown(loadedConsolidatedIncome)
         setConsolidatedExpenseBreakdown(loadedConsolidatedExpenses)
-        setGarageReport(loadedGarages)
-        setGarageIncomeDetailReport(loadedGarageIncomeDetails)
         setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
@@ -289,7 +224,48 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, feeVariationFilter, garageFilter, monthlyFilters.consolidated, monthlyFilters.garages, reportClient])
+  }, [auth.accessToken, feeVariationFilter, monthlyFilters.consolidated, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'garages') {
+      return
+    }
+
+    let ignore = false
+
+    async function loadGarageReport() {
+      setGarageReportLoading(true)
+      setGarageReportError(null)
+      try {
+        const filter = monthlyFilters.garages
+        const report = await reportClient.getGarageReport(auth.accessToken, {
+          monthFrom: getReportMonthStart(filter.monthFrom),
+          monthTo: getReportMonthStart(filter.monthTo),
+          search: garageFilter.trim() || undefined,
+          groupAccruals: garageAccrualsGrouped,
+          offset: garagePageRequest.offset,
+          limit: garagePageRequest.limit,
+        })
+        if (!ignore) {
+          setGarageReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setGarageReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по гаражам.')
+        }
+      } finally {
+        if (!ignore) {
+          setGarageReportLoading(false)
+        }
+      }
+    }
+
+    void loadGarageReport()
+
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, garageAccrualsGrouped, garageFilter, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'payouts') {
@@ -498,7 +474,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const counterpartyOptions = Array.from(new Set([...suppliers.map((supplier) => supplier.name), ...expenseTypes.map((item) => item.name), 'Электрик', 'Председатель', 'Бухгалтерия']))
 
   function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
-    if (key === 'payouts') {
+    if (key === 'garages') {
+      setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'payouts') {
       setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
     }
     setMonthlyFilters((current) => ({
@@ -530,7 +508,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function applyPreviousMonth(key: ReportMonthlyFilterKey) {
-    if (key === 'payouts') {
+    if (key === 'garages') {
+      setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'payouts') {
       setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
     }
     setMonthlyFilters((current) => ({
@@ -725,36 +705,41 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }
 
     if (activeReportTab === 'garages') {
-      const garageRowsByService = aggregateGarageIncomeReportRows(garageIncomeDetailReport)
-      const groupedGarageRows = aggregateGarageIncomeRowsByGarage(garageRowsByService)
-      const visibleGarageRows = garageAccrualsGrouped ? groupedGarageRows : garageRowsByService
       const garageReportColumns = garageAccrualsGrouped
         ? ['Месяц', 'Гараж', 'Начисления', 'Поступления', 'Разница']
         : ['Месяц', 'Гараж', 'Начисления', 'Услуга', 'Поступления', 'Разница']
-      const reportRows = visibleGarageRows.map((row) => garageAccrualsGrouped
+      const reportRows = garageReport?.rows.map((row) => garageAccrualsGrouped
         ? [
-          row.monthLabel,
+          formatMonth(row.accountingMonth),
           row.garageNumber,
           formatMoney(row.accrualAmount),
           formatMoney(row.incomeAmount),
-          formatMoney(row.debt),
+          formatMoney(row.difference),
         ]
         : [
-          row.monthLabel,
+          formatMonth(row.accountingMonth),
           row.garageNumber,
           formatMoney(row.accrualAmount),
-          row.serviceName,
+          row.incomeTypeName,
           formatMoney(row.incomeAmount),
-          formatMoney(row.debt),
-        ])
+          formatMoney(row.difference),
+        ]) ?? []
       const emptyGarageRow = garageAccrualsGrouped
         ? ['', garageFilterLabel, '', 'Данных за период нет', '']
         : ['', garageFilterLabel, '', 'Данных за период нет', '', '']
       const garageReportFooter = garageReport
         ? garageAccrualsGrouped
-          ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), formatMoney(garageReport.incomeTotal), formatMoney(garageReport.debt)]
-          : ['ИТОГО', '', formatMoney(garageReport.accrualTotal), '', formatMoney(garageReport.incomeTotal), formatMoney(garageReport.debt)]
+          ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), formatMoney(garageReport.incomeTotal), formatMoney(garageReport.difference)]
+          : ['ИТОГО', '', formatMoney(garageReport.accrualTotal), '', formatMoney(garageReport.incomeTotal), formatMoney(garageReport.difference)]
         : undefined
+      const garagePage = {
+        items: garageReport?.rows ?? [],
+        totalCount: garageReport?.rowCount ?? 0,
+        offset: garageReport?.offset ?? garagePageRequest.offset,
+        limit: garageReport?.limit ?? garagePageRequest.limit,
+      }
+      const garageVisibleRange = getPageVisibleRange(garagePage)
+      const garageNavigation = getPageNavigation(garagePage)
       return (
         <ReportWorkbookSheet title="Отчёт по гаражам">
           {renderMonthlyFilter('garages', {
@@ -763,17 +748,37 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             extra: (
               <label className="report-workbook-filter-wide">
                 <span>Гаражи</span>
-                <input aria-label="Гаражи" list={garageOptionsId} value={garageFilter} onChange={(event) => setGarageFilter(event.target.value)} placeholder="Гараж или номер" />
+                <input
+                  aria-label="Гаражи"
+                  list={garageOptionsId}
+                  value={garageFilter}
+                  onChange={(event) => {
+                    setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+                    setGarageFilter(event.target.value)
+                  }}
+                  placeholder="Гараж или номер"
+                />
               </label>
             ),
           })}
+          {garageReportLoading ? <p className="prototype-status" role="status">Загружаем отчет по гаражам...</p> : null}
+          {garageReportError ? <FormError>{garageReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО поступлений</strong>
             <strong>Разница</strong>
           </div>
           <div className="report-workbook-toolbar" role="group" aria-label="Группировка отчета по гаражам">
-            <button className="secondary-button" type="button" aria-pressed={garageAccrualsGrouped} onClick={() => setGarageAccrualsGrouped((current) => !current)}>
+            <button
+              className="secondary-button"
+              type="button"
+              aria-pressed={garageAccrualsGrouped}
+              disabled={garageReportLoading}
+              onClick={() => {
+                setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+                setGarageAccrualsGrouped((current) => !current)
+              }}
+            >
               {garageAccrualsGrouped ? 'Разгруппировать начисления' : 'Сгруппировать начисления'}
             </button>
           </div>
@@ -783,6 +788,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             reportRows.length > 0 ? reportRows : [emptyGarageRow],
             garageReportFooter,
           )}
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация отчета по гаражам">
+            <span role="status" aria-live="polite">Показано {garageVisibleRange.from}-{garageVisibleRange.to} из {garagePage.totalCount}</span>
+            <label>
+              Строк на странице
+              <select
+                aria-label="Строк на странице отчета по гаражам"
+                value={garagePage.limit}
+                disabled={garageReportLoading}
+                onChange={(event) => setGaragePageRequest({ offset: 0, limit: Number(event.target.value) })}
+              >
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={!garageNavigation.canGoPrevious || garageReportLoading} onClick={() => setGaragePageRequest((current) => ({ ...current, offset: garageNavigation.previousOffset }))}>Назад</button>
+            <button className="ghost-button" type="button" disabled={!garageNavigation.canGoNext || garageReportLoading} onClick={() => setGaragePageRequest((current) => ({ ...current, offset: garageNavigation.nextOffset }))}>Вперед</button>
+          </div>
         </ReportWorkbookSheet>
       )
     }

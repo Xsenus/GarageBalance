@@ -27,6 +27,26 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpGet("garages")]
+    [ProducesResponseType<GarageDetailReportDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<GarageDetailReportDto>> GetGarageReport(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        [FromQuery] bool groupAccruals,
+        [FromQuery] int? limit,
+        [FromQuery] int? offset,
+        CancellationToken cancellationToken)
+    {
+        var result = await reportService.GetGarageReportAsync(
+            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, limit, offset, GetActorUserId()),
+            cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpPost("consolidated/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

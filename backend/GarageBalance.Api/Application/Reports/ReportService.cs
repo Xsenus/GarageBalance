@@ -10,6 +10,7 @@ public sealed class ReportService(
     IFundChangeReportQuery fundChangeReportQuery,
     IConsolidatedMonthlyReportQuery consolidatedMonthlyReportQuery,
     IConsolidatedGarageReportQuery consolidatedGarageReportQuery,
+    IGarageReportQuery garageReportQuery,
     IFeeReportQuery feeReportQuery,
     IExpenseReportQuery expenseReportQuery,
     IIncomeReportQuery incomeReportQuery,
@@ -106,6 +107,68 @@ public sealed class ReportService(
             cancellationToken);
 
         return ReportResult<ConsolidatedReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<GarageDetailReportDto>> GetGarageReportAsync(GarageReportRequest request, CancellationToken cancellationToken)
+    {
+        var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
+        var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
+        if (periodTo < periodFrom)
+        {
+            return ReportResult<GarageDetailReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        var offset = Math.Max(request.Offset ?? 0, 0);
+        var limit = NormalizeReportLimit(request.Limit ?? 25);
+        var data = await garageReportQuery.GetRowsAsync(
+            periodFrom,
+            periodTo,
+            request.Search,
+            request.GroupAccruals,
+            offset,
+            limit,
+            cancellationToken);
+        var rows = data.Rows.Select(row => new GarageDetailReportRowDto(
+                row.AccountingMonth,
+                row.GarageId,
+                row.GarageNumber,
+                FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
+                row.IncomeTypeId,
+                row.IncomeTypeName,
+                row.AccrualAmount,
+                row.IncomeAmount,
+                row.AccrualAmount - row.IncomeAmount))
+            .ToList();
+        var report = new GarageDetailReportDto(
+            periodFrom,
+            periodTo,
+            data.AccrualTotal,
+            data.IncomeTotal,
+            data.AccrualTotal - data.IncomeTotal,
+            data.RowCount,
+            rows,
+            offset,
+            limit);
+
+        await AddReportAuditAsync(
+            request.ActorUserId,
+            "reports.garages_generated",
+            "Отчет по гаражам",
+            "generated",
+            report.PeriodFrom,
+            report.PeriodTo,
+            report.RowCount,
+            request.Search,
+            new Dictionary<string, object?>
+            {
+                ["groupAccruals"] = request.GroupAccruals,
+                ["limit"] = request.Limit,
+                ["offset"] = request.Offset,
+                ["visibleRowCount"] = report.Rows.Count
+            },
+            cancellationToken);
+
+        return ReportResult<GarageDetailReportDto>.Success(report);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)

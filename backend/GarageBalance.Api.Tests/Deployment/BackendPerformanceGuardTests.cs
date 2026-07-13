@@ -376,6 +376,22 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void GarageReportScreenQuery_AggregatesCountsTotalsAndPageInDatabase()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfGarageReportQuery.cs");
+
+        Assert.True(CountOccurrences(source, ".Concat(") >= 2, "Garage report sources must remain a SQL UNION ALL pipeline.");
+        Assert.True(CountOccurrences(source, ".GroupBy(") >= 2, "Expanded and grouped garage modes must aggregate before paging.");
+        Assert.Contains("sourceRows.SumAsync(row => row.AccrualAmount, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("sourceRows.SumAsync(row => row.IncomeAmount, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("groupedRows.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains("if (IsNpgsql())", source, StringComparison.Ordinal);
+        Assert.Contains("matchingGarageIds", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CashPaymentScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
