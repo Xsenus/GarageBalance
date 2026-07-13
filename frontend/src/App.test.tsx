@@ -227,9 +227,16 @@ describe('App', () => {
     expect(within(dashboardTiles).getByRole('button', { name: 'Счётчики' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: 'Платежи' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: 'Отчёты' })).toBeInTheDocument()
-    expect(within(dashboardTiles).queryByRole('button', { name: 'Настройки' })).not.toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeInTheDocument()
+    expect(within(dashboardTiles).getAllByRole('button')).toHaveLength(7)
+    expect(within(dashboardTiles).queryByRole('button', { name: 'Справочники' })).not.toBeInTheDocument()
+    expect(within(dashboardTiles).queryByRole('button', { name: 'Пользователи' })).not.toBeInTheDocument()
+    expect(within(dashboardTiles).queryByRole('button', { name: 'Импорт' })).not.toBeInTheDocument()
+    expect(within(dashboardTiles).queryByRole('button', { name: 'История изменений' })).not.toBeInTheDocument()
+    expect(within(dashboardTiles).queryByRole('button', { name: 'Что нового' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('navigation', { name: 'Основные разделы' })).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Основные разделы' })).getByRole('button', { name: 'Справочники' })).toBeInTheDocument()
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
@@ -344,6 +351,7 @@ describe('App', () => {
       'Счётчики',
       'Платежи',
       'Отчёты',
+      'Настройки',
       /Управление\s+фондами/i,
     ]
 
@@ -5422,6 +5430,7 @@ describe('App', () => {
     expect(within(operatorTiles).getByRole('button', { name: 'Контрагенты' })).toBeEnabled()
     expect(within(operatorTiles).getByRole('button', { name: 'Платежи' })).toBeEnabled()
     expect(within(operatorTiles).getByRole('button', { name: 'Отчёты' })).toBeDisabled()
+    expect(within(operatorTiles).getByRole('button', { name: 'Настройки' })).toBeEnabled()
     expect(within(operatorTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeDisabled()
 
     await user.click(within(operatorTiles).getByRole('button', { name: 'Контрагенты' }))
@@ -5448,7 +5457,7 @@ describe('App', () => {
           user: {
             email: 'viewer@example.com',
             displayName: 'Наблюдатель',
-            roles: ['read_only'],
+            roles: ['administrator'],
             permissions: ['users.manage', 'dictionaries.read', 'payments.read', 'reports.read'],
           },
         }),
@@ -5567,7 +5576,7 @@ describe('App', () => {
           user: {
             email: 'tariff@example.com',
             displayName: 'Тарифный специалист',
-            roles: ['tariff_manager'],
+            roles: ['administrator'],
             permissions: ['users.manage', 'dictionaries.read', 'tariffs.manage'],
           },
         }),
