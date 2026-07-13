@@ -3,12 +3,30 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
-    public void FinancePanelRemainsInItsFeatureModule()
+    public void WorkspaceRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
+        Assert.Contains("import { Workspace } from './features/workspace/Workspace'", appText, StringComparison.Ordinal);
+        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function Workspace(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function AccessNotice(", appText, StringComparison.Ordinal);
+        Assert.Contains("export function Workspace(", featureText, StringComparison.Ordinal);
+        Assert.Contains("const dashboardTiles", featureText, StringComparison.Ordinal);
+        Assert.Contains("function AccessNotice(", featureText, StringComparison.Ordinal);
+        Assert.Contains("case 'payments':", featureText, StringComparison.Ordinal);
+        Assert.Contains("<FinancePanel", featureText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/workspace/Workspace.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-roadmap.md")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FinancePanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
-        Assert.Contains("import { FinancePanel } from './features/finance/FinancePanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { FinancePanel } from '../finance/FinancePanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<FinancePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function FinancePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function PaymentsPrototypePanel(", appText, StringComparison.Ordinal);
@@ -24,9 +42,9 @@ public sealed class FrontendFeatureModuleTests
     public void ContractorsPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx"));
-        Assert.Contains("import { ContractorsPrototypePanel } from './features/contractors/ContractorsPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { ContractorsPrototypePanel } from '../contractors/ContractorsPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<ContractorsPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ContractorsPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type ContractorGarageRow", appText, StringComparison.Ordinal);
@@ -42,9 +60,9 @@ public sealed class FrontendFeatureModuleTests
     public void TariffsAndFeesPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx"));
-        Assert.Contains("import { TariffsAndFeesPrototypePanel } from './features/tariffs/TariffsAndFeesPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { TariffsAndFeesPrototypePanel } from '../tariffs/TariffsAndFeesPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<TariffsAndFeesPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function TariffsAndFeesPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type TariffPrototypePendingChange", appText, StringComparison.Ordinal);
@@ -59,14 +77,14 @@ public sealed class FrontendFeatureModuleTests
     public void DictionaryPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
         var roadmapLine = File
             .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { DictionaryPanelV2 } from './features/dictionaries/DictionaryPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { DictionaryPanelV2 } from '../dictionaries/DictionaryPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<DictionaryPanelV2", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function DictionaryPanelV2(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type DictionaryEditorState", appText, StringComparison.Ordinal);
@@ -85,7 +103,7 @@ public sealed class FrontendFeatureModuleTests
     public void DictionaryListRemainsInSharedUi()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var dictionaryListText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx"));
         var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
         var roadmapLine = File
@@ -110,7 +128,7 @@ public sealed class FrontendFeatureModuleTests
     public void UserManagementPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var userManagementPanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -123,7 +141,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { UserManagementPanel } from './features/users/UserManagementPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { UserManagementPanel } from '../users/UserManagementPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<UserManagementPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function UserManagementPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type UserEditorState", appText, StringComparison.Ordinal);
@@ -142,7 +160,7 @@ public sealed class FrontendFeatureModuleTests
     public void ReportPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var reportPanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -155,7 +173,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { ReportPanel } from './features/reports/ReportPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { ReportPanel } from '../reports/ReportPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<ReportPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ReportPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type ReportWorkbookTab", appText, StringComparison.Ordinal);
@@ -173,7 +191,7 @@ public sealed class FrontendFeatureModuleTests
     public void AuditPanelRemainsInItsFeatureModuleWithSharedNavigationContracts()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var navigationContractsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "workspaceNavigation.ts"));
         var roadmapLine = File
@@ -181,7 +199,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { AuditPanel } from './features/audit/AuditPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { AuditPanel } from '../audit/AuditPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<AuditPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function AuditPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("getAuditEventSectionLabel", appText, StringComparison.Ordinal);
@@ -202,7 +220,7 @@ public sealed class FrontendFeatureModuleTests
     public void MeterReadingsPanelRemainsInItsFeatureModuleWithSharedEditingHelpers()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var meterReadingsPanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -217,7 +235,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { MeterReadingsPrototypePanel } from './features/meterReadings/MeterReadingsPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { MeterReadingsPrototypePanel } from '../meterReadings/MeterReadingsPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<MeterReadingsPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function MeterReadingsPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("const meterReadingMonths", appText, StringComparison.Ordinal);
@@ -237,7 +255,7 @@ public sealed class FrontendFeatureModuleTests
     public void ImportPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var importPanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -250,7 +268,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { ImportPanel } from './features/import/ImportPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { ImportPanel } from '../import/ImportPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<ImportPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ImportPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type ImportTab", appText, StringComparison.Ordinal);
@@ -269,7 +287,7 @@ public sealed class FrontendFeatureModuleTests
     public void FundsPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var fundsPanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -282,7 +300,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { FundsPrototypePanel } from './features/funds/FundsPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { FundsPrototypePanel } from '../funds/FundsPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<FundsPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function FundsPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type FundOperationDraft", appText, StringComparison.Ordinal);
@@ -301,7 +319,7 @@ public sealed class FrontendFeatureModuleTests
     public void PasswordPanelRemainsInItsFeatureModuleWithSharedFormField()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var passwordPanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -315,7 +333,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { PasswordPanel } from './features/settings/PasswordPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { PasswordPanel } from '../settings/PasswordPanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<PasswordPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function PasswordPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("getOneCFreshSyncConfirmationTitle", appText, StringComparison.Ordinal);
@@ -335,7 +353,7 @@ public sealed class FrontendFeatureModuleTests
     public void AuthGateRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var authGateText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -364,7 +382,7 @@ public sealed class FrontendFeatureModuleTests
     public void ReleasePanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var releasePanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -377,7 +395,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { ReleasePanel } from './features/releases/ReleasePanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("import { ReleasePanel } from '../releases/ReleasePanel'", appText, StringComparison.Ordinal);
         Assert.Contains("<ReleasePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ReleasePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("createReleaseEditorState", appText, StringComparison.Ordinal);

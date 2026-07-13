@@ -6403,6 +6403,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var startScreenLine = activeRoadmapLines.Single(line =>
             line.Contains("Основной экран не должен быть landing page", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var workspaceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
         Assert.StartsWith("- `[x]`", startScreenLine, StringComparison.Ordinal);
@@ -6416,11 +6417,11 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("<main className=\"auth-entry\">", appText, StringComparison.Ordinal);
         Assert.Contains("<AuthGate authClient={authClient} onAuthenticated={handleAuthenticated} />", appText, StringComparison.Ordinal);
         Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appText, StringComparison.Ordinal);
-        Assert.Contains("case 'dashboard'", appText, StringComparison.Ordinal);
-        Assert.Contains("className=\"dashboard-home\"", appText, StringComparison.Ordinal);
-        Assert.Contains("role=\"group\" aria-label=\"Главные разделы\"", appText, StringComparison.Ordinal);
-        Assert.Contains("const dashboardTiles", appText, StringComparison.Ordinal);
-        Assert.Contains("{ title: 'Платежи', section: 'payments'", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'dashboard'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("className=\"dashboard-home\"", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("role=\"group\" aria-label=\"Главные разделы\"", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("const dashboardTiles", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("{ title: 'Платежи', section: 'payments'", workspaceText, StringComparison.Ordinal);
         Assert.DoesNotContain("hero", appText, StringComparison.OrdinalIgnoreCase);
 
         Assert.Contains("shows auth gate before workspace is available", appTestsText, StringComparison.Ordinal);
@@ -6445,6 +6446,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var prototypeLine = activeRoadmapLines.Single(line =>
             line.Contains("Подготовить прототип основных экранов", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var workspaceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
         Assert.StartsWith("- `[x]`", prototypeLine, StringComparison.Ordinal);
@@ -6457,17 +6459,17 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Импорт Access", prototypeLine, StringComparison.Ordinal);
         Assert.Contains("App.test.tsx", prototypeLine, StringComparison.Ordinal);
 
-        Assert.Contains("case 'dashboard'", appText, StringComparison.Ordinal);
-        Assert.Contains("case 'dictionaries'", appText, StringComparison.Ordinal);
-        Assert.Contains("case 'tariffsAndFees'", appText, StringComparison.Ordinal);
-        Assert.Contains("case 'payments'", appText, StringComparison.Ordinal);
-        Assert.Contains("case 'reports'", appText, StringComparison.Ordinal);
-        Assert.Contains("case 'import'", appText, StringComparison.Ordinal);
-        Assert.Contains("<DictionaryPanelV2", appText, StringComparison.Ordinal);
-        Assert.Contains("<TariffsAndFeesPrototypePanel", appText, StringComparison.Ordinal);
-        Assert.Contains("<FinancePanel", appText, StringComparison.Ordinal);
-        Assert.Contains("<ReportPanel", appText, StringComparison.Ordinal);
-        Assert.Contains("<ImportPanel", appText, StringComparison.Ordinal);
+        Assert.Contains("case 'dashboard'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("case 'dictionaries'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("case 'tariffsAndFees'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("case 'payments'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("case 'reports'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("case 'import'", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("<DictionaryPanelV2", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("<TariffsAndFeesPrototypePanel", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("<FinancePanel", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("<ReportPanel", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("<ImportPanel", workspaceText, StringComparison.Ordinal);
 
         Assert.Contains("shows auth gate before workspace is available", appTestsText, StringComparison.Ordinal);
         Assert.Contains("creates first administrator and opens the workspace with users and dictionaries", appTestsText, StringComparison.Ordinal);
@@ -6490,6 +6492,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var statesLine = activeRoadmapLines.Single(line =>
             line.Contains("Показать состояния без данных", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var workspaceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var releasePanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
@@ -6527,9 +6530,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("accessibleStatus.test.ts", statesLine, StringComparison.Ordinal);
         Assert.Contains("formFeedback.test.tsx", statesLine, StringComparison.Ordinal);
 
-        Assert.Contains("function AccessNotice", appText, StringComparison.Ordinal);
-        Assert.Contains("Раздел недоступен", appText, StringComparison.Ordinal);
-        Assert.Contains("Требуется право:", appText, StringComparison.Ordinal);
+        Assert.Contains("function AccessNotice", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Раздел недоступен", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Требуется право:", workspaceText, StringComparison.Ordinal);
         Assert.Contains("role=\"alert\"", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("className=\"empty-state\"", financePanelText, StringComparison.Ordinal);
         Assert.Contains("role=\"status\" aria-live=\"polite\"", financePanelText, StringComparison.Ordinal);

@@ -22,7 +22,8 @@ describe('accessible dynamic messages', () => {
   const tariffsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const contractorsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const financePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource].join('\n')
+  const workspacePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'Workspace.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource, workspacePanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = workspaceSource
@@ -285,11 +286,11 @@ describe('accessible dynamic messages', () => {
     expect(appSource).toContain('aria-label={item.label}')
     expect(appSource).toContain('title={item.label}')
     expect(appSource).toContain('aria-current={isActive ? \'page\' : undefined}')
-    expect(appSource).toContain('aria-label={tile.title.replace(\'\\n\', \' \')}')
-    expect(appSource).toContain('title={tile.title.replace(\'\\n\', \' \')}')
-    expect(appSource).toContain('aria-label="Назад к выбору раздела" title="Назад к выбору раздела"')
-    expect(appSource).toContain('aria-label="Уведомления" title="Уведомления"')
-    expect(appSource).toContain('aria-label="Выйти" title="Выйти"')
+    expect(workspacePanelSource).toContain('aria-label={tile.title.replace(\'\\n\', \' \')}')
+    expect(workspacePanelSource).toContain('title={tile.title.replace(\'\\n\', \' \')}')
+    expect(workspacePanelSource).toContain('aria-label="Назад к выбору раздела" title="Назад к выбору раздела"')
+    expect(workspacePanelSource).toContain('aria-label="Уведомления" title="Уведомления"')
+    expect(workspacePanelSource).toContain('aria-label="Выйти" title="Выйти"')
 
     expect(normalizedAppCss).toContain('.nav-item:hover,\n.nav-item:focus-visible,\n.nav-item.active')
     expect(normalizedAppCss).toContain('.nav-item:focus-visible {\n  outline: 3px solid rgba(46, 144, 250, 0.18);')
@@ -366,20 +367,20 @@ describe('accessible dynamic messages', () => {
   })
   it('keeps icon-only buttons named and explicitly typed', () => {
     const iconButtonIndexes = [
-      ...appSource.matchAll(/className="icon-button"/g),
-      ...appSource.matchAll(/className="funds-action-button/g),
+      ...workspaceSource.matchAll(/className="icon-button"/g),
+      ...workspaceSource.matchAll(/className="funds-action-button/g),
     ].map((match) => match.index ?? -1)
 
     expect(iconButtonIndexes.length).toBeGreaterThan(0)
 
     for (const classNameIndex of iconButtonIndexes) {
-      const buttonStart = appSource.lastIndexOf('<button', classNameIndex)
-      const buttonEnd = appSource.indexOf('</button>', classNameIndex)
+      const buttonStart = workspaceSource.lastIndexOf('<button', classNameIndex)
+      const buttonEnd = workspaceSource.indexOf('</button>', classNameIndex)
 
       expect(buttonStart).toBeGreaterThan(-1)
       expect(buttonEnd).toBeGreaterThan(classNameIndex)
 
-      const buttonSource = appSource.slice(buttonStart, buttonEnd)
+      const buttonSource = workspaceSource.slice(buttonStart, buttonEnd)
       expect(buttonSource).toMatch(/\stype="(?:button|submit)"/)
       expect(buttonSource).toContain('aria-label=')
     }
