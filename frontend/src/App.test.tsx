@@ -27,7 +27,7 @@ import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, Acces
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
 import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
-import type { ManagedRoleDto, ManagedUserDto, UserManagementClient } from './services/usersApi'
+import type { ManagedRoleDto, ManagedUserDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
   beforeEach(() => {
@@ -65,7 +65,7 @@ describe('App', () => {
     }
 
     const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
-    const tileName = name === 'Справочники' ? /Тарифы\s+и\s+сборы/i : name === 'Отчеты' ? 'Отчёты' : name
+    const tileName = name === 'Отчеты' ? 'Отчёты' : name
     await user.click(within(dashboardTiles).getByRole('button', { name: tileName }))
   }
 
@@ -4135,6 +4135,26 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Свернуть панель' })).toBeInTheDocument()
   })
 
+  it('keeps the left sidebar exclusive to the administrator role', async () => {
+    const user = userEvent.setup()
+    const nonAdministratorWithUserPermission = createAuthResponse({
+      user: {
+        email: 'manager@example.com',
+        displayName: 'Менеджер доступа',
+        roles: ['operator'],
+        permissions: ['users.manage', 'dictionaries.read'],
+      },
+    })
+    render(<App authClient={createAuthClient({ login: async () => nonAdministratorWithUserPermission })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Развернуть панель' })).not.toBeInTheDocument()
+  })
+
   it('keeps shell navigation titles current state and icon-only actions in the rendered DOM', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -4902,9 +4922,14 @@ describe('App', () => {
     expect(within(dialog).getByText('Email')).toBeInTheDocument()
     expect(within(dialog).getByText('Имя сотрудника')).toBeInTheDocument()
     expect(within(dialog).getByText('Роль')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Email пользователя')).toHaveAttribute('autocomplete', 'off')
+    expect(within(dialog).getByLabelText('Пароль пользователя')).toHaveAttribute('autocomplete', 'new-password')
+    expect(within(dialog).getByLabelText('Подтверждение пароля пользователя')).toHaveAttribute('autocomplete', 'new-password')
+    expect(within(dialog).getAllByRole('button').filter((button) => ['Сохранить', 'Отмена'].includes(button.textContent ?? '')).map((button) => button.textContent)).toEqual(['Сохранить', 'Отмена'])
     await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
     await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
     await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
@@ -4938,6 +4963,7 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
     await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'Password')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'Password')
     await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
@@ -4948,16 +4974,40 @@ describe('App', () => {
     expect(within(usersPanel).queryByText('operator@example.com')).not.toBeInTheDocument()
   })
 
+  it('does not create a user when password confirmation differs', async () => {
+    const user = userEvent.setup()
+    const createUser = vi.fn(createStatefulUserClient().createUser)
+    const userClient = createStatefulUserClient()
+    userClient.createUser = createUser
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    await user.click((await screen.findByRole('region', { name: 'Пользователи' })).querySelector('button.secondary-button')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass124')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(dialog).findByText('Пароль и подтверждение пароля не совпадают.')).toBeInTheDocument()
+    expect(createUser).not.toHaveBeenCalled()
+  })
+
   it('opens user edit and delete operations from context menu modals', async () => {
     const user = userEvent.setup()
     const statefulUserClient = createStatefulUserClient()
     let deactivationReason: string | null = null
     let updateCalls = 0
+    let lastUpdateRequest: UpdateManagedUserRequest | null = null
     const userClient: UserManagementClient = {
       ...statefulUserClient,
       updateUser: async (...args) => {
         updateCalls += 1
         const request = args[2]
+        lastUpdateRequest = request
         if (!request.isActive) {
           deactivationReason = request.deactivationReason ?? null
         }
@@ -4977,6 +5027,7 @@ describe('App', () => {
     await user.type(within(createDialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(createDialog).getByLabelText('Имя пользователя'), 'Оператор')
     await user.type(within(createDialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(createDialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
     await user.selectOptions(within(createDialog).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(createDialog).getByRole('button', { name: 'Сохранить' }))
 
@@ -5026,6 +5077,7 @@ describe('App', () => {
 
     expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
     expect(updateCalls).toBe(1)
+    expect(lastUpdateRequest?.newPassword).toBeNull()
     expect(await screen.findByText('Пользователь изменен.')).toHaveAttribute('role', 'status')
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
@@ -5175,6 +5227,7 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
     await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
     await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)

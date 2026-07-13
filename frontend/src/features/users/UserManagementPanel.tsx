@@ -40,7 +40,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [restoreTarget, setRestoreTarget] = useState<ManagedUserDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
-  const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
+  const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !saveConfirmation)
@@ -136,6 +136,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       email: user?.email ?? '',
       displayName: user?.displayName ?? '',
       password: '',
+      passwordConfirmation: '',
       roleCode: getPrimaryRoleCode(user, roles),
       isActive: user?.isActive ?? true,
       deactivationReason: '',
@@ -167,7 +168,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         displayName: form.displayName.trim(),
         roleCodes: [form.roleCode],
         isActive: form.isActive,
-        newPassword: form.password.trim() ? form.password : null,
+        newPassword: form.password.length > 0 ? form.password : null,
         deactivationReason: editor.user.isActive && !form.isActive ? form.deactivationReason.trim() : null,
       }
       const changes = getUserEditorChanges(form, editor.user, roles)
@@ -500,18 +501,18 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <X size={18} />
               </button>
             </div>
-            <form className="dictionary-modal-form" onSubmit={saveUser}>
+            <form className="dictionary-modal-form" autoComplete="off" onSubmit={saveUser}>
               {editor.mode === 'create' ? (
                 <FormField label="Email">
-                  <input aria-label="Email пользователя" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
+                  <input aria-label="Email пользователя" autoComplete="off" data-1p-ignore data-lpignore="true" name="managed-user-email" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
                 </FormField>
               ) : (
                 <FormField label="Email">
-                  <input aria-label="Email пользователя" value={form.email} disabled />
+                  <input aria-label="Email пользователя" autoComplete="off" name="managed-user-email-readonly" value={form.email} disabled />
                 </FormField>
               )}
               <FormField label="Имя сотрудника">
-                <input aria-label="Имя пользователя" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
+                <input aria-label="Имя пользователя" autoComplete="off" name="managed-user-display-name" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
               </FormField>
               <FormField label="Роль">
                 <select aria-label="Роль пользователя" value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })} required>
@@ -542,6 +543,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <input
                   aria-label="Пароль пользователя"
                   aria-describedby="new-user-password-policy-hint"
+                  autoComplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  name="managed-user-new-password"
                   placeholder={editor.mode === 'create' ? 'Пароль' : 'Оставьте пустым, если менять не нужно'}
                   value={form.password}
                   onChange={(event) => setForm({ ...form, password: event.target.value })}
@@ -550,14 +555,30 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   required={editor.mode === 'create'}
                 />
               </FormField>
+              <FormField label={editor.mode === 'create' ? 'Повторите пароль' : 'Повторите новый пароль'}>
+                <input
+                  aria-label="Подтверждение пароля пользователя"
+                  aria-describedby="new-user-password-policy-hint"
+                  autoComplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  name="managed-user-new-password-confirmation"
+                  placeholder={editor.mode === 'create' ? 'Повторите пароль' : 'Повторите новый пароль'}
+                  value={form.passwordConfirmation}
+                  onChange={(event) => setForm({ ...form, passwordConfirmation: event.target.value })}
+                  type="password"
+                  minLength={editor.mode === 'create' ? 8 : undefined}
+                  required={editor.mode === 'create'}
+                />
+              </FormField>
               <p className="form-hint" id="new-user-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
               <FormValidationSummary title={editor.mode === 'create' ? 'Проверьте нового пользователя' : 'Проверьте пользователя'} items={validationErrors} />
               <div className="detail-dialog-actions">
-                <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={saving !== null || roles.length === 0}>
                   <Save size={16} />
                   <span>Сохранить</span>
                 </button>
+                <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
               </div>
             </form>
           </section>

@@ -25,6 +25,7 @@ describe('user management helpers', () => {
       email: user.email,
       displayName: `  ${user.displayName}  `,
       password: '',
+      passwordConfirmation: '',
       roleCode: 'operator',
       isActive: true,
       deactivationReason: '',
@@ -37,6 +38,7 @@ describe('user management helpers', () => {
       email: user.email,
       displayName: 'Старший оператор',
       password: 'StrongPass123',
+      passwordConfirmation: 'StrongPass123',
       roleCode: 'administrator',
       isActive: false,
       deactivationReason: 'Доступ больше не нужен',
@@ -53,6 +55,7 @@ describe('user management helpers', () => {
       email: '',
       displayName: '',
       password: 'weak',
+      passwordConfirmation: 'weak',
       roleCode: '',
       isActive: true,
       deactivationReason: '',
@@ -71,6 +74,7 @@ describe('user management helpers', () => {
       email: '',
       displayName: 'Оператор',
       password: '',
+      passwordConfirmation: '',
       roleCode: 'operator',
       isActive: true,
       deactivationReason: '',
@@ -80,6 +84,7 @@ describe('user management helpers', () => {
       email: '',
       displayName: '',
       password: 'weak',
+      passwordConfirmation: 'weak',
       roleCode: '',
       isActive: true,
       deactivationReason: '',
@@ -98,6 +103,7 @@ describe('user management helpers', () => {
       email: activeUser.email,
       displayName: activeUser.displayName,
       password: '',
+      passwordConfirmation: '',
       roleCode: 'operator',
       isActive: false,
       deactivationReason: '',
@@ -107,10 +113,24 @@ describe('user management helpers', () => {
       email: activeUser.email,
       displayName: activeUser.displayName,
       password: '',
+      passwordConfirmation: '',
       roleCode: 'operator',
       isActive: false,
       deactivationReason: 'Уволился',
     }, 'edit', activeUser)).toEqual([])
+  })
+
+  it('requires matching password fields when a password is entered', () => {
+    const user = createUser(['operator'])
+    expect(getUserEditorValidationErrors({
+      email: user.email,
+      displayName: user.displayName,
+      password: 'StrongPass123',
+      passwordConfirmation: 'StrongPass124',
+      roleCode: 'operator',
+      isActive: true,
+      deactivationReason: '',
+    }, 'edit', user)).toContain('Пароль и подтверждение пароля не совпадают.')
   })
 })
 

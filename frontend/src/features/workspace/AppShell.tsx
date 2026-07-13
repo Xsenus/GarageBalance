@@ -23,7 +23,7 @@ import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ReleaseClient } from '../../services/releasesApi'
 import type { ReportClient } from '../../services/reportsApi'
 import type { UserManagementClient } from '../../services/usersApi'
-import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
+import { hasAnyPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { Workspace } from './Workspace'
 
@@ -93,7 +93,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
 
   const activeNavigationItem = navigation.find((entry) => entry.section === activeSection)
   const effectiveActiveSection = activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
-  const showSidebar = hasPermission(auth, permissions.usersManage)
+  const showSidebar = isAdministrator(auth)
   const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
 

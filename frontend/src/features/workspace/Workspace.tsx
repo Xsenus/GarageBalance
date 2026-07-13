@@ -27,6 +27,7 @@ import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '.
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
   { title: 'Тарифы\nи сборы', section: 'tariffsAndFees', requiredAny: [permissions.dictionariesRead] },
+  { title: 'Справочники', section: 'dictionaries', requiredAny: [permissions.dictionariesRead] },
   { title: 'Контрагенты', section: 'contractors', requiredAny: [permissions.dictionariesRead] },
   { title: 'Счётчики', section: 'meterReadings', requiredAny: [permissions.paymentsRead] },
   { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },

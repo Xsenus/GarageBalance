@@ -144,6 +144,8 @@ Build a pleasant but operational interface: compact, calm, readable, and suitabl
 
 Use icons for navigation and actions where appropriate. Keep dense tables readable, make filters obvious, and avoid decorative layouts that reduce useful working space.
 
+Use one shared visual pattern for all single-value comboboxes/selects. Controls must have the same height, border, radius, typography, spacing, chevron, hover/focus, error and disabled states as the rest of the form; a later CSS rule must not reset the shared chevron or other select styling. Every combobox must have an accessible label and keyboard-friendly native or shared accessible behavior. Do not introduce an isolated browser-default or one-off combobox style in a feature form.
+
 For important flows, design loading, empty, error, validation, and permission-denied states from the start.
 
 Use one loading pattern throughout the application. Initial screen, form, card, and table loads must render a shared skeleton that follows the final content shape and keeps the layout stable; do not show a bare `Загрузка...` / `Загружаем...` paragraph in place of content. Use a compact progress indicator inside the affected button only for short submit/save actions. Loading UI must expose a concise `role="status"` announcement with `aria-live="polite"`, keep decorative skeleton bars hidden from assistive technologies, honor `prefers-reduced-motion`, prevent conflicting actions, and never show an empty-state message until loading has finished. Empty table states must use the shared empty-state presentation with comfortable vertical padding instead of an unstyled hint directly under the header.

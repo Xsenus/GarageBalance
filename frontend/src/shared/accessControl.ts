@@ -30,6 +30,10 @@ export function hasPermission(auth: AuthResponse, permission: string): boolean {
   return auth.user.permissions.includes(permission)
 }
 
+export function isAdministrator(auth: AuthResponse): boolean {
+  return auth.user.roles.includes('administrator')
+}
+
 export function hasAnyPermission(auth: AuthResponse, requiredAny?: readonly string[]): boolean {
   return !requiredAny || requiredAny.some((permission) => hasPermission(auth, permission))
 }

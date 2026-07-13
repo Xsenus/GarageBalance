@@ -7,6 +7,7 @@ export type UserFormState = {
   email: string
   displayName: string
   password: string
+  passwordConfirmation: string
   roleCode: string
   isActive: boolean
   deactivationReason: string
@@ -51,8 +52,18 @@ export function getUserEditorChanges(form: UserFormState, user: ManagedUserDto, 
 }
 
 export function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'edit', user?: ManagedUserDto) {
+  const passwordWasEntered = form.password.length > 0 || form.passwordConfirmation.length > 0
+  const passwordConfirmationError = passwordWasEntered && form.password !== form.passwordConfirmation
+    ? 'Пароль и подтверждение пароля не совпадают.'
+    : null
+
   if (mode === 'create') {
-    return getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCode)
+    const errors = getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCode)
+    if (passwordConfirmationError) {
+      errors.push(passwordConfirmationError)
+    }
+
+    return errors
   }
 
   const errors: string[] = []
@@ -64,8 +75,12 @@ export function getUserEditorValidationErrors(form: UserFormState, mode: 'create
     errors.push('Выберите роль пользователя.')
   }
 
-  if (form.password.trim()) {
+  if (passwordWasEntered) {
     errors.push(...getPasswordPolicyErrors(form.password, 'Укажите новый пароль или оставьте поле пустым.'))
+  }
+
+  if (passwordConfirmationError) {
+    errors.push(passwordConfirmationError)
   }
 
   if (user?.isActive && !form.isActive && !form.deactivationReason.trim()) {
