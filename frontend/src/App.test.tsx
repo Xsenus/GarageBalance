@@ -6435,8 +6435,21 @@ describe('App', () => {
     const paginationCounter = within(dictionaryPanel).getByText('Показано 1-6 из 6')
     expect(paginationCounter).toHaveAttribute('role', 'status')
     expect(paginationCounter).toHaveAttribute('aria-live', 'polite')
+    const pagination = within(dictionaryPanel).getByRole('navigation', { name: 'Пагинация справочника' })
+    expect(pagination.firstElementChild).toHaveClass('pagination-primary')
+    expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
     const pageSizes = within(dictionaryPanel).getByRole('group', { name: 'Количество строк справочника' })
     expect(within(pageSizes).getByRole('button', { name: '25' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(pagination).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+
+    const ownersTable = within(dictionaryPanel).getByRole('table', { name: 'Таблица: Владельцы' })
+    const actionsHeader = within(ownersTable).getByRole('columnheader', { name: 'Действия' })
+    expect(actionsHeader).toHaveClass('dictionary-actions-column')
+    const firstOwnerRow = within(ownersTable).getByText('Владелец1 Тест').closest('tr')
+    const deleteButton = within(firstOwnerRow as HTMLElement).getByRole('button', { name: 'Удалить' })
+    expect(deleteButton).toHaveAttribute('title', 'Удалить')
+    expect(deleteButton).toHaveTextContent('')
+    expect(deleteButton.closest('td')).toHaveClass('dictionary-actions-column')
   })
 
   it('announces empty dictionary lists', async () => {
@@ -6885,6 +6898,9 @@ describe('App', () => {
     expect(within(archivedRow).getByText('Архив')).toBeInTheDocument()
 
     const restoreButton = within(archivedRow).getByRole('button', { name: 'Вернуть' })
+    expect(restoreButton).toHaveAttribute('title', 'Вернуть')
+    expect(restoreButton).toHaveTextContent('')
+    expect(restoreButton.closest('td')).toHaveClass('dictionary-actions-column')
     await user.click(restoreButton)
     expect(restoredOwnerId).toBeNull()
     const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть запись из архива?' })

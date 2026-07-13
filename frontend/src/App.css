@@ -4078,12 +4078,32 @@ h1 {
 }
 
 .dictionary-row-action {
+  display: inline-flex;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   min-height: 32px;
-  padding: 6px 9px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .dictionary-row-action-danger {
   color: #b42318;
+}
+
+.dictionary-data-table th.dictionary-actions-column,
+.dictionary-data-table td.dictionary-actions-column {
+  width: 72px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dictionary-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .dictionary-pagination {

@@ -702,7 +702,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
   }
 
   function renderHeaders() {
-    return [...getDictionaryTableHeaders(activeSection), 'Статус', 'Действие'].map((header) => <th key={header}>{header}</th>)
+    const headers = [...getDictionaryTableHeaders(activeSection), 'Статус', 'Действия']
+    return headers.map((header, index) => <th className={index === headers.length - 1 ? 'dictionary-actions-column' : undefined} key={header}>{header}</th>)
   }
 
   function renderCells(item: DictionaryRecord) {
@@ -716,17 +717,15 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
   function renderRowAction(item: DictionaryRecord) {
     if (isArchivedRecord(item)) {
       return (
-        <button className="ghost-button dictionary-row-action" type="button" disabled={!canWriteActiveSection} onClick={() => setRestoreTarget({ section: activeSection, item })}>
-          <RotateCcw size={15} />
-          <span>Вернуть</span>
+        <button className="ghost-button dictionary-row-action" type="button" aria-label="Вернуть" title="Вернуть" disabled={!canWriteActiveSection} onClick={() => setRestoreTarget({ section: activeSection, item })}>
+          <RotateCcw size={15} aria-hidden="true" />
         </button>
       )
     }
 
     return (
-      <button className="ghost-button dictionary-row-action dictionary-row-action-danger" type="button" disabled={!canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
-        <Trash2 size={15} />
-        <span>Удалить</span>
+      <button className="ghost-button dictionary-row-action dictionary-row-action-danger" type="button" aria-label="Удалить" title="Удалить" disabled={!canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
+        <Trash2 size={15} aria-hidden="true" />
       </button>
     )
   }
@@ -1030,7 +1029,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
                         {isArchivedRecord(item) ? 'Архив' : 'Активна'}
                       </span>
                     </td>
-                    <td>{renderRowAction(item)}</td>
+                    <td className="dictionary-actions-column"><span className="dictionary-row-actions">{renderRowAction(item)}</span></td>
                   </tr>
                 ))}
               </tbody>
