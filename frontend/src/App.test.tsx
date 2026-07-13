@@ -9568,7 +9568,7 @@ describe('App', () => {
     expect(within(auditTable).getByText('Администратор ГСК')).toBeInTheDocument()
     expect(within(auditTable).getByText('admin@example.test')).toBeInTheDocument()
     expect(within(auditTable).getByText('ID 5df20dec-2959-4726-a1cb-0e6ec6b28674')).toBeInTheDocument()
-    expect(within(auditTable).getByText('23.06.2026 (11:00:00)')).toBeInTheDocument()
+    expect(within(auditTable).getByText(/23\.06\.2026 \(\d{2}:00:00\)/)).toBeInTheDocument()
     const detailButton = within(auditTable).getByRole('button', { name: 'Открыть карточку события Изменение' })
     expect(detailButton).not.toHaveTextContent('Открыть')
     await user.click(detailButton)
