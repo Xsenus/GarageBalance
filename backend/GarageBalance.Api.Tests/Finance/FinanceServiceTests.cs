@@ -441,6 +441,53 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetMeterReadingYearPageAsync_ReturnsOnlyPagedActiveGaragesAndCompactYearValues()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondGarage = new Garage { Number = "20", PeopleCount = 1, FloorCount = 1 };
+        var archivedGarage = new Garage { Number = "30", PeopleCount = 1, FloorCount = 1, IsArchived = true };
+        database.Context.Garages.AddRange(secondGarage, archivedGarage);
+        database.Context.MeterReadings.AddRange(
+            new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 125m },
+            new MeterReading { GarageId = secondGarage.Id, MeterKind = "water", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 25m },
+            new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2025, 12, 1), ReadingDate = new DateOnly(2025, 12, 20), CurrentValue = 100m },
+            new MeterReading { GarageId = archivedGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 500m });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetMeterReadingYearPageAsync(
+            new MeterReadingYearRequest(2026, " ELECTRICITY ", 1, 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.TotalCount);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
+        var garage = Assert.Single(result.Value.Garages);
+        Assert.Equal(secondGarage.Id, garage.Id);
+        var reading = Assert.Single(result.Value.Readings);
+        Assert.Equal(secondGarage.Id, reading.GarageId);
+        Assert.Equal(new DateOnly(2026, 2, 1), reading.AccountingMonth);
+        Assert.Equal(125m, reading.CurrentValue);
+        Assert.DoesNotContain(result.Value.Garages, item => item.Id == fixtures.Garage.Id);
+    }
+
+    [Theory]
+    [InlineData(1899, "electricity", "meter_reading_year_invalid")]
+    [InlineData(2026, "gas", "meter_kind_invalid")]
+    public async Task GetMeterReadingYearPageAsync_ValidatesYearAndMeterKind(int year, string meterKind, string errorCode)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetMeterReadingYearPageAsync(new MeterReadingYearRequest(year, meterKind), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(errorCode, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task PageEndpoints_NormalizeInvalidPaging()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -229,6 +229,23 @@ public sealed record MeterReadingDto(
     string? Comment,
     bool IsCanceled);
 
+public sealed record MeterReadingYearGarageDto(Guid Id, string Number);
+
+public sealed record MeterReadingYearValueDto(Guid Id, Guid GarageId, DateOnly AccountingMonth, decimal CurrentValue);
+
+public sealed record MeterReadingYearPageDto(
+    IReadOnlyList<MeterReadingYearGarageDto> Garages,
+    IReadOnlyList<MeterReadingYearValueDto> Readings,
+    int TotalCount,
+    int Offset,
+    int Limit);
+
+public sealed record MeterReadingYearRequest(
+    int Year,
+    string? MeterKind,
+    int? Limit = null,
+    int? Offset = null);
+
 public sealed record MissingMeterReadingDto(
     Guid GarageId,
     string GarageNumber,

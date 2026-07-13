@@ -191,6 +191,38 @@ public sealed class FinanceService(
         return new FinancePagedResult<MeterReadingDto>(page.Items.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
+    public async Task<FinanceResult<MeterReadingYearPageDto>> GetMeterReadingYearPageAsync(
+        MeterReadingYearRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Year is < 1900 or > 9999)
+        {
+            return FinanceResult<MeterReadingYearPageDto>.Failure("meter_reading_year_invalid", "Год показаний должен быть от 1900 до 9999.");
+        }
+
+        var meterKind = request.MeterKind?.Trim().ToLowerInvariant();
+        if (meterKind is not ("water" or "electricity"))
+        {
+            return FinanceResult<MeterReadingYearPageDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+        }
+
+        var normalizedOffset = NormalizeListOffset(request.Offset);
+        var normalizedLimit = NormalizeListLimit(request.Limit);
+        var page = await meterReadingRepository.GetYearPageAsync(
+            request.Year,
+            meterKind,
+            normalizedOffset,
+            normalizedLimit,
+            cancellationToken);
+        var result = new MeterReadingYearPageDto(
+            page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number)).ToList(),
+            page.Readings.Select(reading => new MeterReadingYearValueDto(reading.Id, reading.GarageId, reading.AccountingMonth, reading.CurrentValue)).ToList(),
+            page.TotalCount,
+            normalizedOffset,
+            normalizedLimit);
+        return FinanceResult<MeterReadingYearPageDto>.Success(result);
+    }
+
     public async Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());

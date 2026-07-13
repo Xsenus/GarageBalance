@@ -1,9 +1,11 @@
 import { memo, useCallback, useEffect, useState } from 'react'
 import { Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { DictionaryClient, GarageDto } from '../../services/dictionariesApi'
-import type { CreateMeterReadingRequest, FinanceClient } from '../../services/financeApi'
+import type { DictionaryClient } from '../../services/dictionariesApi'
+import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
+import { Pagination } from '../../shared/PageNavigator'
 import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
@@ -26,6 +28,8 @@ const meterReadingTypes = [
   { id: 'electricity', label: 'Электроэнергия', unit: 'кВт' },
   { id: 'water', label: 'Вода', unit: 'м3' },
 ] as const
+
+const meterReadingPageSize = 25
 
 type MeterReadingTypeId = typeof meterReadingTypes[number]['id']
 
@@ -72,10 +76,10 @@ type MeterReadingMonth = typeof meterReadingMonths[number]
 type MeterReadingsTableProps = {
   appliedYear: string
   draftReadings: Record<string, string>
-  garages: GarageDto[]
+  garages: MeterReadingYearGarageDto[]
   loading: boolean
   meterType: MeterReadingTypeId
-  onCommitReading: (garage: GarageDto, month: MeterReadingMonth) => void
+  onCommitReading: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
   onDraftReadingChange: (cellKey: string, value: string) => void
   savedReadings: Record<string, string>
   savingReadingKey: string | null
@@ -113,8 +117,10 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
           ))}
         </div>
         {loading ? (
-          <div className="meter-readings-empty-row" role="row">
-            <span role="cell">Загрузка гаражей и показаний...</span>
+          <div className="meter-readings-loading-row" role="row">
+            <span role="cell">
+              <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем гаражи и показания" rows={5} columns={6} />
+            </span>
           </div>
         ) : garages.length > 0 ? garages.map((garage) => (
           <div className="meter-readings-data-row" role="row" key={garage.id}>
@@ -146,10 +152,12 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   )
 })
 
-export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
+export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
   const [yearDraft, setYearDraft] = useState('2026')
   const [appliedYear, setAppliedYear] = useState('2026')
-  const [garages, setGarages] = useState<GarageDto[]>([])
+  const [garages, setGarages] = useState<MeterReadingYearGarageDto[]>([])
+  const [pageOffset, setPageOffset] = useState(0)
+  const [totalGarageCount, setTotalGarageCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savedReadings, setSavedReadings] = useState<Record<string, string>>({})
@@ -186,6 +194,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     setYearDraft(nextYear)
 
     if (isValidMeterReadingYear(nextYear)) {
+      setPageOffset(0)
       setAppliedYear(nextYear)
     }
   }
@@ -208,24 +217,27 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setLoading(true)
       setError(null)
       try {
-        const [items, readingsPage] = await Promise.all([
-          dictionaryClient.getGarages(auth.accessToken, undefined, 500),
-          financeClient.getMeterReadingsPage(auth.accessToken, { monthFrom: `${appliedYear}-01`, monthTo: `${appliedYear}-12`, meterKind: meterType, limit: 6000, offset: 0 }),
-        ])
+        const yearPage = await financeClient.getMeterReadingYearPage(auth.accessToken, {
+          year: Number(appliedYear),
+          meterKind: meterType,
+          limit: meterReadingPageSize,
+          offset: pageOffset,
+        })
         if (!isMounted) {
           return
         }
 
         const nextSavedReadings: Record<string, string> = {}
         const nextSavedReadingIds: Record<string, string> = {}
-        readingsPage.items.filter((reading) => !reading.isCanceled).forEach((reading) => {
+        yearPage.readings.forEach((reading) => {
           const monthKey = reading.accountingMonth.slice(5, 7)
           const cellKey = createMeterReadingCellKey(appliedYear, meterType, reading.garageId, monthKey)
           nextSavedReadings[cellKey] = formatMeterReadingInputValue(reading.currentValue)
           nextSavedReadingIds[cellKey] = reading.id
         })
 
-        setGarages([...items.filter((item) => !item.isArchived)].sort((left, right) => left.number.localeCompare(right.number, 'ru-RU', { numeric: true })))
+        setGarages(yearPage.garages)
+        setTotalGarageCount(yearPage.totalCount)
         setSavedReadings(nextSavedReadings)
         setDraftReadings(nextSavedReadings)
         setSavedReadingIds(nextSavedReadingIds)
@@ -237,6 +249,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
         setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить гаражи.')
         setGarages([])
+        setTotalGarageCount(0)
         setLoading(false)
       }
     }
@@ -246,7 +259,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     return () => {
       isMounted = false
     }
-  }, [appliedYear, auth.accessToken, dictionaryClient, financeClient, meterType])
+  }, [appliedYear, auth.accessToken, financeClient, meterType, pageOffset])
 
   const saveReadingValue = useCallback(async (cellKey: string, readingId: string | undefined, nextValue: string) => {
     const [, , garageId, monthKey] = cellKey.split(':')
@@ -287,7 +300,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: value }))
   }, [])
 
-  const commitReading = useCallback((garage: GarageDto, month: MeterReadingMonth) => {
+  const commitReading = useCallback((garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => {
     if (!yearIsValid) {
       return
     }
@@ -367,6 +380,21 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         selectedMeterType={selectedMeterType}
         yearIsValid={yearIsValid}
       />
+
+      {totalGarageCount > 0 ? (
+        <nav className="meter-readings-pagination" aria-label="Пагинация показаний">
+          <span role="status" aria-live="polite">
+            {`Показано ${pageOffset + 1}-${Math.min(pageOffset + garages.length, totalGarageCount)} из ${totalGarageCount}`}
+          </span>
+          <Pagination
+            currentPage={Math.floor(pageOffset / meterReadingPageSize) + 1}
+            totalPages={Math.max(1, Math.ceil(totalGarageCount / meterReadingPageSize))}
+            disabled={loading}
+            showQuickJump
+            onPageChange={(page) => setPageOffset((page - 1) * meterReadingPageSize)}
+          />
+        </nav>
+      ) : null}
 
       {pendingReadingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>

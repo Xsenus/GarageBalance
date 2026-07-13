@@ -21,7 +21,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -2622,17 +2622,16 @@ describe('App', () => {
     let createdMeterReadingRequest: CreateMeterReadingRequest | null = null
     let updatedMeterReadingRequest: CreateMeterReadingRequest | null = null
     let updatedMeterReadingId: string | null = null
-    const meterReadingPageRequests: Array<Parameters<FinanceClient['getMeterReadingsPage']>[1]> = []
-    const dictionaryClient = createDictionaryClient({
-      getGarages: async () => [
-        createGarage({ id: 'garage-27', number: '27' }),
-        createGarage({ id: 'garage-12', number: '12' }),
-      ],
-    })
+    let resolveMeterReadingYearPage!: (page: MeterReadingYearPageDto) => void
+    const meterReadingYearPageRequests: Array<Parameters<FinanceClient['getMeterReadingYearPage']>[1]> = []
+    const getGarages = vi.fn(async () => [createGarage({ id: 'unused-garage', number: '99' })])
+    const dictionaryClient = createDictionaryClient({ getGarages })
     const financeClient = createFinanceClient({
-      getMeterReadingsPage: async (_token, params) => {
-        meterReadingPageRequests.push(params)
-        return { items: [], totalCount: 0, offset: 0, limit: 6000 }
+      getMeterReadingYearPage: async (_token, params) => {
+        meterReadingYearPageRequests.push(params)
+        return await new Promise<MeterReadingYearPageDto>((resolve) => {
+          resolveMeterReadingYearPage = resolve
+        })
       },
       createMeterReading: async (_token, request) => {
         createdMeterReadingRequest = request
@@ -2675,6 +2674,17 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: 'Счётчики' }))
 
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    expect(within(readingsPanel).getByRole('status', { name: 'Загружаем гаражи и показания' })).toBeInTheDocument()
+    await act(async () => resolveMeterReadingYearPage({
+      garages: [
+        { id: 'garage-12', number: '12' },
+        { id: 'garage-27', number: '27' },
+      ],
+      readings: [],
+      totalCount: 2,
+      offset: 0,
+      limit: 25,
+    }))
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(readingsPanel).getByLabelText('Год показаний')).toHaveValue('2026')
     expect(within(readingsPanel).queryByRole('combobox', { name: 'Тип показаний' })).not.toBeInTheDocument()
@@ -2682,8 +2692,10 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
     expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварькВт/i })).toBeInTheDocument()
     expect(await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')).toBeInTheDocument()
-    await waitFor(() => expect(meterReadingPageRequests).toHaveLength(1))
-    expect(meterReadingPageRequests[0]).toMatchObject({ monthFrom: '2026-01', monthTo: '2026-12', meterKind: 'electricity' })
+    await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
+    expect(meterReadingYearPageRequests[0]).toEqual({ year: 2026, meterKind: 'electricity', offset: 0, limit: 25 })
+    expect(getGarages).not.toHaveBeenCalled()
+    expect(within(readingsPanel).getByRole('navigation', { name: 'Пагинация показаний' })).toHaveTextContent('Показано 1-2 из 2')
     expect(within(readingsPanel).getByLabelText('Гараж 27, Декабрь, показание')).toBeInTheDocument()
     expect(within(readingsPanel).queryByLabelText('Гараж 35, Декабрь, показание')).not.toBeInTheDocument()
 
@@ -2693,7 +2705,7 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('alert')).toHaveTextContent('Введите год четырьмя цифрами от 1900 до 9999.')
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
     expect(within(readingsPanel).queryByRole('table', { name: 'Показания счетчиков за 1899 год' })).not.toBeInTheDocument()
-    expect(meterReadingPageRequests).toHaveLength(1)
+    expect(meterReadingYearPageRequests).toHaveLength(1)
 
     await user.clear(yearInput)
     await user.type(yearInput, '2026')
@@ -11765,6 +11777,13 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getSupplierAccrualsPage: async () => ({ items: [supplierAccrual], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadings: async () => [meterReading],
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
+    getMeterReadingYearPage: async () => ({
+      garages: [{ id: meterReading.garageId, number: meterReading.garageNumber }],
+      readings: [{ id: meterReading.id, garageId: meterReading.garageId, accountingMonth: meterReading.accountingMonth, currentValue: meterReading.currentValue }],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }),
     getMissingMeterReadings: async () => [missingMeterReading],
     getGarageBalanceHistory: async () => garageBalanceHistory,
     getGarageIncomeWorksheet: async () => garageIncomeWorksheet,

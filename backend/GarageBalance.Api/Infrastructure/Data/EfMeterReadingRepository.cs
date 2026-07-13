@@ -55,6 +55,51 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         return new MeterReadingPageData(items, totalCount);
     }
 
+    public async Task<MeterReadingYearPageData> GetYearPageAsync(
+        int year,
+        string meterKind,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var garageQuery = dbContext.Garages.AsNoTracking()
+            .Where(garage => !garage.IsArchived);
+        var totalCount = await garageQuery.CountAsync(cancellationToken);
+        var garages = await garageQuery
+            .OrderBy(garage => garage.Number)
+            .ThenBy(garage => garage.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(garage => new MeterReadingYearGarageData(garage.Id, garage.Number))
+            .ToListAsync(cancellationToken);
+
+        if (garages.Count == 0)
+        {
+            return new MeterReadingYearPageData(garages, [], totalCount);
+        }
+
+        var monthFrom = new DateOnly(year, 1, 1);
+        var monthTo = new DateOnly(year, 12, 1);
+        var garageIds = garages.Select(garage => garage.Id).ToArray();
+        var readings = await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading =>
+                !reading.IsCanceled &&
+                reading.MeterKind == meterKind &&
+                reading.AccountingMonth >= monthFrom &&
+                reading.AccountingMonth <= monthTo &&
+                garageIds.Contains(reading.GarageId))
+            .OrderBy(reading => reading.GarageId)
+            .ThenBy(reading => reading.AccountingMonth)
+            .Select(reading => new MeterReadingYearValueData(
+                reading.Id,
+                reading.GarageId,
+                reading.AccountingMonth,
+                reading.CurrentValue))
+            .ToListAsync(cancellationToken);
+
+        return new MeterReadingYearPageData(garages, readings, totalCount);
+    }
+
     public async Task<IReadOnlyList<MeterReading>> GetForGaragePeriodAsync(
         Guid garageId,
         DateOnly monthFrom,

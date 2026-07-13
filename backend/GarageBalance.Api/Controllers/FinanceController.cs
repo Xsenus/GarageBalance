@@ -123,6 +123,24 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetMeterReadingsPageAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search, limit, offset), cancellationToken));
     }
 
+    [HttpGet("meter-readings/year")]
+    [ProducesResponseType<MeterReadingYearPageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<MeterReadingYearPageDto>> GetMeterReadingYearPage(
+        [FromQuery] int year,
+        [FromQuery] string? meterKind,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetMeterReadingYearPageAsync(
+            new MeterReadingYearRequest(year, meterKind, limit, offset),
+            cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : Problem(statusCode: StatusCodes.Status400BadRequest, title: result.ErrorMessage, extensions: new Dictionary<string, object?> { ["code"] = result.ErrorCode });
+    }
+
     [HttpGet("meter-readings/missing")]
     [ProducesResponseType<IReadOnlyList<MissingMeterReadingDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MissingMeterReadingDto>>> GetMissingMeterReadings(

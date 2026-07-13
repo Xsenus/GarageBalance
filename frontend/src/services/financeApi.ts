@@ -109,6 +109,26 @@ export type MeterReadingDto = {
   isCanceled: boolean
 }
 
+export type MeterReadingYearGarageDto = {
+  id: string
+  number: string
+}
+
+export type MeterReadingYearValueDto = {
+  id: string
+  garageId: string
+  accountingMonth: string
+  currentValue: number
+}
+
+export type MeterReadingYearPageDto = {
+  garages: MeterReadingYearGarageDto[]
+  readings: MeterReadingYearValueDto[]
+  totalCount: number
+  offset: number
+  limit: number
+}
+
 export type MissingMeterReadingDto = {
   garageId: string
   garageNumber: string
@@ -353,6 +373,7 @@ export type FinanceClient = {
   getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<SupplierAccrualDto>>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
+  getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }): Promise<MeterReadingYearPageDto>
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
@@ -485,6 +506,14 @@ export const financeApi: FinanceClient = {
       monthTo: toMonthStart(params.monthTo),
       meterKind: params.meterKind,
       search: params.search,
+      offset: params.offset,
+      limit: params.limit,
+    }))
+  },
+  getMeterReadingYearPage(accessToken, params) {
+    return requestJson(accessToken, withQuery('/api/finance/meter-readings/year', {
+      year: params.year,
+      meterKind: params.meterKind,
       offset: params.offset,
       limit: params.limit,
     }))

@@ -18,6 +18,8 @@ public interface IFinanceService
 
     Task<FinancePagedResult<MeterReadingDto>> GetMeterReadingsPageAsync(MeterReadingListRequest request, CancellationToken cancellationToken);
 
+    Task<FinanceResult<MeterReadingYearPageDto>> GetMeterReadingYearPageAsync(MeterReadingYearRequest request, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<GarageBalanceHistoryDto>> GetGarageBalanceHistoryAsync(Guid garageId, GarageBalanceHistoryRequest request, CancellationToken cancellationToken);

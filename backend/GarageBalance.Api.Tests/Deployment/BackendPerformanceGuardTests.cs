@@ -130,6 +130,20 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void MeterReadingYearPage_ProjectsOnlyVisibleGaragesAndCompactValuesBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfMeterReadingRepository.cs");
+
+        Assert.Contains("GetYearPageAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".Where(garage => !garage.IsArchived)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains("new MeterReadingYearGarageData(garage.Id, garage.Number)", source, StringComparison.Ordinal);
+        Assert.Contains("new MeterReadingYearValueData(", source, StringComparison.Ordinal);
+        Assert.Contains("garageIds.Contains(reading.GarageId)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AccrualRepository_UsesDatabaseCountOffsetAndLimitWithScopedSqliteFallback()
     {
         var source = ReadApiSource("Infrastructure/Data/EfAccrualRepository.cs");

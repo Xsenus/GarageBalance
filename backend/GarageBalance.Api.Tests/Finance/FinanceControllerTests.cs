@@ -69,6 +69,38 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetMeterReadingYearPage_PassesCompactYearRequestToService()
+    {
+        var page = new MeterReadingYearPageDto([], [], 0, 25, 50);
+        var service = new FakeFinanceService
+        {
+            MeterReadingYearPageResult = FinanceResult<MeterReadingYearPageDto>.Success(page)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetMeterReadingYearPage(2026, "electricity", 25, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(page, ok.Value);
+        Assert.Equal(new MeterReadingYearRequest(2026, "electricity", 50, 25), service.LastMeterReadingYearRequest);
+    }
+
+    [Fact]
+    public async Task GetMeterReadingYearPage_ReturnsBadRequestForInvalidFilter()
+    {
+        var service = new FakeFinanceService
+        {
+            MeterReadingYearPageResult = FinanceResult<MeterReadingYearPageDto>.Failure("meter_kind_invalid", "Некорректный тип счетчика.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetMeterReadingYearPage(2026, "gas", 0, 25, CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+    }
+
+    [Fact]
     public async Task GetGarageBalanceHistory_PassesGarageAndPeriodToService()
     {
         var garageId = Guid.NewGuid();
@@ -1274,6 +1306,7 @@ public sealed class FinanceControllerTests
         public AccrualListRequest? LastAccrualListRequest { get; private set; }
         public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
+        public MeterReadingYearRequest? LastMeterReadingYearRequest { get; private set; }
         public MissingMeterReadingListRequest? LastMissingMeterReadingListRequest { get; private set; }
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
@@ -1311,6 +1344,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<MeterReadingDto> UpdateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> RestoreMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterReadingYearPageDto> MeterReadingYearPageResult { get; init; } = FinanceResult<MeterReadingYearPageDto>.Failure("not_configured", "Not configured.");
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
@@ -1358,6 +1392,12 @@ public sealed class FinanceControllerTests
         {
             LastMeterReadingListRequest = request;
             return Task.FromResult(new FinancePagedResult<MeterReadingDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
+        }
+
+        public Task<FinanceResult<MeterReadingYearPageDto>> GetMeterReadingYearPageAsync(MeterReadingYearRequest request, CancellationToken cancellationToken)
+        {
+            LastMeterReadingYearRequest = request;
+            return Task.FromResult(MeterReadingYearPageResult);
         }
 
         public Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken)

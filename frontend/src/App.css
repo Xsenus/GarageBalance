@@ -2119,6 +2119,27 @@ h1 {
   margin-top: 14px;
 }
 
+.meter-readings-loading-row,
+.meter-readings-empty-row {
+  min-width: 100%;
+}
+
+.meter-readings-loading-row > span,
+.meter-readings-empty-row > span {
+  display: block;
+  padding: 16px;
+}
+
+.meter-readings-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 2px 0;
+  color: #667085;
+  font-size: 13px;
+}
+
 .release-heading-actions {
   display: flex;
   align-items: center;

@@ -21,6 +21,13 @@ public interface IMeterReadingRepository
         int limit,
         CancellationToken cancellationToken);
 
+    Task<MeterReadingYearPageData> GetYearPageAsync(
+        int year,
+        string meterKind,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<MeterReading>> GetForGaragePeriodAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<int> CountActiveAsync(DateOnly? monthFrom, DateOnly? monthTo, string? normalizedSearch, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
@@ -32,3 +39,12 @@ public interface IMeterReadingRepository
 }
 
 public sealed record MeterReadingPageData(IReadOnlyList<MeterReading> Items, int TotalCount);
+
+public sealed record MeterReadingYearGarageData(Guid Id, string Number);
+
+public sealed record MeterReadingYearValueData(Guid Id, Guid GarageId, DateOnly AccountingMonth, decimal CurrentValue);
+
+public sealed record MeterReadingYearPageData(
+    IReadOnlyList<MeterReadingYearGarageData> Garages,
+    IReadOnlyList<MeterReadingYearValueData> Readings,
+    int TotalCount);
