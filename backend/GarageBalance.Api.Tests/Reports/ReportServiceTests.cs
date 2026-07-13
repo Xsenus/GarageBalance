@@ -789,7 +789,7 @@ public sealed class ReportServiceTests
         await database.Context.SaveChangesAsync();
 
         var result = await service.GetBankDepositReportAsync(
-            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", 10, actorUserId),
+            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", 10, ActorUserId: actorUserId),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -806,7 +806,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GetBankDepositReportAsync_AppliesRowLimitWithoutChangingTotals()
+    public async Task GetBankDepositReportAsync_AppliesPageWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
@@ -846,15 +846,17 @@ public sealed class ReportServiceTests
         await database.Context.SaveChangesAsync();
 
         var result = await service.GetBankDepositReportAsync(
-            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Search: null, Limit: 1),
+            new BankDepositReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Search: null, Limit: 1, Offset: 1),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(600m, result.Value!.Total);
         Assert.Equal(3, result.Value.RowCount);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal(new DateOnly(2026, 6, 10), row.Date);
-        Assert.Equal("Сдача 1", row.Comment);
+        Assert.Equal(new DateOnly(2026, 6, 11), row.Date);
+        Assert.Equal("Сдача 2", row.Comment);
     }
 
     [Fact]

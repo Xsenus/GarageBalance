@@ -377,13 +377,14 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void BankDepositScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization()
+    public void BankDepositScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetBankDepositsAsync[\s\S]*?operation\.Fund\.Name\.ToLower\(\)\.Contains\(normalizedSearch\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyLimit\(orderedQuery, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetBankDepositsAsync[\s\S]*?operation\.Fund\.Name\.ToLower\(\)\.Contains\(normalizedSearch\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyPage\(orderedQuery, offset, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
+        Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Reason.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
     }
 

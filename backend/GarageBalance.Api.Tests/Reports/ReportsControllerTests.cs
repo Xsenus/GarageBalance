@@ -340,12 +340,13 @@ public sealed class ReportsControllerTests
         };
         var controller = new ReportsController(service);
 
-        var result = await controller.GetBankDepositReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", 16, CancellationToken.None);
+        var result = await controller.GetBankDepositReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "банк", 16, 8, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal("банк", service.BankDepositRequest?.Search);
         Assert.Equal(16, service.BankDepositRequest?.Limit);
+        Assert.Equal(8, service.BankDepositRequest?.Offset);
     }
 
     [Fact]
@@ -356,7 +357,7 @@ public sealed class ReportsControllerTests
             BankDepositResult = ReportResult<BankDepositReportDto>.Failure("period_invalid", "Invalid period.")
         });
 
-        var result = await controller.GetBankDepositReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
+        var result = await controller.GetBankDepositReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -786,6 +787,8 @@ public sealed class ReportsControllerTests
             new DateOnly(2026, 6, 30),
             3000m,
             1,
+            0,
+            25,
             [
                 new BankDepositReportRowDto(Guid.NewGuid(), new DateOnly(2026, 6, 15), 3000m, "Прочее", "Сдача наличных")
             ]);

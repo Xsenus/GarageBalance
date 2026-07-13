@@ -68,6 +68,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         DateOnly dateFrom,
         DateOnly dateTo,
         string? search,
+        int offset,
         int? limit,
         CancellationToken cancellationToken)
     {
@@ -101,9 +102,9 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                     .ToList();
             }
 
-            operations = operations.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ToList();
+            operations = operations.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id).ToList();
             return new BankDepositReportData(
-                ApplyLimit(operations, limit).ToList(),
+                ApplyPage(operations, offset, limit).ToList(),
                 operations.Sum(operation => operation.Amount),
                 operations.Count);
         }
@@ -118,8 +119,8 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
 
         var rowCount = await query.CountAsync(cancellationToken);
         var total = rowCount == 0 ? 0m : await query.SumAsync(operation => operation.Amount, cancellationToken);
-        var orderedQuery = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name);
-        var result = await ApplyLimit(orderedQuery, limit).ToListAsync(cancellationToken);
+        var orderedQuery = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
+        var result = await ApplyPage(orderedQuery, offset, limit).ToListAsync(cancellationToken);
         return new BankDepositReportData(result, total, rowCount);
     }
 

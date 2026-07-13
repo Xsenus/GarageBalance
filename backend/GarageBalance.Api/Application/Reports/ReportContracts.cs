@@ -49,6 +49,7 @@ public sealed record BankDepositReportRequest(
     DateOnly? DateTo,
     string? Search,
     int? Limit = null,
+    int? Offset = null,
     Guid? ActorUserId = null);
 
 public sealed record FeeReportRequest(
@@ -190,6 +191,8 @@ public sealed record BankDepositReportDto(
     DateOnly DateTo,
     decimal Total,
     int RowCount,
+    int Offset,
+    int Limit,
     IReadOnlyList<BankDepositReportRowDto> Rows);
 
 public sealed record BankDepositReportRowDto(

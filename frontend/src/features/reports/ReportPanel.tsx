@@ -167,6 +167,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [cashPaymentReportLoading, setCashPaymentReportLoading] = useState(false)
   const [cashPaymentReportError, setCashPaymentReportError] = useState<string | null>(null)
   const [bankDepositReport, setBankDepositReport] = useState<BankDepositReportDto | null>(null)
+  const [bankDepositPageRequest, setBankDepositPageRequest] = useState({ offset: 0, limit: 25 })
+  const [bankDepositReportLoading, setBankDepositReportLoading] = useState(false)
+  const [bankDepositReportError, setBankDepositReportError] = useState<string | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
   const [feeDetailMode, setFeeDetailMode] = useState<'debtors' | 'all'>('debtors')
@@ -224,8 +227,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const garageFilterRange = monthlyFilters.garages
         const payoutFilter = monthlyFilters.payouts
         const incomeFilter = dateFilters.income
-        const bankDepositFilter = dateFilters.bankDeposits
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedIncome, loadedBankDeposits, loadedFees] = await Promise.all([
+        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedIncome, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
@@ -268,11 +270,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             rowMode: 'payments',
             limit: 100,
           }),
-          reportClient.getBankDepositReport(auth.accessToken, {
-            dateFrom: bankDepositFilter.dateFrom,
-            dateTo: bankDepositFilter.dateTo,
-            limit: 100,
-          }),
           reportClient.getFeeReport(auth.accessToken, {
             variation: feeVariationFilter.trim() || undefined,
             limit: 100,
@@ -290,7 +287,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         setGarageIncomeDetailReport(loadedGarageIncomeDetails)
         setPayoutReport(loadedPayouts)
         setIncomeReport(loadedIncome)
-        setBankDepositReport(loadedBankDeposits)
         setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
@@ -304,7 +300,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, counterpartyFilter, dateFilters.bankDeposits, dateFilters.income, feeVariationFilter, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+  }, [auth.accessToken, counterpartyFilter, dateFilters.income, feeVariationFilter, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -344,6 +340,45 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
     }
   }, [activeReportTab, auth.accessToken, cashPaymentPageRequest.limit, cashPaymentPageRequest.offset, dateFilters.cashPayments, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'bankDeposits') {
+      return
+    }
+
+    let ignore = false
+
+    async function loadBankDeposits() {
+      setBankDepositReportLoading(true)
+      setBankDepositReportError(null)
+      try {
+        const filter = dateFilters.bankDeposits
+        const report = await reportClient.getBankDepositReport(auth.accessToken, {
+          dateFrom: filter.dateFrom,
+          dateTo: filter.dateTo,
+          offset: bankDepositPageRequest.offset,
+          limit: bankDepositPageRequest.limit,
+        })
+        if (!ignore) {
+          setBankDepositReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setBankDepositReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сдаче кассы в банк.')
+        }
+      } finally {
+        if (!ignore) {
+          setBankDepositReportLoading(false)
+        }
+      }
+    }
+
+    void loadBankDeposits()
+
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, bankDepositPageRequest.limit, bankDepositPageRequest.offset, dateFilters.bankDeposits, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'funds') {
@@ -405,6 +440,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   function updateDateFilter(key: ReportDateFilterKey, field: keyof ReportDateRange, value: string) {
     if (key === 'cashPayments') {
       setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'bankDeposits') {
+      setBankDepositPageRequest((current) => ({ ...current, offset: 0 }))
     } else if (key === 'funds') {
       setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
     }
@@ -427,6 +464,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   function applyToday(key: ReportDateFilterKey) {
     if (key === 'cashPayments') {
       setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'bankDeposits') {
+      setBankDepositPageRequest((current) => ({ ...current, offset: 0 }))
     } else if (key === 'funds') {
       setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
     }
@@ -794,9 +833,19 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         formatMoney(row.amount),
         row.comment || row.fundName || '',
       ]) ?? []
+      const bankDepositPage = {
+        items: bankDepositReport?.rows ?? [],
+        totalCount: bankDepositReport?.rowCount ?? 0,
+        offset: bankDepositReport?.offset ?? bankDepositPageRequest.offset,
+        limit: bankDepositReport?.limit ?? bankDepositPageRequest.limit,
+      }
+      const bankDepositVisibleRange = getPageVisibleRange(bankDepositPage)
+      const bankDepositNavigation = getPageNavigation(bankDepositPage)
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
+          {bankDepositReportLoading ? <p className="prototype-status" role="status">Загружаем сдачу кассы в банк...</p> : null}
+          {bankDepositReportError ? <FormError>{bankDepositReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
             {renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}
             {renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}
@@ -808,6 +857,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             bankRows.length > 0 ? bankRows : [['', 'Операций за период нет', '']],
             bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), `${bankDepositReport.rowCount} операций`] : undefined,
           )}
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация отчета по сдаче кассы в банк">
+            <span role="status" aria-live="polite">Показано {bankDepositVisibleRange.from}-{bankDepositVisibleRange.to} из {bankDepositPage.totalCount}</span>
+            <label>
+              Строк на странице
+              <select
+                aria-label="Строк на странице отчета по сдаче кассы в банк"
+                value={bankDepositPage.limit}
+                disabled={bankDepositReportLoading}
+                onChange={(event) => setBankDepositPageRequest({ offset: 0, limit: Number(event.target.value) })}
+              >
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={!bankDepositNavigation.canGoPrevious || bankDepositReportLoading} onClick={() => setBankDepositPageRequest((current) => ({ ...current, offset: bankDepositNavigation.previousOffset }))}>Назад</button>
+            <button className="ghost-button" type="button" disabled={!bankDepositNavigation.canGoNext || bankDepositReportLoading} onClick={() => setBankDepositPageRequest((current) => ({ ...current, offset: bankDepositNavigation.nextOffset }))}>Вперед</button>
+          </div>
         </ReportWorkbookSheet>
       )
     }

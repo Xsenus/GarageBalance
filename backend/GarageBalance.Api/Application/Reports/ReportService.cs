@@ -602,8 +602,9 @@ public sealed class ReportService(
             return ReportResult<BankDepositReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
-        var data = await cashMovementReportQuery.GetBankDepositsAsync(dateFrom, dateTo, request.Search, limit, cancellationToken);
+        var data = await cashMovementReportQuery.GetBankDepositsAsync(dateFrom, dateTo, request.Search, offset, limit, cancellationToken);
 
         var rows = data.Operations
             .Select(operation => new BankDepositReportRowDto(
@@ -613,7 +614,7 @@ public sealed class ReportService(
                 operation.Fund.Name,
                 operation.Reason))
             .ToList();
-        var report = new BankDepositReportDto(dateFrom, dateTo, data.Total, data.RowCount, rows);
+        var report = new BankDepositReportDto(dateFrom, dateTo, data.Total, data.RowCount, offset, limit ?? data.RowCount, rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -629,7 +630,8 @@ public sealed class ReportService(
                 ["reportType"] = "bank_deposits",
                 ["visibleRowCount"] = report.Rows.Count,
                 ["total"] = report.Total,
-                ["limit"] = request.Limit
+                ["limit"] = request.Limit,
+                ["offset"] = request.Offset
             },
             cancellationToken);
 

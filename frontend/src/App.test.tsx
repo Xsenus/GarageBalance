@@ -10140,6 +10140,23 @@ describe('App', () => {
         rows: [{ ...row, operationId: 'cash-payment-26', purpose: 'Зарплата: Электрик', comment: 'Вторая страница' }],
       })
     })
+    const bankDepositPageRequests: Array<{ offset?: number; limit?: number }> = []
+    const getBankDepositReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
+      bankDepositPageRequests.push({ offset: params?.offset, limit: params?.limit })
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      if (offset === 0) {
+        return createBankDepositReport({ rowCount: 30, offset, limit })
+      }
+
+      const row = createBankDepositReport().rows[0]
+      return createBankDepositReport({
+        rowCount: 30,
+        offset,
+        limit,
+        rows: [{ ...row, operationId: 'bank-deposit-26', amount: 5000, comment: 'Вторая сдача в банк' }],
+      })
+    })
     const fundChangePageRequests: Array<{ offset?: number; limit?: number }> = []
     const getFundChangeReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
       fundChangePageRequests.push({ offset: params?.offset, limit: params?.limit })
@@ -10163,6 +10180,7 @@ describe('App', () => {
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
       getCashPaymentReport,
+      getBankDepositReport,
       getFundChangeReport,
       exportCashPaymentReportXlsx,
       exportBankDepositReportPdf,
@@ -10220,6 +10238,13 @@ describe('App', () => {
     const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
     expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
     expect(bankDepositsTable).toHaveTextContent('3 000,00')
+    const bankDepositPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })
+    expect(within(bankDepositPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    await user.click(within(bankDepositPagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(bankDepositPageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    expect(await within(bankDepositsTable).findByText('Вторая сдача в банк')).toBeInTheDocument()
+    expect(within(bankDepositPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(bankDepositPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
     const bankPdfButton = within(reportsPanel).getByRole('button', { name: 'Скачать PDF' })
     expect(bankPdfButton).toHaveAttribute('title', 'Скачать PDF')
     expect(bankPdfButton).toHaveAttribute('data-tooltip', 'Скачать PDF')
@@ -10313,6 +10338,35 @@ describe('App', () => {
 
     expect(await within(reportsPanel).findByText('Отчет по кассе временно недоступен')).toHaveAttribute('role', 'alert')
     expect(within(reportsPanel).queryByText('Загружаем оплаты из кассы...')).not.toBeInTheDocument()
+  })
+
+  it('shows loading and error states for the paged bank deposit report', async () => {
+    const user = userEvent.setup()
+    let rejectBankDeposits: (reason?: unknown) => void = () => {}
+    const bankDepositPromise = new Promise<BankDepositReportDto>((_resolve, reject) => {
+      rejectBankDeposits = reject
+    })
+    const reportClient = createReportClient({
+      getBankDepositReport: vi.fn(() => bankDepositPromise),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
+
+    expect(await within(reportsPanel).findByText('Загружаем сдачу кассы в банк...')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по сдаче кассы в банк')).toBeDisabled()
+
+    await act(async () => {
+      rejectBankDeposits(new Error('Отчет по сдаче кассы временно недоступен'))
+      await bankDepositPromise.catch(() => undefined)
+    })
+
+    expect(await within(reportsPanel).findByText('Отчет по сдаче кассы временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('Загружаем сдачу кассы в банк...')).not.toBeInTheDocument()
   })
 
   it('keeps report export errors visible without announcing a ready file', async () => {
@@ -13153,6 +13207,8 @@ function createBankDepositReport(overrides: Partial<BankDepositReportDto> = {}):
     dateTo: '2026-06-30',
     total: 3000,
     rowCount: 1,
+    offset: 0,
+    limit: 25,
     rows: [
       {
         operationId: 'bank-deposit-1',

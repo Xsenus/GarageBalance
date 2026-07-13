@@ -1127,7 +1127,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization",
             "ScreenReportQueries_UseDatabaseLimitsForVisibleRows",
             "CashPaymentScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization",
-            "BankDepositScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization",
+            "BankDepositScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization",
             "ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization",
             "AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization",
             "DictionarySearchQueries_KeepExplicitLimitForSearchAndDefaultLists",
@@ -1137,7 +1137,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetCashPaymentReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
-        Assert.Contains("GetBankDepositReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetBankDepositReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
 
         Assert.Contains("закрыт архитектурный пункт PostgreSQL filtering/sorting/aggregation/pagination", historyText, StringComparison.Ordinal);
         Assert.Contains(nameof(DatabaseQueryBoundariesAreCompleteForCurrentListsReportsImportsFundsAndReleases), historyText, StringComparison.Ordinal);
@@ -3402,13 +3402,14 @@ public sealed class ProjectWideRoadmapStatusTests
         foreach (var expectedApiCoverage in new[]
         {
             "downloads report exports through POST because the backend records audit events",
-            "loads paged cash and fund reports with other dedicated filtered endpoints",
+            "loads paged cash, bank and fund reports with other dedicated filtered endpoints",
             "monthFrom=2026-06-01&monthTo=2026-06-01&search=12",
             "garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1",
             "supplierIds=supplier-1&expenseTypeIds=expense-1",
             "cash-payments/export/xlsx",
             "cash-payments?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA&offset=20&limit=20",
             "bank-deposits/export/pdf",
+            "bank-deposits?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%B1%D0%B0%D0%BD%D0%BA&offset=20&limit=20",
             "fees/export/xlsx",
             "fund-changes/export/pdf",
             "fund-changes?dateFrom=2026-06-01&dateTo=2026-06-30&offset=20&limit=20"
@@ -3419,6 +3420,7 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("Пагинация отчета по изменению фондов", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Пагинация отчета по оплатам из кассы", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Пагинация отчета по сдаче кассы в банк", appTestsText, StringComparison.Ordinal);
 
         foreach (var expectedFilterCoverage in new[]
         {

@@ -16,6 +16,7 @@ public interface ICashMovementReportQuery
         DateOnly dateFrom,
         DateOnly dateTo,
         string? search,
+        int offset,
         int? limit,
         CancellationToken cancellationToken);
 }
