@@ -2448,19 +2448,19 @@ h1 {
   top: calc(100% + 6px);
   right: 0;
   left: 0;
-  overflow: hidden;
+  max-height: 360px;
+  overflow-y: auto;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14);
 }
 
-.payments-prototype-search-results button {
-  display: grid;
+.payments-prototype-search-option {
+  display: flex;
+  align-items: center;
   width: 100%;
-  grid-template-columns: minmax(100px, 0.55fr) minmax(0, 1fr);
   gap: 10px;
-  border: 0;
   border-bottom: 1px solid #eaecf0;
   background: #ffffff;
   color: #101828;
@@ -2470,14 +2470,77 @@ h1 {
   text-align: left;
 }
 
-.payments-prototype-search-results button:hover,
-.payments-prototype-search-results button:focus-visible {
+.payments-prototype-search-option:hover,
+.payments-prototype-search-option:focus-within,
+.payments-prototype-search-option[aria-selected="true"] {
   background: #eef4ff;
   outline: 0;
 }
 
-.payments-prototype-search-results button:last-child {
+.payments-prototype-search-option:last-child {
   border-bottom: 0;
+}
+
+.payments-prototype-search-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: #155eef;
+}
+
+.payments-prototype-search-option > span {
+  display: grid;
+  gap: 2px;
+  color: #475467;
+}
+
+.payments-prototype-search-option small {
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.payments-prototype-selected-garages {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.payments-prototype-selected-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #475467;
+  font-size: 0.82rem;
+}
+
+.payments-prototype-selected-heading button {
+  border: 0;
+  background: transparent;
+  color: #155eef;
+  cursor: pointer;
+  font: inherit;
+}
+
+.payments-prototype-selected-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.payments-prototype-selected-list button {
+  min-height: 32px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+  padding: 5px 11px;
+}
+
+.payments-prototype-selected-list button.is-active {
+  border-color: #155eef;
+  background: #eef4ff;
+  color: #155eef;
+  font-weight: 700;
 }
 
 .payments-prototype-search-results span {

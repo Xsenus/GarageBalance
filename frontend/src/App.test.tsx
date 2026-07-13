@@ -2758,6 +2758,7 @@ describe('App', () => {
   it('shows payments prototype and opens payment form modals', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300 })
+    const secondGarage = createGarage({ id: 'garage-2', number: '2', ownerName: 'Иванов Петр', peopleCount: 1, floorCount: 2, startingBalance: 0 })
     const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
     const incomeTypes = [incomeType, waterIncomeType]
@@ -2769,8 +2770,10 @@ describe('App', () => {
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
     const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
+    const searchGaragesPage = vi.fn(async () => ({ items: [garage, secondGarage], totalCount: 2, offset: 0, limit: 20 }))
     const dictionaryClient = createDictionaryClient({
-      getGarages: async () => [garage],
+      getGarages: async () => [garage, secondGarage],
+      getGaragesPage: searchGaragesPage,
       getIncomeTypes: async () => incomeTypes,
     })
     const financeClient = createFinanceClient({
@@ -3144,8 +3147,13 @@ describe('App', () => {
     expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
 
     await user.type(garageSearchInput, 'Иванов')
+    await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20))
     const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
     await user.click(garageOption)
+    const secondGarageOption = await within(prototype).findByRole('option', { name: /Гараж\s*2\s*Иванов Петр/ })
+    await user.click(secondGarageOption)
+    expect(within(prototype).getByLabelText('Выбранные гаражи')).toHaveTextContent('Выбрано: 2')
+    await user.click(within(prototype).getByRole('button', { name: 'Гараж 1' }))
 
     expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('Просроченная задолженность')
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Иванов Иван')
@@ -3764,7 +3772,7 @@ describe('App', () => {
     await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
       operationKind: 'income',
       garageId: 'garage-77',
-      limit: 500,
+      limit: 100,
     })))
     const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
@@ -8364,9 +8372,9 @@ describe('App', () => {
     const meterReadingsTable = within(financePanel).getByRole('table', { name: 'Последние показания' })
 
     expect(await within(operationsTable).findByText('Показано 8 из 9 операций')).toHaveAttribute('role', 'status')
-    expect(within(accrualsTable).getByText('Показано 8 из 9 начислений')).toHaveAttribute('role', 'status')
-    expect(within(supplierAccrualsTable).getByText('Показано 8 из 9 начислений поставщикам')).toHaveAttribute('role', 'status')
-    expect(within(meterReadingsTable).getByText('Показано 8 из 9 показаний')).toHaveAttribute('role', 'status')
+    expect(await within(accrualsTable).findByText('Показано 8 из 9 начислений')).toHaveAttribute('role', 'status')
+    expect(await within(supplierAccrualsTable).findByText('Показано 8 из 9 начислений поставщикам')).toHaveAttribute('role', 'status')
+    expect(await within(meterReadingsTable).findByText('Показано 8 из 9 показаний')).toHaveAttribute('role', 'status')
     const paymentPaginationCounter = within(financePanel).getByText('Показано 1-9 из 9')
     expect(paymentPaginationCounter).toHaveAttribute('role', 'status')
     expect(paymentPaginationCounter).toHaveAttribute('aria-live', 'polite')

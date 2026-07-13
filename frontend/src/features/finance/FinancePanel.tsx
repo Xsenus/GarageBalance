@@ -229,6 +229,7 @@ type RegularAccrualPrototypeSubmitRequest = {
 
 type PaymentsPrototypeSavedState = {
   selectedGarageId: string | null
+  selectedGarageIds?: string[]
   garageSearch: string
   incomeWorksheetMonthFrom?: string
   incomeWorksheetMonthTo?: string
@@ -482,7 +483,7 @@ export function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
+        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
           dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
@@ -490,12 +491,6 @@ export function FinancePanel({
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
-          financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
-          financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
-          financeClient.getMeterReadings(auth.accessToken, financeScreenRequestLimit),
-          financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: month, limit: financeScreenRequestLimit }),
-          financeClient.getSummary(auth.accessToken),
         ])
         if (!ignore) {
           setGarages(loadedGarages)
@@ -506,12 +501,6 @@ export function FinancePanel({
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
           setTariffs(loadedTariffs)
-          setOperations(loadedOperations)
-          setAccruals(loadedAccruals)
-          setSupplierAccruals(loadedSupplierAccruals)
-          setMeterReadings(loadedMeterReadings)
-          setMissingMeterReadings(loadedMissingMeterReadings)
-          setSummary(loadedSummary)
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
@@ -543,6 +532,32 @@ export function FinancePanel({
       ignore = true
     }
   }, [auth.accessToken, dictionaryClient, financeClient, month])
+
+  useEffect(() => {
+    let ignore = false
+    const handle = window.setTimeout(() => {
+      void Promise.all([
+        financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
+        financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
+        financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
+        financeClient.getMeterReadings(auth.accessToken, financeScreenRequestLimit),
+      ]).then(([loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings]) => {
+        if (!ignore) {
+          setOperations(loadedOperations)
+          setAccruals(loadedAccruals)
+          setSupplierAccruals(loadedSupplierAccruals)
+          setMeterReadings(loadedMeterReadings)
+        }
+      }).catch(() => {
+        // Фоновые превью не должны задерживать или ломать основную форму платежей.
+      })
+    }, 500)
+
+    return () => {
+      ignore = true
+      window.clearTimeout(handle)
+    }
+  }, [auth.accessToken, financeClient])
 
   useEffect(() => {
     const handleWindowClick = () => setFinanceContextMenu(null)
@@ -1993,6 +2008,7 @@ export function FinancePanel({
       <PaymentsPrototypePanel
         auth={auth}
         canWritePayments={canWritePayments}
+        dictionaryClient={dictionaryClient}
         expenseTypes={expenseTypes}
         financeClient={financeClient}
         formStateClient={formStateClient}
@@ -2752,6 +2768,7 @@ function createPaymentPrototypeMonthOptions(currentMonth = getCurrentMonthInputV
 function PaymentsPrototypePanel({
   auth,
   canWritePayments,
+  dictionaryClient,
   expenseTypes,
   financeClient,
   formStateClient,
@@ -2765,6 +2782,7 @@ function PaymentsPrototypePanel({
 }: {
   auth: AuthResponse
   canWritePayments: boolean
+  dictionaryClient: DictionaryClient
   expenseTypes: AccountingTypeDto[]
   financeClient: FinanceClient
   formStateClient: FormStateClient
@@ -2778,7 +2796,11 @@ function PaymentsPrototypePanel({
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
+  const [garageSearchGarages, setGarageSearchGarages] = useState<GarageDto[]>([])
+  const [garageSearchLoading, setGarageSearchLoading] = useState(false)
+  const [garageSearchError, setGarageSearchError] = useState<string | null>(null)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
+  const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
   const [incomeWorksheetMonthFrom, setIncomeWorksheetMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
   const [incomeWorksheetMonthTo, setIncomeWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
@@ -2819,9 +2841,16 @@ function PaymentsPrototypePanel({
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
   const [receiptActionSaving, setReceiptActionSaving] = useState(false)
   const [receiptActionStatus, setReceiptActionStatus] = useState<string | null>(null)
-  const realGarageIds = useMemo(() => new Set(garages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [garages])
+  const availableGarages = useMemo(() => {
+    const uniqueGarages = new Map<string, GarageDto>()
+    for (const garage of [...garages, ...garageSearchGarages]) {
+      uniqueGarages.set(garage.id, garage)
+    }
+    return Array.from(uniqueGarages.values())
+  }, [garageSearchGarages, garages])
+  const realGarageIds = useMemo(() => new Set(availableGarages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [availableGarages])
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(
-    () => garages
+    () => availableGarages
       .filter((garage) => !garage.isArchived)
       .map((garage) => ({
         id: garage.id,
@@ -2833,14 +2862,17 @@ function PaymentsPrototypePanel({
         balance: garage.balance,
         overdueDebt: garage.overdueDebt,
       })),
-    [garages],
+    [availableGarages],
   )
   const selectedGarage = garageOptions.find((garage) => garage.id === selectedGarageId) ?? null
+  const selectedGarages = selectedGarageIds
+    .map((garageId) => garageOptions.find((garage) => garage.id === garageId))
+    .filter((garage): garage is PaymentsPrototypeGarage => garage !== undefined)
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = garageOptions
     .filter((garage) => !normalizedSearch || garage.number.toLowerCase().includes(normalizedSearch) || garage.ownerName.toLowerCase().includes(normalizedSearch))
-    .slice(0, 6)
-  const shouldShowGarageResults = garageSearch.length > 0 && (!selectedGarage || garageSearch !== `Гараж ${selectedGarage.number} - ${selectedGarage.ownerName}`)
+    .slice(0, 20)
+  const shouldShowGarageResults = garageSearch.trim().length > 0
   const garageSearchListId = useId()
   const incomeWorksheetMonthOptions = useMemo(
     () => createPaymentPrototypeMonthOptions(getCurrentMonthInputValue(), [incomeWorksheetMonthFrom, incomeWorksheetMonthTo]),
@@ -2848,6 +2880,51 @@ function PaymentsPrototypePanel({
   )
 
   useEffect(() => {
+    const query = garageSearch.trim()
+    if (!query) {
+      setGarageSearchGarages([])
+      setGarageSearchLoading(false)
+      setGarageSearchError(null)
+      return
+    }
+
+    let cancelled = false
+    const handle = window.setTimeout(() => {
+      setGarageSearchLoading(true)
+      setGarageSearchError(null)
+      const request = dictionaryClient.getGaragesPage
+        ? dictionaryClient.getGaragesPage(auth.accessToken, query, 0, 20)
+            .then((page) => page.items)
+        : dictionaryClient.getGarages(auth.accessToken, query, 20)
+      void request
+        .then((foundGarages) => {
+          if (!cancelled) {
+            setGarageSearchGarages(foundGarages)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            setGarageSearchError(error instanceof Error ? error.message : 'Не удалось выполнить поиск гаражей.')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setGarageSearchLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(handle)
+    }
+  }, [auth.accessToken, dictionaryClient, garageSearch])
+
+  useEffect(() => {
+    if (formStateLoaded || garageOptions.length === 0) {
+      return
+    }
+
     let cancelled = false
     formStateClient
       .getState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope)
@@ -2857,13 +2934,20 @@ function PaymentsPrototypePanel({
         }
 
         if (state?.payload) {
-          const restoredGarageId = state.payload.selectedGarageId ?? null
+          const restoredGarageIds = (state.payload.selectedGarageIds?.length
+            ? state.payload.selectedGarageIds
+            : state.payload.selectedGarageId ? [state.payload.selectedGarageId] : [])
+            .filter((garageId) => realGarageIds.has(garageId))
+          const restoredGarageId = restoredGarageIds.includes(state.payload.selectedGarageId ?? '')
+            ? state.payload.selectedGarageId
+            : restoredGarageIds.at(-1) ?? null
           const restoredMonthFrom = state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue())
           const restoredMonthTo = state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue()
           const isRestoredRealGarage = restoredGarageId !== null && realGarageIds.has(restoredGarageId)
           const restoredRealGarage = isRestoredRealGarage ? garageOptions.find((garage) => garage.id === restoredGarageId) ?? null : null
           setSelectedGarageId(isRestoredRealGarage ? restoredGarageId : null)
-          setGarageSearch(isRestoredRealGarage ? state.payload.garageSearch ?? '' : '')
+          setSelectedGarageIds(restoredGarageIds)
+          setGarageSearch(state.payload.garageSearch ?? '')
           setIncomeWorksheetMonthFrom(restoredMonthFrom)
           setIncomeWorksheetMonthTo(restoredMonthTo)
           setGarageRows([])
@@ -2903,7 +2987,7 @@ function PaymentsPrototypePanel({
               .getOperationsPage(auth.accessToken, {
                 operationKind: 'income',
                 garageId: restoredRealGarage.id,
-                limit: 500,
+                limit: 100,
               })
               .then((page) => {
                 if (!cancelled) {
@@ -2937,7 +3021,7 @@ function PaymentsPrototypePanel({
     return () => {
       cancelled = true
     }
-  }, [auth.accessToken, financeClient, formStateClient, garageOptions, realGarageIds])
+  }, [auth.accessToken, financeClient, formStateClient, formStateLoaded, garageOptions, realGarageIds])
 
   useEffect(() => {
     if (!formStateLoaded) {
@@ -2947,14 +3031,14 @@ function PaymentsPrototypePanel({
     const handle = window.setTimeout(() => {
       void formStateClient
         .saveState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope, {
-          payload: { selectedGarageId, garageSearch, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, garageRows, historyRows },
-          summary: 'Сохранено состояние формы платежей и последние введенные значения.'
+          payload: { selectedGarageId, selectedGarageIds, garageSearch, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, garageRows, historyRows },
+          summary: 'Сохранены выбранные гаражи и период формы платежей.'
         })
         .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние платежей.'))
     }, 400)
 
     return () => window.clearTimeout(handle)
-  }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, selectedGarageId])
+  }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, selectedGarageId, selectedGarageIds])
 
   useEffect(() => {
     if (activeTab !== 'expense') {
@@ -3177,7 +3261,7 @@ function PaymentsPrototypePanel({
       const page = await financeClient.getOperationsPage(auth.accessToken, {
         operationKind: 'income',
         garageId: garage.id,
-        limit: 500,
+        limit: 100,
       })
       setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
     } catch (error) {
@@ -3354,9 +3438,8 @@ function PaymentsPrototypePanel({
     }
   }
 
-  function selectGarage(garage: PaymentsPrototypeGarage) {
+  function activateGarage(garage: PaymentsPrototypeGarage) {
     setSelectedGarageId(garage.id)
-    setGarageSearch(`Гараж ${garage.number} - ${garage.ownerName}`)
     setGarageRows([])
     setGarageWorksheetSummary(null)
     setHistoryRows([])
@@ -3364,6 +3447,37 @@ function PaymentsPrototypePanel({
     setReceiptActionStatus(null)
     void loadGarageIncomeWorksheet(garage)
     void loadGaragePaymentHistory(garage)
+  }
+
+  function toggleGarageSelection(garage: PaymentsPrototypeGarage) {
+    if (selectedGarageIds.includes(garage.id)) {
+      const remainingGarageIds = selectedGarageIds.filter((garageId) => garageId !== garage.id)
+      setSelectedGarageIds(remainingGarageIds)
+      if (selectedGarageId === garage.id) {
+        const nextGarage = garageOptions.find((option) => option.id === remainingGarageIds.at(-1)) ?? null
+        if (nextGarage) {
+          activateGarage(nextGarage)
+        } else {
+          setSelectedGarageId(null)
+          setGarageRows([])
+          setGarageWorksheetSummary(null)
+          setHistoryRows([])
+        }
+      }
+      return
+    }
+
+    setSelectedGarageIds((garageIds) => [...garageIds, garage.id])
+    activateGarage(garage)
+  }
+
+  function clearGarageSelection() {
+    setSelectedGarageIds([])
+    setSelectedGarageId(null)
+    setGarageRows([])
+    setGarageWorksheetSummary(null)
+    setHistoryRows([])
+    setPaymentError(null)
   }
 
   function handleIncomeWorksheetMonthFromChange(value: string) {
@@ -3391,7 +3505,7 @@ function PaymentsPrototypePanel({
 
   function selectFirstGarageResult() {
     if (garageSearchResults.length > 0) {
-      selectGarage(garageSearchResults[0])
+      toggleGarageSelection(garageSearchResults[0])
     }
   }
 
@@ -4000,13 +4114,7 @@ function PaymentsPrototypePanel({
               aria-controls={garageSearchListId}
               placeholder="Введите номер гаража или ФИО владельца"
               value={garageSearch}
-              onChange={(event) => {
-                setGarageSearch(event.target.value)
-                setSelectedGarageId(null)
-                setGarageWorksheetSummary(null)
-                setGarageRows([])
-                setHistoryRows([])
-              }}
+              onChange={(event) => setGarageSearch(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
@@ -4017,12 +4125,43 @@ function PaymentsPrototypePanel({
           </label>
           {shouldShowGarageResults ? (
             <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи">
-              {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
-                <button className="payments-prototype-search-option" key={garage.id} type="button" role="option" aria-selected={garage.id === selectedGarageId} onClick={() => selectGarage(garage)}>
-                  <strong>Гараж {garage.number}</strong>
-                  <span>{garage.ownerName}</span>
-                </button>
-              )) : <span className="payments-prototype-search-empty">Ничего не найдено</span>}
+              {garageSearchLoading ? <span className="payments-prototype-search-empty" role="status">Ищем гаражи...</span> : null}
+              {garageSearchError ? <span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span> : null}
+              {!garageSearchLoading && garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
+                <label className="payments-prototype-search-option" key={garage.id} role="option" aria-selected={selectedGarageIds.includes(garage.id)}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Выбрать гараж ${garage.number}, ${garage.ownerName}`}
+                    checked={selectedGarageIds.includes(garage.id)}
+                    onChange={() => toggleGarageSelection(garage)}
+                  />
+                  <span>
+                    <strong>Гараж {garage.number}</strong>
+                    <small>{garage.ownerName}</small>
+                  </span>
+                </label>
+              )) : !garageSearchLoading && !garageSearchError ? <span className="payments-prototype-search-empty">Ничего не найдено</span> : null}
+            </div>
+          ) : null}
+          {selectedGarages.length > 0 ? (
+            <div className="payments-prototype-selected-garages" aria-label="Выбранные гаражи">
+              <div className="payments-prototype-selected-heading">
+                <span>Выбрано: {selectedGarages.length}</span>
+                <button className="ghost-button" type="button" onClick={clearGarageSelection}>Очистить</button>
+              </div>
+              <div className="payments-prototype-selected-list">
+                {selectedGarages.map((garage) => (
+                  <button
+                    className={`ghost-button${garage.id === selectedGarageId ? ' is-active' : ''}`}
+                    key={garage.id}
+                    type="button"
+                    aria-pressed={garage.id === selectedGarageId}
+                    onClick={() => activateGarage(garage)}
+                  >
+                    Гараж {garage.number}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>
