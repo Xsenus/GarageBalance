@@ -6,11 +6,13 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
-import { formatDateTime } from '../../shared/formatters'
+import { formatAuditDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createEmptyPage } from '../../shared/pagination'
 import type { PagedItems } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
+import { SelectControl } from '../../shared/SelectControl'
 import type { AuditPanelPreset, ContractorOpenTarget, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 const auditSectionOptions = [
   { value: '', label: 'Все разделы' },
@@ -90,12 +92,16 @@ function getAuditEntityTypeLabel(entityType: string) {
   return auditEntityTypeOptions.find((option) => option.value === entityType)?.label ?? entityType
 }
 
-function formatAuditActor(actorUserId: string | null) {
-  if (!actorUserId) {
+function formatAuditActor(auditEvent: AuditEventDto) {
+  if (!auditEvent.actorUserId) {
     return 'Система'
   }
 
-  return `ID ${actorUserId.slice(0, 8)}`
+  return auditEvent.actorDisplayName || auditEvent.actorEmail || 'Пользователь'
+}
+
+function formatAuditActorId(actorUserId: string | null) {
+  return actorUserId ? `ID ${actorUserId}` : 'Системное событие'
 }
 
 function parseAuditBeforeAfter(summary: string) {
@@ -118,7 +124,14 @@ function getAuditBeforeAfter(auditEvent: AuditEventDto) {
     }
   }
 
-  return parseAuditBeforeAfter(auditEvent.summary)
+  const parsed = parseAuditBeforeAfter(auditEvent.summary)
+  if (parsed.before !== 'не указано' || parsed.after !== 'не указано') {
+    return parsed
+  }
+
+  return auditEvent.actionKind === 'update'
+    ? parsed
+    : { before: '—', after: '—' }
 }
 
 function getAuditRelatedContext(auditEvent: AuditEventDto) {
@@ -460,33 +473,25 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => { setSearch(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Раздел">
-          <select aria-label="Раздел истории изменений" value={section} onChange={(event) => { setSection(event.target.value); resetAuditPageOffset() }}>
-            {auditSectionOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
+          <SelectControl aria-label="Раздел истории изменений" value={section} options={auditSectionOptions} onChange={(value) => { setSection(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Действие">
-          <select aria-label="Тип действия истории изменений" value={actionKind} onChange={(event) => { setActionKind(event.target.value); resetAuditPageOffset() }}>
-            {auditActionKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
+          <SelectControl aria-label="Тип действия истории изменений" value={actionKind} options={auditActionKindOptions} onChange={(value) => { setActionKind(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Объект">
-          <select aria-label="Тип объекта истории изменений" value={entityType} onChange={(event) => { setEntityType(event.target.value); resetAuditPageOffset() }}>
-            {auditEntityTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
+          <SelectControl aria-label="Тип объекта истории изменений" value={entityType} options={auditEntityTypeOptions} onChange={(value) => { setEntityType(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Пользователь">
           <input aria-label="ID пользователя истории изменений" placeholder="ID пользователя" value={actorUserId} onChange={(event) => { setActorUserId(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Быстрый фильтр">
-          <select aria-label="Быстрый фильтр истории изменений" value={quickFilter} onChange={(event) => { setQuickFilter(event.target.value); resetAuditPageOffset() }}>
-            {auditQuickFilterOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
+          <SelectControl aria-label="Быстрый фильтр истории изменений" value={quickFilter} options={auditQuickFilterOptions} onChange={(value) => { setQuickFilter(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Гараж">
           <input aria-label="Связанный гараж истории изменений" placeholder="Номер или ID гаража" value={relatedGarage} onChange={(event) => { setRelatedGarage(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Месяц">
-          <input aria-label="Связанный месяц истории изменений" type="month" value={relatedAccountingMonth} onChange={(event) => { setRelatedAccountingMonth(event.target.value); resetAuditPageOffset() }} />
+          <LocalizedDatePicker ariaLabel="Связанный месяц истории изменений" mode="month" value={relatedAccountingMonth} onChange={(value) => { setRelatedAccountingMonth(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Контрагент">
           <input aria-label="Связанный контрагент истории изменений" placeholder="Название или ID" value={relatedCounterparty} onChange={(event) => { setRelatedCounterparty(event.target.value); resetAuditPageOffset() }} />
@@ -495,10 +500,10 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <input aria-label="Связанный документ истории изменений" placeholder="Номер или ID документа" value={relatedDocument} onChange={(event) => { setRelatedDocument(event.target.value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="С даты">
-          <input aria-label="Начало периода истории изменений" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); resetAuditPageOffset() }} />
+          <LocalizedDatePicker ariaLabel="Начало периода истории изменений" mode="date" value={dateFrom} onChange={(value) => { setDateFrom(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="По дату">
-          <input aria-label="Конец периода истории изменений" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); resetAuditPageOffset() }} />
+          <LocalizedDatePicker ariaLabel="Конец периода истории изменений" mode="date" value={dateTo} onChange={(value) => { setDateTo(value); resetAuditPageOffset() }} />
         </FormField>
       </form>
 
@@ -520,8 +525,12 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           const beforeAfter = getAuditBeforeAfter(auditEvent)
           return (
             <div className="audit-event-row" role="row" key={auditEvent.id}>
-              <span role="cell">{formatDateTime(auditEvent.createdAtUtc)}</span>
-              <span role="cell">{formatAuditActor(auditEvent.actorUserId)}</span>
+              <span role="cell">{formatAuditDateTime(auditEvent.createdAtUtc)}</span>
+              <span role="cell" className="audit-actor-cell">
+                <strong>{formatAuditActor(auditEvent)}</strong>
+                {auditEvent.actorEmail ? <small>{auditEvent.actorEmail}</small> : null}
+                <small>{formatAuditActorId(auditEvent.actorUserId)}</small>
+              </span>
               <span role="cell">{getAuditEventSectionLabel(auditEvent)}</span>
               <span role="cell">
                 <strong>{getAuditEntityTypeLabel(auditEvent.entityType)}</strong>
@@ -532,14 +541,13 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
                 <strong>{getAuditEventActionKindLabel(auditEvent)}</strong>
                 <small>{auditEvent.summary}</small>
               </span>
-              <span role="cell">{auditEvent.fieldName ?? 'не указано'}</span>
+              <span role="cell">{auditEvent.fieldName ?? (auditEvent.actionKind === 'update' ? 'не указано' : '—')}</span>
               <span role="cell">{beforeAfter.before}</span>
               <span role="cell">{beforeAfter.after}</span>
               <span role="cell">{auditEvent.reason ?? 'не указано'}</span>
               <span role="cell">
-                <button className="ghost-button audit-detail-button" type="button" onClick={() => void openAuditEventDetail(auditEvent)}>
+                <button className="icon-button audit-detail-button" type="button" aria-label={`Открыть карточку события ${getAuditEventActionKindLabel(auditEvent)}`} title="Карточка события" onClick={() => void openAuditEventDetail(auditEvent)}>
                   <FileText size={15} aria-hidden="true" />
-                  <span>Открыть</span>
                 </button>
               </span>
             </div>
@@ -564,7 +572,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
               <div>
                 <p className="eyebrow">Карточка события</p>
                 <h3 id="audit-detail-title">{getAuditEventActionKindLabel(detailState.event)}</h3>
-                <p id="audit-detail-description">{getAuditEventSectionLabel(detailState.event)} · {formatDateTime(detailState.event.createdAtUtc)}</p>
+                <p id="audit-detail-description">{getAuditEventSectionLabel(detailState.event)} · {formatAuditDateTime(detailState.event.createdAtUtc)}</p>
               </div>
               <button ref={detailCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть карточку события" onClick={closeAuditEventDetail}>
                 <X size={18} aria-hidden="true" />
@@ -583,11 +591,11 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
             <dl className="detail-grid audit-detail-grid">
               <div>
                 <dt>Пользователь</dt>
-                <dd>{formatAuditActor(detailState.event.actorUserId)}</dd>
+                <dd>{formatAuditActor(detailState.event)}{detailState.event.actorEmail ? ` · ${detailState.event.actorEmail}` : ''}</dd>
               </div>
               <div>
                 <dt>ID пользователя</dt>
-                <dd>{detailState.event.actorUserId ?? 'Система'}</dd>
+                <dd>{formatAuditActorId(detailState.event.actorUserId)}</dd>
               </div>
               <div>
                 <dt>Раздел</dt>

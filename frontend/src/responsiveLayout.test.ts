@@ -37,6 +37,16 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
   })
 
+  it('keeps audit controls and event details readable at every supported width', () => {
+    expect(normalizedAppCss).toContain('.select-control__trigger,\n.localized-date-picker input {\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.select-control__list {\n  position: absolute;')
+    expect(normalizedAppCss).toContain('.localized-date-picker__popover {\n  position: absolute;')
+    expect(normalizedAppCss).toContain('.audit-detail-dialog {\n  width: min(1120px, calc(100vw - 48px));')
+    expect(normalizedAppCss).toContain('.audit-detail-grid {\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('@media (max-width: 980px) {\n  .audit-detail-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('@media (max-width: 640px) {\n  .audit-detail-grid {\n    grid-template-columns: 1fr;')
+  })
+
   it('keeps shared dialogs usable on narrow screens without action overlap', () => {
     expect(appCss).toContain('@media (max-width: 640px)')
     expect(normalizedAppCss).toContain('.modal-backdrop {\n    align-items: start;\n    padding: 12px;')

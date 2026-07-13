@@ -58,6 +58,9 @@ public sealed class AuditEventWriterTests
         Assert.Contains("Сумма: было 100, стало 150.5", auditEvent.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: было old token=[секрет скрыт], стало new token=[секрет скрыт]", auditEvent.Summary, StringComparison.Ordinal);
         using var metadataJson = JsonDocument.Parse(auditEvent.MetadataJson!);
+        Assert.Equal("Сумма; Комментарий", metadataJson.RootElement.GetProperty("fieldName").GetString());
+        Assert.Contains("Сумма: 100", metadataJson.RootElement.GetProperty("oldValue").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Сумма: 150.5", metadataJson.RootElement.GetProperty("newValue").GetString(), StringComparison.Ordinal);
         Assert.Equal("[секрет скрыт]", metadataJson.RootElement.GetProperty("apiToken").GetString());
         Assert.Equal("[секрет скрыт]", metadataJson.RootElement.GetProperty("ownerPhone").GetString());
         Assert.DoesNotContain("raw-token", auditEvent.MetadataJson, StringComparison.Ordinal);
@@ -73,6 +76,9 @@ public sealed class AuditEventWriterTests
         Assert.Equal("12", dto.RelatedGarageNumber);
         Assert.Equal("2026-06", dto.RelatedAccountingMonth);
         Assert.Equal("PKO-1", dto.RelatedDocumentNumber);
+        Assert.Equal("Сумма; Комментарий", dto.FieldName);
+        Assert.Contains("Сумма: 100", dto.OldValue, StringComparison.Ordinal);
+        Assert.Contains("Сумма: 150.5", dto.NewValue, StringComparison.Ordinal);
         Assert.DoesNotContain("raw-token", dto.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("raw-token", dto.Metadata?.Values ?? []);
     }

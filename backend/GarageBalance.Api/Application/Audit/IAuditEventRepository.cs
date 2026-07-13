@@ -16,8 +16,17 @@ public interface IAuditEventRepository
         CancellationToken cancellationToken);
 
     Task<AuditEvent?> FindEventAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<Guid, AuditActorInfo>> GetActorsAsync(
+        IReadOnlyCollection<Guid> actorUserIds,
+        CancellationToken cancellationToken);
 }
 
 public sealed record AuditEventPageData(
     IReadOnlyList<AuditEvent> Items,
     int TotalCount);
+
+public sealed record AuditActorInfo(
+    Guid Id,
+    string DisplayName,
+    string Email);

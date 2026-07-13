@@ -3760,6 +3760,190 @@ h1 {
   margin-bottom: 14px;
 }
 
+.select-control,
+.localized-date-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.select-control__trigger,
+.localized-date-picker input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+}
+
+.select-control__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.select-control__trigger:hover,
+.localized-date-picker:hover input {
+  border-color: #98a2b3;
+}
+
+.select-control__trigger:focus-visible,
+.localized-date-picker:focus-within input {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.select-control__list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(100%, 220px);
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 32px rgba(16, 24, 40, 0.16);
+  padding: 6px;
+}
+
+.select-control__option {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #344054;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.select-control__option:hover,
+.select-control__option.is-active {
+  background: #eef4ff;
+  color: #1849a9;
+}
+
+.select-control__option[aria-selected='true'] {
+  color: #175cd3;
+  font-weight: 750;
+}
+
+.localized-date-picker input {
+  padding: 9px 40px 9px 10px;
+}
+
+.localized-date-picker__trigger {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+}
+
+.localized-date-picker__trigger:hover,
+.localized-date-picker__trigger:focus-visible {
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.localized-date-picker__popover {
+  position: absolute;
+  z-index: 32;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 292px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 32px rgba(16, 24, 40, 0.16);
+  padding: 12px;
+}
+
+.localized-date-picker__heading {
+  display: grid;
+  grid-template-columns: 32px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.localized-date-picker__heading button,
+.localized-date-picker__calendar button,
+.localized-date-picker__months button {
+  display: grid;
+  min-height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #344054;
+  cursor: pointer;
+}
+
+.localized-date-picker__heading button:hover,
+.localized-date-picker__calendar button:hover,
+.localized-date-picker__months button:hover {
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.localized-date-picker__calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.localized-date-picker__calendar > span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.localized-date-picker__months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.localized-date-picker__calendar button.is-selected,
+.localized-date-picker__months button.is-selected {
+  background: #155eef;
+  color: #ffffff;
+  font-weight: 750;
+}
+
+.localized-date-picker__clear {
+  width: 100%;
+  margin-top: 10px;
+  border: 0;
+  background: transparent;
+  color: #175cd3;
+  cursor: pointer;
+  padding: 6px;
+  font-weight: 700;
+}
+
 .compact-stack {
   display: grid;
   gap: 8px;
@@ -4633,8 +4817,8 @@ h1 {
 
 .audit-event-row {
   display: grid;
-  grid-template-columns: 150px 120px 140px minmax(150px, 1fr) minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) 120px;
-  min-width: 1580px;
+  grid-template-columns: 190px 220px 120px minmax(150px, 1fr) minmax(220px, 1.4fr) minmax(130px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) 54px;
+  min-width: 1740px;
   gap: 10px;
   align-items: start;
   border-top: 1px solid #e4e7ec;
@@ -4660,12 +4844,17 @@ h1 {
 }
 
 .audit-detail-button {
+  margin-inline: auto;
   min-height: 32px;
-  padding: 6px 10px;
+  padding: 6px;
 }
 
 .audit-detail-dialog {
-  width: min(760px, 100%);
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.audit-detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .audit-detail-grid dd {
@@ -5610,6 +5799,10 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 980px) {
+  .audit-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .payments-prototype-search-results {
     grid-template-columns: repeat(2, minmax(190px, 1fr));
   }
@@ -5800,6 +5993,10 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 640px) {
+  .audit-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .payments-prototype-search-results {
     grid-template-columns: minmax(0, 1fr);
     width: calc(100vw - 32px);

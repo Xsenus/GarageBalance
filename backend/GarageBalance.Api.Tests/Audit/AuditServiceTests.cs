@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,40 @@ namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditServiceTests
 {
+    [Fact]
+    public async Task GetEventsAsync_ReturnsActorIdentityAndLegacyMeterDiff()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var actor = new AppUser
+        {
+            Email = "audit-admin@example.test",
+            NormalizedEmail = "AUDIT-ADMIN@EXAMPLE.TEST",
+            DisplayName = "Администратор аудита",
+            PasswordHash = "hash"
+        };
+        database.Context.Users.Add(actor);
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            ActorUserId = actor.Id,
+            Action = "finance.meter_reading_updated",
+            Section = "finance",
+            ActionKind = "update",
+            EntityType = "meter_reading",
+            EntityId = Guid.NewGuid().ToString(),
+            Summary = "Изменено показание electricity по гаражу 1; предыдущее 1, текущее 2, расход 1."
+        });
+        await database.Context.SaveChangesAsync();
+
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var auditEvent = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
+
+        Assert.Equal("Администратор аудита", auditEvent.ActorDisplayName);
+        Assert.Equal("audit-admin@example.test", auditEvent.ActorEmail);
+        Assert.Equal("Показание счетчика", auditEvent.FieldName);
+        Assert.Equal("1", auditEvent.OldValue);
+        Assert.Equal("2", auditEvent.NewValue);
+    }
+
     [Fact]
     public async Task GetEventsAsync_ReturnsLatestEventsFirstAndFiltersBySearch()
     {
@@ -517,7 +552,7 @@ public sealed class AuditServiceTests
         Assert.StartsWith("audit-events-", export.FileName, StringComparison.Ordinal);
         Assert.EndsWith(".csv", export.FileName, StringComparison.Ordinal);
         Assert.Equal("text/csv; charset=utf-8", export.ContentType);
-        Assert.Contains("createdAtUtc,actorUserId,section,actionKind,action,entityType,entityId,entityDisplayName,relatedGarageId,relatedGarageNumber,relatedAccountingMonth,relatedCounterpartyId,relatedCounterpartyName,relatedDocumentId,relatedDocumentNumber,fieldName,oldValue,newValue,reason,metadata,summary", csv);
+        Assert.Contains("createdAtUtc,actorUserId,actorDisplayName,actorEmail,section,actionKind,action,entityType,entityId,entityDisplayName,relatedGarageId,relatedGarageNumber,relatedAccountingMonth,relatedCounterpartyId,relatedCounterpartyName,relatedDocumentId,relatedDocumentNumber,fieldName,oldValue,newValue,reason,metadata,summary", csv);
         Assert.Contains("auth,fail,auth.login_failed", csv);
         Assert.Contains("auth.login_failed", csv);
         Assert.Contains("\"Login [email скрыт] failed, password=[секрет скрыт] \"\"quoted\"\"\"", csv);

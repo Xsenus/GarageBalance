@@ -22,7 +22,9 @@ public sealed record AuditEventDto(
     string? RelatedCounterpartyId = null,
     string? RelatedCounterpartyName = null,
     string? RelatedDocumentId = null,
-    string? RelatedDocumentNumber = null);
+    string? RelatedDocumentNumber = null,
+    string? ActorDisplayName = null,
+    string? ActorEmail = null);
 
 public sealed record AuditEventPageDto(
     IReadOnlyList<AuditEventDto> Items,

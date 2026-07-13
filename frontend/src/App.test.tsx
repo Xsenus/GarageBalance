@@ -9565,7 +9565,13 @@ describe('App', () => {
 
     expect(await within(auditTable).findByText('Тариф')).toBeInTheDocument()
     expect(within(auditTable).getByText('Тариф воды')).toBeInTheDocument()
-    await user.click(within(auditTable).getByRole('button', { name: 'Открыть' }))
+    expect(within(auditTable).getByText('Администратор ГСК')).toBeInTheDocument()
+    expect(within(auditTable).getByText('admin@example.test')).toBeInTheDocument()
+    expect(within(auditTable).getByText('ID 5df20dec-2959-4726-a1cb-0e6ec6b28674')).toBeInTheDocument()
+    expect(within(auditTable).getByText('23.06.2026 (11:00:00)')).toBeInTheDocument()
+    const detailButton = within(auditTable).getByRole('button', { name: 'Открыть карточку события Изменение' })
+    expect(detailButton).not.toHaveTextContent('Открыть')
+    await user.click(detailButton)
 
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
     expect(within(detailDialog).getByText('dictionary.tariff_updated')).toBeInTheDocument()
@@ -9625,17 +9631,21 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    await user.selectOptions(within(auditPanel).getByLabelText('Раздел истории изменений'), 'dictionary')
-    await user.selectOptions(within(auditPanel).getByLabelText('Тип действия истории изменений'), 'update')
-    await user.selectOptions(within(auditPanel).getByLabelText('Тип объекта истории изменений'), 'owner')
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Раздел истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Справочники' }))
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Тип действия истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Изменение' }))
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Тип объекта истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Владелец' }))
     await user.type(within(auditPanel).getByLabelText('ID пользователя истории изменений'), actorUserId)
-    await user.selectOptions(within(auditPanel).getByLabelText('Быстрый фильтр истории изменений'), 'restores')
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Быстрый фильтр истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Только восстановления' }))
     await user.type(within(auditPanel).getByLabelText('Связанный гараж истории изменений'), '12')
-    await user.type(within(auditPanel).getByLabelText('Связанный месяц истории изменений'), '2026-06')
+    await user.type(within(auditPanel).getByLabelText('Связанный месяц истории изменений'), '06.2026')
     await user.type(within(auditPanel).getByLabelText('Связанный контрагент истории изменений'), 'Energy')
     await user.type(within(auditPanel).getByLabelText('Связанный документ истории изменений'), 'PAY-2026')
-    await user.type(within(auditPanel).getByLabelText('Начало периода истории изменений'), '2026-06-01')
-    await user.type(within(auditPanel).getByLabelText('Конец периода истории изменений'), '2026-06-30')
+    await user.type(within(auditPanel).getByLabelText('Начало периода истории изменений'), '01.06.2026')
+    await user.type(within(auditPanel).getByLabelText('Конец периода истории изменений'), '30.06.2026')
 
     await waitFor(() => {
       expect(auditRequest?.section).toBe('dictionary')
@@ -9714,8 +9724,10 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    await user.selectOptions(within(auditPanel).getByLabelText('Раздел истории изменений'), 'reports')
-    await user.selectOptions(within(auditPanel).getByLabelText('Тип объекта истории изменений'), 'report')
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Раздел истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Отчеты' }))
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Тип объекта истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Отчет' }))
 
     await waitFor(() => {
       expect(auditRequest?.section).toBe('reports')
@@ -9765,9 +9777,12 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    await user.selectOptions(within(auditPanel).getByLabelText('Раздел истории изменений'), 'reports')
-    await user.selectOptions(within(auditPanel).getByLabelText('Тип действия истории изменений'), 'export')
-    await user.selectOptions(within(auditPanel).getByLabelText('Тип объекта истории изменений'), 'report')
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Раздел истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Отчеты' }))
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Тип действия истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Выгрузка' }))
+    await user.click(within(auditPanel).getByRole('combobox', { name: 'Тип объекта истории изменений' }))
+    await user.click(within(auditPanel).getByRole('option', { name: 'Отчет' }))
 
     await waitFor(() => {
       expect(auditRequest?.section).toBe('reports')
@@ -9833,8 +9848,8 @@ describe('App', () => {
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
     await waitFor(() => expect(pageCalls).toBeGreaterThan(0))
 
-    fireEvent.change(within(auditPanel).getByLabelText('Конец периода истории изменений'), { target: { value: '2026-06-30' } })
-    fireEvent.change(within(auditPanel).getByLabelText('Начало периода истории изменений'), { target: { value: '2026-07-01' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Конец периода истории изменений'), { target: { value: '30.06.2026' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Начало периода истории изменений'), { target: { value: '01.07.2026' } })
 
     expect(await within(auditPanel).findByText('Проверьте период истории')).toBeInTheDocument()
     expect(within(auditPanel).getByText('Начало периода истории изменений не может быть позже конца.')).toBeInTheDocument()
@@ -9844,7 +9859,7 @@ describe('App', () => {
     expect(csvExportCalls).toBe(0)
     expect(xlsxExportCalls).toBe(0)
 
-    fireEvent.change(within(auditPanel).getByLabelText('Конец периода истории изменений'), { target: { value: '2026-07-31' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Конец периода истории изменений'), { target: { value: '31.07.2026' } })
 
     await waitFor(() => expect(pageRequests.some((request) => request?.dateFrom === '2026-07-01' && request?.dateTo === '2026-07-31')).toBe(true))
     expect(within(auditPanel).queryByText('Проверьте период истории')).not.toBeInTheDocument()
@@ -9914,12 +9929,14 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть' })
+    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Изменение' })
     await user.click(openDetailButton)
 
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
     expect(loadedEventId).toBe('audit-detail-1')
     expect(within(detailDialog).getByText('Карточка события')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('Администратор ГСК · admin@example.test')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('ID 5df20dec-2959-4726-a1cb-0e6ec6b28674')).toBeInTheDocument()
     expect(within(detailDialog).getByText('dictionary.owner_updated')).toBeInTheDocument()
     expect(within(detailDialog).getByText('owner-1')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
@@ -10001,7 +10018,7 @@ describe('App', () => {
     await openSection(user, '\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439')
     const auditPanel = await screen.findByRole('region', { name: '\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439' })
 
-    await user.click(await within(auditPanel).findByRole('button', { name: '\u041e\u0442\u043a\u0440\u044b\u0442\u044c' }))
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Изменение' }))
     const detailDialog = await screen.findByRole('dialog', { name: '\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435' })
     await user.click(within(detailDialog).getByRole('button', { name: '\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b: \u041a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u044b' }))
 
@@ -10053,7 +10070,7 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть' }))
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Изменение' }))
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
 
     expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
@@ -10095,7 +10112,7 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть' })
+    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Формирование' })
     await user.click(openDetailButton)
     const detailDialog = await screen.findByRole('dialog', { name: 'Формирование' })
     const detailCloseIconButton = within(detailDialog).getByRole('button', { name: 'Закрыть карточку события' })
@@ -10174,7 +10191,7 @@ describe('App', () => {
     await openSection(user, 'История изменений')
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
 
-    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть' })
+    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Изменение' })
     await user.click(openDetailButton)
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
     const detailCloseIconButton = within(detailDialog).getByRole('button', { name: 'Закрыть карточку события' })
@@ -12948,6 +12965,8 @@ function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
     id: overrides.id ?? `audit-${overrides.action ?? 'event'}`,
     createdAtUtc: '2026-06-23T04:00:00Z',
     actorUserId: '5df20dec-2959-4726-a1cb-0e6ec6b28674',
+    actorDisplayName: 'Администратор ГСК',
+    actorEmail: 'admin@example.test',
     action: 'auth.login_success',
     entityType: 'user',
     entityId: '5df20dec-2959-4726-a1cb-0e6ec6b28674',

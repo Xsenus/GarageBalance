@@ -63,6 +63,23 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             .FirstOrDefaultAsync(auditEvent => auditEvent.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, AuditActorInfo>> GetActorsAsync(
+        IReadOnlyCollection<Guid> actorUserIds,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserIds.Count == 0)
+        {
+            return new Dictionary<Guid, AuditActorInfo>();
+        }
+
+        var ids = actorUserIds.Distinct().Take(500).ToArray();
+        return await dbContext.Users
+            .AsNoTracking()
+            .Where(user => ids.Contains(user.Id))
+            .Select(user => new AuditActorInfo(user.Id, user.DisplayName, user.Email))
+            .ToDictionaryAsync(user => user.Id, cancellationToken);
+    }
+
     private static IQueryable<AuditEvent> ApplyDateFilters(
         IQueryable<AuditEvent> query,
         AuditEventListRequest request)

@@ -79,19 +79,28 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
         AddMetadata(metadata, "relatedDocumentId", request.RelatedDocumentId);
         AddMetadata(metadata, "relatedDocumentNumber", request.RelatedDocumentNumber);
 
-        if (changes.Count == 1)
+        if (changes.Count > 0)
         {
-            AddMetadata(metadata, "fieldName", changes[0].FieldName);
-            AddMetadata(metadata, "oldValue", changes[0].OldValue);
-            AddMetadata(metadata, "newValue", changes[0].NewValue);
-        }
-        else if (changes.Count > 1)
-        {
-            AddMetadata(metadata, "changedFields", string.Join(", ", changes.Select(change => change.FieldName)));
+            AddMetadata(metadata, "fieldName", string.Join("; ", changes.Select(change => change.FieldName)));
+            AddMetadata(metadata, "oldValue", FormatChanges(changes, change => change.OldValue));
+            AddMetadata(metadata, "newValue", FormatChanges(changes, change => change.NewValue));
             AddMetadata(metadata, "changesCount", changes.Count);
+            if (changes.Count > 1)
+            {
+                AddMetadata(metadata, "changedFields", string.Join(", ", changes.Select(change => change.FieldName)));
+            }
         }
 
         return metadata;
+    }
+
+    private static string FormatChanges(
+        IReadOnlyList<AuditChangeDiff> changes,
+        Func<AuditChangeDiff, string?> valueSelector)
+    {
+        return changes.Count == 1
+            ? FormatDisplayValue(valueSelector(changes[0]))
+            : string.Join("; ", changes.Select(change => $"{change.FieldName}: {FormatDisplayValue(valueSelector(change))}"));
     }
 
     private static void AddMetadata(Dictionary<string, string?> metadata, IReadOnlyDictionary<string, object?>? source)

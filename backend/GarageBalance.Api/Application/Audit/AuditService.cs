@@ -15,6 +15,8 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
     [
         "createdAtUtc",
         "actorUserId",
+        "actorDisplayName",
+        "actorEmail",
         "section",
         "actionKind",
         "action",
@@ -40,7 +42,8 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
     {
         var limit = NormalizeLimit(request.Limit);
         var events = await repository.GetEventsAsync(request, limit, cancellationToken);
-        return events.Select(ToDto).ToList();
+        var actors = await GetActorsAsync(events, cancellationToken);
+        return events.Select(auditEvent => ToDto(auditEvent, actors)).ToList();
     }
 
     public async Task<AuditEventPageDto> GetEventsPageAsync(AuditEventListRequest request, CancellationToken cancellationToken)
@@ -48,14 +51,22 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
         var limit = NormalizeLimit(request.Limit);
         var offset = NormalizeOffset(request.Offset);
         var page = await repository.GetEventsPageAsync(request, offset, limit, cancellationToken);
-        return new AuditEventPageDto(page.Items.Select(ToDto).ToList(), page.TotalCount, offset, limit);
+        var actors = await GetActorsAsync(page.Items, cancellationToken);
+        return new AuditEventPageDto(page.Items.Select(auditEvent => ToDto(auditEvent, actors)).ToList(), page.TotalCount, offset, limit);
     }
 
-    private static AuditEventDto ToDto(AuditEvent auditEvent)
+    private static AuditEventDto ToDto(
+        AuditEvent auditEvent,
+        IReadOnlyDictionary<Guid, AuditActorInfo> actors)
     {
         var maskedSummary = AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty;
         var beforeAfter = ExtractBeforeAfter(maskedSummary);
+        var legacyBeforeAfter = ExtractLegacyBeforeAfter(maskedSummary);
         var metadata = ParseMetadata(auditEvent.MetadataJson);
+        var actionKind = MaskStoredValue(auditEvent.ActionKind) ?? GetActionKind(auditEvent.Action);
+        var actor = auditEvent.ActorUserId is { } actorUserId && actors.TryGetValue(actorUserId, out var actorInfo)
+            ? actorInfo
+            : null;
 
         return new AuditEventDto(
             auditEvent.Id,
@@ -66,11 +77,11 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
             AuditTextMasker.Mask(auditEvent.EntityId),
             maskedSummary,
             MaskStoredValue(auditEvent.Section) ?? GetSection(auditEvent.Action),
-            MaskStoredValue(auditEvent.ActionKind) ?? GetActionKind(auditEvent.Action),
-            ExtractFieldName(maskedSummary),
-            beforeAfter.OldValue,
-            beforeAfter.NewValue,
-            ExtractReason(maskedSummary),
+            actionKind,
+            ExtractMetadataValue(metadata, "fieldName", "changedFields") ?? ExtractFieldName(maskedSummary) ?? InferLegacyFieldName(auditEvent.EntityType, actionKind, legacyBeforeAfter),
+            ExtractMetadataValue(metadata, "oldValue") ?? beforeAfter.OldValue ?? legacyBeforeAfter.OldValue,
+            ExtractMetadataValue(metadata, "newValue") ?? beforeAfter.NewValue ?? legacyBeforeAfter.NewValue,
+            ExtractMetadataValue(metadata, "reason") ?? ExtractReason(maskedSummary),
             metadata,
             MaskStoredValue(auditEvent.EntityDisplayName) ?? ExtractEntityDisplayName(metadata),
             MaskStoredValue(auditEvent.RelatedGarageId) ?? ExtractMetadataValue(metadata, "relatedGarageId", "garageId"),
@@ -79,7 +90,21 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
             MaskStoredValue(auditEvent.RelatedCounterpartyId) ?? ExtractMetadataValue(metadata, "relatedCounterpartyId", "counterpartyId", "supplierId", "ownerId", "employeeId"),
             MaskStoredValue(auditEvent.RelatedCounterpartyName) ?? ExtractMetadataValue(metadata, "relatedCounterpartyName", "counterpartyName", "supplierName", "ownerName", "employeeName"),
             MaskStoredValue(auditEvent.RelatedDocumentId) ?? ExtractMetadataValue(metadata, "relatedDocumentId", "documentId", "operationId", "paymentId", "accrualId", "invoiceId", "receiptId"),
-            MaskStoredValue(auditEvent.RelatedDocumentNumber) ?? ExtractMetadataValue(metadata, "relatedDocumentNumber", "operationNumber", "documentNumber", "paymentNumber", "invoiceNumber", "receiptNumber"));
+            MaskStoredValue(auditEvent.RelatedDocumentNumber) ?? ExtractMetadataValue(metadata, "relatedDocumentNumber", "operationNumber", "documentNumber", "paymentNumber", "invoiceNumber", "receiptNumber"),
+            actor?.DisplayName,
+            actor?.Email);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, AuditActorInfo>> GetActorsAsync(
+        IReadOnlyCollection<AuditEvent> events,
+        CancellationToken cancellationToken)
+    {
+        var actorIds = events
+            .Where(auditEvent => auditEvent.ActorUserId is not null)
+            .Select(auditEvent => auditEvent.ActorUserId!.Value)
+            .Distinct()
+            .ToArray();
+        return await repository.GetActorsAsync(actorIds, cancellationToken);
     }
 
     public async Task<AuditEventExportDto> ExportEventsCsvAsync(AuditEventListRequest request, CancellationToken cancellationToken)
@@ -110,7 +135,13 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
     {
         var auditEvent = await repository.FindEventAsync(id, cancellationToken);
 
-        return auditEvent is null ? null : ToDto(auditEvent);
+        if (auditEvent is null)
+        {
+            return null;
+        }
+
+        var actors = await GetActorsAsync([auditEvent], cancellationToken);
+        return ToDto(auditEvent, actors);
     }
 
     private static string BuildCsv(IReadOnlyList<AuditEventDto> events)
@@ -130,6 +161,8 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
     [
         auditEvent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture),
         auditEvent.ActorUserId?.ToString(),
+        auditEvent.ActorDisplayName,
+        auditEvent.ActorEmail,
         auditEvent.Section,
         auditEvent.ActionKind,
         auditEvent.Action,
@@ -264,6 +297,35 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
         return match.Success
             ? (NormalizeExtractedValue(match.Groups["old"].Value), NormalizeExtractedValue(match.Groups["new"].Value))
             : (null, null);
+    }
+
+    private static (string? OldValue, string? NewValue) ExtractLegacyBeforeAfter(string summary)
+    {
+        var match = Regex.Match(
+            summary,
+            @"предыдущее\s+(?<old>.+?)[,;]\s*текущее\s+(?<new>.+?)(?:[,;.]|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? (NormalizeExtractedValue(match.Groups["old"].Value), NormalizeExtractedValue(match.Groups["new"].Value))
+            : (null, null);
+    }
+
+    private static string? InferLegacyFieldName(
+        string entityType,
+        string actionKind,
+        (string? OldValue, string? NewValue) legacyBeforeAfter)
+    {
+        if (legacyBeforeAfter.OldValue is null && legacyBeforeAfter.NewValue is null)
+        {
+            return null;
+        }
+
+        if (string.Equals(entityType, "meter_reading", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Показание счетчика";
+        }
+
+        return string.Equals(actionKind, "update", StringComparison.OrdinalIgnoreCase) ? "Значение" : null;
     }
 
     private static string? ExtractReason(string summary)

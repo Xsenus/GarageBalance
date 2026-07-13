@@ -2,6 +2,8 @@ export type AuditEventDto = {
   id: string
   createdAtUtc: string
   actorUserId: string | null
+  actorDisplayName?: string | null
+  actorEmail?: string | null
   action: string
   entityType: string
   entityId: string | null

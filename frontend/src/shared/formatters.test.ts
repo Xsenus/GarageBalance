@@ -3,6 +3,7 @@ import type { TariffDto } from '../services/dictionariesApi'
 import type { AccessImportRunDto } from '../services/importApi'
 import {
   formatAccrualSource,
+  formatAuditDateTime,
   formatCount,
   formatDateOnly,
   formatDebtAmount,
@@ -29,6 +30,10 @@ import {
 } from './formatters'
 
 describe('shared formatters', () => {
+  it('formats audit timestamps with seconds in parentheses', () => {
+    expect(formatAuditDateTime('1992-07-10T23:55:56')).toMatch(/^10\.07\.1992 \(23:55:56\)$/)
+  })
+
   it('formats money and debt labels for Russian UI', () => {
     expect(formatMoney(1234.5)).toMatch(/^1\s234,50$/)
     expect(formatDebtLabel(15)).toBe('Задолженность')

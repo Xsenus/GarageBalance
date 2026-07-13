@@ -190,6 +190,13 @@ export function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
+export function formatAuditDateTime(value: string): string {
+  const date = new Date(value)
+  const datePart = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+  const timePart = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date)
+  return `${datePart} (${timePart})`
+}
+
 export function getCurrentMonthInputValue(dateValue = getLocalDateInputValue()): string {
   return dateValue.slice(0, 7)
 }
