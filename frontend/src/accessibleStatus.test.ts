@@ -16,7 +16,8 @@ describe('accessible dynamic messages', () => {
   const meterReadingsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'meterReadings', 'MeterReadingsPanel.tsx'), 'utf8')
   const auditPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'audit', 'AuditPanel.tsx'), 'utf8')
   const reportPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource].join('\n')
+  const userManagementPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'users', 'UserManagementPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -497,7 +498,7 @@ describe('accessible dynamic messages', () => {
       {
         id: 'new-user-password-policy-hint',
         fields: ['aria-label="Пароль пользователя"'],
-        source: appSource,
+        source: userManagementPanelSource,
       },
     ]
 

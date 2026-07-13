@@ -3,6 +3,38 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void UserManagementPanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var userManagementPanelText = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "users",
+            "UserManagementPanel.tsx"));
+        var roadmapLine = File
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "project-roadmap.md"))
+            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
+            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+
+        Assert.Contains("import { UserManagementPanel } from './features/users/UserManagementPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<UserManagementPanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function UserManagementPanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type UserEditorState", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function RolePermissionMatrix(", appText, StringComparison.Ordinal);
+
+        Assert.Contains("export function UserManagementPanel(", userManagementPanelText, StringComparison.Ordinal);
+        Assert.Contains("userClient.getUsersPage", userManagementPanelText, StringComparison.Ordinal);
+        Assert.Contains("userClient.createUser", userManagementPanelText, StringComparison.Ordinal);
+        Assert.Contains("userClient.updateUser", userManagementPanelText, StringComparison.Ordinal);
+        Assert.Contains("userClient.restoreUser", userManagementPanelText, StringComparison.Ordinal);
+        Assert.Contains("userClient.updateRolePermissions", userManagementPanelText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/users/UserManagementPanel.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReportPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
