@@ -90,6 +90,8 @@ export type ExpenseReportDto = {
   difference: number
   rowCount: number
   rows: ExpenseReportRowDto[]
+  offset: number
+  limit: number
 }
 
 export type FundChangeReportRowDto = {
@@ -252,6 +254,7 @@ export type ReportClient = {
       expenseTypeIds?: string[]
       rowMode?: string
       limit?: number
+      offset?: number
     },
   ): Promise<ExpenseReportDto>
   getFundChangeReport(
@@ -474,6 +477,9 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
   }
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
+  }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
   }
   for (const supplierId of params.supplierIds ?? []) {
     searchParams.append('supplierIds', supplierId)

@@ -19,6 +19,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         IReadOnlySet<Guid> expenseTypeIds,
         string? search,
         int? limit,
+        int offset,
         CancellationToken cancellationToken)
     {
         var rows = new List<ExpenseReportRowDto>();
@@ -26,6 +27,9 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var expenseTotal = 0m;
         var rowCount = 0;
         var hasSearch = !string.IsNullOrWhiteSpace(search);
+        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var useClientSearch = hasSearch && !(dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false);
+        var fetchLimit = useClientSearch ? null : GetFetchLimit(offset, limit);
 
         if (rowMode is AllRows or AccrualRows)
         {
@@ -38,13 +42,18 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     startingBalanceQuery = startingBalanceQuery.Where(supplier => supplierIds.Contains(supplier.Id));
                 }
 
-                if (!hasSearch)
+                if (hasSearch && !useClientSearch && !"Стартовый баланс".Contains(normalizedSearch!, StringComparison.OrdinalIgnoreCase))
+                {
+                    startingBalanceQuery = startingBalanceQuery.Where(supplier => supplier.Name.ToLower().Contains(normalizedSearch!));
+                }
+
+                if (!useClientSearch)
                 {
                     accrualTotal += await startingBalanceQuery.SumAsync(supplier => supplier.StartingBalance, cancellationToken);
                     rowCount += await startingBalanceQuery.CountAsync(cancellationToken);
                 }
 
-                var startingBalances = await ApplyLimit(startingBalanceQuery.OrderBy(supplier => supplier.Name), hasSearch ? null : limit)
+                var startingBalances = await ApplyLimit(startingBalanceQuery.OrderBy(supplier => supplier.Name).ThenBy(supplier => supplier.Id), fetchLimit)
                     .ToListAsync(cancellationToken);
                 rows.AddRange(startingBalances.Select(supplier => new ExpenseReportRowDto(
                     StartingBalanceRows,
@@ -78,15 +87,23 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 accrualsQuery = accrualsQuery.Where(accrual => expenseTypeIds.Contains(accrual.ExpenseTypeId));
             }
 
-            if (!hasSearch)
+            if (hasSearch && !useClientSearch)
+            {
+                accrualsQuery = accrualsQuery.Where(accrual =>
+                    accrual.Supplier.Name.ToLower().Contains(normalizedSearch!) ||
+                    accrual.ExpenseType.Name.ToLower().Contains(normalizedSearch!) ||
+                    (accrual.DocumentNumber != null && accrual.DocumentNumber.ToLower().Contains(normalizedSearch!)));
+            }
+
+            if (!useClientSearch)
             {
                 accrualTotal += await accrualsQuery.SumAsync(accrual => accrual.Amount, cancellationToken);
                 rowCount += await accrualsQuery.CountAsync(cancellationToken);
             }
 
             var accruals = await ApplyLimit(
-                    accrualsQuery.OrderBy(accrual => accrual.AccountingMonth).ThenBy(accrual => accrual.Supplier.Name),
-                    hasSearch ? null : limit)
+                    accrualsQuery.OrderBy(accrual => accrual.AccountingMonth).ThenBy(accrual => accrual.Supplier.Name).ThenBy(accrual => accrual.Id),
+                    fetchLimit)
                 .ToListAsync(cancellationToken);
             rows.AddRange(accruals.Select(accrual => new ExpenseReportRowDto(
                 AccrualRows,
@@ -125,15 +142,23 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 paymentsQuery = paymentsQuery.Where(operation => expenseTypeIds.Contains(operation.ExpenseTypeId!.Value));
             }
 
-            if (!hasSearch)
+            if (hasSearch && !useClientSearch)
+            {
+                paymentsQuery = paymentsQuery.Where(operation =>
+                    operation.Supplier!.Name.ToLower().Contains(normalizedSearch!) ||
+                    operation.ExpenseType!.Name.ToLower().Contains(normalizedSearch!) ||
+                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch!)));
+            }
+
+            if (!useClientSearch)
             {
                 expenseTotal += await paymentsQuery.SumAsync(operation => operation.Amount, cancellationToken);
                 rowCount += await paymentsQuery.CountAsync(cancellationToken);
             }
 
             var payments = await ApplyLimit(
-                    paymentsQuery.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.Supplier!.Name),
-                    hasSearch ? null : limit)
+                    paymentsQuery.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.Supplier!.Name).ThenBy(operation => operation.Id),
+                    fetchLimit)
                 .ToListAsync(cancellationToken);
             rows.AddRange(payments.Select(operation => new ExpenseReportRowDto(
                 PaymentRows,
@@ -150,21 +175,22 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 operation.Comment)));
         }
 
-        if (hasSearch)
+        if (useClientSearch)
         {
-            var normalizedSearch = search!.Trim();
+            var clientSearch = search!.Trim();
             rows = rows.Where(row =>
-                    row.SupplierName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    row.ExpenseTypeName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    (row.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                    row.SupplierName.Contains(clientSearch, StringComparison.OrdinalIgnoreCase) ||
+                    row.ExpenseTypeName.Contains(clientSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (row.DocumentNumber?.Contains(clientSearch, StringComparison.OrdinalIgnoreCase) ?? false))
                 .ToList();
             accrualTotal = rows.Sum(row => row.AccrualAmount);
             expenseTotal = rows.Sum(row => row.ExpenseAmount);
             rowCount = rows.Count;
         }
 
-        var visibleRows = ApplyLimit(
+        var visibleRows = ApplyPage(
                 rows.OrderBy(row => row.Date).ThenBy(row => row.SupplierName).ThenBy(row => row.RowType),
+                offset,
                 limit)
             .ToList();
         return new ExpenseReportQueryData(accrualTotal, expenseTotal, rowCount, visibleRows);
@@ -173,6 +199,12 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
     private static IQueryable<T> ApplyLimit<T>(IQueryable<T> query, int? limit) =>
         limit is > 0 ? query.Take(limit.Value) : query;
 
-    private static IEnumerable<T> ApplyLimit<T>(IEnumerable<T> rows, int? limit) =>
-        limit is > 0 ? rows.Take(limit.Value) : rows;
+    private static IEnumerable<T> ApplyPage<T>(IEnumerable<T> rows, int offset, int? limit)
+    {
+        var page = offset > 0 ? rows.Skip(offset) : rows;
+        return limit is > 0 ? page.Take(limit.Value) : page;
+    }
+
+    private static int? GetFetchLimit(int offset, int? limit) =>
+        limit is > 0 ? (int)Math.Min((long)offset + limit.Value, int.MaxValue) : null;
 }

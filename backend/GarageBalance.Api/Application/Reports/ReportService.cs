@@ -297,6 +297,7 @@ public sealed class ReportService(
         }
 
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var offset = Math.Max(request.Offset ?? 0, 0);
         var data = await expenseReportQuery.GetRowsAsync(
             dateFrom,
             dateTo,
@@ -305,6 +306,7 @@ public sealed class ReportService(
             request.ExpenseTypeIds.ToHashSet(),
             request.Search,
             limit,
+            offset,
             cancellationToken);
         var report = new ExpenseReportDto(
             dateFrom,
@@ -313,7 +315,9 @@ public sealed class ReportService(
             data.ExpenseTotal,
             data.AccrualTotal - data.ExpenseTotal,
             data.RowCount,
-            data.Rows);
+            data.Rows,
+            offset,
+            limit ?? data.Rows.Count);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -1249,7 +1253,8 @@ public sealed class ReportService(
             ["visibleRowCount"] = visibleRowCount,
             ["supplierFilterCount"] = request.SupplierIds.Count,
             ["expenseTypeFilterCount"] = request.ExpenseTypeIds.Count,
-            ["limit"] = request.Limit
+            ["limit"] = request.Limit,
+            ["offset"] = request.Offset
         };
     }
 

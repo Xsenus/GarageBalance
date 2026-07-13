@@ -201,11 +201,13 @@ public sealed class ReportsControllerTests
             [],
             "payments",
             16,
+            8,
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal(16, service.ExpenseRequest?.Limit);
+        Assert.Equal(8, service.ExpenseRequest?.Offset);
     }
 
     [Fact]
@@ -589,7 +591,7 @@ public sealed class ReportsControllerTests
             ExpenseResult = ReportResult<ExpenseReportDto>.Failure("period_invalid", "Период неверный.")
         });
 
-        var result = await controller.GetExpenseReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all", null, CancellationToken.None);
+        var result = await controller.GetExpenseReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], "all", null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -730,7 +732,9 @@ public sealed class ReportsControllerTests
             1,
             [
                 new ExpenseReportRowDto("payments", new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), supplierId, "Vodokanal", expenseTypeId, "Вода", 0m, 400m, -400m, "RKO-1", null)
-            ]);
+            ],
+            0,
+            25);
     }
 
     private static FundChangeReportDto CreateFundChangeReport()

@@ -161,6 +161,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [garageReport, setGarageReport] = useState<ConsolidatedReportDto | null>(null)
   const [garageIncomeDetailReport, setGarageIncomeDetailReport] = useState<IncomeReportDto | null>(null)
   const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
+  const [payoutPageRequest, setPayoutPageRequest] = useState({ offset: 0, limit: 25 })
+  const [payoutReportLoading, setPayoutReportLoading] = useState(false)
+  const [payoutReportError, setPayoutReportError] = useState<string | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
   const [incomePageRequest, setIncomePageRequest] = useState({ offset: 0, limit: 25 })
   const [incomeReportLoading, setIncomeReportLoading] = useState(false)
@@ -228,8 +231,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       try {
         const consolidatedFilter = monthlyFilters.consolidated
         const garageFilterRange = monthlyFilters.garages
-        const payoutFilter = monthlyFilters.payouts
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedFees] = await Promise.all([
+        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
@@ -259,12 +261,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             search: garageFilter.trim() || undefined,
             limit: 500,
           }),
-          reportClient.getExpenseReport(auth.accessToken, {
-            dateFrom: getReportMonthStart(payoutFilter.monthFrom),
-            dateTo: getReportMonthEnd(payoutFilter.monthTo),
-            search: counterpartyFilter.trim() || undefined,
-            limit: 100,
-          }),
           reportClient.getFeeReport(auth.accessToken, {
             variation: feeVariationFilter.trim() || undefined,
             limit: 100,
@@ -280,7 +276,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         setConsolidatedExpenseBreakdown(loadedConsolidatedExpenses)
         setGarageReport(loadedGarages)
         setGarageIncomeDetailReport(loadedGarageIncomeDetails)
-        setPayoutReport(loadedPayouts)
         setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
@@ -294,7 +289,47 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, counterpartyFilter, feeVariationFilter, garageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+  }, [auth.accessToken, feeVariationFilter, garageFilter, monthlyFilters.consolidated, monthlyFilters.garages, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'payouts') {
+      return
+    }
+
+    let ignore = false
+
+    async function loadPayoutReport() {
+      setPayoutReportLoading(true)
+      setPayoutReportError(null)
+      try {
+        const filter = monthlyFilters.payouts
+        const report = await reportClient.getExpenseReport(auth.accessToken, {
+          dateFrom: getReportMonthStart(filter.monthFrom),
+          dateTo: getReportMonthEnd(filter.monthTo),
+          search: counterpartyFilter.trim() || undefined,
+          offset: payoutPageRequest.offset,
+          limit: payoutPageRequest.limit,
+        })
+        if (!ignore) {
+          setPayoutReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setPayoutReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по выплатам.')
+        }
+      } finally {
+        if (!ignore) {
+          setPayoutReportLoading(false)
+        }
+      }
+    }
+
+    void loadPayoutReport()
+
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, counterpartyFilter, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'income') {
@@ -463,6 +498,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const counterpartyOptions = Array.from(new Set([...suppliers.map((supplier) => supplier.name), ...expenseTypes.map((item) => item.name), 'Электрик', 'Председатель', 'Бухгалтерия']))
 
   function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
+    if (key === 'payouts') {
+      setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
+    }
     setMonthlyFilters((current) => ({
       ...current,
       [key]: {
@@ -492,6 +530,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function applyPreviousMonth(key: ReportMonthlyFilterKey) {
+    if (key === 'payouts') {
+      setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
+    }
     setMonthlyFilters((current) => ({
       ...current,
       [key]: { monthFrom: previousMonth, monthTo: previousMonth },
@@ -755,6 +796,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         formatMoney(row.expenseAmount),
         formatMoney(row.difference),
       ]) ?? []
+      const payoutPage = {
+        items: payoutReport?.rows ?? [],
+        totalCount: payoutReport?.rowCount ?? 0,
+        offset: payoutReport?.offset ?? payoutPageRequest.offset,
+        limit: payoutReport?.limit ?? payoutPageRequest.limit,
+      }
+      const payoutVisibleRange = getPageVisibleRange(payoutPage)
+      const payoutNavigation = getPageNavigation(payoutPage)
       return (
         <ReportWorkbookSheet title="Отчёт по выплатам">
           {renderMonthlyFilter('payouts', {
@@ -763,10 +812,21 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             extra: (
               <label className="report-workbook-filter-wide">
                 <span>Поставщики/сотрудники</span>
-                <input aria-label="Поставщики или сотрудники" list={supplierOptionsId} value={counterpartyFilter} onChange={(event) => setCounterpartyFilter(event.target.value)} placeholder="Поставщик или сотрудник" />
+                <input
+                  aria-label="Поставщики или сотрудники"
+                  list={supplierOptionsId}
+                  value={counterpartyFilter}
+                  onChange={(event) => {
+                    setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
+                    setCounterpartyFilter(event.target.value)
+                  }}
+                  placeholder="Поставщик или сотрудник"
+                />
               </label>
             ),
           })}
+          {payoutReportLoading ? <p className="prototype-status" role="status">Загружаем выплаты...</p> : null}
+          {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО выплат</strong>
@@ -778,6 +838,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             reportRows.length > 0 ? reportRows : [['', '', counterpartyFilterLabel, 'Данных за период нет', '', '']],
             payoutReport ? ['ИТОГО', '', '', formatMoney(payoutReport.accrualTotal), formatMoney(payoutReport.expenseTotal), formatMoney(payoutReport.difference)] : undefined,
           )}
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация отчета по выплатам">
+            <span role="status" aria-live="polite">Показано {payoutVisibleRange.from}-{payoutVisibleRange.to} из {payoutPage.totalCount}</span>
+            <label>
+              Строк на странице
+              <select
+                aria-label="Строк на странице отчета по выплатам"
+                value={payoutPage.limit}
+                disabled={payoutReportLoading}
+                onChange={(event) => setPayoutPageRequest({ offset: 0, limit: Number(event.target.value) })}
+              >
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={!payoutNavigation.canGoPrevious || payoutReportLoading} onClick={() => setPayoutPageRequest((current) => ({ ...current, offset: payoutNavigation.previousOffset }))}>Назад</button>
+            <button className="ghost-button" type="button" disabled={!payoutNavigation.canGoNext || payoutReportLoading} onClick={() => setPayoutPageRequest((current) => ({ ...current, offset: payoutNavigation.nextOffset }))}>Вперед</button>
+          </div>
         </ReportWorkbookSheet>
       )
     }

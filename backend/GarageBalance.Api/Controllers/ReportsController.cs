@@ -162,6 +162,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? expenseTypeIds,
         [FromQuery] string? rowMode,
         [FromQuery] int? limit,
+        [FromQuery] int? offset,
         CancellationToken cancellationToken)
     {
         var result = await reportService.GetExpenseReportAsync(
@@ -173,6 +174,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 expenseTypeIds ?? [],
                 rowMode,
                 limit,
+                offset,
                 GetActorUserId()),
             cancellationToken);
 

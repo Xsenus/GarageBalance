@@ -10,6 +10,7 @@ public interface IExpenseReportQuery
         IReadOnlySet<Guid> expenseTypeIds,
         string? search,
         int? limit,
+        int offset,
         CancellationToken cancellationToken);
 }
 

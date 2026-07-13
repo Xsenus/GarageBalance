@@ -10147,6 +10147,33 @@ describe('App', () => {
         }],
       })
     })
+    const payoutPageRequests: Array<{ offset?: number; limit?: number }> = []
+    const getExpenseReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getExpenseReport']>[1]) => {
+      if (params?.offset === undefined) {
+        return baseReportClient.getExpenseReport(token, params)
+      }
+
+      payoutPageRequests.push({ offset: params.offset, limit: params.limit })
+      const offset = params.offset ?? 0
+      const limit = params.limit ?? 25
+      const row = createExpenseReport().rows[0]
+      return createExpenseReport({
+        rowCount: 30,
+        offset,
+        limit,
+        accrualTotal: 12000,
+        expenseTotal: 10000,
+        difference: 2000,
+        rows: [{
+          ...row,
+          supplierName: offset === 0 ? 'Водоканал' : 'Электрик',
+          expenseTypeName: offset === 0 ? 'Вода' : 'Зарплата',
+          expenseAmount: offset === 0 ? 400 : 2600,
+          difference: offset === 0 ? -400 : -2600,
+          documentNumber: offset === 0 ? 'RKO-1' : 'RKO-26',
+        }],
+      })
+    })
     const cashPaymentPageRequests: Array<{ offset?: number; limit?: number }> = []
     const getCashPaymentReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
       cashPaymentPageRequests.push({ offset: params?.offset, limit: params?.limit })
@@ -10204,6 +10231,7 @@ describe('App', () => {
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
       getIncomeReport,
+      getExpenseReport,
       getCashPaymentReport,
       getBankDepositReport,
       getFundChangeReport,
@@ -10218,6 +10246,18 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    const payoutReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })
+    expect(await within(payoutReportTable).findByText('Водоканал')).toBeInTheDocument()
+    const payoutPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по выплатам' })
+    expect(within(payoutPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    await user.click(within(payoutPagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(payoutPageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    expect(await within(payoutReportTable).findByText('Электрик')).toBeInTheDocument()
+    expect(payoutReportTable).toHaveTextContent('2 600,00')
+    expect(within(payoutPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(payoutPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
 
     await openReportTab(user, reportsPanel, 'Поступления')
     expect(within(reportsPanel).getByText('Отчет по поступлениям')).toBeInTheDocument()
@@ -10342,6 +10382,38 @@ describe('App', () => {
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(fundXlsxButton)
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
+  })
+
+  it('shows loading and error states for the paged payout report', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    let rejectPayouts: (reason?: unknown) => void = () => {}
+    const payoutPromise = new Promise<ExpenseReportDto>((_resolve, reject) => {
+      rejectPayouts = reject
+    })
+    const reportClient = createReportClient({
+      getExpenseReport: vi.fn((token, params) => params?.offset === undefined
+        ? baseReportClient.getExpenseReport(token, params)
+        : payoutPromise),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По выплатам')
+
+    expect(await within(reportsPanel).findByText('Загружаем выплаты...')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по выплатам')).toBeDisabled()
+
+    await act(async () => {
+      rejectPayouts(new Error('Отчет по выплатам временно недоступен'))
+      await payoutPromise.catch(() => undefined)
+    })
+
+    expect(await within(reportsPanel).findByText('Отчет по выплатам временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('Загружаем выплаты...')).not.toBeInTheDocument()
   })
 
   it('shows loading and error states for the paged income report', async () => {
@@ -13180,6 +13252,8 @@ function createExpenseReport(overrides: Partial<ExpenseReportDto> = {}): Expense
     expenseTotal: 400,
     difference: -400,
     rowCount: 1,
+    offset: 0,
+    limit: 25,
     rows: [
       {
         rowType: 'payments',

@@ -373,7 +373,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals()
+    public async Task GetExpenseReportAsync_AppliesPageWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -383,15 +383,38 @@ public sealed class ReportServiceTests
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 300m, "RKO-2", null), null, CancellationToken.None);
 
         var result = await service.GetExpenseReportAsync(
-            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "payments", 1),
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "payments", 1, 1),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Value!.RowCount);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal("RKO-1", row.DocumentNumber);
+        Assert.Equal("RKO-2", row.DocumentNumber);
         Assert.Equal(700m, result.Value.ExpenseTotal);
         Assert.Equal(-700m, result.Value.Difference);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
+    }
+
+    [Fact]
+    public async Task GetExpenseReportAsync_AppliesSearchBeforePageAndTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "MATCH-1", null), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 300m, "MATCH-2", null), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 14), new DateOnly(2026, 6, 1), 200m, "OTHER", null), null, CancellationToken.None);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "MATCH", [], [], "payments", 1, 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.RowCount);
+        Assert.Equal(700m, result.Value.ExpenseTotal);
+        Assert.Equal("MATCH-2", Assert.Single(result.Value.Rows).DocumentNumber);
     }
 
     [Fact]

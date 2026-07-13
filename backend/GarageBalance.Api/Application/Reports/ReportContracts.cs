@@ -27,6 +27,7 @@ public sealed record ExpenseReportRequest(
     IReadOnlyCollection<Guid> ExpenseTypeIds,
     string? RowMode,
     int? Limit = null,
+    int? Offset = null,
     Guid? ActorUserId = null);
 
 public sealed record FundChangeReportRequest(
@@ -129,7 +130,9 @@ public sealed record ExpenseReportDto(
     decimal ExpenseTotal,
     decimal Difference,
     int RowCount,
-    IReadOnlyList<ExpenseReportRowDto> Rows);
+    IReadOnlyList<ExpenseReportRowDto> Rows,
+    int Offset,
+    int Limit);
 
 public sealed record ExpenseReportRowDto(
     string RowType,
