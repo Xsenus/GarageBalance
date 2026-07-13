@@ -7,6 +7,7 @@ import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, C
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, formatFinanceVisibleRange, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
@@ -280,6 +281,7 @@ export function FinancePanel({
   fundsClient,
   formStateClient,
   integrationClient,
+  settingsClient,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
@@ -287,6 +289,7 @@ export function FinancePanel({
   fundsClient: FundsClient
   formStateClient: FormStateClient
   integrationClient: IntegrationClient
+  settingsClient: ApplicationSettingsClient
 }) {
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
@@ -349,6 +352,9 @@ export function FinancePanel({
   const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
   const [loading, setLoading] = useState(true)
+  const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
+  const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
+  const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const closeCancelFinanceDialog = useCallback(() => {
@@ -535,6 +541,36 @@ export function FinancePanel({
 
   useEffect(() => {
     let ignore = false
+    settingsClient.getPaymentDisplaySettings(auth.accessToken)
+      .then((settings) => {
+        if (!ignore) {
+          setShowAllGarageOperations(settings.showAllGarageOperationsByDefault)
+          setPaymentDisplaySettingsError(null)
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) {
+          setShowAllGarageOperations(false)
+          setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось загрузить настройку отображения платежей.')
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setPaymentDisplaySettingsLoaded(true)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [auth.accessToken, settingsClient])
+
+  useEffect(() => {
+    if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
+      return
+    }
+
+    let ignore = false
     const handle = window.setTimeout(() => {
       void Promise.all([
         financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
@@ -557,7 +593,7 @@ export function FinancePanel({
       ignore = true
       window.clearTimeout(handle)
     }
-  }, [auth.accessToken, financeClient])
+  }, [auth.accessToken, financeClient, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   useEffect(() => {
     const handleWindowClick = () => setFinanceContextMenu(null)
@@ -629,9 +665,13 @@ export function FinancePanel({
   }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, meterForm.accountingMonth])
 
   useEffect(() => {
+    if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
+      return
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadFinanceWorkbench(activeFinanceSection, 0, financePage.limit)
-  }, [activeFinanceSection, financePage.limit, loadFinanceWorkbench])
+  }, [activeFinanceSection, financePage.limit, loadFinanceWorkbench, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   async function searchIncomeGarages() {
     const query = incomeGarageSearch.trim()
@@ -1993,16 +2033,17 @@ export function FinancePanel({
   const financeNavigation = getPageNavigation(financePage)
 
   return (
-    <section className="finance-panel" aria-label={getFinancePanelLabel('section')}>
+    <section className={showAllGarageOperations ? 'finance-panel finance-panel--show-overview' : 'finance-panel'} aria-label={getFinancePanelLabel('section')}>
       <div className="section-heading">
         <div>
           <p className="eyebrow">{getFinancePanelLabel('section')}</p>
           <h2>{getFinancePanelLabel('title')}</h2>
         </div>
-        <span>{loading ? getFinancePanelLabel('loading') : formatFinanceOperationCount(summary.operationCount)}</span>
+        <span>{loading || !paymentDisplaySettingsLoaded ? getFinancePanelLabel('loading') : showAllGarageOperations ? formatFinanceOperationCount(summary.operationCount) : 'Поиск по гаражу'}</span>
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
+      {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
       {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
 
       <PaymentsPrototypePanel

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, KeyRound, PlugZap, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { Eye, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
@@ -11,9 +12,9 @@ import { formatDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
 
-export function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; onUserChanged: (user: CurrentUserDto) => void }) {
+export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onUserChanged: (user: CurrentUserDto) => void }) {
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'integrations'>(() => (
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
       : 'security'
@@ -43,9 +44,15 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
   const [protectedSettingSaving, setProtectedSettingSaving] = useState<string | null>(null)
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
+  const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
+  const [paymentDisplaySettingsLoading, setPaymentDisplaySettingsLoading] = useState(false)
+  const [paymentDisplaySettingsSaving, setPaymentDisplaySettingsSaving] = useState(false)
+  const [paymentDisplaySettingsMessage, setPaymentDisplaySettingsMessage] = useState<string | null>(null)
+  const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
+  const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
@@ -53,6 +60,51 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
   const oneCFreshSyncDialogRef = useFocusTrap<HTMLElement>(Boolean(oneCFreshSyncConfirmation))
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
   useEscapeKey(Boolean(oneCFreshSyncConfirmation) && !oneCFreshSyncSaving, () => closeOneCFreshSyncConfirmation())
+
+  useEffect(() => {
+    if (!canManageApplicationSettings || activeSettingsTab !== 'display') {
+      return
+    }
+
+    let ignore = false
+    setPaymentDisplaySettingsLoading(true)
+    setPaymentDisplaySettingsError(null)
+    settingsClient.getPaymentDisplaySettings(auth.accessToken)
+      .then((settings) => {
+        if (!ignore) {
+          setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) {
+          setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось загрузить настройки платежей.')
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setPaymentDisplaySettingsLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, settingsClient])
+
+  async function savePaymentDisplaySettings() {
+    setPaymentDisplaySettingsSaving(true)
+    setPaymentDisplaySettingsMessage(null)
+    setPaymentDisplaySettingsError(null)
+    try {
+      const settings = await settingsClient.updatePaymentDisplaySettings(auth.accessToken, { showAllGarageOperationsByDefault })
+      setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+      setPaymentDisplaySettingsMessage('Настройка отображения платежей сохранена.')
+    } catch (caught) {
+      setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку отображения платежей.')
+    } finally {
+      setPaymentDisplaySettingsSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (!canViewIntegrationStatus) {
@@ -296,6 +348,20 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
               <KeyRound size={17} aria-hidden="true" />
               <span>Безопасность</span>
             </button>
+            {canManageApplicationSettings ? (
+              <button
+                id="settings-display-tab"
+                className={activeSettingsTab === 'display' ? 'settings-tab is-active' : 'settings-tab'}
+                type="button"
+                role="tab"
+                aria-controls="settings-display-panel"
+                aria-selected={activeSettingsTab === 'display'}
+                onClick={() => setActiveSettingsTab('display')}
+              >
+                <SlidersHorizontal size={17} aria-hidden="true" />
+                <span>Отображение</span>
+              </button>
+            ) : null}
             {integrationSettingsVisible ? (
               <button
                 id="settings-integrations-tab"
@@ -314,9 +380,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
         </aside>
         <div
           className="settings-section-content"
-          id={activeSettingsTab === 'security' ? 'settings-security-panel' : 'settings-integrations-panel'}
+          id={activeSettingsTab === 'security' ? 'settings-security-panel' : activeSettingsTab === 'display' ? 'settings-display-panel' : 'settings-integrations-panel'}
           role="tabpanel"
-          aria-labelledby={activeSettingsTab === 'security' ? 'settings-security-tab' : 'settings-integrations-tab'}
+          aria-labelledby={activeSettingsTab === 'security' ? 'settings-security-tab' : activeSettingsTab === 'display' ? 'settings-display-tab' : 'settings-integrations-tab'}
         >
       {activeSettingsTab === 'security' ? (
       <section className="password-panel" aria-label="Безопасность аккаунта">
@@ -349,6 +415,42 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
             <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
           </button>
         </form>
+      </section>
+      ) : null}
+      {canManageApplicationSettings && activeSettingsTab === 'display' ? (
+      <section className="password-panel" aria-label="Настройки отображения платежей">
+        <div>
+          <p className="eyebrow">Отображение</p>
+          <h2>Платежи при открытии раздела</h2>
+          <p>По умолчанию раздел ожидает поиск гаража. При включении общей ведомости поступления и выплаты показываются сразу, но загружаются постранично.</p>
+        </div>
+        <div className="dictionary-form">
+          <label className="contractors-switch-row">
+            <span>
+              <strong>Показывать общую ведомость платежей</strong>
+              <small>Поиск по гаражу продолжит работать в любом режиме.</small>
+            </span>
+            <span className="contractors-switch-control">
+              <input
+                type="checkbox"
+                aria-label="Показывать общую ведомость платежей при открытии"
+                checked={showAllGarageOperationsByDefault}
+                disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
+                onChange={(event) => {
+                  setShowAllGarageOperationsByDefault(event.target.checked)
+                  setPaymentDisplaySettingsMessage(null)
+                }}
+              />
+            </span>
+          </label>
+          {paymentDisplaySettingsLoading ? <p className="form-hint" role="status">Загружаем настройку...</p> : null}
+          {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
+          {paymentDisplaySettingsMessage ? <div className="form-success" role="status" aria-live="polite">{paymentDisplaySettingsMessage}</div> : null}
+          <button className="secondary-button" type="button" disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving} onClick={() => void savePaymentDisplaySettings()}>
+            <SlidersHorizontal size={16} aria-hidden="true" />
+            <span>{paymentDisplaySettingsSaving ? 'Сохраняем...' : 'Сохранить отображение'}</span>
+          </button>
+        </div>
       </section>
       ) : null}
       {integrationSettingsVisible && activeSettingsTab === 'integrations' ? (

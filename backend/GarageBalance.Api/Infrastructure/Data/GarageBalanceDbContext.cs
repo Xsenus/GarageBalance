@@ -5,6 +5,7 @@ using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Domain.Integrations;
+using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Domain.Workflows;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AccessImportQuarantineItem> AccessImportQuarantineItems => Set<AccessImportQuarantineItem>();
     public DbSet<AccessImportCreatedRecord> AccessImportCreatedRecords => Set<AccessImportCreatedRecord>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
+    public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
 
     void IAuditEventStore.Add(AuditEvent auditEvent)
     {
@@ -76,6 +78,14 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(user => user.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(500).IsRequired();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
+        });
+
+        modelBuilder.Entity<ApplicationSetting>(entity =>
+        {
+            entity.ToTable("application_settings");
+            entity.HasKey(setting => setting.Id);
+            entity.Property(setting => setting.Key).HasMaxLength(160).IsRequired();
+            entity.HasIndex(setting => setting.Key).IsUnique();
         });
 
         modelBuilder.Entity<AppRole>(entity =>

@@ -22,6 +22,7 @@ import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ReportClient } from '../../services/reportsApi'
 import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 
@@ -52,6 +53,7 @@ export function Workspace({
   reportClient,
   releaseClient,
   userClient,
+  settingsClient,
   onOpenAudit,
   onOpenSection,
   onUserChanged,
@@ -72,6 +74,7 @@ export function Workspace({
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
+  settingsClient: ApplicationSettingsClient
   onOpenAudit: (preset: AuditPanelPreset) => void
   onOpenSection: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void
   onUserChanged: (user: CurrentUserDto) => void
@@ -137,7 +140,7 @@ export function Workspace({
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
-          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} integrationClient={integrationClient} />
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} integrationClient={integrationClient} settingsClient={settingsClient} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
         )
@@ -185,7 +188,7 @@ export function Workspace({
       case 'releases':
         return <ReleasePanel auth={auth} releaseClient={releaseClient} />
       case 'settings':
-        return <PasswordPanel auth={auth} authClient={authClient} integrationClient={integrationClient} onUserChanged={onUserChanged} />
+        return <PasswordPanel auth={auth} authClient={authClient} integrationClient={integrationClient} settingsClient={settingsClient} onUserChanged={onUserChanged} />
       default:
         return null
     }

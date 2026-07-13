@@ -23,6 +23,7 @@ import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ReleaseClient } from '../../services/releasesApi'
 import type { ReportClient } from '../../services/reportsApi'
 import type { UserManagementClient } from '../../services/usersApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { Workspace } from './Workspace'
@@ -81,11 +82,12 @@ type AppShellProps = {
   reportClient: ReportClient
   releaseClient: ReleaseClient
   userClient: UserManagementClient
+  settingsClient: ApplicationSettingsClient
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }
 
-export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionaryClient, financeClient, fundsClient, formStateClient, importClient, integrationClient, reportClient, releaseClient, userClient, onUserChanged, onLogout }: AppShellProps) {
+export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionaryClient, financeClient, fundsClient, formStateClient, importClient, integrationClient, reportClient, releaseClient, settingsClient, userClient, onUserChanged, onLogout }: AppShellProps) {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
   const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)
@@ -157,7 +159,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
       ) : null}
 
       <section className="workspace">
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={onUserChanged} onLogout={onLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={onUserChanged} onLogout={onLogout} />
       </section>
     </main>
   )

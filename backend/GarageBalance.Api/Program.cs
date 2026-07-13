@@ -10,6 +10,7 @@ using GarageBalance.Api.Application.Integrations;
 using GarageBalance.Api.Application.Releases;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Application.Security;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Application.Workflows;
 using GarageBalance.Api.Controllers;
@@ -42,6 +43,8 @@ builder.Services.AddDbContext<GarageBalanceDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
+builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();
+builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();

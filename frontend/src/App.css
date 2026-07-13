@@ -2407,6 +2407,18 @@ h1 {
   margin-bottom: 18px;
 }
 
+.finance-panel--show-overview > .summary-strip,
+.finance-panel--show-overview > .finance-workbench {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  white-space: normal;
+}
+
 .payments-prototype-topline {
   display: grid;
   grid-template-columns: minmax(280px, 520px) minmax(360px, 0.8fr);

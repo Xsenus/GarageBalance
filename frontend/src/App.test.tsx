@@ -15,8 +15,17 @@ vi.mock('./services/formStatesApi', () => ({
   },
 }))
 
+vi.mock('./services/settingsApi', () => ({
+  settingsApi: {
+    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true })),
+    updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request),
+  },
+}))
+
 import App from './App'
 import { formStatesApi } from './services/formStatesApi'
+import { settingsApi } from './services/settingsApi'
+import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
@@ -40,6 +49,8 @@ describe('App', () => {
       updatedAtUtc: '2026-06-30T03:00:00Z',
       updatedByUserId: 'admin-user',
     }))
+    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true }))
+    vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request)
     window.sessionStorage.clear()
     window.localStorage.clear()
   })
@@ -3712,6 +3723,25 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
   })
 
+  it('keeps the payment overview empty until search when the display setting is disabled', async () => {
+    const user = userEvent.setup()
+    const getOperations = vi.fn(async () => [])
+    const getOperationsPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 25 }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getOperations, getOperationsPage })} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
+
+    expect(await within(prototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
+    expect(financePanel).not.toHaveClass('finance-panel--show-overview')
+    await act(async () => new Promise((resolve) => window.setTimeout(resolve, 600)))
+    expect(getOperations).not.toHaveBeenCalled()
+    expect(getOperationsPage).not.toHaveBeenCalled()
+  })
+
   it('loads selected garage payment history from finance backend', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
@@ -4567,6 +4597,29 @@ describe('App', () => {
     expect(changeCalled).toBe(false)
   })
 
+  it('saves the default payment overview mode from display settings', async () => {
+    const user = userEvent.setup()
+    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request)
+    const settingsClient = createSettingsClient({ updatePaymentDisplaySettings })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
+
+    const displayPanel = within(settings).getByRole('region', { name: 'Настройки отображения платежей' })
+    const toggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать общую ведомость платежей при открытии' })
+    await waitFor(() => expect(toggle).toBeEnabled())
+    expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
+
+    await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', { showAllGarageOperationsByDefault: true }))
+    expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
+  })
+
   it.each([
     ['администратора', createAuthResponse()],
     ['пользователя без административных прав', createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
@@ -4584,6 +4637,11 @@ describe('App', () => {
     const settings = await screen.findByRole('region', { name: 'Настройки' })
     const tabList = within(settings).getByRole('tablist', { name: 'Разделы настроек' })
     expect(within(tabList).getByRole('tab', { name: 'Безопасность' })).toHaveAttribute('aria-selected', 'true')
+    if (auth.user.permissions.includes('users.manage')) {
+      expect(within(tabList).getByRole('tab', { name: 'Отображение' })).toBeInTheDocument()
+    } else {
+      expect(within(tabList).queryByRole('tab', { name: 'Отображение' })).not.toBeInTheDocument()
+    }
     expect(within(tabList).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
     expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     expect(within(settings).queryByRole('region', { name: 'Интеграция 1C Fresh' })).not.toBeInTheDocument()
@@ -11173,6 +11231,14 @@ function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseCli
       releaseId,
       isPublished: true,
     })),
+  }
+}
+
+function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}): ApplicationSettingsClient {
+  return {
+    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
+    updatePaymentDisplaySettings: async (_accessToken, request) => request,
+    ...overrides,
   }
 }
 
