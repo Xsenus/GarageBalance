@@ -91,6 +91,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("export function ContractorsPrototypePanel(", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.createGarage", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getGaragesPage", featureText, StringComparison.Ordinal);
+        Assert.Contains("isGarageServerSortKey", featureText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Пагинация гаражей\"", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.updateSupplier", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getSuppliersPage", featureText, StringComparison.Ordinal);

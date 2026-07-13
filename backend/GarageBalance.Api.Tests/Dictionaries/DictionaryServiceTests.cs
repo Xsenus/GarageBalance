@@ -657,6 +657,36 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetGaragesPageAsync_SortsDirectFieldsBeforePagination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var zedOwner = await service.CreateOwnerAsync(
+            new UpsertOwnerRequest("Zed", "Owner", null, "+7 900 200", null, null),
+            null,
+            CancellationToken.None);
+        var alphaOwner = await service.CreateOwnerAsync(
+            new UpsertOwnerRequest("Alpha", "Owner", null, "+7 900 100", null, null),
+            null,
+            CancellationToken.None);
+        await service.CreateGarageAsync(
+            new UpsertGarageRequest("01", 1, 2, zedOwner.Value!.Id, 0, null, null, null),
+            null,
+            CancellationToken.None);
+        await service.CreateGarageAsync(
+            new UpsertGarageRequest("99", 4, 1, alphaOwner.Value!.Id, 0, null, null, null),
+            null,
+            CancellationToken.None);
+
+        var byOwner = await service.GetGaragesPageAsync(null, 0, 1, "owner", "asc", CancellationToken.None);
+        var byPeople = await service.GetGaragesPageAsync(null, 0, 1, "peopleCount", "desc", CancellationToken.None);
+
+        Assert.Equal(2, byOwner.TotalCount);
+        Assert.Equal("99", Assert.Single(byOwner.Items).Number);
+        Assert.Equal("99", Assert.Single(byPeople.Items).Number);
+    }
+
+    [Fact]
     public async Task CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner()
     {
         await using var database = await TestDatabase.CreateAsync();

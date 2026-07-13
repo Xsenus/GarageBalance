@@ -212,12 +212,14 @@ public sealed class DictionaryService(
         return await ToGarageDtosWithBalancesAsync(garages, cancellationToken);
     }
 
-    public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        var page = await garageRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        var normalizedSortBy = sortBy?.Trim() switch { "peopleCount" => "peopleCount", "floorCount" => "floorCount", "owner" => "owner", "phone" => "phone", _ => "number" };
+        var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
+        var page = await garageRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
         return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(page.Items, cancellationToken), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 

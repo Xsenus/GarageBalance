@@ -164,6 +164,7 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 }
 
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
+type ContractorGarageServerSortKey = Exclude<ContractorGarageColumnKey, 'actions' | 'overdueDebt'>
 type ContractorSupplierSortKey = 'name' | 'service' | 'contactPerson' | 'phone' | 'email' | 'debt'
 type ContractorSupplierServerSortKey = ContractorSupplierSortKey
 type ContractorStaffSortKey = 'fullName' | 'department' | 'rate'
@@ -297,6 +298,10 @@ function compareContractorSuppliers(left: ContractorSupplierRow, right: Contract
   }
 
   return comparePrototypeText(left[key], right[key])
+}
+
+function isGarageServerSortKey(key: ContractorSortKey): key is ContractorGarageServerSortKey {
+  return key === 'number' || key === 'peopleCount' || key === 'floorCount' || key === 'owner' || key === 'phone'
 }
 
 function isSupplierServerSortKey(key: ContractorSortKey): key is ContractorSupplierServerSortKey {
@@ -967,12 +972,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
 
-  async function loadGaragePage(offset = garagePage.offset, limit = garagePage.limit) {
+  async function loadGaragePage(
+    offset = garagePage.offset,
+    limit = garagePage.limit,
+    sort: ContractorSortState = contractorSort.section === 'garages' && isGarageServerSortKey(contractorSort.key)
+      ? contractorSort
+      : { section: 'garages', key: 'number', direction: 'asc' },
+  ) {
     setContractorPageLoading((current) => ({ ...current, garages: true }))
     setGarageContextMenu(null)
     try {
       const page = dictionaryClient.getGaragesPage
-        ? await dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true)
+        ? await dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction)
         : createFallbackPage(await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true), offset, limit)
       setGarages(page.items.map((garage) => createGarageRowFromDto(garage, owners)))
       setGaragePage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
@@ -1593,7 +1604,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ? { ...contractorSort, direction: contractorSort.direction === 'asc' ? 'desc' : 'asc' }
       : { section, key, direction: 'asc' }
     setContractorSort(nextSort)
-    if (section === 'staff') {
+    if (section === 'garages' && isGarageServerSortKey(key)) {
+      void loadGaragePage(0, garagePage.limit, nextSort)
+    } else if (section === 'staff') {
       void loadStaffPage(0, staffPage.limit, nextSort)
     } else if (section === 'suppliers' && isSupplierServerSortKey(key)) {
       void loadSupplierPage(0, supplierPage.limit, nextSort)

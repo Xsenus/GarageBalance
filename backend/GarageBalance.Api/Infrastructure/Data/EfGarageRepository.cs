@@ -31,20 +31,22 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         bool includeArchived,
         int offset,
         int limit,
+        string sortBy,
+        bool sortDescending,
         CancellationToken cancellationToken)
     {
         var query = ApplyArchiveFilter(includeArchived);
         if (normalizedSearch is { } searchValue && IsSqliteProvider())
         {
-            var garages = await query.OrderBy(garage => garage.Number).ToListAsync(cancellationToken);
+            var garages = await ApplyPageSorting(query, sortBy, sortDescending).ThenBy(garage => garage.Id).ToListAsync(cancellationToken);
             var filtered = garages.Where(garage => GarageMatchesSearch(garage, searchValue)).ToList();
             return new GaragePageData(filtered.Skip(offset).Take(limit).ToList(), filtered.Count);
         }
 
         query = ApplySearch(query, normalizedSearch);
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(garage => garage.Number)
+        var items = await ApplyPageSorting(query, sortBy, sortDescending)
+            .ThenBy(garage => garage.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -131,6 +133,23 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static IOrderedQueryable<Garage> ApplyPageSorting(IQueryable<Garage> query, string sortBy, bool descending)
+    {
+        return (sortBy, descending) switch
+        {
+            ("peopleCount", true) => query.OrderByDescending(garage => garage.PeopleCount),
+            ("peopleCount", false) => query.OrderBy(garage => garage.PeopleCount),
+            ("floorCount", true) => query.OrderByDescending(garage => garage.FloorCount),
+            ("floorCount", false) => query.OrderBy(garage => garage.FloorCount),
+            ("owner", true) => query.OrderByDescending(garage => garage.Owner == null ? null : garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)),
+            ("owner", false) => query.OrderBy(garage => garage.Owner == null ? null : garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)),
+            ("phone", true) => query.OrderByDescending(garage => garage.Owner == null ? null : garage.Owner.Phone),
+            ("phone", false) => query.OrderBy(garage => garage.Owner == null ? null : garage.Owner.Phone),
+            (_, true) => query.OrderByDescending(garage => garage.Number),
+            _ => query.OrderBy(garage => garage.Number)
+        };
+    }
 
     private static bool GarageMatchesSearch(Garage garage, string normalizedSearch) =>
         garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||

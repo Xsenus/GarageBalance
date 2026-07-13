@@ -1549,12 +1549,12 @@ describe('App', () => {
 
   it('pages garages, suppliers and staff through server dictionary pages', async () => {
     const user = userEvent.setup()
-    const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
+    const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
     const supplierPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
     const staffPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
     const supplierGroup = createGroup({ id: 'group-page', name: 'Коммунальные услуги' })
-    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
-      garagePageRequests.push({ offset, limit, includeArchived })
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, includeArchived = false, sortBy?: string, sortDirection?: string) => {
+      garagePageRequests.push({ offset, limit, includeArchived, sortBy, sortDirection })
       const number = offset === 0 ? '1' : '26'
       return {
         items: [createGarage({ id: `garage-page-${number}`, number })],
@@ -1602,9 +1602,12 @@ describe('App', () => {
     expect(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 1' })).toBeInTheDocument()
     expect(within(garagePagination).getByRole('button', { name: 'Назад' })).toBeDisabled()
     await user.click(within(garagePagination).getByRole('button', { name: 'Вперед' }))
-    await waitFor(() => expect(garagePageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true }))
+    await waitFor(() => expect(garagePageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true, sortBy: 'number', sortDirection: 'asc' }))
     expect(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 26' })).toBeInTheDocument()
     expect(within(garagePagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
+    await user.click(within(garagesTable).getByRole('button', { name: 'Владелец' }))
+    await waitFor(() => expect(garagePageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'owner', sortDirection: 'asc' }))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const supplierPagination = within(contractorsPanel).getByRole('navigation', { name: 'Пагинация поставщиков' })

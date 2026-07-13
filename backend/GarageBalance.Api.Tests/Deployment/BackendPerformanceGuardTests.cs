@@ -87,6 +87,7 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfGarageRepository.cs");
         Assert.Contains("IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("ApplyPageSorting(query, sortBy, sortDescending)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2);
