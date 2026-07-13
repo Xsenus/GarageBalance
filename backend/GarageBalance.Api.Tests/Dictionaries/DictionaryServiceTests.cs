@@ -1209,6 +1209,31 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public void DemoTariffCatalogMigration_SeedsOnlyEmptyCatalogWithStageEightValuesAndAudit()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260713065213_SeedDemoTariffCatalog.cs"));
+
+        Assert.Contains("NOT EXISTS (SELECT 1 FROM tariffs)", migration, StringComparison.Ordinal);
+        Assert.Contains("NOT EXISTS (SELECT 1 FROM charge_service_settings)", migration, StringComparison.Ordinal);
+        Assert.Contains("docs/stage-8-demo-test-data.json", migration, StringComparison.Ordinal);
+        Assert.Contains("'Тариф на воду', 'meter_water', 45.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Электроэнергия', 'meter_electricity', 6.2000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Сумма членского взноса', 'fixed', 500.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Сумма целевого взноса', 'fixed', 1200.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("dictionary.demo_tariff_catalog_seeded", migration, StringComparison.Ordinal);
+        Assert.Contains("Перед реальным учетом проверьте и замените ставку", migration, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(migration, "Демонстрационные данные этапа 8."));
+        Assert.Contains("DELETE FROM charge_service_settings", migration, StringComparison.Ordinal);
+        Assert.Contains("DELETE FROM tariffs", migration, StringComparison.Ordinal);
+        Assert.Contains("FROM accruals", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreateExpenseTypeAsync_WritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
