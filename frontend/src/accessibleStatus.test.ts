@@ -21,10 +21,11 @@ describe('accessible dynamic messages', () => {
   const dictionaryPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'dictionaries', 'DictionaryPanel.tsx'), 'utf8')
   const tariffsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const contractorsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource].join('\n')
+  const financePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
-    const liveRegionLines = appSource
+    const liveRegionLines = workspaceSource
       .split(/\r?\n/)
       .map((line, index) => ({ index: index + 1, line: line.trim() }))
       .filter(({ line }) => line.includes('aria-live="polite"'))
@@ -34,13 +35,13 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps shared form errors and validation summaries exposed as alerts', () => {
-    expect(appSource).toContain("import { FormError, FormValidationSummary } from './shared/formFeedback'")
+    expect(financePanelSource).toContain("import { FormError, FormValidationSummary } from '../../shared/formFeedback'")
     expect(formFeedbackSource).toContain('<div className="form-error" role="alert">')
     expect(formFeedbackSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
   })
 
   it('keeps detail dialogs named, described and modal', () => {
-    const dialogLines = appSource
+    const dialogLines = workspaceSource
       .split(/\r?\n/)
       .map((line, index) => ({ index: index + 1, line: line.trim() }))
       .filter(({ line }) => line.includes('className="detail-dialog"'))
@@ -140,14 +141,14 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('cursor: not-allowed;')
     expect(appCss).toContain('background-color: #f8fafc;')
 
-    const selectOpeningTags = [...appSource.matchAll(/<select\b[\s\S]*?>/g)].map((match) => match[0])
+    const selectOpeningTags = [...workspaceSource.matchAll(/<select\b[\s\S]*?>/g)].map((match) => match[0])
 
     expect(selectOpeningTags.length).toBeGreaterThan(0)
     expect(selectOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
-    expect(appSource).toContain('aria-label="Гараж для поступления"')
-    expect(appSource).toContain('aria-label="Вид выплаты"')
-    expect(appSource).toContain('aria-label="Тариф для регулярного начисления"')
-    expect(appSource).toContain("aria-label={getFinanceToolbarLabel('pageSize')}")
+    expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
+    expect(financePanelSource).toContain('aria-label="Вид выплаты"')
+    expect(financePanelSource).toContain('aria-label="Тариф для регулярного начисления"')
+    expect(financePanelSource).toContain("aria-label={getFinanceToolbarLabel('pageSize')}")
   })
 
   it('keeps text inputs and textareas consistently styled and labeled', () => {
@@ -184,15 +185,15 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('cursor: not-allowed;')
     expect(appCss).toContain('background-color: #f8fafc;')
 
-    const inputOpeningTags = [...appSource.matchAll(/<input\b[\s\S]*?>/g)].map((match) => match[0])
-    const textareaOpeningTags = [...appSource.matchAll(/<textarea\b[\s\S]*?>/g)].map((match) => match[0])
+    const inputOpeningTags = [...workspaceSource.matchAll(/<input\b[\s\S]*?>/g)].map((match) => match[0])
+    const textareaOpeningTags = [...workspaceSource.matchAll(/<textarea\b[\s\S]*?>/g)].map((match) => match[0])
 
     expect(inputOpeningTags.length).toBeGreaterThan(0)
     expect(textareaOpeningTags.length).toBeGreaterThan(0)
     expect(inputOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
     expect(textareaOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
 
-    const fieldsWithPlaceholder = [...appSource.matchAll(/<(?:input|textarea)\b[\s\S]*?placeholder=/g)].map((match) => match[0])
+    const fieldsWithPlaceholder = [...workspaceSource.matchAll(/<(?:input|textarea)\b[\s\S]*?placeholder=/g)].map((match) => match[0])
 
     expect(fieldsWithPlaceholder.length).toBeGreaterThan(0)
     expect(fieldsWithPlaceholder.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
@@ -260,18 +261,18 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('flex-wrap: wrap;')
     expect(appCss).toContain('grid-template-columns: 1fr;')
 
-    const tabButtonIndexes = [...appSource.matchAll(/role="tab"/g)].map((match) => match.index ?? -1)
+    const tabButtonIndexes = [...workspaceSource.matchAll(/role="tab"/g)].map((match) => match.index ?? -1)
 
     expect(tabButtonIndexes.length).toBeGreaterThan(0)
 
     for (const roleIndex of tabButtonIndexes) {
-      const buttonStart = appSource.lastIndexOf('<button', roleIndex)
-      const buttonEnd = appSource.indexOf('</button>', roleIndex)
+      const buttonStart = workspaceSource.lastIndexOf('<button', roleIndex)
+      const buttonEnd = workspaceSource.indexOf('</button>', roleIndex)
 
       expect(buttonStart).toBeGreaterThan(-1)
       expect(buttonEnd).toBeGreaterThan(roleIndex)
 
-      const buttonSource = appSource.slice(buttonStart, buttonEnd)
+      const buttonSource = workspaceSource.slice(buttonStart, buttonEnd)
       expect(buttonSource).toContain('type="button"')
       expect(buttonSource).toContain('aria-selected=')
       expect(buttonSource).toContain('onClick=')
@@ -339,11 +340,11 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('.empty-state')
     expect(appCss).toContain('overflow-wrap: anywhere;')
 
-    const tableOpeningTags = [...appSource.matchAll(/<[^>]+\brole="table"[\s\S]*?>/g)].map((match) => match[0])
+    const tableOpeningTags = [...workspaceSource.matchAll(/<[^>]+\brole="table"[\s\S]*?>/g)].map((match) => match[0])
 
     expect(tableOpeningTags.length).toBeGreaterThan(0)
     expect(tableOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
-    expect(appSource).toContain('role="status" aria-live="polite"')
+    expect(workspaceSource).toContain('role="status" aria-live="polite"')
   })
 
   it('keeps old report export buttons hidden while workbook layouts are active', () => {
@@ -479,15 +480,15 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps form controls explicitly named', () => {
-    const formControlIndexes = [...appSource.matchAll(/<(?:input|select|textarea)\b/g)].map((match) => match.index ?? -1)
+    const formControlIndexes = [...workspaceSource.matchAll(/<(?:input|select|textarea)\b/g)].map((match) => match.index ?? -1)
 
     expect(formControlIndexes.length).toBeGreaterThan(0)
 
     for (const controlStart of formControlIndexes) {
-      const openingTagEnd = appSource.indexOf('>', controlStart)
+      const openingTagEnd = workspaceSource.indexOf('>', controlStart)
       expect(openingTagEnd).toBeGreaterThan(controlStart)
 
-      const openingTagSource = appSource.slice(controlStart, openingTagEnd + 1)
+      const openingTagSource = workspaceSource.slice(controlStart, openingTagEnd + 1)
       expect(openingTagSource).toMatch(/\saria-label=|\saria-labelledby=/)
     }
   })

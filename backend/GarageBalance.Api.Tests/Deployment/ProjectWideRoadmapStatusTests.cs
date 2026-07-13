@@ -584,6 +584,7 @@ public sealed class ProjectWideRoadmapStatusTests
             .ToArray();
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
         var financeApiTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.test.ts"));
@@ -603,9 +604,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("FullPaymentAcceptanceScenarioIsMarkedCompleteWhenRoadmapCodeTestsAndReleaseNotesExist", acceptanceLine, StringComparison.Ordinal);
         Assert.StartsWith("- `[x]`", detailLine, StringComparison.Ordinal);
 
-        Assert.Contains("<h3 id=\"full-payment-title\">Полная оплата</h3>", appText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Сумма полной оплаты\" inputMode=\"decimal\" value={amount} readOnly", appText, StringComparison.Ordinal);
-        Assert.Contains("createGarageDebtPayment", appText, StringComparison.Ordinal);
+        Assert.Contains("<h3 id=\"full-payment-title\">Полная оплата</h3>", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Сумма полной оплаты\" inputMode=\"decimal\" value={amount} readOnly", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("createGarageDebtPayment", financePanelText, StringComparison.Ordinal);
         Assert.Contains("shows payments prototype and opens payment form modals", appTestsText, StringComparison.Ordinal);
         Assert.Contains("pays opening debt through full payment when worksheet has no service rows", appTestsText, StringComparison.Ordinal);
         Assert.Contains("expect(fullPaymentAmount).toHaveAttribute('readonly')", appTestsText, StringComparison.Ordinal);
@@ -872,6 +873,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
         var financeControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceControllerTests.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
 
@@ -904,18 +906,18 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GetGarageIncomeWorksheet_ReturnsNotFoundForMissingGarage", financeControllerTestsText, StringComparison.Ordinal);
         Assert.Contains("GetGarageIncomeWorksheet_ReturnsBadRequestForInvalidPeriod", financeControllerTestsText, StringComparison.Ordinal);
 
-        Assert.Contains("createGarageIncomeRowsFromWorksheet", appText, StringComparison.Ordinal);
-        Assert.Contains("loadGarageIncomeWorksheet", appText, StringComparison.Ordinal);
-        Assert.Contains("financeClient.createIncome", appText, StringComparison.Ordinal);
-        Assert.Contains("paymentDraft: ''", appText, StringComparison.Ordinal);
-        Assert.Contains("setHistoryRows", appText, StringComparison.Ordinal);
-        Assert.Contains("loadGaragePaymentHistory(selectedGarage)", appText, StringComparison.Ordinal);
-        Assert.Contains("Выбранный гараж", appText, StringComparison.Ordinal);
-        Assert.Contains("Платёж", appText, StringComparison.Ordinal);
-        Assert.Contains("Оплачено", appText, StringComparison.Ordinal);
-        Assert.Contains("Задолженность", appText, StringComparison.Ordinal);
-        Assert.Contains("История платежей гаража", appText, StringComparison.Ordinal);
-        Assert.Contains("Итоги кассы и банка", appText, StringComparison.Ordinal);
+        Assert.Contains("createGarageIncomeRowsFromWorksheet", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("loadGarageIncomeWorksheet", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.createIncome", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("paymentDraft: ''", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("setHistoryRows", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("loadGaragePaymentHistory(selectedGarage)", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Выбранный гараж", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Платёж", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Оплачено", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Задолженность", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("История платежей гаража", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Итоги кассы и банка", financePanelText, StringComparison.Ordinal);
 
         Assert.Contains("loads selected garage income worksheet from finance backend", appTestsText, StringComparison.Ordinal);
         Assert.Contains("does not restore stale saved payment rows for a real garage before backend worksheet loads", appTestsText, StringComparison.Ordinal);
@@ -946,6 +948,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
         var reportServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Reports", "ReportServiceTests.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var meterReadingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "meterReadings", "MeterReadingsPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
@@ -972,7 +975,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("MeterReadingCount", reportServiceTestsText, StringComparison.Ordinal);
 
         Assert.Contains("MeterReadingsPrototypePanel", meterReadingsPanelText, StringComparison.Ordinal);
-        Assert.Contains("createGarageIncomeRowsFromWorksheet", appText, StringComparison.Ordinal);
+        Assert.Contains("createGarageIncomeRowsFromWorksheet", financePanelText, StringComparison.Ordinal);
         Assert.Contains("shows meter readings prototype as a yearly garage table", appTestsText, StringComparison.Ordinal);
         Assert.Contains("creates meter reading and shows calculated consumption", appTestsText, StringComparison.Ordinal);
         Assert.Contains("highlights garages without meter readings for selected month", appTestsText, StringComparison.Ordinal);
@@ -1221,6 +1224,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
         var dictionaryServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var meterReadingsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "meterReadings", "MeterReadingsPanel.tsx"));
         var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
@@ -1260,9 +1264,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("paymentDueDay", dictionaryServiceText, StringComparison.Ordinal);
         Assert.Contains("paymentDueMonth", dictionaryServiceText, StringComparison.Ordinal);
 
-        Assert.Contains("payments-prototype-required-cell", appText, StringComparison.Ordinal);
-        Assert.Contains("row.meterRequired && row.meter === null", appText, StringComparison.Ordinal);
-        Assert.Contains("meterRequired: row.meterKind !== null && row.meterValue === null", appText, StringComparison.Ordinal);
+        Assert.Contains("payments-prototype-required-cell", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("row.meterRequired && row.meter === null", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("meterRequired: row.meterKind !== null && row.meterValue === null", financePanelText, StringComparison.Ordinal);
         Assert.Contains("meter_reading", auditPanelText, StringComparison.Ordinal);
         Assert.Contains("Подтвердить показание?", meterReadingsPanelText, StringComparison.Ordinal);
 
@@ -1289,6 +1293,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var financeServiceText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
         var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var financeApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts"));
 
@@ -1321,11 +1326,11 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GetExpenseWorksheetAsync_KeepsCashAndBankEqualCollectedFundsAfterMixedExpenses", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("CreateExpenseAsync_AllocatesPaymentToOldestSupplierDebts", financeServiceTestsText, StringComparison.Ordinal);
 
-        Assert.Contains("createExpenseRowsFromWorksheet", appText, StringComparison.Ordinal);
-        Assert.Contains(".getExpenseWorksheet(auth.accessToken", appText, StringComparison.Ordinal);
-        Assert.Contains("Оплатить", appText, StringComparison.Ordinal);
-        Assert.Contains("Добавить начисление", appText, StringComparison.Ordinal);
-        Assert.Contains("Добавить выплату", appText, StringComparison.Ordinal);
+        Assert.Contains("createExpenseRowsFromWorksheet", financePanelText, StringComparison.Ordinal);
+        Assert.Contains(".getExpenseWorksheet(auth.accessToken", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Оплатить", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Добавить начисление", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Добавить выплату", financePanelText, StringComparison.Ordinal);
         Assert.Contains("loads expense worksheet from finance backend", appTestsText, StringComparison.Ordinal);
         Assert.Contains("does not show prototype expense rows when expense worksheet is unavailable", appTestsText, StringComparison.Ordinal);
         Assert.Contains("savedExpenseRequests[0]", appTestsText, StringComparison.Ordinal);
@@ -6303,6 +6308,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "Integrations",
             "ReceiptPrintingServiceTests.cs"));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var integrationsApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "integrationsApi.ts"));
         var releaseText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
@@ -6323,8 +6329,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Assert.True(result.Value.IsCopy)", serviceTestsText, StringComparison.Ordinal);
         Assert.Contains("Assert.Equal(\"КОПИЯ\", result.Value.CopyMark)", serviceTestsText, StringComparison.Ordinal);
 
-        Assert.Contains("Напечатать копию квитанции?", appText, StringComparison.Ordinal);
-        Assert.Contains("Отметка:", appText, StringComparison.Ordinal);
+        Assert.Contains("Напечатать копию квитанции?", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("Отметка:", financePanelText, StringComparison.Ordinal);
         Assert.Contains("isCopy: boolean", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("copyMark: string | null", integrationsApiText, StringComparison.Ordinal);
         Assert.Contains("Напечатать копию квитанции платежа", appTestsText, StringComparison.Ordinal);
@@ -6347,6 +6353,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var shellLine = activeRoadmapLines.Single(line =>
             line.Contains("Подготовить кликабельный shell", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var reportPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "reports", "ReportPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var accessibleStatusTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "accessibleStatus.test.ts"));
@@ -6368,9 +6375,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("const navigation: NavigationItem[]", appText, StringComparison.Ordinal);
         Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appText, StringComparison.Ordinal);
         Assert.Contains("aria-label={`Поиск: ${activeOption.label}`}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
-        Assert.Contains("role=\"dialog\"", appText, StringComparison.Ordinal);
-        Assert.Contains("role=\"table\"", appText, StringComparison.Ordinal);
-        Assert.Contains("dictionary-data-table", appText, StringComparison.Ordinal);
+        Assert.Contains("role=\"dialog\"", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("role=\"table\"", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionary-data-table", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("report-workbook-table", reportPanelText, StringComparison.Ordinal);
         Assert.Contains("opens the workspace with users and dictionaries", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Главное меню", appTestsText, StringComparison.Ordinal);
@@ -6483,6 +6490,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var statesLine = activeRoadmapLines.Single(line =>
             line.Contains("Показать состояния без данных", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var releasePanelText = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "frontend",
@@ -6523,8 +6531,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Раздел недоступен", appText, StringComparison.Ordinal);
         Assert.Contains("Требуется право:", appText, StringComparison.Ordinal);
         Assert.Contains("role=\"alert\"", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx")), StringComparison.Ordinal);
-        Assert.Contains("className=\"empty-state\"", appText, StringComparison.Ordinal);
-        Assert.Contains("role=\"status\" aria-live=\"polite\"", appText, StringComparison.Ordinal);
+        Assert.Contains("className=\"empty-state\"", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\" aria-live=\"polite\"", financePanelText, StringComparison.Ordinal);
         Assert.Contains("Загружаем историю обновлений", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("Пока нет опубликованных изменений", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("Пользователей пока нет", userManagementPanelText, StringComparison.Ordinal);
@@ -6543,7 +6551,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Нет доступа к платежам.", appTestsText, StringComparison.Ordinal);
 
         Assert.Contains("expect(appCss).toContain('.empty-state')", accessibleStatusTestsText, StringComparison.Ordinal);
-        Assert.Contains("expect(appSource).toContain('role=\"status\" aria-live=\"polite\"')", accessibleStatusTestsText, StringComparison.Ordinal);
+        Assert.Contains("expect(workspaceSource).toContain('role=\"status\" aria-live=\"polite\"')", accessibleStatusTestsText, StringComparison.Ordinal);
         Assert.Contains("export function FormError", formFeedbackText, StringComparison.Ordinal);
         Assert.Contains("role=\"alert\"", formFeedbackText, StringComparison.Ordinal);
         Assert.Contains("renders form errors as alerts", formFeedbackTestsText, StringComparison.Ordinal);
