@@ -1056,39 +1056,49 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
 
       {contextMenu ? (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" aria-label="Операции со справочником" onClick={(event) => event.stopPropagation()}>
-          <button type="button" role="menuitem" onClick={() => openEditor(contextMenu.section, 'create')}>
-            <Plus size={15} />
-            <span>Добавить</span>
-          </button>
-          {contextMenu.section === 'garages' ? (
-            <button type="button" role="menuitem" onClick={() => void openBalanceHistory(contextMenu.item as GarageDto)}>
-              <FileText size={15} />
-              <span>История баланса</span>
+          <div className="context-menu-group" role="group">
+            <button type="button" role="menuitem" onClick={() => openEditor(contextMenu.section, 'create')}>
+              <Plus size={15} />
+              <span>Добавить</span>
             </button>
-          ) : null}
-          {isArchivedRecord(contextMenu.item) ? (
-            <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
-              setRestoreTarget({ section: contextMenu.section, item: contextMenu.item })
-              setContextMenu(null)
-            }}>
-              <RotateCcw size={15} />
-              <span>Вернуть</span>
-            </button>
-          ) : (
-            <>
-              <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => openEditor(contextMenu.section, 'edit', contextMenu.item)}>
-                <Save size={15} />
-                <span>Изменить</span>
-              </button>
-              <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
-                openArchiveTarget(contextMenu.section, contextMenu.item)
+          </div>
+          <div className="context-menu-separator" role="separator" />
+          <div className="context-menu-group" role="group">
+            {isArchivedRecord(contextMenu.item) ? (
+              <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
+                setRestoreTarget({ section: contextMenu.section, item: contextMenu.item })
                 setContextMenu(null)
               }}>
-                <Trash2 size={15} />
-                <span>Удалить</span>
+                <RotateCcw size={15} />
+                <span>Вернуть</span>
               </button>
+            ) : (
+              <>
+                <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => openEditor(contextMenu.section, 'edit', contextMenu.item)}>
+                  <Save size={15} />
+                  <span>Изменить</span>
+                </button>
+                <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
+                  openArchiveTarget(contextMenu.section, contextMenu.item)
+                  setContextMenu(null)
+                }}>
+                  <Trash2 size={15} />
+                  <span>Удалить</span>
+                </button>
+              </>
+            )}
+          </div>
+          {contextMenu.section === 'garages' ? (
+            <>
+              <div className="context-menu-separator" role="separator" />
+              <div className="context-menu-group" role="group">
+                <button type="button" role="menuitem" onClick={() => void openBalanceHistory(contextMenu.item as GarageDto)}>
+                  <FileText size={15} />
+                  <span>История баланса</span>
+                </button>
+              </div>
             </>
-          )}
+          ) : null}
         </div>
       ) : null}
 

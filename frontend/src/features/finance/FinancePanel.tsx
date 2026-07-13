@@ -2489,18 +2489,23 @@ export function FinancePanel({
       </div>
       {financeContextMenu ? (
         <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label={getFinanceToolbarLabel('contextMenu')} onClick={(event) => event.stopPropagation()} onKeyDown={handleFinanceContextMenuKeyDown}>
-          <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
-            <span>{getFinanceContextMenuLabel('add')}</span>
-          </button>
-          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record || financeContextMenu.record.isCanceled} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record, financeContextMenuTriggerRef.current) : undefined}>
-            <span>{getFinanceContextMenuLabel('edit')}</span>
-          </button>
-          <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record || financeContextMenu.record.isCanceled} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
-            <span>{getFinanceContextMenuLabel('delete')}</span>
-          </button>
-          <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record?.isCanceled} onClick={() => financeContextMenu.record ? restoreFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
-            <span>{getFinanceContextMenuLabel('restore')}</span>
-          </button>
+          <div className="context-menu-group" role="group">
+            <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
+              <span>{getFinanceContextMenuLabel('add')}</span>
+            </button>
+          </div>
+          <div className="context-menu-separator" role="separator" />
+          <div className="context-menu-group" role="group">
+            <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record || financeContextMenu.record.isCanceled} onClick={() => financeContextMenu.record ? editFinanceRecord(financeContextMenu.section, financeContextMenu.record, financeContextMenuTriggerRef.current) : undefined}>
+              <span>{getFinanceContextMenuLabel('edit')}</span>
+            </button>
+            <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record || financeContextMenu.record.isCanceled} onClick={() => financeContextMenu.record ? deleteFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
+              <span>{getFinanceContextMenuLabel('delete')}</span>
+            </button>
+            <button type="button" role="menuitem" disabled={!canWritePayments || !financeContextMenu.record?.isCanceled} onClick={() => financeContextMenu.record ? restoreFinanceRecord(financeContextMenu.section, financeContextMenu.record) : undefined}>
+              <span>{getFinanceContextMenuLabel('restore')}</span>
+            </button>
+          </div>
         </div>
       ) : null}
       {cancelFinanceTarget ? (

@@ -1363,6 +1363,14 @@ h1 {
   width: 100%;
 }
 
+.contractors-directory-cell--right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .contractors-garage-actions .contractors-report-button {
   margin-right: auto;
 }
@@ -4725,6 +4733,17 @@ button.operation-row:focus-visible {
 .report-tabs button small {
   color: #667085;
   font-size: 12px;
+}
+
+.context-menu-group {
+  display: grid;
+  gap: 4px;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: #eaecf0;
 }
 
 .report-tabs--workbook {

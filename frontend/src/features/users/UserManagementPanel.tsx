@@ -469,22 +469,27 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
       {contextMenu ? (
         <div className="context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
-          <button type="button" role="menuitem" onClick={() => openEditor('create')}>
-            <Plus size={15} />
-            <span>Добавить</span>
-          </button>
-          <button type="button" role="menuitem" onClick={() => openEditor('edit', contextMenu.user)}>
-            <Save size={15} />
-            <span>Изменить</span>
-          </button>
-          <button className="context-menu-danger" type="button" role="menuitem" onClick={() => { openDeleteDialog(contextMenu.user); setContextMenu(null) }} disabled={!contextMenu.user.isActive}>
-            <Trash2 size={15} />
-            <span>Удалить</span>
-          </button>
-          <button type="button" role="menuitem" onClick={() => { setRestoreTarget(contextMenu.user); setContextMenu(null) }} disabled={contextMenu.user.isActive}>
-            <RotateCcw size={15} />
-            <span>Вернуть</span>
-          </button>
+          <div className="context-menu-group" role="group">
+            <button type="button" role="menuitem" onClick={() => openEditor('create')}>
+              <Plus size={15} />
+              <span>Добавить</span>
+            </button>
+          </div>
+          <div className="context-menu-separator" role="separator" />
+          <div className="context-menu-group" role="group">
+            <button type="button" role="menuitem" onClick={() => openEditor('edit', contextMenu.user)}>
+              <Save size={15} />
+              <span>Изменить</span>
+            </button>
+            <button className="context-menu-danger" type="button" role="menuitem" onClick={() => { openDeleteDialog(contextMenu.user); setContextMenu(null) }} disabled={!contextMenu.user.isActive}>
+              <Trash2 size={15} />
+              <span>Удалить</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => { setRestoreTarget(contextMenu.user); setContextMenu(null) }} disabled={contextMenu.user.isActive}>
+              <RotateCcw size={15} />
+              <span>Вернуть</span>
+            </button>
+          </div>
         </div>
       ) : null}
 

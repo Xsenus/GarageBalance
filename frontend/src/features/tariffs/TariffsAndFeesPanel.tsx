@@ -1899,12 +1899,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             style={{ left: oneTimeContextMenu.x, top: oneTimeContextMenu.y }}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => toggleOneTimeActive(oneTimeContextMenu.row)}>
-              {oneTimeContextMenu.row.isActive ? 'Деактивировать' : 'Активировать'}
-            </button>
-            <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openOneTimeDeleteDialog(oneTimeContextMenu.row)}>
-              <span>Удалить</span>
-            </button>
+            <div className="context-menu-group" role="group">
+              <button type="button" role="menuitem" onClick={() => toggleOneTimeActive(oneTimeContextMenu.row)}>
+                {oneTimeContextMenu.row.isActive ? 'Деактивировать' : 'Активировать'}
+              </button>
+              <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openOneTimeDeleteDialog(oneTimeContextMenu.row)}>
+                <span>Удалить</span>
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

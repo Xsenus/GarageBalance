@@ -175,6 +175,16 @@ All large working tables must use the shared `TablePagination` and `PageNavigato
 - Page-size controls must have stable dimensions and must never overlap their labels, values, or navigation buttons.
 - When a compact table genuinely needs pagination, reuse the same component instead of inventing a smaller visual variant.
 
+### Unified context menus
+
+All right-click menus must use the shared `context-menu` structure and the same compact visual language throughout the application. Do not create feature-specific menu spacing, separators, action order, or verbose labels.
+
+- Wrap related commands in `context-menu-group`; a menu with one logical category uses one group without a decorative separator.
+- Keep record-management commands such as edit and delete/archive/restore in one group. Style destructive actions consistently and retain confirmation where the business flow requires it.
+- Put navigation, report, history, export, or other secondary commands in a separate group and divide categories with an accessible `role="separator"` element using the shared `context-menu-separator` class.
+- Use concise visible labels such as `Финансовый отчет` instead of `Открыть финансовый отчет`; keep a full verb phrase in `aria-label` or `title` when it improves accessibility.
+- Preserve the shared icons, keyboard navigation, focus restoration, disabled states, hover/focus states, and menu-item accessible names in every section.
+
 ## Performance
 
 The system must feel fast on the customer's real cooperative data. Design lists, search, reports, imports, and dashboards with performance in mind from the beginning.

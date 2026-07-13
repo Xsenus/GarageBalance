@@ -262,8 +262,9 @@ function formatPrototypeMoney(value: number | null | undefined) {
 }
 
 function parsePrototypeMoney(value: string) {
-  const normalized = value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')
-  const parsed = Number(normalized)
+  const normalized = value.replace(/\s/g, '').replace(',', '.')
+  const numericPart = normalized.match(/-?\d+(?:\.\d+)?/)?.[0]
+  const parsed = Number(numericPart)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
@@ -459,7 +460,7 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
     address: owner?.address ?? '',
     startingBalance: formatPrototypeMoney(garage.startingBalance),
     balance: formatPrototypeMoney(balance),
-    overdueDebt: overdueDebt > 0 ? `${formatPrototypeMoney(overdueDebt)} руб.` : '',
+    overdueDebt: overdueDebt > 0 ? `${formatMoney(overdueDebt)} руб.` : '',
     initialWater: formatPrototypeNumber(garage.initialWaterMeterValue),
     initialElectricity: formatPrototypeNumber(garage.initialElectricityMeterValue),
     meters: owner?.meterNotes ?? '',
@@ -1789,7 +1790,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span role="cell" className="contractors-directory-cell--center">{row.floorCount}</span>
                 <span role="cell">{row.owner}</span>
                 <span role="cell">{row.phone}</span>
-                <span role="cell" className={row.overdueDebt ? 'contractors-directory-cell--center money-expense' : 'contractors-directory-cell--center'}>
+                <span role="cell" className={row.overdueDebt ? 'contractors-directory-cell--right money-expense' : 'contractors-directory-cell--right'}>
                   {row.isDeleted ? 'Удален' : row.overdueDebt || 'Нет'}
                 </span>
                 <span role="cell" className="contractors-row-actions">
@@ -2036,24 +2037,31 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             onMouseDown={(event) => event.stopPropagation()}
           >
             {garageContextMenu.row.isDeleted ? (
-              <button type="button" role="menuitem" onClick={() => restoreGarage(garageContextMenu.row)}>
-                <RotateCcw size={16} />
-                <span>Восстановить</span>
-              </button>
+              <div className="context-menu-group" role="group">
+                <button type="button" role="menuitem" onClick={() => restoreGarage(garageContextMenu.row)}>
+                  <RotateCcw size={16} />
+                  <span>Восстановить</span>
+                </button>
+              </div>
             ) : (
               <>
-                <button type="button" role="menuitem" onClick={() => openGarageEditor(garageContextMenu.row)}>
-                  <Pencil size={16} />
-                  <span>Изменить</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => openGarageFinancialReport(garageContextMenu.row)}>
-                  <FileText size={16} />
-                  <span>Открыть финансовый отчет</span>
-                </button>
-                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openGarageDeleteDialog(garageContextMenu.row)}>
-                  <Trash2 size={16} />
-                  <span>Удалить</span>
-                </button>
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openGarageEditor(garageContextMenu.row)}>
+                    <Pencil size={16} />
+                    <span>Изменить</span>
+                  </button>
+                  <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openGarageDeleteDialog(garageContextMenu.row)}>
+                    <Trash2 size={16} />
+                    <span>Удалить</span>
+                  </button>
+                </div>
+                <div className="context-menu-separator" role="separator" />
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openGarageFinancialReport(garageContextMenu.row)}>
+                    <FileText size={16} />
+                    <span>Финансовый отчет</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -2070,24 +2078,31 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             onMouseDown={(event) => event.stopPropagation()}
           >
             {supplierContextMenu.row.isDeleted ? (
-              <button type="button" role="menuitem" onClick={() => restoreSupplier(supplierContextMenu.row)}>
-                <RotateCcw size={16} />
-                <span>Восстановить</span>
-              </button>
+              <div className="context-menu-group" role="group">
+                <button type="button" role="menuitem" onClick={() => restoreSupplier(supplierContextMenu.row)}>
+                  <RotateCcw size={16} />
+                  <span>Восстановить</span>
+                </button>
+              </div>
             ) : (
               <>
-                <button type="button" role="menuitem" onClick={() => openSupplierEditor(supplierContextMenu.row)}>
-                  <Pencil size={16} />
-                  <span>Изменить</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => openSupplierFinancialReport(supplierContextMenu.row)}>
-                  <FileText size={16} />
-                  <span>Открыть финансовый отчет</span>
-                </button>
-                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openSupplierDeleteDialog(supplierContextMenu.row)}>
-                  <Trash2 size={16} />
-                  <span>Удалить</span>
-                </button>
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openSupplierEditor(supplierContextMenu.row)}>
+                    <Pencil size={16} />
+                    <span>Изменить</span>
+                  </button>
+                  <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openSupplierDeleteDialog(supplierContextMenu.row)}>
+                    <Trash2 size={16} />
+                    <span>Удалить</span>
+                  </button>
+                </div>
+                <div className="context-menu-separator" role="separator" />
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openSupplierFinancialReport(supplierContextMenu.row)}>
+                    <FileText size={16} />
+                    <span>Финансовый отчет</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -2104,24 +2119,31 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             onMouseDown={(event) => event.stopPropagation()}
           >
             {employeeContextMenu.row.isDeleted ? (
-              <button type="button" role="menuitem" onClick={() => restoreEmployee(employeeContextMenu.row)}>
-                <RotateCcw size={16} />
-                <span>Восстановить</span>
-              </button>
+              <div className="context-menu-group" role="group">
+                <button type="button" role="menuitem" onClick={() => restoreEmployee(employeeContextMenu.row)}>
+                  <RotateCcw size={16} />
+                  <span>Восстановить</span>
+                </button>
+              </div>
             ) : (
               <>
-                <button type="button" role="menuitem" onClick={() => openEmployeeEditor(employeeContextMenu.row)}>
-                  <Pencil size={16} />
-                  <span>Изменить</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => openEmployeeFinancialReport(employeeContextMenu.row)}>
-                  <FileText size={16} />
-                  <span>Открыть финансовый отчет</span>
-                </button>
-                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openEmployeeDeleteDialog(employeeContextMenu.row)}>
-                  <Trash2 size={16} />
-                  <span>Удалить</span>
-                </button>
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openEmployeeEditor(employeeContextMenu.row)}>
+                    <Pencil size={16} />
+                    <span>Изменить</span>
+                  </button>
+                  <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openEmployeeDeleteDialog(employeeContextMenu.row)}>
+                    <Trash2 size={16} />
+                    <span>Удалить</span>
+                  </button>
+                </div>
+                <div className="context-menu-separator" role="separator" />
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openEmployeeFinancialReport(employeeContextMenu.row)}>
+                    <FileText size={16} />
+                    <span>Финансовый отчет</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -2138,12 +2160,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             onMouseDown={(event) => event.stopPropagation()}
           >
             {departmentContextMenu.row.isDeleted ? (
-              <button type="button" role="menuitem" onClick={() => restoreDepartment(departmentContextMenu.row)}>
-                <RotateCcw size={16} />
-                <span>Восстановить</span>
-              </button>
+              <div className="context-menu-group" role="group">
+                <button type="button" role="menuitem" onClick={() => restoreDepartment(departmentContextMenu.row)}>
+                  <RotateCcw size={16} />
+                  <span>Восстановить</span>
+                </button>
+              </div>
             ) : (
-              <>
+              <div className="context-menu-group" role="group">
                 <button type="button" role="menuitem" onClick={() => openDepartmentEditor(departmentContextMenu.row)}>
                   <Pencil size={16} />
                   <span>Изменить</span>
@@ -2152,7 +2176,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   <Trash2 size={16} />
                   <span>Удалить</span>
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -3182,16 +3206,20 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
             {contactContextMenu.contact.isDeleted ? (
               <>
                 <p className="context-menu-hint">При восстановлении контакта будет восстановлен и поставщик.</p>
-                <button type="button" role="menuitem" onClick={() => requestRestoreContact(contactContextMenu.contact)}>
-                  <RotateCcw size={16} />
-                  <span>Восстановить контакт</span>
-                </button>
+                <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => requestRestoreContact(contactContextMenu.contact)}>
+                    <RotateCcw size={16} />
+                    <span>Восстановить контакт</span>
+                  </button>
+                </div>
               </>
             ) : (
-              <button className="context-menu-danger" type="button" role="menuitem" onClick={() => requestDeleteContact(contactContextMenu.contact)}>
-                <Trash2 size={16} />
-                <span>Удалить контакт</span>
-              </button>
+              <div className="context-menu-group" role="group">
+                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => requestDeleteContact(contactContextMenu.contact)}>
+                  <Trash2 size={16} />
+                  <span>Удалить контакт</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
