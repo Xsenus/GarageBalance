@@ -210,6 +210,8 @@ public sealed class BackendPerformanceGuardTests
     public void StaffMemberRepository_UsesDatabaseLimitBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
     }

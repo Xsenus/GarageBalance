@@ -1287,6 +1287,7 @@ public sealed class BackendLayeringTests
         var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Dictionaries", "DictionaryService.cs"));
         Assert.Contains("IStaffMemberRepository staffMemberRepository", service, StringComparison.Ordinal);
         Assert.Contains("staffMemberRepository.GetListAsync", service, StringComparison.Ordinal);
+        Assert.Contains("staffMemberRepository.GetPageAsync", service, StringComparison.Ordinal);
         Assert.Contains("staffMemberRepository.FindActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("staffMemberRepository.FindArchivedAsync", service, StringComparison.Ordinal);
         Assert.Contains("staffMemberRepository.Add", service, StringComparison.Ordinal);

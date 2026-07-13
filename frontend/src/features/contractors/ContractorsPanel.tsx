@@ -717,8 +717,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>([])
   const [supplierPage, setSupplierPage] = useState<ContractorPageState>(createContractorPageState)
   const [supplierContacts, setSupplierContacts] = useState<SupplierContactDto[]>([])
-  const [contractorPageLoading, setContractorPageLoading] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: true, suppliers: true })
+  const [contractorPageLoading, setContractorPageLoading] = useState<Record<ContractorSection, boolean>>({ garages: true, suppliers: true, staff: true })
   const [staff, setStaff] = useState<ContractorStaffRow[]>([])
+  const [staffPage, setStaffPage] = useState<ContractorPageState>(createContractorPageState)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>([])
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [supplierServices, setSupplierServices] = useState<string[]>([])
@@ -819,7 +820,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
           dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
-          dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+          dictionaryClient.getStaffMembersPage
+            ? dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
+            : dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
         ])
 
         if (cancelled) {
@@ -837,14 +840,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         setSupplierContacts(supplierContactRows)
         setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
         setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
-        setStaff(staffRows.map(createStaffRowFromDto))
+        setStaff(staffRows.items.map(createStaffRowFromDto))
+        setStaffPage({ totalCount: staffRows.totalCount, offset: staffRows.offset, limit: staffRows.limit })
       } catch (error) {
         if (!cancelled) {
           setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контрагентов из справочников.')
         }
       } finally {
         if (!cancelled) {
-          setContractorPageLoading({ garages: false, suppliers: false })
+          setContractorPageLoading({ garages: false, suppliers: false, staff: false })
         }
       }
     }
@@ -989,6 +993,22 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу поставщиков.')
     } finally {
       setContractorPageLoading((current) => ({ ...current, suppliers: false }))
+    }
+  }
+
+  async function loadStaffPage(offset = staffPage.offset, limit = staffPage.limit) {
+    setContractorPageLoading((current) => ({ ...current, staff: true }))
+    setEmployeeContextMenu(null)
+    try {
+      const page = dictionaryClient.getStaffMembersPage
+        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true)
+        : createFallbackPage(await dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true), offset, limit)
+      setStaff(page.items.map(createStaffRowFromDto))
+      setStaffPage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу персонала.')
+    } finally {
+      setContractorPageLoading((current) => ({ ...current, staff: false }))
     }
   }
 
@@ -1384,8 +1404,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           return currentStaff.map((item) => (item.id === employee.id ? nextEmployee : item))
         }
 
-        return [...currentStaff, nextEmployee]
+        return [...currentStaff.slice(0, Math.max(0, staffPage.limit - 1)), nextEmployee]
       })
+      if (!currentEmployee) {
+        setStaffPage((currentPage) => ({ ...currentPage, totalCount: currentPage.totalCount + 1 }))
+      }
       return
     } catch (error) {
       setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить сотрудника.')
@@ -1626,6 +1649,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const supplierVisibleRange = getPageVisibleRange({ ...supplierPage, items: suppliers })
   const garagePageNavigation = getPageNavigation({ ...garagePage, items: garages })
   const supplierPageNavigation = getPageNavigation({ ...supplierPage, items: suppliers })
+  const staffVisibleRange = getPageVisibleRange({ ...staffPage, items: staff })
+  const staffPageNavigation = getPageNavigation({ ...staffPage, items: staff })
   const debtorsButtonLabel = activeSection === 'suppliers'
     ? showDebtorsOnly ? 'Показать всех поставщиков' : 'Показать должников'
     : showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
@@ -1907,9 +1932,20 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               ))}
               {visibleStaff.length === 0 ? (
                 <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                  <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
+                  <span className="contractors-directory-empty-cell" role="cell">{contractorPageLoading.staff ? 'Загрузка персонала...' : 'Сотрудники пока не настроены.'}</span>
                 </div>
               ) : null}
+            </div>
+            <div className="dictionary-pagination" role="navigation" aria-label="Пагинация персонала">
+              <span role="status" aria-live="polite">Показано {staffVisibleRange.from}-{staffVisibleRange.to} из {staffPage.totalCount}</span>
+              <label>
+                Строк
+                <select aria-label="Количество строк персонала" value={staffPage.limit} disabled={contractorPageLoading.staff} onChange={(event) => void loadStaffPage(0, Number(event.target.value))}>
+                  {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+                </select>
+              </label>
+              <button className="ghost-button" type="button" disabled={contractorPageLoading.staff || !staffPageNavigation.canGoPrevious} onClick={() => void loadStaffPage(staffPageNavigation.previousOffset)}>Назад</button>
+              <button className="ghost-button" type="button" disabled={contractorPageLoading.staff || !staffPageNavigation.canGoNext} onClick={() => void loadStaffPage(staffPageNavigation.nextOffset)}>Вперед</button>
             </div>
           </section>
         </>

@@ -1820,6 +1820,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("[HttpPut(\"staff-departments/{id:guid}\")]", controllerText, StringComparison.Ordinal);
         Assert.Contains("[HttpPost(\"staff-departments/{id:guid}/restore\")]", controllerText, StringComparison.Ordinal);
         Assert.Contains("[HttpGet(\"staff-members\")]", controllerText, StringComparison.Ordinal);
+        Assert.Contains("[HttpGet(\"staff-members/page\")]", controllerText, StringComparison.Ordinal);
         Assert.Contains("[HttpPost(\"staff-members\")]", controllerText, StringComparison.Ordinal);
         Assert.Contains("[HttpPut(\"staff-members/{id:guid}\")]", controllerText, StringComparison.Ordinal);
         Assert.Contains("[HttpPost(\"staff-members/{id:guid}/restore\")]", controllerText, StringComparison.Ordinal);

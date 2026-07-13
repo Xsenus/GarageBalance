@@ -1547,10 +1547,11 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 180000)
 
-  it('pages garages and suppliers through server dictionary pages', async () => {
+  it('pages garages, suppliers and staff through server dictionary pages', async () => {
     const user = userEvent.setup()
     const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
     const supplierPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
+    const staffPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
     const supplierGroup = createGroup({ id: 'group-page', name: 'Коммунальные услуги' })
     const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
       garagePageRequests.push({ offset, limit, includeArchived })
@@ -1572,10 +1573,21 @@ describe('App', () => {
         limit,
       }
     })
+    const getStaffMembersPage = vi.fn(async (_token: string, _departmentId?: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
+      staffPageRequests.push({ offset, limit, includeArchived })
+      const fullName = offset === 0 ? 'Сотрудник 1' : 'Сотрудник 26'
+      return {
+        items: [createStaffMember({ id: `staff-page-${offset}`, fullName, departmentName: 'Бухгалтерия' })],
+        totalCount: 30,
+        offset,
+        limit,
+      }
+    })
     const dictionaryClient = createDictionaryClient({
       getGaragesPage,
       getSupplierGroups: async () => [supplierGroup],
       getSuppliersPage,
+      getStaffMembersPage,
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -1603,6 +1615,16 @@ describe('App', () => {
     expect(await within(contractorsPanel).findByText('Поставщик 26')).toBeInTheDocument()
     expect(within(supplierPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
     expect(within(supplierPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    const staffPagination = within(contractorsPanel).getByRole('navigation', { name: 'Пагинация персонала' })
+    expect(within(staffPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    expect(within(contractorsPanel).getByText('Сотрудник 1')).toBeInTheDocument()
+    await user.click(within(staffPagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(staffPageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true }))
+    expect(await within(contractorsPanel).findByText('Сотрудник 26')).toBeInTheDocument()
+    expect(within(staffPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(staffPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
   })
 
   it('confirms contractor staff edits with department and rate diff', async () => {

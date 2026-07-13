@@ -868,6 +868,34 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetStaffMembersPageAsync_AppliesFiltersAndReturnsRequestedPage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Бухгалтерия"), null, CancellationToken.None);
+        for (var index = 1; index <= 30; index++)
+        {
+            await service.CreateStaffMemberAsync(
+                new UpsertStaffMemberRequest($"Сотрудник {index:D2}", department.Value!.Id, 40000 + index),
+                null,
+                CancellationToken.None);
+        }
+
+        var page = await service.GetStaffMembersPageAsync(department.Value!.Id, null, 10, 5, CancellationToken.None);
+        var filtered = await service.GetStaffMembersPageAsync(null, "29", 0, 25, CancellationToken.None);
+
+        Assert.Equal(30, page.TotalCount);
+        Assert.Equal(10, page.Offset);
+        Assert.Equal(5, page.Limit);
+        Assert.Equal(5, page.Items.Count);
+        Assert.Equal("Сотрудник 11", page.Items[0].FullName);
+        Assert.Equal("Сотрудник 15", page.Items[^1].FullName);
+        Assert.Single(filtered.Items);
+        Assert.Equal("Сотрудник 29", filtered.Items[0].FullName);
+        Assert.Equal(1, filtered.TotalCount);
+    }
+
+    [Fact]
     public async Task RestoreStaffMemberAsync_RestoresOnlyWhenDepartmentIsActiveAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
