@@ -3,13 +3,31 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void AppShellRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var shellText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx"));
+        Assert.Contains("import { AuthenticatedAppShell } from './features/workspace/AppShell'", appText, StringComparison.Ordinal);
+        Assert.Contains("<AuthenticatedAppShell", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("sidebarExpandedStorageKey", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("const navigation", appText, StringComparison.Ordinal);
+        Assert.Contains("export function AuthenticatedAppShell(", shellText, StringComparison.Ordinal);
+        Assert.Contains("sidebarExpandedStorageKey", shellText, StringComparison.Ordinal);
+        Assert.Contains("const navigation: NavigationItem[]", shellText, StringComparison.Ordinal);
+        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", shellText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/workspace/AppShell.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-roadmap.md")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WorkspaceRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var shellText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
-        Assert.Contains("import { Workspace } from './features/workspace/Workspace'", appText, StringComparison.Ordinal);
-        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appText, StringComparison.Ordinal);
+        Assert.Contains("import { Workspace } from './Workspace'", shellText, StringComparison.Ordinal);
+        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", shellText, StringComparison.Ordinal);
         Assert.DoesNotContain("function Workspace(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function AccessNotice(", appText, StringComparison.Ordinal);
         Assert.Contains("export function Workspace(", featureText, StringComparison.Ordinal);

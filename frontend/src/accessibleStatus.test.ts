@@ -23,7 +23,8 @@ describe('accessible dynamic messages', () => {
   const contractorsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const financePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8')
   const workspacePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'Workspace.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource, workspacePanelSource].join('\n')
+  const appShellSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'AppShell.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource, workspacePanelSource, appShellSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = workspaceSource
@@ -281,11 +282,11 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps sidebar topbar and dashboard icon navigation labeled titled and focusable', () => {
-    expect(appSource).toContain('const sidebarToggleLabel = isSidebarExpanded ? \'Свернуть панель\' : \'Развернуть панель\'')
-    expect(appSource).toContain('aria-label={sidebarToggleLabel} title={sidebarToggleLabel}')
-    expect(appSource).toContain('aria-label={item.label}')
-    expect(appSource).toContain('title={item.label}')
-    expect(appSource).toContain('aria-current={isActive ? \'page\' : undefined}')
+    expect(appShellSource).toContain('const sidebarToggleLabel = isSidebarExpanded ? \'Свернуть панель\' : \'Развернуть панель\'')
+    expect(appShellSource).toContain('aria-label={sidebarToggleLabel} title={sidebarToggleLabel}')
+    expect(appShellSource).toContain('aria-label={item.label}')
+    expect(appShellSource).toContain('title={item.label}')
+    expect(appShellSource).toContain('aria-current={isActive ? \'page\' : undefined}')
     expect(workspacePanelSource).toContain('aria-label={tile.title.replace(\'\\n\', \' \')}')
     expect(workspacePanelSource).toContain('title={tile.title.replace(\'\\n\', \' \')}')
     expect(workspacePanelSource).toContain('aria-label="Назад к выбору раздела" title="Назад к выбору раздела"')
@@ -387,15 +388,15 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps all buttons explicitly typed', () => {
-    const buttonIndexes = [...appSource.matchAll(/<button\b/g)].map((match) => match.index ?? -1)
+    const buttonIndexes = [...workspaceSource.matchAll(/<button\b/g)].map((match) => match.index ?? -1)
 
     expect(buttonIndexes.length).toBeGreaterThan(0)
 
     for (const buttonStart of buttonIndexes) {
-      const openingTagEnd = appSource.indexOf('>', buttonStart)
+      const openingTagEnd = workspaceSource.indexOf('>', buttonStart)
       expect(openingTagEnd).toBeGreaterThan(buttonStart)
 
-      const openingTagSource = appSource.slice(buttonStart, openingTagEnd + 1)
+      const openingTagSource = workspaceSource.slice(buttonStart, openingTagEnd + 1)
       expect(openingTagSource).toMatch(/\stype="(?:button|submit)"/)
     }
   })

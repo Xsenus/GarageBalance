@@ -1982,6 +1982,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var frontendApiText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "services", "dictionariesApi.ts"));
         var frontendWorkbenchText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "dictionaryWorkbench.ts"));
         var frontendAppText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var frontendAppShellText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx"));
         var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var frontendTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
         var releaseNotesText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
@@ -2025,7 +2026,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("onContextMenu={(event) => openContextMenu(event, activeSection, item)}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("В этом справочнике пока нет записей", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("Показано {visibleRange.from}-{visibleRange.to} из {activePage.totalCount}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
-        Assert.Contains("label: 'История изменений'", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("label: 'История изменений'", frontendAppShellText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Раздел истории изменений\"", auditPanelText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Тип объекта истории изменений\"", auditPanelText, StringComparison.Ordinal);
 
@@ -6353,6 +6354,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var shellLine = activeRoadmapLines.Single(line =>
             line.Contains("Подготовить кликабельный shell", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appShellText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx"));
         var financePanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
         var reportPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "reports", "ReportPanel.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
@@ -6370,10 +6372,10 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("accessibleStatus.test.ts", shellLine, StringComparison.Ordinal);
         Assert.Contains("responsiveLayout.test.ts", shellLine, StringComparison.Ordinal);
 
-        Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appText, StringComparison.Ordinal);
-        Assert.Contains("sidebarToggleLabel", appText, StringComparison.Ordinal);
-        Assert.Contains("const navigation: NavigationItem[]", appText, StringComparison.Ordinal);
-        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appText, StringComparison.Ordinal);
+        Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appShellText, StringComparison.Ordinal);
+        Assert.Contains("sidebarToggleLabel", appShellText, StringComparison.Ordinal);
+        Assert.Contains("const navigation: NavigationItem[]", appShellText, StringComparison.Ordinal);
+        Assert.Contains("<Workspace activeSection={effectiveActiveSection}", appShellText, StringComparison.Ordinal);
         Assert.Contains("aria-label={`Поиск: ${activeOption.label}`}", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("role=\"dialog\"", financePanelText, StringComparison.Ordinal);
         Assert.Contains("role=\"table\"", financePanelText, StringComparison.Ordinal);
@@ -6403,6 +6405,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var startScreenLine = activeRoadmapLines.Single(line =>
             line.Contains("Основной экран не должен быть landing page", StringComparison.Ordinal));
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var appShellText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx"));
         var workspaceText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var appTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.test.tsx"));
 
@@ -6416,7 +6419,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("if (!auth)", appText, StringComparison.Ordinal);
         Assert.Contains("<main className=\"auth-entry\">", appText, StringComparison.Ordinal);
         Assert.Contains("<AuthGate authClient={authClient} onAuthenticated={handleAuthenticated} />", appText, StringComparison.Ordinal);
-        Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appText, StringComparison.Ordinal);
+        Assert.Contains("className={showSidebar ? `app-shell ${sidebarModeClass}`", appShellText, StringComparison.Ordinal);
         Assert.Contains("case 'dashboard'", workspaceText, StringComparison.Ordinal);
         Assert.Contains("className=\"dashboard-home\"", workspaceText, StringComparison.Ordinal);
         Assert.Contains("role=\"group\" aria-label=\"Главные разделы\"", workspaceText, StringComparison.Ordinal);
