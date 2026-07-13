@@ -364,13 +364,14 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void CashPaymentScreenQuery_UsesDatabaseCountSumAndLimitBeforeMaterialization()
+    public void CashPaymentScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetCashPaymentsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyLimit\(ordered, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetCashPaymentsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
+        Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Supplier.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Contains("operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
     }

@@ -10,6 +10,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         DateOnly dateFrom,
         DateOnly dateTo,
         string? search,
+        int offset,
         int? limit,
         CancellationToken cancellationToken)
     {
@@ -36,14 +37,15 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
 
             var rowCount = await query.CountAsync(cancellationToken);
             var total = rowCount == 0 ? 0m : await query.SumAsync(operation => operation.Amount, cancellationToken);
-            var ordered = query.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.DocumentNumber);
-            var operations = await ApplyLimit(ordered, limit).ToListAsync(cancellationToken);
+            var ordered = query.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.DocumentNumber).ThenBy(operation => operation.Id);
+            var operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
             return new CashPaymentReportData(operations, total, rowCount);
         }
 
         var fallbackOperations = await query
             .OrderBy(operation => operation.OperationDate)
             .ThenBy(operation => operation.DocumentNumber)
+            .ThenBy(operation => operation.Id)
             .ToListAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -57,7 +59,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         }
 
         return new CashPaymentReportData(
-            ApplyLimit(fallbackOperations, limit).ToList(),
+            ApplyPage(fallbackOperations, offset, limit).ToList(),
             fallbackOperations.Sum(operation => operation.Amount),
             fallbackOperations.Count);
     }
@@ -126,6 +128,18 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
 
     private static IEnumerable<T> ApplyLimit<T>(IEnumerable<T> items, int? limit) =>
         limit is > 0 ? items.Take(limit.Value) : items;
+
+    private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
+    {
+        var page = offset > 0 ? query.Skip(offset) : query;
+        return limit is > 0 ? page.Take(limit.Value) : page;
+    }
+
+    private static IEnumerable<T> ApplyPage<T>(IEnumerable<T> items, int offset, int? limit)
+    {
+        var page = offset > 0 ? items.Skip(offset) : items;
+        return limit is > 0 ? page.Take(limit.Value) : page;
+    }
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;

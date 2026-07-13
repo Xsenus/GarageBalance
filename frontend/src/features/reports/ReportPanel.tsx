@@ -163,6 +163,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
   const [cashPaymentReport, setCashPaymentReport] = useState<CashPaymentReportDto | null>(null)
+  const [cashPaymentPageRequest, setCashPaymentPageRequest] = useState({ offset: 0, limit: 25 })
+  const [cashPaymentReportLoading, setCashPaymentReportLoading] = useState(false)
+  const [cashPaymentReportError, setCashPaymentReportError] = useState<string | null>(null)
   const [bankDepositReport, setBankDepositReport] = useState<BankDepositReportDto | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
@@ -221,9 +224,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const garageFilterRange = monthlyFilters.garages
         const payoutFilter = monthlyFilters.payouts
         const incomeFilter = dateFilters.income
-        const cashPaymentFilter = dateFilters.cashPayments
         const bankDepositFilter = dateFilters.bankDeposits
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedIncome, loadedCashPayments, loadedBankDeposits, loadedFees] = await Promise.all([
+        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedIncome, loadedBankDeposits, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
@@ -266,11 +268,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             rowMode: 'payments',
             limit: 100,
           }),
-          reportClient.getCashPaymentReport(auth.accessToken, {
-            dateFrom: cashPaymentFilter.dateFrom,
-            dateTo: cashPaymentFilter.dateTo,
-            limit: 100,
-          }),
           reportClient.getBankDepositReport(auth.accessToken, {
             dateFrom: bankDepositFilter.dateFrom,
             dateTo: bankDepositFilter.dateTo,
@@ -293,7 +290,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         setGarageIncomeDetailReport(loadedGarageIncomeDetails)
         setPayoutReport(loadedPayouts)
         setIncomeReport(loadedIncome)
-        setCashPaymentReport(loadedCashPayments)
         setBankDepositReport(loadedBankDeposits)
         setFeeReport(loadedFees)
       } catch (caught) {
@@ -308,7 +304,46 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, counterpartyFilter, dateFilters.bankDeposits, dateFilters.cashPayments, dateFilters.income, feeVariationFilter, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+  }, [auth.accessToken, counterpartyFilter, dateFilters.bankDeposits, dateFilters.income, feeVariationFilter, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'cashPayments') {
+      return
+    }
+
+    let ignore = false
+
+    async function loadCashPayments() {
+      setCashPaymentReportLoading(true)
+      setCashPaymentReportError(null)
+      try {
+        const filter = dateFilters.cashPayments
+        const report = await reportClient.getCashPaymentReport(auth.accessToken, {
+          dateFrom: filter.dateFrom,
+          dateTo: filter.dateTo,
+          offset: cashPaymentPageRequest.offset,
+          limit: cashPaymentPageRequest.limit,
+        })
+        if (!ignore) {
+          setCashPaymentReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setCashPaymentReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по оплатам из кассы.')
+        }
+      } finally {
+        if (!ignore) {
+          setCashPaymentReportLoading(false)
+        }
+      }
+    }
+
+    void loadCashPayments()
+
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, cashPaymentPageRequest.limit, cashPaymentPageRequest.offset, dateFilters.cashPayments, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'funds') {
@@ -368,7 +403,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function updateDateFilter(key: ReportDateFilterKey, field: keyof ReportDateRange, value: string) {
-    if (key === 'funds') {
+    if (key === 'cashPayments') {
+      setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'funds') {
       setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
     }
     setDateFilters((current) => ({
@@ -388,7 +425,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function applyToday(key: ReportDateFilterKey) {
-    if (key === 'funds') {
+    if (key === 'cashPayments') {
+      setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'funds') {
       setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
     }
     setDateFilters((current) => ({
@@ -705,9 +744,19 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         row.purpose,
         row.comment ?? '',
       ]) ?? []
+      const cashPaymentPage = {
+        items: cashPaymentReport?.rows ?? [],
+        totalCount: cashPaymentReport?.rowCount ?? 0,
+        offset: cashPaymentReport?.offset ?? cashPaymentPageRequest.offset,
+        limit: cashPaymentReport?.limit ?? cashPaymentPageRequest.limit,
+      }
+      const cashPaymentVisibleRange = getPageVisibleRange(cashPaymentPage)
+      const cashPaymentNavigation = getPageNavigation(cashPaymentPage)
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
+          {cashPaymentReportLoading ? <p className="prototype-status" role="status">Загружаем оплаты из кассы...</p> : null}
+          {cashPaymentReportError ? <FormError>{cashPaymentReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
             {renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}
             {renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}
@@ -719,6 +768,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             cashRows.length > 0 ? cashRows : [['', 'Операций за период нет', '', '', '']],
             cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', `${cashPaymentReport.rowCount} операций`] : undefined,
           )}
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация отчета по оплатам из кассы">
+            <span role="status" aria-live="polite">Показано {cashPaymentVisibleRange.from}-{cashPaymentVisibleRange.to} из {cashPaymentPage.totalCount}</span>
+            <label>
+              Строк на странице
+              <select
+                aria-label="Строк на странице отчета по оплатам из кассы"
+                value={cashPaymentPage.limit}
+                disabled={cashPaymentReportLoading}
+                onChange={(event) => setCashPaymentPageRequest({ offset: 0, limit: Number(event.target.value) })}
+              >
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={!cashPaymentNavigation.canGoPrevious || cashPaymentReportLoading} onClick={() => setCashPaymentPageRequest((current) => ({ ...current, offset: cashPaymentNavigation.previousOffset }))}>Назад</button>
+            <button className="ghost-button" type="button" disabled={!cashPaymentNavigation.canGoNext || cashPaymentReportLoading} onClick={() => setCashPaymentPageRequest((current) => ({ ...current, offset: cashPaymentNavigation.nextOffset }))}>Вперед</button>
+          </div>
         </ReportWorkbookSheet>
       )
     }

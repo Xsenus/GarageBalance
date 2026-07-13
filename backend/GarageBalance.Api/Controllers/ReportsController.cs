@@ -243,10 +243,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
         [FromQuery] int? limit,
+        [FromQuery] int? offset,
         CancellationToken cancellationToken)
     {
         var result = await reportService.GetCashPaymentReportAsync(
-            new CashPaymentReportRequest(dateFrom, dateTo, search, limit, GetActorUserId()),
+            new CashPaymentReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId()),
             cancellationToken);
 
         return result.Succeeded

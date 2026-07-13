@@ -306,12 +306,13 @@ public sealed class ReportsControllerTests
         };
         var controller = new ReportsController(service);
 
-        var result = await controller.GetCashPaymentReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "чек", 16, CancellationToken.None);
+        var result = await controller.GetCashPaymentReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "чек", 16, 8, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal("чек", service.CashPaymentRequest?.Search);
         Assert.Equal(16, service.CashPaymentRequest?.Limit);
+        Assert.Equal(8, service.CashPaymentRequest?.Offset);
     }
 
     [Fact]
@@ -322,7 +323,7 @@ public sealed class ReportsControllerTests
             CashPaymentResult = ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Invalid period.")
         });
 
-        var result = await controller.GetCashPaymentReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
+        var result = await controller.GetCashPaymentReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -762,6 +763,8 @@ public sealed class ReportsControllerTests
             new DateOnly(2026, 6, 30),
             1200m,
             1,
+            0,
+            25,
             [
                 new CashPaymentReportRowDto(
                     Guid.NewGuid(),

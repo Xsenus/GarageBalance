@@ -41,6 +41,7 @@ public sealed record CashPaymentReportRequest(
     DateOnly? DateTo,
     string? Search,
     int? Limit = null,
+    int? Offset = null,
     Guid? ActorUserId = null);
 
 public sealed record BankDepositReportRequest(
@@ -169,6 +170,8 @@ public sealed record CashPaymentReportDto(
     DateOnly DateTo,
     decimal Total,
     int RowCount,
+    int Offset,
+    int Limit,
     IReadOnlyList<CashPaymentReportRowDto> Rows);
 
 public sealed record CashPaymentReportRowDto(

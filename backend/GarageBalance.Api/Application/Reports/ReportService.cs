@@ -472,8 +472,9 @@ public sealed class ReportService(
             return ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
-        var data = await cashMovementReportQuery.GetCashPaymentsAsync(dateFrom, dateTo, request.Search, limit, cancellationToken);
+        var data = await cashMovementReportQuery.GetCashPaymentsAsync(dateFrom, dateTo, request.Search, offset, limit, cancellationToken);
 
         var rows = data.Operations
             .Select(operation => new CashPaymentReportRowDto(
@@ -487,7 +488,7 @@ public sealed class ReportService(
                 operation.DocumentNumber,
                 operation.Comment))
             .ToList();
-        var report = new CashPaymentReportDto(dateFrom, dateTo, data.Total, data.RowCount, rows);
+        var report = new CashPaymentReportDto(dateFrom, dateTo, data.Total, data.RowCount, offset, limit ?? data.RowCount, rows);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -503,7 +504,8 @@ public sealed class ReportService(
                 ["reportType"] = "cash_payments",
                 ["visibleRowCount"] = report.Rows.Count,
                 ["total"] = report.Total,
-                ["limit"] = request.Limit
+                ["limit"] = request.Limit,
+                ["offset"] = request.Offset
             },
             cancellationToken);
 

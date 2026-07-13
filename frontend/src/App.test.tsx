@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
@@ -10123,6 +10123,23 @@ describe('App', () => {
 
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
+    const cashPaymentPageRequests: Array<{ offset?: number; limit?: number }> = []
+    const getCashPaymentReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
+      cashPaymentPageRequests.push({ offset: params?.offset, limit: params?.limit })
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      if (offset === 0) {
+        return createCashPaymentReport({ rowCount: 30, offset, limit })
+      }
+
+      const row = createCashPaymentReport().rows[0]
+      return createCashPaymentReport({
+        rowCount: 30,
+        offset,
+        limit,
+        rows: [{ ...row, operationId: 'cash-payment-26', purpose: 'Зарплата: Электрик', comment: 'Вторая страница' }],
+      })
+    })
     const fundChangePageRequests: Array<{ offset?: number; limit?: number }> = []
     const getFundChangeReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
       fundChangePageRequests.push({ offset: params?.offset, limit: params?.limit })
@@ -10145,6 +10162,7 @@ describe('App', () => {
     const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
+      getCashPaymentReport,
       getFundChangeReport,
       exportCashPaymentReportXlsx,
       exportBankDepositReportPdf,
@@ -10183,6 +10201,13 @@ describe('App', () => {
     expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
     expect(cashPaymentsTable).toHaveTextContent('400,00')
     expect(cashPaymentsTable).not.toHaveTextContent('Назначение платежа')
+    const cashPaymentPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })
+    expect(within(cashPaymentPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    await user.click(within(cashPaymentPagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(cashPaymentPageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    expect(await within(cashPaymentsTable).findByText('Зарплата: Электрик')).toBeInTheDocument()
+    expect(within(cashPaymentPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(cashPaymentPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
     const cashXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(cashXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(cashXlsxButton).toHaveAttribute('data-tooltip', 'Скачать XLSX')
@@ -10259,6 +10284,35 @@ describe('App', () => {
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(fundXlsxButton)
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
+  })
+
+  it('shows loading and error states for the paged cash payment report', async () => {
+    const user = userEvent.setup()
+    let rejectCashPayments: (reason?: unknown) => void = () => {}
+    const cashPaymentPromise = new Promise<CashPaymentReportDto>((_resolve, reject) => {
+      rejectCashPayments = reject
+    })
+    const reportClient = createReportClient({
+      getCashPaymentReport: vi.fn(() => cashPaymentPromise),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Оплаты из кассы')
+
+    expect(await within(reportsPanel).findByText('Загружаем оплаты из кассы...')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по оплатам из кассы')).toBeDisabled()
+
+    await act(async () => {
+      rejectCashPayments(new Error('Отчет по кассе временно недоступен'))
+      await cashPaymentPromise.catch(() => undefined)
+    })
+
+    expect(await within(reportsPanel).findByText('Отчет по кассе временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('Загружаем оплаты из кассы...')).not.toBeInTheDocument()
   })
 
   it('keeps report export errors visible without announcing a ready file', async () => {
@@ -13074,6 +13128,8 @@ function createCashPaymentReport(overrides: Partial<CashPaymentReportDto> = {}):
     dateTo: '2026-06-30',
     total: 400,
     rowCount: 1,
+    offset: 0,
+    limit: 25,
     rows: [
       {
         operationId: 'cash-payment-1',

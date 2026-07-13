@@ -674,7 +674,7 @@ public sealed class ReportServiceTests
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
 
         var result = await service.GetCashPaymentReportAsync(
-            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "вод", 10, actorUserId),
+            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "вод", 10, ActorUserId: actorUserId),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -692,7 +692,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GetCashPaymentReportAsync_AppliesRowLimitWithoutChangingTotals()
+    public async Task GetCashPaymentReportAsync_AppliesPageWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -731,14 +731,16 @@ public sealed class ReportServiceTests
         await database.Context.SaveChangesAsync();
 
         var result = await service.GetCashPaymentReportAsync(
-            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Search: null, Limit: 1),
+            new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Search: null, Limit: 1, Offset: 1),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(600m, result.Value!.Total);
         Assert.Equal(3, result.Value.RowCount);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal("RKO-LIMIT-1", row.DocumentNumber);
+        Assert.Equal("RKO-LIMIT-2", row.DocumentNumber);
     }
 
     [Fact]
