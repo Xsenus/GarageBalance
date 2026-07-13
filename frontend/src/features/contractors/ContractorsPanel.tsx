@@ -10,7 +10,8 @@ import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { Pagination } from '../../shared/PageNavigator'
+import { createFallbackPage, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
@@ -1676,10 +1677,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [staff, contractorSort])
   const garageVisibleRange = getPageVisibleRange({ ...garagePage, items: garages })
   const supplierVisibleRange = getPageVisibleRange({ ...supplierPage, items: suppliers })
-  const garagePageNavigation = getPageNavigation({ ...garagePage, items: garages })
-  const supplierPageNavigation = getPageNavigation({ ...supplierPage, items: suppliers })
   const staffVisibleRange = getPageVisibleRange({ ...staffPage, items: staff })
-  const staffPageNavigation = getPageNavigation({ ...staffPage, items: staff })
+  const garageCurrentPage = Math.floor(garagePage.offset / garagePage.limit) + 1
+  const supplierCurrentPage = Math.floor(supplierPage.offset / supplierPage.limit) + 1
+  const staffCurrentPage = Math.floor(staffPage.offset / staffPage.limit) + 1
+  const garageTotalPages = Math.max(1, Math.ceil(garagePage.totalCount / garagePage.limit))
+  const supplierTotalPages = Math.max(1, Math.ceil(supplierPage.totalCount / supplierPage.limit))
+  const staffTotalPages = Math.max(1, Math.ceil(staffPage.totalCount / staffPage.limit))
   const debtorsButtonLabel = activeSection === 'suppliers'
     ? showDebtorsOnly ? 'Показать всех поставщиков' : 'Показать должников'
     : showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
@@ -1797,8 +1801,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={contractorPageLoading.garages || !garagePageNavigation.canGoPrevious} onClick={() => void loadGaragePage(garagePageNavigation.previousOffset)}>Назад</button>
-            <button className="ghost-button" type="button" disabled={contractorPageLoading.garages || !garagePageNavigation.canGoNext} onClick={() => void loadGaragePage(garagePageNavigation.nextOffset)}>Вперед</button>
+            <Pagination currentPage={garageCurrentPage} totalPages={garageTotalPages} disabled={contractorPageLoading.garages} showQuickJump onPageChange={(page) => void loadGaragePage((page - 1) * garagePage.limit)} />
           </div>
         </section>
       ) : null}
@@ -1873,8 +1876,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
               </select>
             </label>
-            <button className="ghost-button" type="button" disabled={contractorPageLoading.suppliers || !supplierPageNavigation.canGoPrevious} onClick={() => void loadSupplierPage(supplierPageNavigation.previousOffset)}>Назад</button>
-            <button className="ghost-button" type="button" disabled={contractorPageLoading.suppliers || !supplierPageNavigation.canGoNext} onClick={() => void loadSupplierPage(supplierPageNavigation.nextOffset)}>Вперед</button>
+            <Pagination currentPage={supplierCurrentPage} totalPages={supplierTotalPages} disabled={contractorPageLoading.suppliers} showQuickJump onPageChange={(page) => void loadSupplierPage((page - 1) * supplierPage.limit)} />
           </div>
         </section>
       ) : null}
@@ -1973,8 +1975,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
                 </select>
               </label>
-              <button className="ghost-button" type="button" disabled={contractorPageLoading.staff || !staffPageNavigation.canGoPrevious} onClick={() => void loadStaffPage(staffPageNavigation.previousOffset)}>Назад</button>
-              <button className="ghost-button" type="button" disabled={contractorPageLoading.staff || !staffPageNavigation.canGoNext} onClick={() => void loadStaffPage(staffPageNavigation.nextOffset)}>Вперед</button>
+              <Pagination currentPage={staffCurrentPage} totalPages={staffTotalPages} disabled={contractorPageLoading.staff} showQuickJump onPageChange={(page) => void loadStaffPage((page - 1) * staffPage.limit)} />
             </div>
           </section>
         </>

@@ -11,6 +11,7 @@
 - `frontend/src/responsiveLayout.test.ts`: проверка scrollable dialog-layout внутри viewport.
 - `frontend/src/shared/focusHooks.ts` и `focusHooks.test.tsx`: единые hooks для Escape, focus-on-open, focus-trap и восстановления фокуса.
 - `frontend/src/shared/changePreview.ts` и `changePreview.test.ts`: единый формат `было -> стало` для confirmation изменений.
+- `frontend/src/shared/PageNavigator.tsx` и `PageNavigator.test.tsx`: единая нумерованная пагинация со стрелками, многоточием, активной страницей и быстрым переходом для больших списков.
 
 ## Семейства Контролов
 
@@ -31,7 +32,7 @@
 | Tabs | Role-based tabs and section tab buttons | Контрагенты, платежи, отчеты, настройки, dashboard navigation | Проверить mobile overflow для всех новых трехвкладочных/многовкладочных экранов |
 | Dialogs/modals | `modal-backdrop`, `detail-dialog`, `detail-dialog-header`, `detail-dialog-actions` | Редакторы, confirmations, карточки истории, прототипные формы | Новые dialogs обязаны подключать focus trap, Escape, cancel, accessible title/description и restore focus |
 | Tables | Рабочие tables с accessible names, states and row actions | Тарифы, контрагенты, показания, платежи, фонды, справочники, отчеты, история | Для больших backend-таблиц сохранять pagination/server filters или горизонтальный scroll |
-| Pagination/filter states | Shared pagination helpers, filter labels, status messages | История, отчеты, справочники, платежи | Проверить все новые filters на debounce/сброс offset и disabled loading states |
+| Pagination/filter states | `PageNavigator` для нумерованной навигации, shared pagination helpers, filter labels, status messages | Контрагенты, история, отчеты, справочники, платежи | Новые серверные таблицы должны переиспользовать `PageNavigator`; filters обязаны сбрасывать offset, а навигация — блокироваться во время загрузки |
 | Empty/loading/error states | `empty-state`, `form-error`, `role=status`, `role=alert` | Авторизация, справочники, финансы, импорт, отчеты, история | Дальше расширять на будущие backend-модели фондов, сборов и персонала |
 
 ## Экраны И Текущий Статус
@@ -44,7 +45,7 @@
 | Пользователи | Таблица, editor dialog, role select, password input, delete/restore confirmations | Confirmation diff и restore focus покрыты тестами |
 | Справочники | Forms, archive/restore dialogs, table/list actions, date/select/money controls | Общий editor и confirmation flow покрыт, отдельные будущие модели еще открыты |
 | Тарифы и сборы-прототип | Editable cells, add service/fee dialogs, threshold action, one-time delete/restore | Стиль приведен к общим dialogs/buttons; backend-модель сборов остается открытой |
-| Контрагенты-прототип | Tabs `Гаражи`/`Поставщики`/`Персонал`, dialogs per section, delete/restore confirmations | UI-прототип есть, backend-модели контактов/персонала еще открыты |
+| Контрагенты-прототип | Tabs `Гаражи`/`Поставщики`/`Персонал`, dialogs per section, delete/restore confirmations, нумерованная server pagination | Все три таблицы используют единый `PageNavigator`; backend-модели контактов/персонала еще открыты |
 | Показания-прототип | Year input, type select, editable table cells, confirmation dialog | Нужна backend-модель истории и сохранения показаний по гаражам |
 | Платежи-прототип | Payments table, add accrual/payment/bank dialogs, full payment dialog | Требуется дальнейшее удаление лишней информации и привязка к backend-логике |
 | Управление фондами-прототип | Fund table, deposit/withdraw dialogs | Confirmation UI есть, backend/audit для фондов остается открытым |
@@ -62,6 +63,7 @@
 - `detail-dialog` должен быть `role="dialog"`, `aria-modal="true"` и иметь `aria-labelledby`.
 - Высокие dialogs должны прокручиваться внутри viewport, а header/actions оставаться доступными.
 - `focusHooks` покрывают Escape, focus-on-open, focus-trap и восстановление фокуса.
+- `PageNavigator` покрыт тестами диапазонов страниц, стрелок, нумерованных кнопок, быстрого перехода и disabled-состояния; workflow контрагентов проверяет запрос второй серверной страницы.
 - Основные workflow-тесты открывают и проверяют dialogs тарифов, контрагентов, показаний, платежей, фондов, пользователей, справочников, отчетов, импорта и истории.
 
 ## Открытые Хвосты
