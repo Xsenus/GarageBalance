@@ -22,6 +22,8 @@ Follow the agreed project order unless the user explicitly changes priorities:
 
 When the user sends a task from chat, screenshots, photos, attached images, or a combination of chat text and images, first study all visible text and customer notes. Treat chat comments above the images as part of the task. If the same request appears more than once, check whether it is already fully implemented; if it is complete and verified, do not duplicate it, otherwise finish or improve the existing work.
 
+After every task received through chat, clean up everything created only for that task before sending the final response. This applies to implementation, analysis, diagnosis, documentation, failed checks, interrupted runs, and tasks that end without code changes. Stop every task-owned process and helper, remove temporary files, logs, screenshots, previews, generated inspection output, scratch directories, caches, and other disposable artifacts, then perform a final command-line process and artifact audit. Never leave something running or stored merely because the task failed or was interrupted. Do not stop user-started or shared Codex/MCP/IDE services. A process or artifact may remain only when the user explicitly requested it, it is a deliverable, or it is required for continued operation; record every such retained item and its purpose in the final response.
+
 For implementation tasks, proceed end to end unless the user explicitly asks only for analysis or a plan:
 
 - clarify only when the missing answer cannot be discovered and guessing would be risky;
