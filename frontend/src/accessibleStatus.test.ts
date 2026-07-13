@@ -20,7 +20,8 @@ describe('accessible dynamic messages', () => {
   const dictionaryListSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'DictionaryList.tsx'), 'utf8')
   const dictionaryPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'dictionaries', 'DictionaryPanel.tsx'), 'utf8')
   const tariffsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource].join('\n')
+  const contractorsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = appSource
@@ -230,8 +231,8 @@ describe('accessible dynamic messages', () => {
     expect(checkboxOpeningTags.length).toBeGreaterThan(0)
     expect(checkboxOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
     expect(dictionaryPanelSource).toContain('Показывать архивные')
-    expect(appSource).toContain('Регулярные платежи')
-    expect(appSource).toContain('Пороговая тарификация')
+    expect(workspaceSource).toContain('Регулярные платежи')
+    expect(workspaceSource).toContain('Пороговая тарификация')
   })
 
   it('keeps tabs active focused and responsive', () => {

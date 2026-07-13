@@ -3,6 +3,24 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void ContractorsPanelRemainsInItsFeatureModule()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
+        var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx"));
+        Assert.Contains("import { ContractorsPrototypePanel } from './features/contractors/ContractorsPanel'", appText, StringComparison.Ordinal);
+        Assert.Contains("<ContractorsPrototypePanel", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function ContractorsPrototypePanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("type ContractorGarageRow", appText, StringComparison.Ordinal);
+        Assert.Contains("export function ContractorsPrototypePanel(", featureText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.createGarage", featureText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.updateSupplier", featureText, StringComparison.Ordinal);
+        Assert.Contains("financeClient.getGarageBalanceHistory", featureText, StringComparison.Ordinal);
+        Assert.Contains("onOpenAudit", featureText, StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/contractors/ContractorsPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-roadmap.md")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TariffsAndFeesPanelRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();

@@ -1855,8 +1855,8 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("/api/dictionaries/staff-departments", frontendServiceText, StringComparison.Ordinal);
         Assert.Contains("/api/dictionaries/staff-members", frontendServiceText, StringComparison.Ordinal);
-        Assert.Contains("Ставка сотрудника", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Открыть финансовый отчет сотрудника", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Ставка сотрудника", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет сотрудника", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("Подтвердить изменения сотрудника", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("Причина удаления сотрудника", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("Восстановить сотрудника", frontendTestsText, StringComparison.Ordinal);
@@ -1950,8 +1950,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("StaffDepartmentAndMemberAsync_WriteAuditAndBlockUsedDepartmentArchive", serviceTestsText, StringComparison.Ordinal);
         Assert.Contains("/api/dictionaries/supplier-groups", frontendServiceText, StringComparison.Ordinal);
         Assert.Contains("/api/dictionaries/staff-departments", frontendServiceText, StringComparison.Ordinal);
-        Assert.Contains("Добавить поставщика", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Добавить отдел", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Добавить поставщика", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Добавить отдел", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("Восстановить поставщика", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("Восстановить сотрудника", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("\"version\": \"0.408.0\"", releaseNotesText, StringComparison.Ordinal);
@@ -2229,8 +2229,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("заполнена матрица без `[заполнить]` и `[decision]`", templateText, StringComparison.Ordinal);
         Assert.Contains("заказчик явно подтвердил правила", templateText, StringComparison.Ordinal);
 
-        Assert.Contains("Показать должников", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Открыть финансовый отчет", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Показать должников", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
         Assert.Contains("shows empty states for contractor debtor filters and empty staff", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("opens financial reports for suppliers and staff from contractors tables", frontendTestsText, StringComparison.Ordinal);
         Assert.Contains("Раздельный фильтр должников в контрагентах", releaseNotesText, StringComparison.Ordinal);
@@ -2659,14 +2659,14 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("operation.SupplierId?.ToString() ?? operation.StaffMemberId?.ToString()", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("operation.Supplier?.Name ?? operation.StaffMember?.FullName", financeServiceText, StringComparison.Ordinal);
 
-        Assert.Contains("Открыть финансовый отчет гаража", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Открыть финансовый отчет поставщика", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Открыть финансовый отчет сотрудника", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Финансовый отчет гаража", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Финансовый отчет поставщика", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Финансовый отчет сотрудника", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Контактное лицо", frontendAppText, StringComparison.Ordinal);
-        Assert.Contains("Должность", frontendAppText, StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет гаража", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет поставщика", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Открыть финансовый отчет сотрудника", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Финансовый отчет гаража", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Финансовый отчет поставщика", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Финансовый отчет сотрудника", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Контактное лицо", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
+        Assert.Contains("Должность", File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx")), StringComparison.Ordinal);
 
         Assert.Contains("SupplierContactAsync_SavesContactAndWritesAudit", dictionaryTestsText, StringComparison.Ordinal);
         Assert.Contains("RestoreSupplierContactAsync_RestoresSupplierAndWritesAudit", dictionaryTestsText, StringComparison.Ordinal);
