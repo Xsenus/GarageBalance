@@ -162,6 +162,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [garageIncomeDetailReport, setGarageIncomeDetailReport] = useState<IncomeReportDto | null>(null)
   const [payoutReport, setPayoutReport] = useState<ExpenseReportDto | null>(null)
   const [incomeReport, setIncomeReport] = useState<IncomeReportDto | null>(null)
+  const [incomePageRequest, setIncomePageRequest] = useState({ offset: 0, limit: 25 })
+  const [incomeReportLoading, setIncomeReportLoading] = useState(false)
+  const [incomeReportError, setIncomeReportError] = useState<string | null>(null)
   const [cashPaymentReport, setCashPaymentReport] = useState<CashPaymentReportDto | null>(null)
   const [cashPaymentPageRequest, setCashPaymentPageRequest] = useState({ offset: 0, limit: 25 })
   const [cashPaymentReportLoading, setCashPaymentReportLoading] = useState(false)
@@ -226,8 +229,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const consolidatedFilter = monthlyFilters.consolidated
         const garageFilterRange = monthlyFilters.garages
         const payoutFilter = monthlyFilters.payouts
-        const incomeFilter = dateFilters.income
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedIncome, loadedFees] = await Promise.all([
+        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedGarages, loadedGarageIncomeDetails, loadedPayouts, loadedFees] = await Promise.all([
           reportClient.getConsolidatedReport(auth.accessToken, {
             monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
             monthTo: getReportMonthStart(consolidatedFilter.monthTo),
@@ -263,13 +265,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             search: counterpartyFilter.trim() || undefined,
             limit: 100,
           }),
-          reportClient.getIncomeReport(auth.accessToken, {
-            dateFrom: incomeFilter.dateFrom,
-            dateTo: incomeFilter.dateTo,
-            search: incomeGarageFilter.trim() || undefined,
-            rowMode: 'payments',
-            limit: 100,
-          }),
           reportClient.getFeeReport(auth.accessToken, {
             variation: feeVariationFilter.trim() || undefined,
             limit: 100,
@@ -286,7 +281,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         setGarageReport(loadedGarages)
         setGarageIncomeDetailReport(loadedGarageIncomeDetails)
         setPayoutReport(loadedPayouts)
-        setIncomeReport(loadedIncome)
         setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
@@ -300,7 +294,48 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, counterpartyFilter, dateFilters.income, feeVariationFilter, garageFilter, incomeGarageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+  }, [auth.accessToken, counterpartyFilter, feeVariationFilter, garageFilter, monthlyFilters.consolidated, monthlyFilters.garages, monthlyFilters.payouts, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'income') {
+      return
+    }
+
+    let ignore = false
+
+    async function loadIncomeReport() {
+      setIncomeReportLoading(true)
+      setIncomeReportError(null)
+      try {
+        const filter = dateFilters.income
+        const report = await reportClient.getIncomeReport(auth.accessToken, {
+          dateFrom: filter.dateFrom,
+          dateTo: filter.dateTo,
+          search: incomeGarageFilter.trim() || undefined,
+          rowMode: 'payments',
+          offset: incomePageRequest.offset,
+          limit: incomePageRequest.limit,
+        })
+        if (!ignore) {
+          setIncomeReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setIncomeReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по поступлениям.')
+        }
+      } finally {
+        if (!ignore) {
+          setIncomeReportLoading(false)
+        }
+      }
+    }
+
+    void loadIncomeReport()
+
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, dateFilters.income, incomeGarageFilter, incomePageRequest.limit, incomePageRequest.offset, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -438,7 +473,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function updateDateFilter(key: ReportDateFilterKey, field: keyof ReportDateRange, value: string) {
-    if (key === 'cashPayments') {
+    if (key === 'income') {
+      setIncomePageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'cashPayments') {
       setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
     } else if (key === 'bankDeposits') {
       setBankDepositPageRequest((current) => ({ ...current, offset: 0 }))
@@ -462,7 +499,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function applyToday(key: ReportDateFilterKey) {
-    if (key === 'cashPayments') {
+    if (key === 'income') {
+      setIncomePageRequest((current) => ({ ...current, offset: 0 }))
+    } else if (key === 'cashPayments') {
       setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
     } else if (key === 'bankDeposits') {
       setBankDepositPageRequest((current) => ({ ...current, offset: 0 }))
@@ -752,6 +791,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         row.incomeTypeName,
         row.debtAfterPayment === null || row.debtAfterPayment === undefined ? '' : formatMoney(row.debtAfterPayment),
       ]) ?? []
+      const incomePage = {
+        items: incomeReport?.rows ?? [],
+        totalCount: incomeReport?.rowCount ?? 0,
+        offset: incomeReport?.offset ?? incomePageRequest.offset,
+        limit: incomeReport?.limit ?? incomePageRequest.limit,
+      }
+      const incomeVisibleRange = getPageVisibleRange(incomePage)
+      const incomeNavigation = getPageNavigation(incomePage)
       return (
         <ReportWorkbookSheet title="Отчет по поступлениям">
           {renderDateFilter('income', {
@@ -760,10 +807,21 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             extra: (
               <label className="report-workbook-filter-wide">
                 <span>Гаражи</span>
-                <input aria-label="Гаражи по поступлениям" list={garageOptionsId} value={incomeGarageFilter} onChange={(event) => setIncomeGarageFilter(event.target.value)} placeholder="Гараж или номер" />
+                <input
+                  aria-label="Гаражи по поступлениям"
+                  list={garageOptionsId}
+                  value={incomeGarageFilter}
+                  onChange={(event) => {
+                    setIncomePageRequest((current) => ({ ...current, offset: 0 }))
+                    setIncomeGarageFilter(event.target.value)
+                  }}
+                  placeholder="Гараж или номер"
+                />
               </label>
             ),
           })}
+          {incomeReportLoading ? <p className="prototype-status" role="status">Загружаем поступления...</p> : null}
+          {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по поступлениям',
@@ -771,6 +829,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '', '']],
             incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), '', ''] : undefined,
           )}
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация отчета по поступлениям">
+            <span role="status" aria-live="polite">Показано {incomeVisibleRange.from}-{incomeVisibleRange.to} из {incomePage.totalCount}</span>
+            <label>
+              Строк на странице
+              <select
+                aria-label="Строк на странице отчета по поступлениям"
+                value={incomePage.limit}
+                disabled={incomeReportLoading}
+                onChange={(event) => setIncomePageRequest({ offset: 0, limit: Number(event.target.value) })}
+              >
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={!incomeNavigation.canGoPrevious || incomeReportLoading} onClick={() => setIncomePageRequest((current) => ({ ...current, offset: incomeNavigation.previousOffset }))}>Назад</button>
+            <button className="ghost-button" type="button" disabled={!incomeNavigation.canGoNext || incomeReportLoading} onClick={() => setIncomePageRequest((current) => ({ ...current, offset: incomeNavigation.nextOffset }))}>Вперед</button>
+          </div>
         </ReportWorkbookSheet>
       )
     }

@@ -340,7 +340,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("expenseReportQuery.GetRowsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetRowsWithoutSearchAsync", garageSource, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(incomeSource, "ApplyLimit(") >= 4 &&
+            CountOccurrences(incomeSource, "ApplyLimit(") >= 3 &&
+            incomeSource.Contains("ApplyPage(", StringComparison.Ordinal) &&
+            incomeSource.Contains("GetFetchLimit(offset, limit)", StringComparison.Ordinal) &&
             CountOccurrences(expenseSource, "ApplyLimit(") >= 4,
             "Remaining report visible rows must be bounded before materialization for income, expense, accrual and starting-balance segments.");
         Assert.True(
@@ -355,6 +357,10 @@ public sealed class BackendPerformanceGuardTests
             CountOccurrences(incomeSource, "SumAsync(") >= 3 &&
             CountOccurrences(expenseSource, "SumAsync(") >= 3,
             "Report totals must be aggregated in the database instead of being derived only from materialized rows.");
+        Assert.Contains("useClientSearch = hasSearch && !", incomeSource, StringComparison.Ordinal);
+        Assert.True(
+            CountOccurrences(incomeSource, "ToLower().Contains(normalizedSearch!)") >= 6,
+            "PostgreSQL income-report search must be applied to source queries before count, sum and page materialization.");
         Assert.Matches(
             BoundedQueryRegex(@"GetRowsWithoutSearchAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ApplyLimit\(query, limit\)\.ToListAsync\(cancellationToken\)"),
             garageSource);

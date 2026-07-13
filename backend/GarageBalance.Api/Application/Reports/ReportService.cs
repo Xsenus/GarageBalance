@@ -242,6 +242,7 @@ public sealed class ReportService(
         }
 
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var offset = Math.Max(request.Offset ?? 0, 0);
         var data = await incomeReportQuery.GetRowsAsync(
             dateFrom,
             dateTo,
@@ -251,6 +252,7 @@ public sealed class ReportService(
             request.IncomeTypeIds.ToHashSet(),
             request.Search,
             limit,
+            offset,
             cancellationToken);
         var report = new IncomeReportDto(
             dateFrom,
@@ -259,7 +261,9 @@ public sealed class ReportService(
             data.IncomeTotal,
             data.AccrualTotal - data.IncomeTotal,
             data.RowCount,
-            data.Rows);
+            data.Rows,
+            offset,
+            limit ?? data.Rows.Count);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -1231,7 +1235,8 @@ public sealed class ReportService(
             ["garageFilterCount"] = request.GarageIds.Count,
             ["ownerFilterCount"] = request.OwnerIds.Count,
             ["incomeTypeFilterCount"] = request.IncomeTypeIds.Count,
-            ["limit"] = request.Limit
+            ["limit"] = request.Limit,
+            ["offset"] = request.Offset
         };
     }
 

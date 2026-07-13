@@ -16,6 +16,7 @@ public sealed record IncomeReportRequest(
     IReadOnlyCollection<Guid> IncomeTypeIds,
     string? RowMode,
     int? Limit = null,
+    int? Offset = null,
     Guid? ActorUserId = null);
 
 public sealed record ExpenseReportRequest(
@@ -99,7 +100,9 @@ public sealed record IncomeReportDto(
     decimal IncomeTotal,
     decimal Debt,
     int RowCount,
-    IReadOnlyList<IncomeReportRowDto> Rows);
+    IReadOnlyList<IncomeReportRowDto> Rows,
+    int Offset,
+    int Limit);
 
 public sealed record IncomeReportRowDto(
     string RowType,

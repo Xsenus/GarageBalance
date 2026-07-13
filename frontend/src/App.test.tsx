@@ -10123,6 +10123,30 @@ describe('App', () => {
 
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    const incomePageRequests: Array<{ offset?: number; limit?: number }> = []
+    const getIncomeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
+      if (params?.offset === undefined) {
+        return baseReportClient.getIncomeReport(token, params)
+      }
+
+      incomePageRequests.push({ offset: params.offset, limit: params.limit })
+      const offset = params.offset ?? 0
+      const limit = params.limit ?? 25
+      const paymentRow = createIncomeReport().rows.find((row) => row.rowType === 'payments')!
+      return createIncomeReport({
+        rowCount: 30,
+        offset,
+        limit,
+        incomeTotal: 45000,
+        rows: [{
+          ...paymentRow,
+          date: offset === 0 ? '2026-06-10' : '2026-06-26',
+          incomeAmount: offset === 0 ? 1500 : 2600,
+          documentNumber: offset === 0 ? 'PKO-1' : 'PKO-26',
+        }],
+      })
+    })
     const cashPaymentPageRequests: Array<{ offset?: number; limit?: number }> = []
     const getCashPaymentReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
       cashPaymentPageRequests.push({ offset: params?.offset, limit: params?.limit })
@@ -10179,6 +10203,7 @@ describe('App', () => {
     const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
+      getIncomeReport,
       getCashPaymentReport,
       getBankDepositReport,
       getFundChangeReport,
@@ -10211,6 +10236,14 @@ describe('App', () => {
     expect(incomeReportTable).toHaveTextContent('Остаток долга после платежа')
     expect(incomeReportTable).toHaveTextContent('500,00')
     expect(incomeReportTable).not.toHaveTextContent('Начисление за июнь')
+    const incomePagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по поступлениям' })
+    expect(within(incomePagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    await user.click(within(incomePagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    expect(await within(incomeReportTable).findByText('2026-06-26')).toBeInTheDocument()
+    expect(incomeReportTable).toHaveTextContent('2 600,00')
+    expect(within(incomePagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(incomePagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()
@@ -10309,6 +10342,38 @@ describe('App', () => {
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(fundXlsxButton)
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
+  })
+
+  it('shows loading and error states for the paged income report', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    let rejectIncome: (reason?: unknown) => void = () => {}
+    const incomePromise = new Promise<IncomeReportDto>((_resolve, reject) => {
+      rejectIncome = reject
+    })
+    const reportClient = createReportClient({
+      getIncomeReport: vi.fn((token, params) => params?.offset === undefined
+        ? baseReportClient.getIncomeReport(token, params)
+        : incomePromise),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Поступления')
+
+    expect(await within(reportsPanel).findByText('Загружаем поступления...')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по поступлениям')).toBeDisabled()
+
+    await act(async () => {
+      rejectIncome(new Error('Отчет по поступлениям временно недоступен'))
+      await incomePromise.catch(() => undefined)
+    })
+
+    expect(await within(reportsPanel).findByText('Отчет по поступлениям временно недоступен')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).queryByText('Загружаем поступления...')).not.toBeInTheDocument()
   })
 
   it('shows loading and error states for the paged cash payment report', async () => {
@@ -13064,6 +13129,8 @@ function createIncomeReport(overrides: Partial<IncomeReportDto> = {}): IncomeRep
     incomeTotal: 1500,
     debt: 500,
     rowCount: 2,
+    offset: 0,
+    limit: 25,
     rows: [
       {
         rowType: 'accruals',

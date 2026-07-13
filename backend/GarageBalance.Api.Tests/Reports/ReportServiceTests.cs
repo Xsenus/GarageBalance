@@ -210,7 +210,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals()
+    public async Task GetIncomeReportAsync_AppliesPageWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -220,15 +220,38 @@ public sealed class ReportServiceTests
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 700m, "PKO-2", null), null, CancellationToken.None);
 
         var result = await service.GetIncomeReportAsync(
-            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "payments", 1),
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], [], "payments", 1, Offset: 1),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Value!.RowCount);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal("PKO-1", row.DocumentNumber);
+        Assert.Equal("PKO-2", row.DocumentNumber);
         Assert.Equal(2200m, result.Value.IncomeTotal);
         Assert.Equal(-2200m, result.Value.Debt);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
+    }
+
+    [Fact]
+    public async Task GetIncomeReportAsync_AppliesSearchBeforePageAndTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "MATCH-1", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 700m, "MATCH-2", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 900m, "OTHER", null), null, CancellationToken.None);
+
+        var result = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "MATCH", [], [], [], "payments", 1, Offset: 1),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.RowCount);
+        Assert.Equal(2200m, result.Value.IncomeTotal);
+        Assert.Equal("MATCH-2", Assert.Single(result.Value.Rows).DocumentNumber);
     }
 
     [Fact]

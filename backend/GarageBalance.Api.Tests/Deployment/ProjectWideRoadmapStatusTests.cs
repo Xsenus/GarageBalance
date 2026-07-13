@@ -1134,7 +1134,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "FundOperationsAndReleaseLists_KeepNormalizedOutputBounds"
         };
         Assert.All(requiredPerformanceGuards, guard => Assert.Contains(guard, performanceTestsText, StringComparison.Ordinal));
-        Assert.Contains("GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetExpenseReportAsync_AppliesRowLimitWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetCashPaymentReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
         Assert.Contains("GetBankDepositReportAsync_AppliesPageWithoutChangingTotals", reportTestsText, StringComparison.Ordinal);
@@ -2791,7 +2791,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
 
         Assert.Contains("GetIncomeReportAsync_ReturnsAccrualAndPaymentRows", reportServiceTestsText, StringComparison.Ordinal);
-        Assert.Contains("GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetIncomeReportAsync_AppliesPageWithoutChangingTotals", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("GetIncomeReportAsync_ReturnsDebtAfterEachPayment", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("GetIncomeReportAsync_FiltersByOwnerIncomeTypeAndRowMode", reportServiceTestsText, StringComparison.Ordinal);
@@ -3277,7 +3277,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "GetConsolidatedReportAsync_NormalizesReportPeriodToMonthStarts",
             "GetConsolidatedReportAsync_ReturnsErrorForInvalidPeriod",
             "GetIncomeReportAsync_ReturnsAccrualAndPaymentRows",
-            "GetIncomeReportAsync_AppliesRowLimitWithoutChangingTotals",
+            "GetIncomeReportAsync_AppliesPageWithoutChangingTotals",
             "GetIncomeReportAsync_ReturnsDebtAfterEachPayment",
             "GetIncomeReportAsync_IncludesGarageStartingBalanceAsDebt",
             "GetIncomeReportAsync_FiltersByOwnerIncomeTypeAndRowMode",
@@ -3373,6 +3373,7 @@ public sealed class ProjectWideRoadmapStatusTests
         {
             "shows report workbook tabs with Excel-like filters and tables",
             "shows daily, fee and fund report filters with quick period buttons",
+            "shows loading and error states for the paged income report",
             "keeps report export errors visible without announcing a ready file",
             "keeps reports closed without dictionary read permission for filters",
             "Консолидированный отчёт",
@@ -3402,9 +3403,10 @@ public sealed class ProjectWideRoadmapStatusTests
         foreach (var expectedApiCoverage in new[]
         {
             "downloads report exports through POST because the backend records audit events",
-            "loads paged cash, bank and fund reports with other dedicated filtered endpoints",
+            "loads paged income, cash, bank and fund reports with other dedicated filtered endpoints",
             "monthFrom=2026-06-01&monthTo=2026-06-01&search=12",
             "garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1",
+            "income?dateFrom=2026-06-01&dateTo=2026-06-30&search=12&rowMode=payments&limit=20&offset=20",
             "supplierIds=supplier-1&expenseTypeIds=expense-1",
             "cash-payments/export/xlsx",
             "cash-payments?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA&offset=20&limit=20",
@@ -3419,6 +3421,7 @@ public sealed class ProjectWideRoadmapStatusTests
         }
 
         Assert.Contains("Пагинация отчета по изменению фондов", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("Пагинация отчета по поступлениям", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Пагинация отчета по оплатам из кассы", appTestsText, StringComparison.Ordinal);
         Assert.Contains("Пагинация отчета по сдаче кассы в банк", appTestsText, StringComparison.Ordinal);
 

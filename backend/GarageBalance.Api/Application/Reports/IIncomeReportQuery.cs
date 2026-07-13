@@ -11,6 +11,7 @@ public interface IIncomeReportQuery
         IReadOnlySet<Guid> incomeTypeIds,
         string? search,
         int? limit,
+        int offset,
         CancellationToken cancellationToken);
 }
 

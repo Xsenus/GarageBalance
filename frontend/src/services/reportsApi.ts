@@ -63,6 +63,8 @@ export type IncomeReportDto = {
   debt: number
   rowCount: number
   rows: IncomeReportRowDto[]
+  offset: number
+  limit: number
 }
 
 export type ExpenseReportRowDto = {
@@ -213,6 +215,7 @@ export type ReportClient = {
       incomeTypeIds?: string[]
       rowMode?: string
       limit?: number
+      offset?: number
     },
   ): Promise<IncomeReportDto>
   exportIncomeReportXlsx(
@@ -422,6 +425,9 @@ function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport
   }
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
+  }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
   }
   for (const garageId of params.garageIds ?? []) {
     searchParams.append('garageIds', garageId)

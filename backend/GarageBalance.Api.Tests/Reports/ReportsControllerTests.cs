@@ -159,11 +159,13 @@ public sealed class ReportsControllerTests
             [],
             "all",
             16,
+            8,
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal(16, service.IncomeRequest?.Limit);
+        Assert.Equal(8, service.IncomeRequest?.Offset);
     }
 
     [Fact]
@@ -174,7 +176,7 @@ public sealed class ReportsControllerTests
             IncomeResult = ReportResult<IncomeReportDto>.Failure("period_invalid", "Период неверный.")
         });
 
-        var result = await controller.GetIncomeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all", null, CancellationToken.None);
+        var result = await controller.GetIncomeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, [], [], [], "all", null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -710,7 +712,9 @@ public sealed class ReportsControllerTests
             [
                 new IncomeReportRowDto("accruals", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), garageId, "12", null, "Иванов Иван", incomeTypeId, "Членский взнос", 2000m, 0m, 2000m, null, null),
                 new IncomeReportRowDto("payments", new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), garageId, "12", null, "Иванов Иван", incomeTypeId, "Членский взнос", 0m, 1500m, -1500m, "PKO-1", null)
-            ]);
+            ],
+            0,
+            25);
     }
 
     private static ExpenseReportDto CreateExpenseReport()

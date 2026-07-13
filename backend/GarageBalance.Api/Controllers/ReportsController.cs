@@ -69,6 +69,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? incomeTypeIds,
         [FromQuery] string? rowMode,
         [FromQuery] int? limit,
+        [FromQuery] int? offset,
         CancellationToken cancellationToken)
     {
         var result = await reportService.GetIncomeReportAsync(
@@ -81,6 +82,7 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 incomeTypeIds ?? [],
                 rowMode,
                 limit,
+                offset,
                 GetActorUserId()),
             cancellationToken);
 
