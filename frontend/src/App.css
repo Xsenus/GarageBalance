@@ -2478,8 +2478,10 @@ h1 {
   position: absolute;
   z-index: 10;
   top: calc(100% + 6px);
-  right: 0;
   left: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  width: min(920px, calc(100vw - 64px));
   max-height: 360px;
   overflow-y: auto;
   border: 1px solid #d0d5dd;
@@ -2500,6 +2502,10 @@ h1 {
   font: inherit;
   padding: 10px 12px;
   text-align: left;
+}
+
+.payments-prototype-search-option:not(:nth-child(3n)) {
+  border-right: 1px solid #eaecf0;
 }
 
 .payments-prototype-search-option:hover,
@@ -2553,26 +2559,69 @@ h1 {
 }
 
 .payments-prototype-selected-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
-.payments-prototype-selected-list button {
-  min-height: 32px;
+.payments-prototype-selected-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  min-height: 44px;
   border: 1px solid #d0d5dd;
-  border-radius: 999px;
+  border-radius: 8px;
   background: #ffffff;
   color: #344054;
-  cursor: pointer;
-  padding: 5px 11px;
+  overflow: hidden;
 }
 
-.payments-prototype-selected-list button.is-active {
+.payments-prototype-selected-item.is-active {
   border-color: #155eef;
   background: #eef4ff;
   color: #155eef;
-  font-weight: 700;
+}
+
+.payments-prototype-selected-activate {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.payments-prototype-selected-activate small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payments-prototype-selected-item.is-active .payments-prototype-selected-activate strong {
+  color: #155eef;
+}
+
+.payments-prototype-selected-remove.icon-button {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  justify-self: center;
+  border-color: transparent;
+  background: transparent;
+  color: #667085;
+}
+
+.payments-prototype-selected-remove.icon-button:hover,
+.payments-prototype-selected-remove.icon-button:focus-visible {
+  border-color: #fda29b;
+  background: #fff1f0;
+  color: #b42318;
 }
 
 .payments-prototype-search-results span {
@@ -2581,6 +2630,7 @@ h1 {
 
 .payments-prototype-search-empty {
   display: block;
+  grid-column: 1 / -1;
   padding: 10px 12px;
 }
 
@@ -2611,8 +2661,16 @@ h1 {
 
 .payments-prototype-garage-summary strong,
 .payments-prototype-owner-row strong {
+  width: 100%;
   color: #101828;
   font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  justify-self: end;
+  text-align: right;
+}
+
+.payments-prototype-garage-summary-value {
+  justify-self: end;
   text-align: right;
 }
 
@@ -2686,13 +2744,21 @@ h1 {
 
 .payments-prototype-owner-row {
   display: grid;
-  grid-template-columns: minmax(90px, 0.35fr) minmax(220px, 0.8fr) minmax(180px, 0.7fr) minmax(230px, 0.9fr);
+  grid-template-columns: minmax(90px, 0.35fr) minmax(220px, 0.8fr) minmax(180px, 0.7fr) minmax(580px, 1.8fr);
   gap: 10px;
   align-items: stretch;
 }
 
 .payments-prototype-owner-row .payments-prototype-actions {
+  flex-wrap: nowrap;
   min-width: 0;
+}
+
+.payments-prototype-owner-row .payments-prototype-actions .secondary-button {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .payments-prototype-card {
@@ -5524,6 +5590,22 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 980px) {
+  .payments-prototype-search-results {
+    grid-template-columns: repeat(2, minmax(190px, 1fr));
+  }
+
+  .payments-prototype-search-option:not(:nth-child(3n)) {
+    border-right: 0;
+  }
+
+  .payments-prototype-search-option:nth-child(odd) {
+    border-right: 1px solid #eaecf0;
+  }
+
+  .payments-prototype-owner-row .payments-prototype-actions {
+    flex-wrap: wrap;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -5698,6 +5780,15 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 640px) {
+  .payments-prototype-search-results {
+    grid-template-columns: minmax(0, 1fr);
+    width: calc(100vw - 32px);
+  }
+
+  .payments-prototype-search-option:nth-child(odd) {
+    border-right: 0;
+  }
+
   .modal-backdrop {
     align-items: start;
     padding: 12px;

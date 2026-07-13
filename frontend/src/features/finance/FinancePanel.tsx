@@ -2037,7 +2037,11 @@ export function FinancePanel({
           <p className="eyebrow">{getFinancePanelLabel('section')}</p>
           <h2>{getFinancePanelLabel('title')}</h2>
         </div>
-        <span>{loading || !paymentDisplaySettingsLoaded ? getFinancePanelLabel('loading') : showAllGarageOperations ? formatFinanceOperationCount(summary.operationCount) : 'Поиск по гаражу'}</span>
+        {loading || !paymentDisplaySettingsLoaded ? (
+          <span>{getFinancePanelLabel('loading')}</span>
+        ) : showAllGarageOperations ? (
+          <span>{formatFinanceOperationCount(summary.operationCount)}</span>
+        ) : null}
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
@@ -2843,6 +2847,8 @@ function PaymentsPrototypePanel({
   const [garageSearchGarages, setGarageSearchGarages] = useState<GarageDto[]>([])
   const [garageSearchLoading, setGarageSearchLoading] = useState(false)
   const [garageSearchError, setGarageSearchError] = useState<string | null>(null)
+  const [garageSearchOpen, setGarageSearchOpen] = useState(false)
+  const garageSearchWrapRef = useRef<HTMLDivElement | null>(null)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
   const [incomeWorksheetMonthFrom, setIncomeWorksheetMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
@@ -2916,7 +2922,7 @@ function PaymentsPrototypePanel({
   const garageSearchResults = garageOptions
     .filter((garage) => !normalizedSearch || garage.number.toLowerCase().includes(normalizedSearch) || garage.ownerName.toLowerCase().includes(normalizedSearch))
     .slice(0, 20)
-  const shouldShowGarageResults = garageSearch.trim().length > 0
+  const shouldShowGarageResults = garageSearchOpen && garageSearch.trim().length > 0
   const garageSearchListId = useId()
   const incomeWorksheetMonthOptions = useMemo(
     () => createPaymentPrototypeMonthOptions(getCurrentMonthInputValue(), [incomeWorksheetMonthFrom, incomeWorksheetMonthTo]),
@@ -2963,6 +2969,21 @@ function PaymentsPrototypePanel({
       window.clearTimeout(handle)
     }
   }, [auth.accessToken, dictionaryClient, garageSearch])
+
+  useEffect(() => {
+    if (!garageSearchOpen) {
+      return undefined
+    }
+
+    const closeGarageSearchOnOutsidePointer = (event: PointerEvent) => {
+      if (!garageSearchWrapRef.current?.contains(event.target as Node)) {
+        setGarageSearchOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer)
+  }, [garageSearchOpen])
 
   useEffect(() => {
     if (formStateLoaded || garageOptions.length === 0) {
@@ -3493,21 +3514,25 @@ function PaymentsPrototypePanel({
     void loadGaragePaymentHistory(garage)
   }
 
+  function removeGarageSelection(garage: PaymentsPrototypeGarage) {
+    const remainingGarageIds = selectedGarageIds.filter((garageId) => garageId !== garage.id)
+    setSelectedGarageIds(remainingGarageIds)
+    if (selectedGarageId === garage.id) {
+      const nextGarage = garageOptions.find((option) => option.id === remainingGarageIds.at(-1)) ?? null
+      if (nextGarage) {
+        activateGarage(nextGarage)
+      } else {
+        setSelectedGarageId(null)
+        setGarageRows([])
+        setGarageWorksheetSummary(null)
+        setHistoryRows([])
+      }
+    }
+  }
+
   function toggleGarageSelection(garage: PaymentsPrototypeGarage) {
     if (selectedGarageIds.includes(garage.id)) {
-      const remainingGarageIds = selectedGarageIds.filter((garageId) => garageId !== garage.id)
-      setSelectedGarageIds(remainingGarageIds)
-      if (selectedGarageId === garage.id) {
-        const nextGarage = garageOptions.find((option) => option.id === remainingGarageIds.at(-1)) ?? null
-        if (nextGarage) {
-          activateGarage(nextGarage)
-        } else {
-          setSelectedGarageId(null)
-          setGarageRows([])
-          setGarageWorksheetSummary(null)
-          setHistoryRows([])
-        }
-      }
+      removeGarageSelection(garage)
       return
     }
 
@@ -3550,6 +3575,7 @@ function PaymentsPrototypePanel({
   function selectFirstGarageResult() {
     if (garageSearchResults.length > 0) {
       toggleGarageSelection(garageSearchResults[0])
+      setGarageSearchOpen(false)
     }
   }
 
@@ -4148,7 +4174,7 @@ function PaymentsPrototypePanel({
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
       <div className="payments-prototype-topline">
-        <div className="payments-prototype-search-wrap">
+        <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">
           <label className="payments-prototype-search">
             <Search size={18} aria-hidden="true" />
             <input
@@ -4158,8 +4184,17 @@ function PaymentsPrototypePanel({
               aria-controls={garageSearchListId}
               placeholder="Введите номер гаража или ФИО владельца"
               value={garageSearch}
-              onChange={(event) => setGarageSearch(event.target.value)}
+              onFocus={() => setGarageSearchOpen(garageSearch.trim().length > 0)}
+              onChange={(event) => {
+                setGarageSearch(event.target.value)
+                setGarageSearchOpen(event.target.value.trim().length > 0)
+              }}
               onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setGarageSearchOpen(false)
+                  return
+                }
                 if (event.key === 'Enter') {
                   event.preventDefault()
                   selectFirstGarageResult()
@@ -4195,15 +4230,30 @@ function PaymentsPrototypePanel({
               </div>
               <div className="payments-prototype-selected-list">
                 {selectedGarages.map((garage) => (
-                  <button
-                    className={`ghost-button${garage.id === selectedGarageId ? ' is-active' : ''}`}
-                    key={garage.id}
-                    type="button"
-                    aria-pressed={garage.id === selectedGarageId}
-                    onClick={() => activateGarage(garage)}
-                  >
-                    Гараж {garage.number}
-                  </button>
+                  <div className={`payments-prototype-selected-item${garage.id === selectedGarageId ? ' is-active' : ''}`} key={garage.id}>
+                    <button
+                      className="ghost-button payments-prototype-selected-activate"
+                      type="button"
+                      aria-label={`Гараж ${garage.number}`}
+                      aria-pressed={garage.id === selectedGarageId}
+                      onClick={() => {
+                        activateGarage(garage)
+                        setGarageSearchOpen(false)
+                      }}
+                    >
+                      <strong>Гараж {garage.number}</strong>
+                      <small>{garage.ownerName}</small>
+                    </button>
+                    <button
+                      className="icon-button payments-prototype-selected-remove"
+                      type="button"
+                      aria-label={`Убрать гараж ${garage.number} из выбранных`}
+                      title="Убрать из выбранных"
+                      onClick={() => removeGarageSelection(garage)}
+                    >
+                      <X size={14} aria-hidden="true" />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -4212,10 +4262,10 @@ function PaymentsPrototypePanel({
 
         {selectedGarage ? (
           <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
-            <div><span>Люди</span><strong>{selectedGarage.peopleCount}</strong></div>
-            <div><span>Баланс</span><strong className={selectedGarage.balance < 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(Math.abs(selectedGarage.balance))}</strong></div>
-            <div><span>Этажи</span><strong>{selectedGarage.floorCount}</strong></div>
-            <div><span>Просроченная задолженность</span><strong className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
+            <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
+            <div><span>Баланс</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.balance < 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(Math.abs(selectedGarage.balance))}</strong></div>
+            <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
+            <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
           </section>
         ) : null}
       </div>
@@ -4243,7 +4293,7 @@ function PaymentsPrototypePanel({
             <div><span>Гараж</span><strong>{selectedGarage.number}</strong></div>
             <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
             <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
-            <div className="payments-prototype-actions payments-prototype-actions--stacked">
+            <div className="payments-prototype-actions">
               <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <Plus size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>

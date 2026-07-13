@@ -45,4 +45,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n    bottom: -14px;\n    display: grid;\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('.detail-dialog-actions button {\n    width: 100%;')
   })
+
+  it('keeps garage multi-selection compact and responsive', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n  position: absolute;')
+    expect(appCss).toContain('grid-template-columns: repeat(3, minmax(190px, 1fr));')
+    expect(normalizedAppCss).toContain('.payments-prototype-selected-list {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.payments-prototype-garage-summary-value {\n  justify-self: end;\n  text-align: right;')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n  flex-wrap: nowrap;')
+    expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: repeat(2, minmax(190px, 1fr));')
+    expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
+  })
 })
