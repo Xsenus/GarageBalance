@@ -227,8 +227,9 @@ describe('App', () => {
     expect(within(dashboardTiles).getByRole('button', { name: 'Счётчики' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: 'Платежи' })).toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: 'Отчёты' })).toBeInTheDocument()
-    expect(within(dashboardTiles).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
+    expect(within(dashboardTiles).queryByRole('button', { name: 'Настройки' })).not.toBeInTheDocument()
     expect(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Основные разделы' })).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
@@ -343,7 +344,6 @@ describe('App', () => {
       'Счётчики',
       'Платежи',
       'Отчёты',
-      'Настройки',
       /Управление\s+фондами/i,
     ]
 

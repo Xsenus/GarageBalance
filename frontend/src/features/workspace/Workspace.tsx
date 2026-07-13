@@ -33,7 +33,6 @@ const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: 
   { title: 'Счётчики', section: 'meterReadings', requiredAny: [permissions.paymentsRead] },
   { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
   { title: 'Отчёты', section: 'reports', requiredAny: [permissions.reportsRead] },
-  { title: 'Настройки', section: 'settings' },
   { title: 'Управление\nфондами', section: 'funds', requiredAny: [permissions.reportsRead] },
 ]
 
