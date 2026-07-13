@@ -90,7 +90,11 @@ public sealed class FrontendFeatureModuleTests
         Assert.DoesNotContain("type ContractorGarageRow", appText, StringComparison.Ordinal);
         Assert.Contains("export function ContractorsPrototypePanel(", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.createGarage", featureText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getGaragesPage", featureText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Пагинация гаражей\"", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.updateSupplier", featureText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getSuppliersPage", featureText, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Пагинация поставщиков\"", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.getGarageBalanceHistory", featureText, StringComparison.Ordinal);
         Assert.Contains("onOpenAudit", featureText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/contractors/ContractorsPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "project-roadmap.md")), StringComparison.Ordinal);

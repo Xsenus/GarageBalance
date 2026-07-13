@@ -10,6 +10,7 @@ import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
@@ -179,6 +180,15 @@ const contractorGarageColumnStorageKey = 'garagebalance.contractors.garageColumn
 const contractorSupplierColumnStorageKey = 'garagebalance.contractors.supplierColumnWidths'
 const contractorStaffColumnStorageKey = 'garagebalance.contractors.staffColumnWidths'
 const contractorsDictionaryListLimit = 500
+const contractorsDefaultPageSize = 25
+
+type ContractorPageState = {
+  totalCount: number
+  offset: number
+  limit: number
+}
+
+const createContractorPageState = (): ContractorPageState => ({ totalCount: 0, offset: 0, limit: contractorsDefaultPageSize })
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const contractorGarageColumnDefinitions: Array<ContractorColumnDefinition<ContractorGarageColumnKey>> = [
@@ -702,8 +712,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
   const [garages, setGarages] = useState<ContractorGarageRow[]>([])
+  const [garagePage, setGaragePage] = useState<ContractorPageState>(createContractorPageState)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [suppliers, setSuppliers] = useState<ContractorSupplierRow[]>([])
+  const [supplierPage, setSupplierPage] = useState<ContractorPageState>(createContractorPageState)
+  const [supplierContacts, setSupplierContacts] = useState<SupplierContactDto[]>([])
+  const [contractorPageLoading, setContractorPageLoading] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: true, suppliers: true })
   const [staff, setStaff] = useState<ContractorStaffRow[]>([])
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>([])
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
@@ -796,9 +810,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       try {
         const [ownerRows, garageRows, groups, supplierRows, supplierContactRows, departmentRows, staffRows] = await Promise.all([
           dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-          dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+          dictionaryClient.getGaragesPage
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
+            : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
           dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+          dictionaryClient.getSuppliersPage
+            ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
+            : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
           dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
           dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
           dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
@@ -808,18 +826,25 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           return
         }
 
-        const nextSuppliers = supplierRows.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
+        const nextSuppliers = supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
 
         setOwners(ownerRows)
-        setGarages(garageRows.map((garage) => createGarageRowFromDto(garage, ownerRows)))
+        setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownerRows)))
+        setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
         setSupplierGroups(groups)
         setSuppliers(nextSuppliers)
+        setSupplierPage({ totalCount: supplierRows.totalCount, offset: supplierRows.offset, limit: supplierRows.limit })
+        setSupplierContacts(supplierContactRows)
         setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
         setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
         setStaff(staffRows.map(createStaffRowFromDto))
       } catch (error) {
         if (!cancelled) {
           setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контрагентов из справочников.')
+        }
+      } finally {
+        if (!cancelled) {
+          setContractorPageLoading({ garages: false, suppliers: false })
         }
       }
     }
@@ -933,6 +958,40 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
 
+  async function loadGaragePage(offset = garagePage.offset, limit = garagePage.limit) {
+    setContractorPageLoading((current) => ({ ...current, garages: true }))
+    setGarageContextMenu(null)
+    try {
+      const page = dictionaryClient.getGaragesPage
+        ? await dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true)
+        : createFallbackPage(await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true), offset, limit)
+      setGarages(page.items.map((garage) => createGarageRowFromDto(garage, owners)))
+      setGaragePage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу гаражей.')
+    } finally {
+      setContractorPageLoading((current) => ({ ...current, garages: false }))
+    }
+  }
+
+  async function loadSupplierPage(offset = supplierPage.offset, limit = supplierPage.limit) {
+    setContractorPageLoading((current) => ({ ...current, suppliers: true }))
+    setSupplierContextMenu(null)
+    try {
+      const page = dictionaryClient.getSuppliersPage
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true)
+        : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true), offset, limit)
+      const nextSuppliers = page.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContacts))
+      setSuppliers(nextSuppliers)
+      setSupplierPage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
+      setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, ...nextSuppliers.map((supplier) => supplier.service)]))
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу поставщиков.')
+    } finally {
+      setContractorPageLoading((current) => ({ ...current, suppliers: false }))
+    }
+  }
+
   const resizeGarageColumn = (columnKey: ContractorGarageColumnKey, event: MouseEvent<HTMLButtonElement>) => {
     startContractorColumnResize(contractorGarageColumnDefinitions, garageColumnWidths, setGarageColumnWidths, columnKey, event)
   }
@@ -971,8 +1030,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           return currentGarages.map((item) => (item.id === garage.id ? nextGarage : item))
         }
 
-        return [...currentGarages, nextGarage]
+        return [...currentGarages.slice(0, Math.max(0, garagePage.limit - 1)), nextGarage]
       })
+      if (!currentGarage) {
+        setGaragePage((currentPage) => ({ ...currentPage, totalCount: currentPage.totalCount + 1 }))
+      }
       return
     } catch (error) {
       setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить гараж.')
@@ -1226,8 +1288,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           return currentSuppliers.map((item) => (item.id === normalizedSupplier.id ? nextSupplier : item))
         }
 
-        return [...currentSuppliers, nextSupplier]
+        return [...currentSuppliers.slice(0, Math.max(0, supplierPage.limit - 1)), nextSupplier]
       })
+      if (!currentSupplier) {
+        setSupplierPage((currentPage) => ({ ...currentPage, totalCount: currentPage.totalCount + 1 }))
+      }
       return
     } catch (error) {
       setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить поставщика.')
@@ -1557,6 +1622,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     const sortKey = contractorSort.key as ContractorStaffSortKey
     return rows.sort((left, right) => applyContractorSortDirection(compareContractorStaff(left, right, sortKey), contractorSort.direction))
   }, [staff, contractorSort])
+  const garageVisibleRange = getPageVisibleRange({ ...garagePage, items: garages })
+  const supplierVisibleRange = getPageVisibleRange({ ...supplierPage, items: suppliers })
+  const garagePageNavigation = getPageNavigation({ ...garagePage, items: garages })
+  const supplierPageNavigation = getPageNavigation({ ...supplierPage, items: suppliers })
   const debtorsButtonLabel = activeSection === 'suppliers'
     ? showDebtorsOnly ? 'Показать всех поставщиков' : 'Показать должников'
     : showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
@@ -1658,9 +1727,24 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             ))}
             {visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{contractorPageLoading.garages ? 'Загрузка гаражей...' : showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
               </div>
             ) : null}
+          </div>
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация гаражей">
+            <span role="status" aria-live="polite">
+              {showGarageDebtorsOnly
+                ? `Должников на странице: ${visibleGarages.length}. Записи ${garageVisibleRange.from}-${garageVisibleRange.to} из ${garagePage.totalCount}`
+                : `Показано ${garageVisibleRange.from}-${garageVisibleRange.to} из ${garagePage.totalCount}`}
+            </span>
+            <label>
+              Строк
+              <select aria-label="Количество строк гаражей" value={garagePage.limit} disabled={contractorPageLoading.garages} onChange={(event) => void loadGaragePage(0, Number(event.target.value))}>
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={contractorPageLoading.garages || !garagePageNavigation.canGoPrevious} onClick={() => void loadGaragePage(garagePageNavigation.previousOffset)}>Назад</button>
+            <button className="ghost-button" type="button" disabled={contractorPageLoading.garages || !garagePageNavigation.canGoNext} onClick={() => void loadGaragePage(garagePageNavigation.nextOffset)}>Вперед</button>
           </div>
         </section>
       ) : null}
@@ -1719,9 +1803,24 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             })}
             {visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{contractorPageLoading.suppliers ? 'Загрузка поставщиков...' : showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
               </div>
             ) : null}
+          </div>
+          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация поставщиков">
+            <span role="status" aria-live="polite">
+              {showSupplierDebtorsOnly
+                ? `Должников на странице: ${visibleSuppliers.length}. Записи ${supplierVisibleRange.from}-${supplierVisibleRange.to} из ${supplierPage.totalCount}`
+                : `Показано ${supplierVisibleRange.from}-${supplierVisibleRange.to} из ${supplierPage.totalCount}`}
+            </span>
+            <label>
+              Строк
+              <select aria-label="Количество строк поставщиков" value={supplierPage.limit} disabled={contractorPageLoading.suppliers} onChange={(event) => void loadSupplierPage(0, Number(event.target.value))}>
+                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+              </select>
+            </label>
+            <button className="ghost-button" type="button" disabled={contractorPageLoading.suppliers || !supplierPageNavigation.canGoPrevious} onClick={() => void loadSupplierPage(supplierPageNavigation.previousOffset)}>Назад</button>
+            <button className="ghost-button" type="button" disabled={contractorPageLoading.suppliers || !supplierPageNavigation.canGoNext} onClick={() => void loadSupplierPage(supplierPageNavigation.nextOffset)}>Вперед</button>
           </div>
         </section>
       ) : null}

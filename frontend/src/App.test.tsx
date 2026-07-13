@@ -1547,6 +1547,64 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 180000)
 
+  it('pages garages and suppliers through server dictionary pages', async () => {
+    const user = userEvent.setup()
+    const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
+    const supplierPageRequests: Array<{ offset: number; limit: number; includeArchived: boolean }> = []
+    const supplierGroup = createGroup({ id: 'group-page', name: 'Коммунальные услуги' })
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
+      garagePageRequests.push({ offset, limit, includeArchived })
+      const number = offset === 0 ? '1' : '26'
+      return {
+        items: [createGarage({ id: `garage-page-${number}`, number })],
+        totalCount: 30,
+        offset,
+        limit,
+      }
+    })
+    const getSuppliersPage = vi.fn(async (_token: string, _groupId?: string, _search?: string, offset = 0, limit = 25, includeArchived = false) => {
+      supplierPageRequests.push({ offset, limit, includeArchived })
+      const name = offset === 0 ? 'Поставщик 1' : 'Поставщик 26'
+      return {
+        items: [createSupplier({ id: `supplier-page-${offset}`, name, groupId: supplierGroup.id, groupName: supplierGroup.name })],
+        totalCount: 30,
+        offset,
+        limit,
+      }
+    })
+    const dictionaryClient = createDictionaryClient({
+      getGaragesPage,
+      getSupplierGroups: async () => [supplierGroup],
+      getSuppliersPage,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const garagePagination = await within(contractorsPanel).findByRole('navigation', { name: 'Пагинация гаражей' })
+
+    expect(within(garagePagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    expect(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 1' })).toBeInTheDocument()
+    expect(within(garagePagination).getByRole('button', { name: 'Назад' })).toBeDisabled()
+    await user.click(within(garagePagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(garagePageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true }))
+    expect(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 26' })).toBeInTheDocument()
+    expect(within(garagePagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const supplierPagination = within(contractorsPanel).getByRole('navigation', { name: 'Пагинация поставщиков' })
+    expect(within(supplierPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    expect(within(contractorsPanel).getByText('Поставщик 1')).toBeInTheDocument()
+    await user.click(within(supplierPagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(supplierPageRequests).toContainEqual({ offset: 25, limit: 25, includeArchived: true }))
+    expect(await within(contractorsPanel).findByText('Поставщик 26')).toBeInTheDocument()
+    expect(within(supplierPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(supplierPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
+  })
+
   it('confirms contractor staff edits with department and rate diff', async () => {
     const user = userEvent.setup()
     const currentDepartment = createStaffDepartment({ id: '11111111-1111-4111-8111-111111111111', name: 'Бухгалтерия' })
