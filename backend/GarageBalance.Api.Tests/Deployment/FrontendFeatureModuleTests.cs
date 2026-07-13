@@ -3,6 +3,28 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void FrontendCompositionRootRemainsThinAfterFeatureExtraction()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appPath = Path.Combine(repositoryRoot, "frontend", "src", "App.tsx");
+        var appText = File.ReadAllText(appPath);
+        var appLineCount = File.ReadLines(appPath).Count();
+
+        Assert.True(appLineCount <= 100, $"App.tsx must remain a thin composition root, but contains {appLineCount} lines.");
+        Assert.Contains("<AuthGate", appText, StringComparison.Ordinal);
+        Assert.Contains("<AuthenticatedAppShell", appText, StringComparison.Ordinal);
+        Assert.Contains("loadStoredAuthSession", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function Workspace(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function FinancePanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function ContractorsPrototypePanel(", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("function DictionaryPanelV2(", appText, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx")));
+        Assert.True(File.Exists(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx")));
+        Assert.True(File.Exists(Path.Combine(repositoryRoot, "frontend", "src", "shared", "focusHooks.ts")));
+        Assert.True(File.Exists(Path.Combine(repositoryRoot, "frontend", "src", "services", "financeApi.ts")));
+    }
+
+    [Fact]
     public void AppShellRemainsInItsFeatureModule()
     {
         var repositoryRoot = FindRepositoryRoot();
