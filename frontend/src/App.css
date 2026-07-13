@@ -874,6 +874,18 @@ h1 {
   width: 100%;
 }
 
+.contractors-date-value {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(62px, 0.45fr) minmax(118px, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.contractors-date-value .contractors-field-error {
+  grid-column: 1 / -1;
+}
+
 .contractors-field-error {
   color: #b42318;
   font-size: 12px;
@@ -941,7 +953,7 @@ h1 {
 
 .contractors-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr);
+  grid-template-columns: minmax(320px, 0.8fr) minmax(680px, 1.2fr);
   gap: 18px;
   align-items: start;
 }
@@ -4075,27 +4087,86 @@ h1 {
 }
 
 .dictionary-pagination {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 8px 12px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
   border-top: 1px solid #e4e7ec;
-  padding-top: 10px;
+  background: #fcfcfd;
+  padding: 8px 12px 10px;
 }
 
-.dictionary-pagination > span {
-  margin-right: auto;
-  color: #667085;
-  font-size: 13px;
+.pagination-primary {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.dictionary-pagination > label {
+.pagination-page-sizes {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex: 0 0 auto;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #f2f4f7;
+  padding: 3px;
+}
+
+.pagination-size {
+  min-width: 34px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding: 0 9px;
+}
+
+.pagination-size:hover:not(:disabled),
+.pagination-size:focus-visible {
+  border-color: #84adff;
+  background: #eff8ff;
+  color: #175cd3;
+  outline: none;
+}
+
+.pagination-size.is-active {
+  border-color: #84adff;
+  background: #ffffff;
+  color: #175cd3;
+  box-shadow: inset 0 0 0 1px rgba(21, 112, 239, 0.12);
+}
+
+.pagination-size:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.pagination-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-self: end;
+  min-width: max-content;
   color: #667085;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .pagination-controls {
@@ -4213,9 +4284,19 @@ h1 {
 }
 
 @media (max-width: 720px) {
-  .dictionary-pagination > span {
-    width: 100%;
-    margin-right: 0;
+  .dictionary-pagination {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pagination-primary {
+    justify-content: center;
+  }
+
+  .pagination-meta {
+    justify-self: center;
+    min-width: 0;
+    text-align: center;
+    white-space: normal;
   }
 
   .pagination-controls {

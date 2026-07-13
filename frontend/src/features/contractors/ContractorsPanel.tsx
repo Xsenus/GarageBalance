@@ -11,8 +11,7 @@ import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { Pagination } from '../../shared/PageNavigator'
-import { createClientPage, createFallbackPage, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
@@ -1715,15 +1714,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     return rows.sort((left, right) => applyContractorSortDirection(compareContractorStaff(left, right, sortKey), contractorSort.direction))
   }, [staff, contractorSort])
   const departmentPage = createClientPage(departments, departmentPageNumber, departmentPageSize)
-  const garageVisibleRange = getPageVisibleRange({ ...garagePage, items: garages })
-  const supplierVisibleRange = getPageVisibleRange({ ...supplierPage, items: suppliers })
-  const staffVisibleRange = getPageVisibleRange({ ...staffPage, items: staff })
-  const garageCurrentPage = Math.floor(garagePage.offset / garagePage.limit) + 1
-  const supplierCurrentPage = Math.floor(supplierPage.offset / supplierPage.limit) + 1
-  const staffCurrentPage = Math.floor(staffPage.offset / staffPage.limit) + 1
-  const garageTotalPages = Math.max(1, Math.ceil(garagePage.totalCount / garagePage.limit))
-  const supplierTotalPages = Math.max(1, Math.ceil(supplierPage.totalCount / supplierPage.limit))
-  const staffTotalPages = Math.max(1, Math.ceil(staffPage.totalCount / staffPage.limit))
   const debtorsButtonLabel = activeSection === 'suppliers'
     ? showDebtorsOnly ? 'Показать всех поставщиков' : 'Показать должников'
     : showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
@@ -1829,20 +1819,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               </div>
             ) : null}
           </div>
-          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация гаражей">
-            <span role="status" aria-live="polite">
-              {showGarageDebtorsOnly
-                ? `Должников на странице: ${visibleGarages.length}. Записи ${garageVisibleRange.from}-${garageVisibleRange.to} из ${garagePage.totalCount}`
-                : `Показано ${garageVisibleRange.from}-${garageVisibleRange.to} из ${garagePage.totalCount}`}
-            </span>
-            <label>
-              Строк
-              <select aria-label="Количество строк гаражей" value={garagePage.limit} disabled={contractorPageLoading.garages} onChange={(event) => void loadGaragePage(0, Number(event.target.value))}>
-                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-              </select>
-            </label>
-            <Pagination currentPage={garageCurrentPage} totalPages={garageTotalPages} disabled={contractorPageLoading.garages} showQuickJump onPageChange={(page) => void loadGaragePage((page - 1) * garagePage.limit)} />
-          </div>
+          <TablePagination
+            ariaLabel="Пагинация гаражей"
+            totalCount={garagePage.totalCount}
+            offset={garagePage.offset}
+            limit={garagePage.limit}
+            visibleCount={visibleGarages.length}
+            disabled={contractorPageLoading.garages}
+            pageSizeLabel="Количество строк гаражей"
+            statusText={showGarageDebtorsOnly ? `Должников на странице: ${visibleGarages.length}` : undefined}
+            onPageChange={(page) => void loadGaragePage((page - 1) * garagePage.limit)}
+            onPageSizeChange={(limit) => void loadGaragePage(0, limit)}
+          />
         </section>
       ) : null}
 
@@ -1904,20 +1892,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               </div>
             ) : null}
           </div>
-          <div className="dictionary-pagination" role="navigation" aria-label="Пагинация поставщиков">
-            <span role="status" aria-live="polite">
-              {showSupplierDebtorsOnly
-                ? `Должников на странице: ${visibleSuppliers.length}. Записи ${supplierVisibleRange.from}-${supplierVisibleRange.to} из ${supplierPage.totalCount}`
-                : `Показано ${supplierVisibleRange.from}-${supplierVisibleRange.to} из ${supplierPage.totalCount}`}
-            </span>
-            <label>
-              Строк
-              <select aria-label="Количество строк поставщиков" value={supplierPage.limit} disabled={contractorPageLoading.suppliers} onChange={(event) => void loadSupplierPage(0, Number(event.target.value))}>
-                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-              </select>
-            </label>
-            <Pagination currentPage={supplierCurrentPage} totalPages={supplierTotalPages} disabled={contractorPageLoading.suppliers} showQuickJump onPageChange={(page) => void loadSupplierPage((page - 1) * supplierPage.limit)} />
-          </div>
+          <TablePagination
+            ariaLabel="Пагинация поставщиков"
+            totalCount={supplierPage.totalCount}
+            offset={supplierPage.offset}
+            limit={supplierPage.limit}
+            visibleCount={visibleSuppliers.length}
+            disabled={contractorPageLoading.suppliers}
+            pageSizeLabel="Количество строк поставщиков"
+            statusText={showSupplierDebtorsOnly ? `Должников на странице: ${visibleSuppliers.length}` : undefined}
+            onPageChange={(page) => void loadSupplierPage((page - 1) * supplierPage.limit)}
+            onPageSizeChange={(limit) => void loadSupplierPage(0, limit)}
+          />
         </section>
       ) : null}
 
@@ -2025,16 +2011,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </div>
               ) : null}
             </div>
-            <div className="dictionary-pagination" role="navigation" aria-label="Пагинация персонала">
-              <span role="status" aria-live="polite">Показано {staffVisibleRange.from}-{staffVisibleRange.to} из {staffPage.totalCount}</span>
-              <label>
-                Строк
-                <select aria-label="Количество строк персонала" value={staffPage.limit} disabled={contractorPageLoading.staff} onChange={(event) => void loadStaffPage(0, Number(event.target.value))}>
-                  {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-                </select>
-              </label>
-              <Pagination currentPage={staffCurrentPage} totalPages={staffTotalPages} disabled={contractorPageLoading.staff} showQuickJump onPageChange={(page) => void loadStaffPage((page - 1) * staffPage.limit)} />
-            </div>
+            <TablePagination
+              ariaLabel="Пагинация персонала"
+              totalCount={staffPage.totalCount}
+              offset={staffPage.offset}
+              limit={staffPage.limit}
+              visibleCount={visibleStaff.length}
+              disabled={contractorPageLoading.staff}
+              pageSizeLabel="Количество строк персонала"
+              onPageChange={(page) => void loadStaffPage((page - 1) * staffPage.limit)}
+              onPageSizeChange={(limit) => void loadStaffPage(0, limit)}
+            />
           </section>
         </>
       ) : null}

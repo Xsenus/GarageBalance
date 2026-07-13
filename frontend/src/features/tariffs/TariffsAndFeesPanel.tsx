@@ -211,7 +211,10 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
 }
 
 function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[]) {
-  const rowsBackedByTariffs = contractorTariffRows.filter((row) => Boolean(row.calculationBase && findTariffForPrototypeRow(tariffs, row)))
+  const backedCategories = new Set(contractorTariffRows
+    .filter((row) => Boolean(row.calculationBase && findTariffForPrototypeRow(tariffs, row)))
+    .map((row) => row.category))
+  const rowsBackedByTariffs = contractorTariffRows.filter((row) => backedCategories.has(row.category))
   return mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, tariffs), settings)
 }
 
@@ -311,9 +314,46 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
 
 function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], settings: ChargeServiceSettingDto[]) {
   const rowsWithoutBackendServices = rows.filter((row) => !row.backendServiceSettingId)
+  const normalizedCategories = new Set(rowsWithoutBackendServices.map((row) => row.category.toLocaleLowerCase('ru')))
+  const matchedSettings = new Map(settings
+    .filter((setting) => normalizedCategories.has(setting.name.toLocaleLowerCase('ru')))
+    .map((setting) => [setting.name.toLocaleLowerCase('ru'), setting]))
+  const mergedRows = rowsWithoutBackendServices.map((row) => {
+    const setting = matchedSettings.get(row.category.toLocaleLowerCase('ru'))
+    if (!setting) {
+      return row
+    }
+
+    const common = {
+      ...row,
+      byMeter: setting.isMetered,
+      tiered: setting.hasTieredTariff,
+      isDeleted: setting.isArchived,
+    }
+    if (row.title === 'Периодичность') {
+      return { ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'periodicity' as const, amount: String(setting.periodicityMonths ?? 12) }
+    }
+    if (row.title === 'Учитывать платеж с') {
+      return { ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'start-date' as const, dateDay: '01', dateMonth: getContractorTariffMonthValue(setting.accrualStartMonth) }
+    }
+    if (row.title === 'Оплата до' || row.title === 'Оплата за год до') {
+      return {
+        ...common,
+        backendServiceSettingId: setting.id,
+        serviceSettingKind: 'due-date' as const,
+        dateDay: setting.paymentDueDay ? String(setting.paymentDueDay).padStart(2, '0') : row.dateDay,
+        dateMonth: setting.paymentDueMonth ? getContractorTariffMonthValue(setting.paymentDueMonth) : row.dateMonth,
+      }
+    }
+    if (row.title === 'Перенос долга в просроченный') {
+      return { ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'overdue-days' as const, amount: String(setting.overdueGraceDays) }
+    }
+    return common
+  })
+  const unmatchedSettings = settings.filter((setting) => !matchedSettings.has(setting.name.toLocaleLowerCase('ru')))
   return [
-    ...rowsWithoutBackendServices,
-    ...settings.flatMap((setting) => createChargeServiceRows(setting)),
+    ...mergedRows,
+    ...unmatchedSettings.flatMap((setting) => createChargeServiceRows(setting)),
   ]
 }
 
@@ -781,7 +821,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
   function buildChargeServiceRequest(setting: ChargeServiceSettingDto, nextRows: ContractorTariffRow[]): UpsertChargeServiceSettingRequest {
     const relatedRows = nextRows.filter((item) => item.backendServiceSettingId === setting.id)
-    const mainRow = relatedRows.find((item) => item.serviceSettingKind === 'main') ?? relatedRows[0]
+    const mainRow = relatedRows.find((item) => item.serviceSettingKind === 'main')
     const periodicityRow = relatedRows.find((item) => item.serviceSettingKind === 'periodicity')
     const startRow = relatedRows.find((item) => item.serviceSettingKind === 'start-date')
     const dueRow = relatedRows.find((item) => item.serviceSettingKind === 'due-date')
@@ -1567,35 +1607,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     ) : (
                       <span>{row.title}</span>
                     )}
-                    {row.serviceSettingKind === 'main' && serviceSetting ? (
-                      <span className="contractors-sheet-row-actions">
-                        {row.isDeleted ? (
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            aria-label={`Вернуть услугу ${serviceSetting.name}`}
-                            disabled={!canManageTariffs || isServiceSaving}
-                            onClick={() => setChargeServiceRestoreTarget(serviceSetting)}
-                          >
-                            <RotateCcw size={15} />
-                            <span>Вернуть</span>
-                          </button>
-                        ) : (
-                          <button
-                            className="icon-button danger-button"
-                            type="button"
-                            aria-label={`Архивировать услугу ${serviceSetting.name}`}
-                            disabled={!canManageTariffs || isServiceSaving}
-                            onClick={() => {
-                              setChargeServiceArchiveTarget(serviceSetting)
-                              setChargeServiceArchiveReason('')
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </span>
-                    ) : null}
                     {isCustomThreshold ? (
                       <span className="contractors-sheet-row-actions">
                         <button
@@ -1614,9 +1625,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     ) : null}
                   </span>
                   <span role="cell" className="contractors-value-cell">
-                    {row.threshold ? <em>{row.threshold}</em> : null}
                     {row.dateDay !== undefined ? (
-                      <div className="contractors-date-field">
+                      <div className="contractors-date-value">
                         <input
                           aria-label={`${row.category}: ${row.title}: день`}
                           aria-invalid={Boolean(tariffDateErrors[row.id])}
@@ -1636,6 +1646,25 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           }}
                           onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
                         />
+                        <select
+                          aria-label={`${row.category}: ${row.title}: месяц`}
+                          className="contractors-editable-select contractors-editable-select--month"
+                          disabled={!canManageTariffs || isRowDisabled}
+                          value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
+                          onChange={(event) => {
+                            setTariffDateErrors((errors) => {
+                              const nextErrors = { ...errors }
+                              delete nextErrors[row.id]
+                              return nextErrors
+                            })
+                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], dateMonth: event.target.value } }))
+                          }}
+                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
+                        >
+                          {contractorTariffMonthOptions.map((month) => (
+                            <option key={month.value} value={month.value}>{month.label}</option>
+                          ))}
+                        </select>
                         {tariffDateErrors[row.id] ? <span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span> : null}
                       </div>
                     ) : (
@@ -1650,27 +1679,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                   <span role="cell">
-                    {row.dateDay !== undefined ? (
-                      <select
-                        aria-label={`${row.category}: ${row.title}: месяц`}
-                        className="contractors-editable-select contractors-editable-select--month"
-                        disabled={!canManageTariffs || isRowDisabled}
-                        value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
-                        onChange={(event) => {
-                          setTariffDateErrors((errors) => {
-                            const nextErrors = { ...errors }
-                            delete nextErrors[row.id]
-                            return nextErrors
-                          })
-                          setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], dateMonth: event.target.value } }))
-                        }}
-                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
-                      >
-                        {contractorTariffMonthOptions.map((month) => (
-                          <option key={month.value} value={month.value}>{month.label}</option>
-                        ))}
-                      </select>
-                    ) : (
+                    {row.dateDay === undefined ? (
                       <input
                         aria-label={`${row.category}: ${row.title}: единица`}
                         className="contractors-editable-input contractors-editable-input--unit"
@@ -1679,7 +1688,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
                       />
-                    )}
+                    ) : null}
                   </span>
                   <span role="cell">
                     <select
@@ -2194,7 +2203,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           onClose={() => setModal(null)}
           onSave={createServiceSetting}
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
-          unitOptions={Array.from(new Set(tariffRows.map((row) => row.unit).filter((unit): unit is string => Boolean(unit))))}
+          unitOptions={Array.from(new Set(tariffRows
+            .filter((row) => Boolean(row.calculationBase) || row.serviceSettingKind === 'main')
+            .map((row) => row.unit)
+            .filter((unit): unit is string => Boolean(unit))))}
         />
       ) : null}
       {modal === 'fee' ? (

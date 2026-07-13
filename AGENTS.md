@@ -165,6 +165,16 @@ Frontend tests must include:
 - workflow tests for login, permissions, dictionary editing, payment entry, report filtering, import dry-run, and "Что нового";
 - accessibility-oriented assertions using roles, names, labels, and keyboard-reachable controls.
 
+### Unified table pagination
+
+All large working tables must use the shared `TablePagination` and `PageNavigator` components. Do not create feature-specific pagination markup, native page-size selects, or separate Previous/Next controls.
+
+- Keep the page-size buttons `10`, `25`, `50`, and `100` together with numbered page navigation on the left side of the pagination bar.
+- Show the current page, total pages, total result count, and visible range in the status area on the right.
+- Use the same spacing, control sizes, focus states, disabled states, responsive stacking, accessible navigation label, page-size group label, and numbered button names in every table.
+- Page-size controls must have stable dimensions and must never overlap their labels, values, or navigation buttons.
+- When a compact table genuinely needs pagination, reuse the same component instead of inventing a smaller visual variant.
+
 ## Performance
 
 The system must feel fast on the customer's real cooperative data. Design lists, search, reports, imports, and dashboards with performance in mind from the beginning.

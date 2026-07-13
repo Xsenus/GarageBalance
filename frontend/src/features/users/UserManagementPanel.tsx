@@ -9,7 +9,8 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { createEmptyPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { createEmptyPage } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 import type { UserEditChange, UserFormState } from '../../shared/userManagement'
 import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
 
@@ -378,8 +379,6 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setOffset(0)
   }
 
-  const pageVisibleRange = getPageVisibleRange(page)
-  const pageNavigation = getPageNavigation(page)
 
   return (
     <section className="dictionary-panel-v2 users-panel-v2" aria-label="Пользователи" onClick={() => setContextMenu(null)}>
@@ -452,17 +451,17 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
             {loading ? <p className="empty-state" role="status" aria-live="polite">Загружаем пользователей...</p> : null}
           </div>
 
-          <div className="dictionary-pagination">
-            <span role="status" aria-live="polite">Показано {pageVisibleRange.from}-{pageVisibleRange.to} из {page.totalCount}</span>
-            <label>
-              Строк:
-              <select aria-label="Количество строк пользователей" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setOffset(0) }}>
-                {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-              </select>
-            </label>
-            <button className="ghost-button" type="button" onClick={() => setOffset(pageNavigation.previousOffset)} disabled={!pageNavigation.canGoPrevious || loading}>Назад</button>
-            <button className="ghost-button" type="button" onClick={() => setOffset(pageNavigation.nextOffset)} disabled={!pageNavigation.canGoNext || loading}>Вперед</button>
-          </div>
+          <TablePagination
+            ariaLabel="Пагинация пользователей"
+            totalCount={page.totalCount}
+            offset={offset}
+            limit={pageSize}
+            visibleCount={page.items.length}
+            disabled={loading}
+            pageSizeLabel="Количество строк пользователей"
+            onPageChange={(pageNumber) => setOffset((pageNumber - 1) * pageSize)}
+            onPageSizeChange={(limit) => { setPageSize(limit); setOffset(0) }}
+          />
         </div>
       </div>
 

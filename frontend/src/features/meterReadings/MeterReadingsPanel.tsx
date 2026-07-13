@@ -5,7 +5,7 @@ import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
 import { LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
-import { Pagination } from '../../shared/PageNavigator'
+import { TablePagination } from '../../shared/TablePagination'
 import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
@@ -29,7 +29,7 @@ const meterReadingTypes = [
   { id: 'water', label: 'Вода', unit: 'м3' },
 ] as const
 
-const meterReadingPageSize = 25
+const defaultMeterReadingPageSize = 25
 
 type MeterReadingTypeId = typeof meterReadingTypes[number]['id']
 
@@ -157,6 +157,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
   const [appliedYear, setAppliedYear] = useState('2026')
   const [garages, setGarages] = useState<MeterReadingYearGarageDto[]>([])
   const [pageOffset, setPageOffset] = useState(0)
+  const [pageSize, setPageSize] = useState(defaultMeterReadingPageSize)
   const [totalGarageCount, setTotalGarageCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -220,7 +221,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
         const yearPage = await financeClient.getMeterReadingYearPage(auth.accessToken, {
           year: Number(appliedYear),
           meterKind: meterType,
-          limit: meterReadingPageSize,
+          limit: pageSize,
           offset: pageOffset,
         })
         if (!isMounted) {
@@ -259,7 +260,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     return () => {
       isMounted = false
     }
-  }, [appliedYear, auth.accessToken, financeClient, meterType, pageOffset])
+  }, [appliedYear, auth.accessToken, financeClient, meterType, pageOffset, pageSize])
 
   const saveReadingValue = useCallback(async (cellKey: string, readingId: string | undefined, nextValue: string) => {
     const [, , garageId, monthKey] = cellKey.split(':')
@@ -381,20 +382,17 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
         yearIsValid={yearIsValid}
       />
 
-      {totalGarageCount > 0 ? (
-        <nav className="meter-readings-pagination" aria-label="Пагинация показаний">
-          <span role="status" aria-live="polite">
-            {`Показано ${pageOffset + 1}-${Math.min(pageOffset + garages.length, totalGarageCount)} из ${totalGarageCount}`}
-          </span>
-          <Pagination
-            currentPage={Math.floor(pageOffset / meterReadingPageSize) + 1}
-            totalPages={Math.max(1, Math.ceil(totalGarageCount / meterReadingPageSize))}
-            disabled={loading}
-            showQuickJump
-            onPageChange={(page) => setPageOffset((page - 1) * meterReadingPageSize)}
-          />
-        </nav>
-      ) : null}
+      <TablePagination
+        ariaLabel="Пагинация показаний"
+        totalCount={totalGarageCount}
+        offset={pageOffset}
+        limit={pageSize}
+        visibleCount={garages.length}
+        disabled={loading}
+        pageSizeLabel="Количество гаражей с показаниями"
+        onPageChange={(page) => setPageOffset((page - 1) * pageSize)}
+        onPageSizeChange={(limit) => { setPageSize(limit); setPageOffset(0) }}
+      />
 
       {pendingReadingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>

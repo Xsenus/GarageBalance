@@ -92,14 +92,14 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("dictionaryClient.createGarage", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getGaragesPage", featureText, StringComparison.Ordinal);
         Assert.Contains("isGarageServerSortKey", featureText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Пагинация гаражей\"", featureText, StringComparison.Ordinal);
+        Assert.Contains("ariaLabel=\"Пагинация гаражей\"", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.updateSupplier", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getSuppliersPage", featureText, StringComparison.Ordinal);
         Assert.Contains("isSupplierServerSortKey", featureText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Пагинация поставщиков\"", featureText, StringComparison.Ordinal);
+        Assert.Contains("ariaLabel=\"Пагинация поставщиков\"", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.getStaffMembersPage", featureText, StringComparison.Ordinal);
         Assert.Contains("sort.key, sort.direction", featureText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Пагинация персонала\"", featureText, StringComparison.Ordinal);
+        Assert.Contains("ariaLabel=\"Пагинация персонала\"", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.getGarageBalanceHistory", featureText, StringComparison.Ordinal);
         Assert.Contains("onOpenAudit", featureText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/contractors/ContractorsPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md")), StringComparison.Ordinal);

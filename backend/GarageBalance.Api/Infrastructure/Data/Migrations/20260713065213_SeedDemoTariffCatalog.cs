@@ -120,7 +120,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                             ),
                             (
                                 'f0d7ed2e-ec55-42b4-8a79-01b37c287106', 'Наружное освещение', TRUE, 12, 1, 31, 12, 0,
-                                NULL, NULL, FALSE, FALSE, 'руб.', FALSE,
+                                NULL, '8a92bf70-9339-4bbc-8e5d-a05cda185106', FALSE, FALSE, 'руб.', FALSE,
                                 TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'
                             );
 

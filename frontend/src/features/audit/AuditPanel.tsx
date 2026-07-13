@@ -8,8 +8,9 @@ import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { formatDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { createEmptyPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
+import { createEmptyPage } from '../../shared/pagination'
 import type { PagedItems } from '../../shared/pagination'
+import { TablePagination } from '../../shared/TablePagination'
 import type { AuditPanelPreset, ContractorOpenTarget, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 const auditSectionOptions = [
   { value: '', label: 'Все разделы' },
@@ -420,8 +421,6 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
     : error?.recovery === 'exportXlsx'
       ? (exporting ? 'Выгружаем...' : 'Повторить выгрузку XLSX')
       : (loading ? 'Загружаем...' : 'Повторить загрузку')
-  const auditVisibleRange = getPageVisibleRange(page)
-  const auditNavigation = getPageNavigation(page)
   const auditHasValidationErrors = auditValidationErrors.length > 0
 
   return (
@@ -547,17 +546,17 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           )
         })}
       </div>
-      <div className="dictionary-pagination audit-pagination" role="navigation" aria-label="Пагинация истории изменений">
-        <span role="status" aria-live="polite">Показано {auditVisibleRange.from}-{auditVisibleRange.to} из {page.totalCount}</span>
-        <label>
-          Строк
-          <select aria-label="Количество строк истории изменений" value={page.limit} onChange={(event) => setPage(createEmptyPage<AuditEventDto>(Number(event.target.value)))}>
-            {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-          </select>
-        </label>
-        <button className="ghost-button" type="button" disabled={loading || !auditNavigation.canGoPrevious} onClick={() => setPage((current) => ({ ...current, offset: auditNavigation.previousOffset }))}>Назад</button>
-        <button className="ghost-button" type="button" disabled={loading || !auditNavigation.canGoNext} onClick={() => setPage((current) => ({ ...current, offset: auditNavigation.nextOffset }))}>Вперед</button>
-      </div>
+      <TablePagination
+        ariaLabel="Пагинация истории изменений"
+        totalCount={page.totalCount}
+        offset={page.offset}
+        limit={page.limit}
+        visibleCount={page.items.length}
+        disabled={loading}
+        pageSizeLabel="Количество строк истории изменений"
+        onPageChange={(pageNumber) => setPage((current) => ({ ...current, offset: (pageNumber - 1) * current.limit }))}
+        onPageSizeChange={(limit) => setPage(createEmptyPage<AuditEventDto>(limit))}
+      />
       {detailState ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeAuditEventDetail}>
           <section ref={detailDialogRef} className="detail-dialog audit-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="audit-detail-title" aria-describedby="audit-detail-description" onMouseDown={(event) => event.stopPropagation()}>

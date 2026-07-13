@@ -377,10 +377,16 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Тариф воды')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()
+    const bottomGrid = within(tariffsPanel).getByText('Нерегулярные платежи').closest('.contractors-bottom-grid')
+    expect(bottomGrid).not.toBeNull()
+    expect(within(bottomGrid as HTMLElement).getByText('Объявленные сборы')).toBeInTheDocument()
     for (const paginationName of ['Пагинация тарифов и услуг', 'Пагинация нерегулярных платежей', 'Пагинация объявленных сборов']) {
       const pagination = within(tariffsPanel).getByRole('navigation', { name: paginationName })
+      expect(pagination.firstElementChild).toHaveClass('pagination-primary')
       expect(within(pagination).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+      expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
     }
+    expect(within(tariffsPanel).queryByText('x')).not.toBeInTheDocument()
 
     const addTariffServiceButton = within(tariffsPanel).getAllByRole('button', { name: 'Добавить услугу' })[0]
     await user.click(addTariffServiceButton)
@@ -2155,12 +2161,10 @@ describe('App', () => {
     }))
   })
 
-  it('creates a charge service setting from tariffs screen and renders saved rows', async () => {
+  it('creates a charge service setting, renders saved rows and keeps archive actions hidden', async () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceRequest: unknown = null
-    const archivedServiceRequests: Array<{ id: string; reason: string }> = []
-    const restoredServiceIds: string[] = []
     let serviceSettings: ChargeServiceSettingDto[] = []
     const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
@@ -2210,21 +2214,6 @@ describe('App', () => {
         serviceSettings = serviceSettings.map((setting) => (setting.id === id ? savedSetting : setting))
         return savedSetting
       },
-      archiveChargeServiceSetting: async (_token, id, reason) => {
-        archivedServiceRequests.push({ id, reason })
-        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? { ...setting, isArchived: true } : setting))
-      },
-      restoreChargeServiceSetting: async (_token, id) => {
-        restoredServiceIds.push(id)
-        const restoredSetting = serviceSettings.find((setting) => setting.id === id)
-        if (!restoredSetting) {
-          throw new Error('Услуга не найдена')
-        }
-
-        const nextSetting = { ...restoredSetting, isArchived: false }
-        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? nextSetting : setting))
-        return nextSetting
-      },
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -2264,6 +2253,9 @@ describe('App', () => {
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
     expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('12')
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
+    const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
+    expect(dueDateValue).not.toBeNull()
+    expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: Оплата до: месяц')).toHaveValue('фев')
 
     const periodicityInput = within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')
     await user.clear(periodicityInput)
@@ -2302,41 +2294,8 @@ describe('App', () => {
     }))
     expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('6')
 
-    await user.click(within(tariffsPanel).getByRole('button', { name: 'Архивировать услугу Охрана' }))
-    let archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать услугу?' })
-    const archiveCancelButton = within(archiveDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(archiveCancelButton).toHaveFocus())
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Архивировать услугу?' })).not.toBeInTheDocument())
-    expect(archivedServiceRequests).toEqual([])
-
-    await user.click(within(tariffsPanel).getByRole('button', { name: 'Архивировать услугу Охрана' }))
-    archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать услугу?' })
-    expect(within(archiveDialog).getByRole('button', { name: 'Архивировать' })).toBeDisabled()
-    await user.type(within(archiveDialog).getByLabelText('Причина архивации услуги'), 'Услуга больше не действует')
-    await user.click(within(archiveDialog).getByRole('button', { name: 'Архивировать' }))
-
-    await waitFor(() => expect(archivedServiceRequests).toEqual([
-      { id: 'service-security', reason: 'Услуга больше не действует' },
-    ]))
-    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toBeDisabled()
-    expect(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' })).toBeInTheDocument()
-
-    await user.click(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' }))
-    let restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
-    const restoreCancelButton = within(restoreDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(restoreCancelButton).toHaveFocus())
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть услугу?' })).not.toBeInTheDocument())
-    expect(restoredServiceIds).toEqual([])
-
-    await user.click(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' }))
-    restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
-    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
-
-    await waitFor(() => expect(restoredServiceIds).toEqual(['service-security']))
-    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toBeEnabled()
-    expect(within(tariffsPanel).getByRole('button', { name: 'Архивировать услугу Охрана' })).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Архивировать услугу Охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
   })
 
   it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {
@@ -6476,7 +6435,8 @@ describe('App', () => {
     const paginationCounter = within(dictionaryPanel).getByText('Показано 1-6 из 6')
     expect(paginationCounter).toHaveAttribute('role', 'status')
     expect(paginationCounter).toHaveAttribute('aria-live', 'polite')
-    expect(within(dictionaryPanel).getByRole('combobox', { name: 'Количество строк справочника' })).toHaveValue('25')
+    const pageSizes = within(dictionaryPanel).getByRole('group', { name: 'Количество строк справочника' })
+    expect(within(pageSizes).getByRole('button', { name: '25' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('announces empty dictionary lists', async () => {
@@ -10201,7 +10161,7 @@ describe('App', () => {
     expect(within(auditTable).getByText('audit.event_25')).toBeInTheDocument()
     expect(within(auditTable).queryByText('audit.event_26')).not.toBeInTheDocument()
 
-    await user.click(within(auditPanel).getByRole('button', { name: 'Вперед' }))
+    await user.click(within(auditPanel).getByRole('button', { name: 'Следующая страница' }))
 
     expect(await within(auditPanel).findByText('Показано 26-30 из 30')).toHaveAttribute('role', 'status')
     expect(within(auditTable).getByText('audit.event_30')).toBeInTheDocument()
@@ -10766,7 +10726,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По гаражам')
 
     expect(await within(reportsPanel).findByText('Загружаем отчет по гаражам...')).toHaveAttribute('role', 'status')
-    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по гаражам')).toBeDisabled()
+    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по гаражам' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
       rejectGarages(new Error('Отчет по гаражам временно недоступен'))
@@ -10798,7 +10758,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По выплатам')
 
     expect(await within(reportsPanel).findByText('Загружаем выплаты...')).toHaveAttribute('role', 'status')
-    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по выплатам')).toBeDisabled()
+    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по выплатам' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
       rejectPayouts(new Error('Отчет по выплатам временно недоступен'))
@@ -10830,7 +10790,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Поступления')
 
     expect(await within(reportsPanel).findByText('Загружаем поступления...')).toHaveAttribute('role', 'status')
-    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по поступлениям')).toBeDisabled()
+    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по поступлениям' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
       rejectIncome(new Error('Отчет по поступлениям временно недоступен'))
@@ -10859,7 +10819,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
 
     expect(await within(reportsPanel).findByText('Загружаем оплаты из кассы...')).toHaveAttribute('role', 'status')
-    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по оплатам из кассы')).toBeDisabled()
+    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по оплатам из кассы' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
       rejectCashPayments(new Error('Отчет по кассе временно недоступен'))
@@ -10888,7 +10848,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
 
     expect(await within(reportsPanel).findByText('Загружаем сдачу кассы в банк...')).toHaveAttribute('role', 'status')
-    expect(within(reportsPanel).getByLabelText('Строк на странице отчета по сдаче кассы в банк')).toBeDisabled()
+    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по сдаче кассы в банк' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
       rejectBankDeposits(new Error('Отчет по сдаче кассы временно недоступен'))

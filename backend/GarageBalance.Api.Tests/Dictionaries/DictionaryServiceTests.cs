@@ -1286,6 +1286,7 @@ public sealed class DictionaryServiceTests
         Assert.Contains("'Сумма целевого взноса', 'fixed', 1200.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Ставка за вывоз мусора', 'people', 300.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Наружное освещение', 'fixed', 300.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("NULL, '8a92bf70-9339-4bbc-8e5d-a05cda185106', FALSE, FALSE, 'руб.'", migration, StringComparison.Ordinal);
         Assert.Contains("'Электрики', 'fixed', 500.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Бухгалтерия', 'fixed', 700.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Руководство', 'fixed', 900.0000", migration, StringComparison.Ordinal);
@@ -1302,6 +1303,24 @@ public sealed class DictionaryServiceTests
         Assert.Contains("DELETE FROM irregular_payments", migration, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM tariffs", migration, StringComparison.Ordinal);
         Assert.Contains("FROM accruals", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DemoTariffCatalogNormalizationMigration_UpdatesOnlyKnownLightingRelationshipAndWritesAudit()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260713160338_NormalizeDemoTariffCatalogRelationships.cs"));
+
+        Assert.Contains("WHERE \"Id\" = 'f0d7ed2e-ec55-42b4-8a79-01b37c287106'", migration, StringComparison.Ordinal);
+        Assert.Contains("AND \"Name\" = 'Наружное освещение'", migration, StringComparison.Ordinal);
+        Assert.Contains("AND \"TariffId\" IS NULL", migration, StringComparison.Ordinal);
+        Assert.Contains("\"TariffId\" = '8a92bf70-9339-4bbc-8e5d-a05cda185106'", migration, StringComparison.Ordinal);
+        Assert.Contains("dictionary.demo_tariff_catalog_normalized", migration, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT (\"Id\") DO NOTHING", migration, StringComparison.Ordinal);
     }
 
     [Fact]

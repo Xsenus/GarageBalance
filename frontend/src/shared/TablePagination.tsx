@@ -31,14 +31,27 @@ export function TablePagination({
 
   return (
     <div className="dictionary-pagination" role="navigation" aria-label={ariaLabel}>
-      <span role="status" aria-live="polite">{statusText ?? `Показано ${from}-${to} из ${totalCount}`}</span>
-      <label>
-        Строк
-        <select aria-label={pageSizeLabel} value={limit} disabled={disabled} onChange={(event) => onPageSizeChange(Number(event.target.value))}>
-          {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
-        </select>
-      </label>
-      <Pagination currentPage={currentPage} totalPages={totalPages} disabled={disabled} showQuickJump onPageChange={onPageChange} />
+      <div className="pagination-primary">
+        <div className="pagination-page-sizes" role="group" aria-label={pageSizeLabel}>
+          {pageSizeOptions.map((size) => (
+            <button
+              className={size === limit ? 'pagination-size is-active' : 'pagination-size'}
+              type="button"
+              aria-pressed={size === limit}
+              disabled={disabled}
+              onClick={() => onPageSizeChange(size)}
+              key={size}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+        <Pagination currentPage={currentPage} totalPages={totalPages} disabled={disabled} showQuickJump onPageChange={onPageChange} />
+      </div>
+      <div className="pagination-meta">
+        <span role="status" aria-live="polite">Показано {from}-{to} из {totalCount}</span>
+        <span>Страница {currentPage} из {totalPages} · Найдено: {totalCount}{statusText ? ` · ${statusText}` : ''}</span>
+      </div>
     </div>
   )
 }
