@@ -64,7 +64,7 @@
 | Импорт Access | rollback-заявка dry-run | cancel | Backend API | confirmation с обязательной причиной; фактический rollback не выполняется |
 | Импорт Access | закрытие карантина | edit/resolve | Backend API | button action с audit; отдельного confirmation пока нет |
 | Импорт Access | JSON-отчет dry-run | export | Backend API | POST export, пишет audit |
-| Настройки | запуск и повтор 1C Fresh | edit | Backend API | confirmation с optional comment; `pending_adapter`, без plaintext refresh token |
+| Настройки | запуск и повтор 1C Fresh | edit | Backend API, UI временно скрыт | Вкладка интеграций не отображается и не загружает статусы ни для одной роли; backend flow сохранен для будущего включения |
 | История платежей гаража | печать, отмена и повтор квитанции | export/cancel | Backend API | icon-actions с confirmation; cancel/reprint требуют reason, `pending_adapter` до устройства |
 | Отчеты | фильтры и просмотр | generated/read | Backend API | generate/read, пишет audit для формирования |
 | Отчеты | XLSX/PDF export | export | Backend API | POST export, пишет audit |
@@ -81,6 +81,10 @@
 - `ControllerThinnessTests` закрепляет thin controllers, запрет dangerous safe methods и обязательный body reason для `Archive*`, `Cancel*`, `Delete*`.
 - Frontend workflows в `App.test.tsx` покрывают user, dictionary, finance, import, reports, tariffs prototype, contractors prototype, meter prototype, funds prototype и payment prototype сценарии.
 - Документационные tests закрепляют API documentation, audit coverage и soft-delete/cancel coverage.
+
+## История выполнения
+
+- 2026-07-13 — настройки получили внутреннюю вкладку «Безопасность». Все frontend-формы интеграций (1С Fresh, печать, DaData) временно скрыты общей настройкой `VITE_SHOW_INTEGRATION_SETTINGS=false`, поэтому при обычном открытии раздела интеграционные API не вызываются; их backend и тестовые сценарии сохранены без ослабления permissions.
 
 ## Открытые Хвосты
 

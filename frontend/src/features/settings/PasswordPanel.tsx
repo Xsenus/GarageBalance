@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { Eye, KeyRound, PlugZap, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -10,7 +10,14 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { formatDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
+
 export function PasswordPanel({ auth, authClient, integrationClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; onUserChanged: (user: CurrentUserDto) => void }) {
+  const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'integrations'>(() => (
+    integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
+      ? 'integrations'
+      : 'security'
+  ))
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -36,9 +43,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
   const [protectedSettingSaving, setProtectedSettingSaving] = useState<string | null>(null)
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
-  const canViewIntegrationStatus = hasPermission(auth, permissions.importRun)
-  const canViewReceiptPrintingStatus = hasPermission(auth, permissions.paymentsWrite)
-  const canManageIntegrationSettings = hasPermission(auth, permissions.usersManage)
+  const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
+  const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
+  const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
@@ -269,6 +276,49 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
 
   return (
     <>
+      <section className="settings-layout" aria-label="Настройки">
+        <aside className="settings-section-nav">
+          <div>
+            <p className="eyebrow">Настройки</p>
+            <h1>Настройки</h1>
+            <p>Выберите раздел для управления параметрами системы и своей учетной записи.</p>
+          </div>
+          <div className="settings-tab-list" role="tablist" aria-label="Разделы настроек" aria-orientation="vertical">
+            <button
+              id="settings-security-tab"
+              className={activeSettingsTab === 'security' ? 'settings-tab is-active' : 'settings-tab'}
+              type="button"
+              role="tab"
+              aria-controls="settings-security-panel"
+              aria-selected={activeSettingsTab === 'security'}
+              onClick={() => setActiveSettingsTab('security')}
+            >
+              <KeyRound size={17} aria-hidden="true" />
+              <span>Безопасность</span>
+            </button>
+            {integrationSettingsVisible ? (
+              <button
+                id="settings-integrations-tab"
+                className={activeSettingsTab === 'integrations' ? 'settings-tab is-active' : 'settings-tab'}
+                type="button"
+                role="tab"
+                aria-controls="settings-integrations-panel"
+                aria-selected={activeSettingsTab === 'integrations'}
+                onClick={() => setActiveSettingsTab('integrations')}
+              >
+                <PlugZap size={17} aria-hidden="true" />
+                <span>Интеграции</span>
+              </button>
+            ) : null}
+          </div>
+        </aside>
+        <div
+          className="settings-section-content"
+          id={activeSettingsTab === 'security' ? 'settings-security-panel' : 'settings-integrations-panel'}
+          role="tabpanel"
+          aria-labelledby={activeSettingsTab === 'security' ? 'settings-security-tab' : 'settings-integrations-tab'}
+        >
+      {activeSettingsTab === 'security' ? (
       <section className="password-panel" aria-label="Безопасность аккаунта">
         <div>
           <p className="eyebrow">Безопасность</p>
@@ -300,6 +350,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
           </button>
         </form>
       </section>
+      ) : null}
+      {integrationSettingsVisible && activeSettingsTab === 'integrations' ? (
+      <>
       {canViewIntegrationStatus ? (
         <section className="password-panel" aria-label="Интеграция 1C Fresh">
           <div>
@@ -485,6 +538,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
       ) : null}
       {protectedSettingError ? <FormError>{protectedSettingError}</FormError> : null}
       {protectedSettingMessage ? <div className="form-success" role="status" aria-live="polite">{protectedSettingMessage}</div> : null}
+      </>
+      ) : null}
+        </div>
+      </section>
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
           <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
@@ -518,7 +575,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, onUserChang
           </section>
         </div>
       ) : null}
-      {oneCFreshSyncConfirmation ? (
+      {integrationSettingsVisible && oneCFreshSyncConfirmation ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {
           if (!oneCFreshSyncSaving) {
             closeOneCFreshSyncConfirmation()

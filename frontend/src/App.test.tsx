@@ -4559,6 +4559,37 @@ describe('App', () => {
     expect(changeCalled).toBe(false)
   })
 
+  it.each([
+    ['администратора', createAuthResponse()],
+    ['пользователя без административных прав', createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
+  ])('shows settings tabs and hides integrations for %s', async (_roleLabel, auth) => {
+    const user = userEvent.setup()
+    const getOneCFreshStatus = vi.fn(async () => createOneCFreshStatus())
+    const getReceiptPrintingStatus = vi.fn(async () => createReceiptPrintingStatus())
+    const integrationClient = createIntegrationClient({ getOneCFreshStatus, getReceiptPrintingStatus })
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    const tabList = within(settings).getByRole('tablist', { name: 'Разделы настроек' })
+    expect(within(tabList).getByRole('tab', { name: 'Безопасность' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(tabList).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
+    expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
+    expect(within(settings).queryByRole('region', { name: 'Интеграция 1C Fresh' })).not.toBeInTheDocument()
+    expect(within(settings).queryByRole('region', { name: 'Печать чеков и квитанций' })).not.toBeInTheDocument()
+    expect(within(settings).queryByRole('region', { name: 'Подсказки DaData' })).not.toBeInTheDocument()
+    await act(async () => Promise.resolve())
+    expect(getOneCFreshStatus).not.toHaveBeenCalled()
+    expect(getReceiptPrintingStatus).not.toHaveBeenCalled()
+  })
+
+  describe('скрытые настройки интеграций — сценарии для контролируемого повторного включения', () => {
+    beforeEach(() => vi.stubEnv('VITE_SHOW_INTEGRATION_SETTINGS', 'true'))
+    afterEach(() => vi.unstubAllEnvs())
+
   it('shows safe 1C Fresh integration status in settings', async () => {
     const user = userEvent.setup()
     let tokenSeen: string | null = null
@@ -5017,6 +5048,8 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Печать чеков и квитанций' })).not.toBeInTheDocument()
     expect(receiptPrintingCalled).toBe(false)
+  })
+
   })
 
   it('adds managed user from protected workspace', async () => {

@@ -692,6 +692,80 @@ h1 {
   background: #fcfcfd;
 }
 
+.settings-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.settings-section-nav {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.04);
+}
+
+.settings-section-nav h1 {
+  font-size: 24px;
+}
+
+.settings-section-nav p:not(.eyebrow) {
+  margin-top: 8px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-tab-list {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #344054;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-tab:hover,
+.settings-tab:focus-visible {
+  border-color: #d6e4ff;
+  background: #f5f8ff;
+  color: #1849a9;
+}
+
+.settings-tab:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.18);
+  outline-offset: 2px;
+}
+
+.settings-tab.is-active {
+  border-color: #d6e4ff;
+  background: #eef4ff;
+  color: #1849a9;
+}
+
+.settings-section-content {
+  min-width: 0;
+}
+
 .contractors-sheet-row--deleted {
   background: #f9fafb;
   color: #98a2b3;
@@ -5274,6 +5348,18 @@ button.operation-row:focus-visible {
   .hero-panel,
   .password-panel {
     grid-template-columns: 1fr;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-section-nav {
+    position: static;
+  }
+
+  .settings-tab-list {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 
   .auth-layout {
