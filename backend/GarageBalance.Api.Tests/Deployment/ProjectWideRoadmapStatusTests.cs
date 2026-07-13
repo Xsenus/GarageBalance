@@ -3288,7 +3288,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "GetExpenseReportAsync_FiltersBySupplierExpenseTypeAndSearch",
             "GetExpenseReportAsync_ReturnsSupplierAccrualRows",
             "GetExpenseReportAsync_ReturnsErrorForInvalidPeriod",
-            "GetFundChangeReportAsync_ReturnsFundOperationsAndWritesAudit",
+            "GetFundChangeReportAsync_ReturnsPagedFundOperationsAndWritesAudit",
             "GetCashPaymentReportAsync_ReturnsExpenseRowsAndWritesAudit",
             "GetBankDepositReportAsync_ReturnsDepositRowsAndWritesAudit",
             "GetFeeReportAsync_ReturnsSummaryDebtorsAndWritesAudit",
@@ -3402,18 +3402,21 @@ public sealed class ProjectWideRoadmapStatusTests
         foreach (var expectedApiCoverage in new[]
         {
             "downloads report exports through POST because the backend records audit events",
-            "loads cash, bank and fee reports through dedicated filtered endpoints",
+            "loads cash, bank, fee and paged fund reports through dedicated filtered endpoints",
             "monthFrom=2026-06-01&monthTo=2026-06-01&search=12",
             "garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1",
             "supplierIds=supplier-1&expenseTypeIds=expense-1",
             "cash-payments/export/xlsx",
             "bank-deposits/export/pdf",
             "fees/export/xlsx",
-            "fund-changes/export/pdf"
+            "fund-changes/export/pdf",
+            "fund-changes?dateFrom=2026-06-01&dateTo=2026-06-30&offset=20&limit=20"
         })
         {
             Assert.Contains(expectedApiCoverage, reportsApiTestsText, StringComparison.Ordinal);
         }
+
+        Assert.Contains("Пагинация отчета по изменению фондов", appTestsText, StringComparison.Ordinal);
 
         foreach (var expectedFilterCoverage in new[]
         {

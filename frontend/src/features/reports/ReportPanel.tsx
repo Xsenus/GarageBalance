@@ -7,6 +7,7 @@ import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto,
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
+import { getPageNavigation, getPageVisibleRange, pageSizeOptions } from '../../shared/pagination'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
@@ -171,6 +172,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [reportExporting, setReportExporting] = useState<string | null>(null)
   const [reportExportMessage, setReportExportMessage] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
+  const [fundChangePageRequest, setFundChangePageRequest] = useState({ offset: 0, limit: 25 })
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
 
@@ -323,7 +325,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getFundChangeReport(auth.accessToken, {
           dateFrom: filter.dateFrom,
           dateTo: filter.dateTo,
-          limit: 100,
+          offset: fundChangePageRequest.offset,
+          limit: fundChangePageRequest.limit,
         })
         if (!ignore) {
           setFundChangeReport(report)
@@ -344,7 +347,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.funds, reportClient])
+  }, [activeReportTab, auth.accessToken, dateFilters.funds, fundChangePageRequest.limit, fundChangePageRequest.offset, reportClient])
 
   const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
   const garageFilterLabel = garageFilter.trim() || 'Все гаражи'
@@ -365,6 +368,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function updateDateFilter(key: ReportDateFilterKey, field: keyof ReportDateRange, value: string) {
+    if (key === 'funds') {
+      setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
+    }
     setDateFilters((current) => ({
       ...current,
       [key]: {
@@ -382,6 +388,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }
 
   function applyToday(key: ReportDateFilterKey) {
+    if (key === 'funds') {
+      setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
+    }
     setDateFilters((current) => ({
       ...current,
       [key]: { dateFrom: today, dateTo: today },
@@ -841,6 +850,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     const visibleFundRows = fundRows.length > 0
       ? fundRows
       : [['', '', 'Операций за период нет', '', '', '', '', '']]
+    const fundPage = {
+      items: fundChangeReport?.rows ?? [],
+      totalCount: fundChangeReport?.rowCount ?? 0,
+      offset: fundChangeReport?.offset ?? fundChangePageRequest.offset,
+      limit: fundChangeReport?.limit ?? fundChangePageRequest.limit,
+    }
+    const fundVisibleRange = getPageVisibleRange(fundPage)
+    const fundNavigation = getPageNavigation(fundPage)
 
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
@@ -859,6 +876,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           </div>
         ) : null}
         {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма', 'Сумма до', 'Сумма после', 'Пользователь', 'Комментарий'], visibleFundRows)}
+        <div className="dictionary-pagination" role="navigation" aria-label="Пагинация отчета по изменению фондов">
+          <span role="status" aria-live="polite">Показано {fundVisibleRange.from}-{fundVisibleRange.to} из {fundPage.totalCount}</span>
+          <label>
+            Строк на странице
+            <select
+              aria-label="Строк на странице отчета по изменению фондов"
+              value={fundPage.limit}
+              disabled={fundChangeReportLoading}
+              onChange={(event) => setFundChangePageRequest({ offset: 0, limit: Number(event.target.value) })}
+            >
+              {pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}
+            </select>
+          </label>
+          <button className="ghost-button" type="button" disabled={!fundNavigation.canGoPrevious || fundChangeReportLoading} onClick={() => setFundChangePageRequest((current) => ({ ...current, offset: fundNavigation.previousOffset }))}>Назад</button>
+          <button className="ghost-button" type="button" disabled={!fundNavigation.canGoNext || fundChangeReportLoading} onClick={() => setFundChangePageRequest((current) => ({ ...current, offset: fundNavigation.nextOffset }))}>Вперед</button>
+        </div>
       </ReportWorkbookSheet>
     )
   }

@@ -8,6 +8,7 @@ public interface IFundChangeReportQuery
         DateOnly dateFrom,
         DateOnly dateTo,
         string? search,
+        int offset,
         int? limit,
         CancellationToken cancellationToken);
 }

@@ -42,17 +42,19 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(14, '/api/reports/fund-changes/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%84%D0%BE%D0%BD%D0%B4', postRequest())
   })
 
-  it('loads cash, bank and fee reports through dedicated filtered endpoints', async () => {
+  it('loads cash, bank, fee and paged fund reports through dedicated filtered endpoints', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)
 
     await reportsApi.getCashPaymentReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'чек', limit: 20 })
     await reportsApi.getBankDepositReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'банк', limit: 20 })
     await reportsApi.getFeeReport('token', { variation: 'Сбор на ворота', limit: 20 })
+    await reportsApi.getFundChangeReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', offset: 20, limit: 20 })
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/cash-payments?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA&limit=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/bank-deposits?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%B1%D0%B0%D0%BD%D0%BA&limit=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/fees?variation=%D0%A1%D0%B1%D0%BE%D1%80+%D0%BD%D0%B0+%D0%B2%D0%BE%D1%80%D0%BE%D1%82%D0%B0&limit=20', getRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/fund-changes?dateFrom=2026-06-01&dateTo=2026-06-30&offset=20&limit=20', getRequest())
   })
 })
 

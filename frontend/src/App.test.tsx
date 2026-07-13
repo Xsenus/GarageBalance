@@ -10123,11 +10123,29 @@ describe('App', () => {
 
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
+    const fundChangePageRequests: Array<{ offset?: number; limit?: number }> = []
+    const getFundChangeReport = vi.fn(async (_token: string, params?: { offset?: number; limit?: number }) => {
+      fundChangePageRequests.push({ offset: params?.offset, limit: params?.limit })
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      if (offset === 0) {
+        return createFundChangeReport({ rowCount: 30, offset, limit })
+      }
+
+      const row = createFundChangeReport().rows[0]
+      return createFundChangeReport({
+        rowCount: 30,
+        offset,
+        limit,
+        rows: [{ ...row, operationId: 'fund-operation-26', fundName: 'Резервный фонд', reason: 'Вторая страница' }],
+      })
+    })
     const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const exportBankDepositReportPdf = vi.fn(async () => new Blob(['bank pdf'], { type: 'application/pdf' }))
     const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['fund changes xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const reportClient = createReportClient({
+      getFundChangeReport,
       exportCashPaymentReportXlsx,
       exportBankDepositReportPdf,
       exportFeeReportXlsx,
@@ -10229,6 +10247,13 @@ describe('App', () => {
     expect(fundChangesTable).toHaveTextContent('Распределение средств')
     expect(fundChangesTable).toHaveTextContent('Администратор ГСК')
     expect(fundChangesTable).not.toHaveTextContent('Резервный фонд')
+    const fundPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по изменению фондов' })
+    expect(within(fundPagination).getByText('Показано 1-2 из 30')).toHaveAttribute('role', 'status')
+    await user.click(within(fundPagination).getByRole('button', { name: 'Вперед' }))
+    await waitFor(() => expect(fundChangePageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    expect(await within(fundChangesTable).findByText('Резервный фонд')).toBeInTheDocument()
+    expect(within(fundPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
+    expect(within(fundPagination).getByRole('button', { name: 'Вперед' })).toBeDisabled()
     const fundXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(fundXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
@@ -13007,6 +13032,8 @@ function createFundChangeReport(overrides: Partial<FundChangeReportDto> = {}): F
     depositTotal: 1500,
     withdrawalTotal: 300,
     rowCount: 2,
+    offset: 0,
+    limit: 25,
     rows: [
       {
         operationId: 'fund-operation-1',

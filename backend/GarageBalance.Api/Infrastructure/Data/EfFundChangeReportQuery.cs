@@ -10,6 +10,7 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         DateOnly dateFrom,
         DateOnly dateTo,
         string? search,
+        int offset,
         int? limit,
         CancellationToken cancellationToken)
     {
@@ -48,8 +49,9 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
             rowCount = filteredList.Count;
             depositTotal = filteredList.Where(operation => operation.OperationKind == FundOperationKinds.Deposit).Sum(operation => operation.Amount);
             withdrawalTotal = filteredList.Where(operation => operation.OperationKind == FundOperationKinds.Withdraw).Sum(operation => operation.Amount);
-            operations = ApplyLimit(
-                    filteredList.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name),
+            operations = ApplyPage(
+                    filteredList.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id),
+                    offset,
                     limit)
                 .ToList();
         }
@@ -69,8 +71,8 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
                 .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
             withdrawalTotal = await query.Where(operation => operation.OperationKind == FundOperationKinds.Withdraw)
                 .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-            var ordered = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name);
-            operations = await ApplyLimit(ordered, limit).ToListAsync(cancellationToken);
+            var ordered = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
+            operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
         }
 
         var actorIds = operations.Where(operation => operation.ActorUserId.HasValue)
@@ -85,11 +87,17 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         return new FundChangeReportData(operations, depositTotal, withdrawalTotal, rowCount, usersById);
     }
 
-    private static IQueryable<T> ApplyLimit<T>(IQueryable<T> query, int? limit) =>
-        limit is > 0 ? query.Take(limit.Value) : query;
+    private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
+    {
+        var page = offset > 0 ? query.Skip(offset) : query;
+        return limit is > 0 ? page.Take(limit.Value) : page;
+    }
 
-    private static IEnumerable<T> ApplyLimit<T>(IEnumerable<T> items, int? limit) =>
-        limit is > 0 ? items.Take(limit.Value) : items;
+    private static IEnumerable<T> ApplyPage<T>(IEnumerable<T> items, int offset, int? limit)
+    {
+        var page = offset > 0 ? items.Skip(offset) : items;
+        return limit is > 0 ? page.Take(limit.Value) : page;
+    }
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;

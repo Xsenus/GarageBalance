@@ -466,7 +466,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GetFundChangeReportAsync_ReturnsFundOperationsAndWritesAudit()
+    public async Task GetFundChangeReportAsync_ReturnsPagedFundOperationsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
@@ -531,16 +531,20 @@ public sealed class ReportServiceTests
         await database.Context.SaveChangesAsync();
 
         var result = await service.GetFundChangeReportAsync(
-            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId),
+            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", Limit: 1, Offset: 1, ActorUserId: actorUserId),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(1500m, result.Value!.DepositTotal);
         Assert.Equal(300m, result.Value.WithdrawalTotal);
         Assert.Equal(2, result.Value.RowCount);
-        Assert.Equal(2, result.Value.Rows.Count);
-        Assert.Contains(result.Value.Rows, row => row.ChangeKind == FundOperationKinds.Deposit && row.ChangeName == "Пополнение" && row.ActorDisplayName == "Администратор ГСК");
-        Assert.Contains(result.Value.Rows, row => row.ChangeKind == FundOperationKinds.Withdraw && row.ChangeName == "Изъятие" && row.BalanceAfter == 1200m);
+        Assert.Equal(1, result.Value.Offset);
+        Assert.Equal(1, result.Value.Limit);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal(FundOperationKinds.Withdraw, row.ChangeKind);
+        Assert.Equal("Изъятие", row.ChangeName);
+        Assert.Equal(1200m, row.BalanceAfter);
+        Assert.Equal("Администратор ГСК", row.ActorDisplayName);
         Assert.DoesNotContain(result.Value.Rows, row => row.Reason == "Canceled fund operation");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_generated" &&

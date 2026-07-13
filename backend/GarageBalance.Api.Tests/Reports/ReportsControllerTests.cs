@@ -226,11 +226,13 @@ public sealed class ReportsControllerTests
             new DateOnly(2026, 6, 30),
             "Электро",
             16,
+            8,
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal(16, service.FundChangeRequest?.Limit);
+        Assert.Equal(8, service.FundChangeRequest?.Offset);
         Assert.Equal("Электро", service.FundChangeRequest?.Search);
         Assert.Equal(actorUserId, service.FundChangeRequest?.ActorUserId);
     }
@@ -243,7 +245,7 @@ public sealed class ReportsControllerTests
             FundChangeResult = ReportResult<FundChangeReportDto>.Failure("period_invalid", "Invalid period.")
         });
 
-        var result = await controller.GetFundChangeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, CancellationToken.None);
+        var result = await controller.GetFundChangeReport(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30), null, null, null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
@@ -734,6 +736,8 @@ public sealed class ReportsControllerTests
             1500m,
             0m,
             1,
+            0,
+            25,
             [
                 new FundChangeReportRowDto(
                     Guid.NewGuid(),

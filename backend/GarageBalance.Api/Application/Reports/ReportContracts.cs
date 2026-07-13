@@ -33,6 +33,7 @@ public sealed record FundChangeReportRequest(
     DateOnly? DateTo,
     string? Search,
     int? Limit = null,
+    int? Offset = null,
     Guid? ActorUserId = null);
 
 public sealed record CashPaymentReportRequest(
@@ -145,6 +146,8 @@ public sealed record FundChangeReportDto(
     decimal DepositTotal,
     decimal WithdrawalTotal,
     int RowCount,
+    int Offset,
+    int Limit,
     IReadOnlyList<FundChangeReportRowDto> Rows);
 
 public sealed record FundChangeReportRowDto(

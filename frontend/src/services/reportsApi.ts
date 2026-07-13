@@ -111,6 +111,8 @@ export type FundChangeReportDto = {
   depositTotal: number
   withdrawalTotal: number
   rowCount: number
+  offset: number
+  limit: number
   rows: FundChangeReportRowDto[]
 }
 
@@ -251,6 +253,7 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      offset?: number
       limit?: number
     },
   ): Promise<FundChangeReportDto>
@@ -479,6 +482,9 @@ function buildFundChangeReportQuery(params: Parameters<ReportClient['getFundChan
   }
   if (params.search) {
     searchParams.set('search', params.search)
+  }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
   }
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
