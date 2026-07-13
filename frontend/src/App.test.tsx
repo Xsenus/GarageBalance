@@ -1605,6 +1605,11 @@ describe('App', () => {
 
     await user.click(addEmployeeButton)
     employeeDialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
+    expect(within(employeeDialog).getByLabelText('Отдел сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
+    expect(within(employeeDialog).getByLabelText('Ставка сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
+    const employeeSubmitActions = within(employeeDialog).getByRole('button', { name: /Сохранить/i }).closest('.contractors-dialog-submit-actions')
+    expect(employeeSubmitActions).not.toBeNull()
+    expect(within(employeeSubmitActions as HTMLElement).getByRole('button', { name: 'Отмена' })).toBeInTheDocument()
     await user.type(within(employeeDialog).getByLabelText('ФИО сотрудника'), 'Смирнов Алексей')
     await user.selectOptions(within(employeeDialog).getByLabelText('Отдел сотрудника'), 'Охрана')
     await user.type(within(employeeDialog).getByLabelText('Ставка сотрудника'), '25000')
