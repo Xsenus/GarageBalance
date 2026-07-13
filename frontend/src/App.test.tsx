@@ -1608,6 +1608,8 @@ describe('App', () => {
     const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
     await user.click(within(garagesTable).getByRole('button', { name: 'Владелец' }))
     await waitFor(() => expect(garagePageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'owner', sortDirection: 'asc' }))
+    await user.click(within(garagesTable).getByRole('button', { name: 'Просроченная задолженность' }))
+    await waitFor(() => expect(garagePageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'overdueDebt', sortDirection: 'asc' }))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const supplierPagination = within(contractorsPanel).getByRole('navigation', { name: 'Пагинация поставщиков' })

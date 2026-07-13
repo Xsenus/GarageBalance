@@ -164,7 +164,7 @@ const contractorSectionLabels: Record<ContractorSection, string> = {
 }
 
 type ContractorGarageColumnKey = 'number' | 'peopleCount' | 'floorCount' | 'owner' | 'phone' | 'overdueDebt' | 'actions'
-type ContractorGarageServerSortKey = Exclude<ContractorGarageColumnKey, 'actions' | 'overdueDebt'>
+type ContractorGarageServerSortKey = Exclude<ContractorGarageColumnKey, 'actions'>
 type ContractorSupplierSortKey = 'name' | 'service' | 'contactPerson' | 'phone' | 'email' | 'debt'
 type ContractorSupplierServerSortKey = ContractorSupplierSortKey
 type ContractorStaffSortKey = 'fullName' | 'department' | 'rate'
@@ -301,7 +301,7 @@ function compareContractorSuppliers(left: ContractorSupplierRow, right: Contract
 }
 
 function isGarageServerSortKey(key: ContractorSortKey): key is ContractorGarageServerSortKey {
-  return key === 'number' || key === 'peopleCount' || key === 'floorCount' || key === 'owner' || key === 'phone'
+  return key === 'number' || key === 'peopleCount' || key === 'floorCount' || key === 'owner' || key === 'phone' || key === 'overdueDebt'
 }
 
 function isSupplierServerSortKey(key: ContractorSortKey): key is ContractorSupplierServerSortKey {

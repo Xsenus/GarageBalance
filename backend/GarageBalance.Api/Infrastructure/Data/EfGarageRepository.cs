@@ -36,11 +36,20 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         CancellationToken cancellationToken)
     {
         var query = ApplyArchiveFilter(includeArchived);
-        if (normalizedSearch is { } searchValue && IsSqliteProvider())
+        if (IsSqliteProvider() && (normalizedSearch is not null || sortBy == "overdueDebt"))
         {
-            var garages = await ApplyPageSorting(query, sortBy, sortDescending).ThenBy(garage => garage.Id).ToListAsync(cancellationToken);
-            var filtered = garages.Where(garage => GarageMatchesSearch(garage, searchValue)).ToList();
-            return new GaragePageData(filtered.Skip(offset).Take(limit).ToList(), filtered.Count);
+            var garages = await query.ToListAsync(cancellationToken);
+            var filtered = normalizedSearch is { } searchValue
+                ? garages.Where(garage => GarageMatchesSearch(garage, searchValue)).ToList()
+                : garages;
+            var totals = sortBy == "overdueDebt"
+                ? await GetBalanceTotalsAsync(filtered.Select(garage => garage.Id).ToArray(), cancellationToken)
+                : new GarageBalanceTotalsData(new Dictionary<Guid, decimal>(), new Dictionary<Guid, decimal>());
+            var pageItems = ApplySqlitePageSorting(filtered, totals, sortBy, sortDescending)
+                .Skip(offset)
+                .Take(limit)
+                .ToList();
+            return new GaragePageData(pageItems, filtered.Count);
         }
 
         query = ApplySearch(query, normalizedSearch);
@@ -134,7 +143,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
-    private static IOrderedQueryable<Garage> ApplyPageSorting(IQueryable<Garage> query, string sortBy, bool descending)
+    private IOrderedQueryable<Garage> ApplyPageSorting(IQueryable<Garage> query, string sortBy, bool descending)
     {
         return (sortBy, descending) switch
         {
@@ -146,9 +155,57 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
             ("owner", false) => query.OrderBy(garage => garage.Owner == null ? null : garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)),
             ("phone", true) => query.OrderByDescending(garage => garage.Owner == null ? null : garage.Owner.Phone),
             ("phone", false) => query.OrderBy(garage => garage.Owner == null ? null : garage.Owner.Phone),
+            ("overdueDebt", true) => query.OrderByDescending(garage => Math.Max(
+                garage.StartingBalance +
+                (dbContext.Accruals
+                    .Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled)
+                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
+                (dbContext.FinancialOperations
+                    .Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+                    .Sum(operation => (decimal?)operation.Amount) ?? 0m),
+                0m)),
+            ("overdueDebt", false) => query.OrderBy(garage => Math.Max(
+                garage.StartingBalance +
+                (dbContext.Accruals
+                    .Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled)
+                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
+                (dbContext.FinancialOperations
+                    .Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+                    .Sum(operation => (decimal?)operation.Amount) ?? 0m),
+                0m)),
             (_, true) => query.OrderByDescending(garage => garage.Number),
             _ => query.OrderBy(garage => garage.Number)
         };
+    }
+
+    private static IOrderedEnumerable<Garage> ApplySqlitePageSorting(
+        IEnumerable<Garage> garages,
+        GarageBalanceTotalsData totals,
+        string sortBy,
+        bool descending)
+    {
+        Func<Garage, decimal> overdueDebt = garage => Math.Max(
+            garage.StartingBalance +
+            totals.AccrualTotals.GetValueOrDefault(garage.Id) -
+            totals.IncomeTotals.GetValueOrDefault(garage.Id),
+            0m);
+
+        var ordered = (sortBy, descending) switch
+        {
+            ("peopleCount", true) => garages.OrderByDescending(garage => garage.PeopleCount),
+            ("peopleCount", false) => garages.OrderBy(garage => garage.PeopleCount),
+            ("floorCount", true) => garages.OrderByDescending(garage => garage.FloorCount),
+            ("floorCount", false) => garages.OrderBy(garage => garage.FloorCount),
+            ("owner", true) => garages.OrderByDescending(garage => garage.Owner?.FullName),
+            ("owner", false) => garages.OrderBy(garage => garage.Owner?.FullName),
+            ("phone", true) => garages.OrderByDescending(garage => garage.Owner?.Phone),
+            ("phone", false) => garages.OrderBy(garage => garage.Owner?.Phone),
+            ("overdueDebt", true) => garages.OrderByDescending(overdueDebt),
+            ("overdueDebt", false) => garages.OrderBy(overdueDebt),
+            (_, true) => garages.OrderByDescending(garage => garage.Number),
+            _ => garages.OrderBy(garage => garage.Number)
+        };
+        return ordered.ThenBy(garage => garage.Id);
     }
 
     private static bool GarageMatchesSearch(Garage garage, string normalizedSearch) =>

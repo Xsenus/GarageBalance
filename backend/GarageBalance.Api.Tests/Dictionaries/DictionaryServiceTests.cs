@@ -657,7 +657,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task GetGaragesPageAsync_SortsDirectFieldsBeforePagination()
+    public async Task GetGaragesPageAsync_SortsFieldsBeforePagination()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -669,7 +669,7 @@ public sealed class DictionaryServiceTests
             new UpsertOwnerRequest("Alpha", "Owner", null, "+7 900 100", null, null),
             null,
             CancellationToken.None);
-        await service.CreateGarageAsync(
+        var debtGarage = await service.CreateGarageAsync(
             new UpsertGarageRequest("01", 1, 2, zedOwner.Value!.Id, 0, null, null, null),
             null,
             CancellationToken.None);
@@ -677,13 +677,38 @@ public sealed class DictionaryServiceTests
             new UpsertGarageRequest("99", 4, 1, alphaOwner.Value!.Id, 0, null, null, null),
             null,
             CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Sorting income", "sorting_income"),
+            null,
+            CancellationToken.None);
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = debtGarage.Value!.Id,
+            IncomeTypeId = incomeType.Value!.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 175m,
+            Source = AccrualSources.Manual
+        });
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            GarageId = debtGarage.Value.Id,
+            IncomeTypeId = incomeType.Value.Id,
+            OperationDate = new DateOnly(2026, 7, 15),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 75m
+        });
+        await database.Context.SaveChangesAsync();
 
         var byOwner = await service.GetGaragesPageAsync(null, 0, 1, "owner", "asc", CancellationToken.None);
         var byPeople = await service.GetGaragesPageAsync(null, 0, 1, "peopleCount", "desc", CancellationToken.None);
+        var byOverdueDebt = await service.GetGaragesPageAsync(null, 0, 1, "overdueDebt", "desc", CancellationToken.None);
 
         Assert.Equal(2, byOwner.TotalCount);
         Assert.Equal("99", Assert.Single(byOwner.Items).Number);
         Assert.Equal("99", Assert.Single(byPeople.Items).Number);
+        Assert.Equal("01", Assert.Single(byOverdueDebt.Items).Number);
+        Assert.Equal(100m, byOverdueDebt.Items[0].OverdueDebt);
     }
 
     [Fact]
