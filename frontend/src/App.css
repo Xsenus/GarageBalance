@@ -201,6 +201,19 @@
   flex: 0 0 auto;
 }
 
+.workspace--reports {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.workspace--reports > .topbar {
+  flex: 0 0 auto;
+}
+
 .auth-entry {
   min-height: 100vh;
   background: #ffffff;
@@ -5540,7 +5553,15 @@ button.operation-row:focus-visible {
 }
 
 .report-tabs--workbook {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.report-tabs--workbook button {
+  min-width: 150px;
+  flex: 1 0 150px;
 }
 
 .report-tab-panel {
@@ -5814,8 +5835,31 @@ button.operation-row:focus-visible {
   gap: 14px;
 }
 
+.workspace--reports > .reports-workbook-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.reports-workbook-panel > .section-heading,
+.reports-workbook-panel > .form-error,
+.reports-workbook-panel > .form-success,
+.reports-workbook-panel > .report-tabs--workbook {
+  flex: 0 0 auto;
+}
+
+.reports-workbook-panel > .report-tab-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .report-workbook-sheet {
-  display: grid;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 14px;
   overflow: hidden;
   border: 1px solid #d0d5dd;
@@ -5911,6 +5955,27 @@ button.operation-row:focus-visible {
   margin: 0 16px 16px;
   border-top: 1px solid #111827;
   border-left: 1px solid #111827;
+}
+
+.report-workbook-sheet > .report-workbook-table {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  margin-bottom: 0;
+}
+
+.report-workbook-sheet > .dictionary-pagination {
+  flex: 0 0 auto;
+}
+
+.report-workbook-sheet > .report-workbook-split {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .report-workbook-row {

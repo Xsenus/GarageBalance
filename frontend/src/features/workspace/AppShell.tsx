@@ -102,6 +102,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
     'workspace',
     effectiveActiveSection === 'meterReadings' ? 'workspace--meter-readings' : '',
     effectiveActiveSection === 'contractors' ? 'workspace--contractors' : '',
+    effectiveActiveSection === 'reports' ? 'workspace--reports' : '',
   ].filter(Boolean).join(' ')
 
   function handleToggleSidebar() {

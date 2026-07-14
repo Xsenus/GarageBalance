@@ -100,6 +100,15 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {\n  flex: 0 0 auto;')
   })
 
+  it('keeps report pagination visible and report choices in one row', () => {
+    expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
+    expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;')
+    expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
+    expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 150px;')
+    expect(normalizedAppCss).toContain('.report-workbook-sheet > .report-workbook-table {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow: auto;')
+    expect(normalizedAppCss).toContain('.report-workbook-sheet > .dictionary-pagination {\n  flex: 0 0 auto;')
+  })
+
   it('keeps settings navigation full-height and settings forms compact', () => {
     expect(normalizedAppCss).toContain('.settings-layout {\n  display: grid;\n  grid-template-columns: 240px minmax(0, 1fr);\n  gap: 18px;\n  min-height: calc(100dvh - 210px);')
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')

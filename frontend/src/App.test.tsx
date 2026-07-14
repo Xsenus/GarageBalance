@@ -10554,6 +10554,7 @@ describe('App', () => {
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
+    expect(reportsPanel.closest('.workspace')).toHaveClass('workspace--reports')
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(reportsPanel).getByRole('tab', { name: /Консолидированный/ })).toHaveAttribute('aria-selected', 'true')
     for (const tabName of ['По гаражам', 'По выплатам', 'Поступления', 'Оплаты из кассы', 'Сдача кассы в банк', 'Сборы', 'Изменение фондов']) {
