@@ -430,7 +430,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
           <p className="eyebrow">Импорт</p>
           <h2>Проверка старой базы Access перед переносом</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${runs.length} запусков`}</span>
+        {!loading ? <span>{runs.length} запусков</span> : null}
       </div>
 
       {error ? <FormError>{error}</FormError> : null}

@@ -24,13 +24,9 @@ export function LoadingSkeleton({ label, rows = 3, columns = 1, className = '' }
   )
 }
 
-export function TableLoadingState({ label, className = '' }: { label: string; className?: string }) {
-  return (
-    <div className={`table-loading-state ${className}`.trim()} role="status" aria-live="polite" aria-label={label}>
-      <span className="table-loading-state-spinner" aria-hidden="true" />
-      <span className="table-loading-state-label">{label}</span>
-    </div>
-  )
+export function TableLoadingState({ label, className = '', rows, columns = 4 }: { label: string; className?: string; rows?: number; columns?: number }) {
+  const skeletonRows = rows ?? (className.includes('table-loading-state--compact') ? 2 : 4)
+  return <LoadingSkeleton className={`table-loading-state ${className}`.trim()} label={label} rows={skeletonRows} columns={columns} />
 }
 
 export function EmptyState({ children, className = '' }: { children: ReactNode; className?: string }) {

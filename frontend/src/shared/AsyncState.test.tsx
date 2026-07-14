@@ -19,11 +19,13 @@ describe('AsyncState', () => {
     expect(screen.getByRole('status')).toHaveClass('empty-state--spacious')
   })
 
-  it('renders the shared centered table loader', () => {
+  it('renders the shared table-shaped skeleton loader', () => {
     const { container } = render(<TableLoadingState label="Загружаем таблицу" />)
 
     expect(screen.getByRole('status', { name: 'Загружаем таблицу' })).toBeInTheDocument()
-    expect(container.querySelector('.table-loading-state-spinner')).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByText('Загружаем таблицу')).toBeInTheDocument()
+    expect(container.querySelectorAll('.loading-skeleton-row')).toHaveLength(4)
+    expect(container.querySelectorAll('.loading-skeleton-line')).toHaveLength(16)
+    expect(container.querySelector('.loading-skeleton-row')).toHaveAttribute('aria-hidden', 'true')
+    expect(container.querySelector('.table-loading-state-spinner')).not.toBeInTheDocument()
   })
 })

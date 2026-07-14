@@ -2053,9 +2053,7 @@ export function FinancePanel({
           <p className="eyebrow">{getFinancePanelLabel('section')}</p>
           <h2>{getFinancePanelLabel('title')}</h2>
         </div>
-        {loading || !paymentDisplaySettingsLoaded ? (
-          <span>{getFinancePanelLabel('loading')}</span>
-        ) : showAllGarageOperations ? (
+        {!loading && paymentDisplaySettingsLoaded && showAllGarageOperations ? (
           <span>{formatFinanceOperationCount(summary.operationCount)}</span>
         ) : null}
       </div>

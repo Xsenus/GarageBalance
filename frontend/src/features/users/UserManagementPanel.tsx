@@ -388,7 +388,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           <p className="eyebrow">Пользователи</p>
           <h2>Доступ в систему и роли сотрудников</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${page.totalCount} пользователей`}</span>
+        {!loading ? <span>{page.totalCount} пользователей</span> : null}
       </div>
 
       {error ? <FormError>{error}</FormError> : null}

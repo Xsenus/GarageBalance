@@ -53,7 +53,17 @@ describe('shared loading-state coverage', () => {
     expect(component).toContain('role="status"')
     expect(component).toContain('aria-live="polite"')
     expect(component).toContain('aria-hidden="true"')
-    expect(component).toContain('table-loading-state-spinner')
+    expect(component).toContain('return <LoadingSkeleton')
+    expect(component).not.toContain('table-loading-state-spinner')
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
+  it('does not regress to bare loading text in production feature panels', () => {
+    const source = loadingFeatures
+      .map(([relativePath]) => readFileSync(resolve(process.cwd(), 'src', 'features', relativePath), 'utf8'))
+      .join('\n')
+
+    expect(source).not.toMatch(/<span>\{loading \? ['"]Загрузка\.\.\./)
+    expect(source).not.toMatch(/<p[^>]*>\s*(?:Загрузка|Загружаем)/)
   })
 })

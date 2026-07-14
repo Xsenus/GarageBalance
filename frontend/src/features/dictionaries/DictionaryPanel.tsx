@@ -975,7 +975,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
           <p className="eyebrow">Справочники</p>
           <h2>{activeOption.label}</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${activePage.totalCount} записей`}</span>
+        {!loading ? <span>{activePage.totalCount} записей</span> : null}
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
@@ -1797,7 +1797,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <p className="eyebrow">Справочники</p>
           <h2>База для импорта, начислений и отчетов</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${owners.length + garages.length + suppliers.length} записей`}</span>
+        {!loading ? <span>{owners.length + garages.length + suppliers.length} записей</span> : null}
       </div>
 
       {error ? <FormError>{error}</FormError> : null}

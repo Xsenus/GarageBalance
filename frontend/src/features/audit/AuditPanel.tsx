@@ -445,7 +445,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <h2>История изменений объектов и действий системы</h2>
         </div>
         <div className="section-actions">
-          <span>{loading ? 'Загрузка...' : `${page.totalCount} событий`}</span>
+          {!loading ? <span>{page.totalCount} событий</span> : null}
           <button className="secondary-button" type="button" disabled={exporting || auditHasValidationErrors} onClick={exportCurrentEventsCsv}>
             <FileSpreadsheet size={16} />
             Скачать CSV
@@ -580,7 +580,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            {detailState.loading ? <p className="form-note" role="status" aria-live="polite">Загружаем карточку события...</p> : null}
+            {detailState.loading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем карточку события" rows={3} columns={2} /> : null}
             {detailState.error ? (
               <div className="audit-error-state">
                 <FormError>{detailState.error}</FormError>
