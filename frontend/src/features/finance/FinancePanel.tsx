@@ -4571,12 +4571,12 @@ function PaymentsPrototypePanel({
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
                         <td>{row.item}</td>
-                        <td className={row.cost ? 'money-income' : undefined}>{formatPaymentPrototypeValue(row.cost)}</td>
-                        <td>{formatPaymentPrototypeValue(row.paid)}</td>
-                        <td>{formatPaymentPrototypeValue(row.balance)}</td>
-                        <td>{formatPaymentPrototypeValue(row.collected)}</td>
+                        <td className={row.cost ? 'money-income' : undefined}>{formatPaymentMoney(row.cost)}</td>
+                        <td>{formatPaymentMoney(row.paid)}</td>
+                        <td>{formatPaymentMoney(row.balance)}</td>
+                        <td>{formatPaymentMoney(row.collected)}</td>
                         <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
-                          {formatPaymentPrototypeValue(row.difference)}
+                          {formatPaymentMoney(row.difference)}
                         </td>
                         <td>
                           {row.action && row.item !== 'Авансовые выплаты' && row.item !== 'Выплата без чека' ? (
@@ -4603,11 +4603,11 @@ function PaymentsPrototypePanel({
                   <tr className="payments-prototype-total-row">
                     <td>ИТОГО</td>
                     <td />
-                    <td>{formatPaymentPrototypeValue(expenseAccrualTotal)}</td>
-                    <td>{formatPaymentPrototypeValue(expensePaidTotal)}</td>
-                    <td>{formatPaymentPrototypeValue(expenseBalanceTotal)}</td>
-                    <td>{formatPaymentPrototypeValue(expenseCollectedTotal)}</td>
-                    <td className={expenseDifferenceTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentPrototypeValue(expenseDifferenceTotal)}</td>
+                    <td>{formatPaymentMoney(expenseAccrualTotal)}</td>
+                    <td>{formatPaymentMoney(expensePaidTotal)}</td>
+                    <td>{formatPaymentMoney(expenseBalanceTotal)}</td>
+                    <td>{formatPaymentMoney(expenseCollectedTotal)}</td>
+                    <td className={expenseDifferenceTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentMoney(expenseDifferenceTotal)}</td>
                     <td />
                   </tr>
                 </tbody>

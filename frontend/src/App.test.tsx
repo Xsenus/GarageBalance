@@ -3368,8 +3368,9 @@ describe('App', () => {
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
 
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
-    expect(within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })).toBeInTheDocument()
-    expect(within(prototype).getAllByText('257 100')).toHaveLength(2)
+    const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
+    expect(expenseTable).toBeInTheDocument()
+    expect(within(expenseTable).getByText('257 100.00')).toBeInTheDocument()
 
     const addExpenseButton = within(prototype).getByRole('button', { name: 'Добавить выплату' })
     await user.click(addExpenseButton)
@@ -4065,8 +4066,8 @@ describe('App', () => {
     const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(await within(expenseTable).findByText('Серверный водоканал')).toBeInTheDocument()
     expect(within(expenseTable).getByText('Петрова Ольга')).toBeInTheDocument()
-    expect(within(expenseTable).getAllByText('32 000').length).toBeGreaterThan(0)
-    expect(within(expenseTable).getAllByText('47 000').length).toBeGreaterThan(0)
+    expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)
+    expect(within(expenseTable).getAllByText('47 000.00').length).toBeGreaterThan(0)
     expect(within(prototype).getByText('12 000')).toBeInTheDocument()
     expect(within(prototype).getByText('4 000')).toBeInTheDocument()
   })
