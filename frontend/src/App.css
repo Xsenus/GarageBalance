@@ -5389,9 +5389,145 @@ button.operation-row:focus-visible {
 
 .import-workbench {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(420px, 1fr);
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+.import-workbench-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.import-reader-card,
+.import-report-card {
+  min-width: 0;
+}
+
+.import-reader-requirements {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.import-reader-requirements > div {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.import-reader-requirements span,
+.import-report-metrics span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.import-reader-requirements strong {
+  overflow-wrap: anywhere;
+  color: #101828;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.import-report-card {
+  gap: 12px;
+}
+
+.import-report-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid #eaecf0;
+  padding-top: 10px;
+}
+
+.import-report-group h4 {
+  margin: 0;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.import-report-file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  margin: 0;
+  color: #475467;
+  font-size: 13px;
+}
+
+.import-report-file strong,
+.import-report-file span,
+.import-report-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-report-file strong {
+  color: #101828;
+}
+
+.import-report-summary {
+  margin: 0;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.import-report-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.import-report-metrics > div {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 64px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 9px 10px;
+  text-align: center;
+}
+
+.import-report-metrics span {
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.import-report-metrics strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #101828;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.import-report-actions > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.import-report-actions .secondary-button {
+  min-width: 0;
+  justify-content: center;
 }
 
 .import-tabs {
@@ -6565,6 +6701,14 @@ button.operation-row:focus-visible {
   }
 
   .import-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .import-report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .import-report-actions > div {
     grid-template-columns: 1fr;
   }
 

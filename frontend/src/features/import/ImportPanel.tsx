@@ -453,68 +453,81 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
           </button>
         </form>
 
-        <div className="dictionary-form">
-          <h3>Reader Access</h3>
-          {readerStatus ? (
-            <>
-              <p className={readerStatus.isAvailable ? 'status-active' : 'warning-text'} role="status" aria-live="polite">{formatImportReaderStatus(readerStatus.status)}</p>
-              <p className="empty-state">{readerStatus.statusMessage}</p>
-              {readerStatus.requiredComponents.length > 0 ? (
-                <div className="summary-strip" aria-label="Требования reader Access">
-                  {readerStatus.requiredComponents.map((component) => (
-                    <div key={component}>
-                      <span>Компонент</span>
-                      <strong>{component}</strong>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </>
-          ) : <p className="empty-state" role="status" aria-live="polite">Статус reader Access загружается...</p>}
-        </div>
+        <div className="import-workbench-overview">
+          <div className="dictionary-form import-reader-card">
+            <h3>Reader Access</h3>
+            {readerStatus ? (
+              <>
+                <p className={readerStatus.isAvailable ? 'status-active' : 'warning-text'} role="status" aria-live="polite">{formatImportReaderStatus(readerStatus.status)}</p>
+                <p className="empty-state">{readerStatus.statusMessage}</p>
+                {readerStatus.requiredComponents.length > 0 ? (
+                  <div className="import-reader-requirements" aria-label="Требования reader Access">
+                    {readerStatus.requiredComponents.map((component) => (
+                      <div key={component}>
+                        <span>Компонент</span>
+                        <strong>{component}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : <p className="empty-state" role="status" aria-live="polite">Статус reader Access загружается...</p>}
+          </div>
 
-        <div className="dictionary-form">
-          <h3>Отчет проверки</h3>
-          <button className="secondary-button" type="button" aria-label={reportDownloadActionLabel} title={reportDownloadActionLabel} data-tooltip={reportDownloadActionLabel} disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
-            <FileText size={16} aria-hidden="true" />
-            <span>Скачать отчет JSON</span>
-          </button>
-          <button className="secondary-button" type="button" aria-label={applyActionLabel} title={applyActionLabel} data-tooltip={applyActionLabel} disabled={applyDisabled} onClick={() => currentRun ? openApplyDialog(currentRun) : undefined}>
-            <DatabaseZap size={16} aria-hidden="true" />
-            <span>Запросить импорт</span>
-          </button>
-          <button className="secondary-button" type="button" aria-label={applyCancelActionLabel} title={applyCancelActionLabel} data-tooltip={applyCancelActionLabel} disabled={applyCancelDisabled} onClick={() => currentRun ? openApplyCancelDialog(currentRun) : undefined}>
-            <RotateCcw size={16} aria-hidden="true" />
-            <span>Отменить заявку</span>
-          </button>
-          <button className="secondary-button" type="button" aria-label={rollbackActionLabel} title={rollbackActionLabel} data-tooltip={rollbackActionLabel} disabled={rollbackDisabled} onClick={() => currentRun ? openRollbackDialog(currentRun) : undefined}>
-            <RotateCcw size={16} aria-hidden="true" />
-            <span>Запросить rollback</span>
-          </button>
-          {currentRun ? (
-            <>
-              <p className="empty-state" role="status" aria-live="polite">{currentRun.originalFileName} · {formatImportRunCheckSummary(currentRun)}</p>
-              <p className="empty-state" role="status" aria-live="polite">{currentRun.summary}</p>
-              <div className="summary-strip" aria-label="Итоги dry-run импорта">
-                <div>
-                  <span>Статус</span>
-                  <strong>{formatImportRunStatus(currentRun.status)}</strong>
+          <section className="dictionary-form import-report-card" aria-labelledby="import-report-title">
+            <h3 id="import-report-title">Отчет проверки</h3>
+            {currentRun ? (
+              <>
+                <div className="import-report-group" aria-label="Проверенный файл и результат">
+                  <h4>Файл и результат</h4>
+                  <p className="import-report-file" role="status" aria-live="polite">
+                    <strong>{currentRun.originalFileName}</strong>
+                    <span>{formatImportRunCheckSummary(currentRun)}</span>
+                  </p>
+                  <p className="import-report-summary">{currentRun.summary}</p>
                 </div>
-                <div>
-                  <span>Успешно</span>
-                  <strong className="status-active">{currentRun.passedChecks}</strong>
+                <div className="import-report-metrics" aria-label="Итоги dry-run импорта">
+                  <div>
+                    <span>Статус</span>
+                    <strong>{formatImportRunStatus(currentRun.status)}</strong>
+                  </div>
+                  <div>
+                    <span>Успешно</span>
+                    <strong className="status-active">{currentRun.passedChecks}</strong>
+                  </div>
+                  <div>
+                    <span>Предупреждения</span>
+                    <strong className="warning-text">{currentRun.warningCount}</strong>
+                  </div>
+                  <div>
+                    <span>Ошибки</span>
+                    <strong className={currentRun.errorCount > 0 ? 'status-disabled' : 'status-active'}>{currentRun.errorCount}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span>Предупреждения</span>
-                  <strong className="warning-text">{currentRun.warningCount}</strong>
-                </div>
-                <div>
-                  <span>Ошибки</span>
-                  <strong className={currentRun.errorCount > 0 ? 'status-disabled' : 'status-active'}>{currentRun.errorCount}</strong>
-                </div>
+              </>
+            ) : <p className="empty-state" role="status" aria-live="polite">Выберите запуск dry-run</p>}
+            <div className="import-report-group import-report-actions" aria-label="Действия с отчетом проверки">
+              <h4>Действия</h4>
+              <div>
+                <button className="secondary-button" type="button" aria-label={reportDownloadActionLabel} title={reportDownloadActionLabel} data-tooltip={reportDownloadActionLabel} disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
+                  <FileText size={16} aria-hidden="true" />
+                  <span>Скачать отчет JSON</span>
+                </button>
+                <button className="secondary-button" type="button" aria-label={applyActionLabel} title={applyActionLabel} data-tooltip={applyActionLabel} disabled={applyDisabled} onClick={() => currentRun ? openApplyDialog(currentRun) : undefined}>
+                  <DatabaseZap size={16} aria-hidden="true" />
+                  <span>Запросить импорт</span>
+                </button>
+                <button className="secondary-button" type="button" aria-label={applyCancelActionLabel} title={applyCancelActionLabel} data-tooltip={applyCancelActionLabel} disabled={applyCancelDisabled} onClick={() => currentRun ? openApplyCancelDialog(currentRun) : undefined}>
+                  <RotateCcw size={16} aria-hidden="true" />
+                  <span>Отменить заявку</span>
+                </button>
+                <button className="secondary-button" type="button" aria-label={rollbackActionLabel} title={rollbackActionLabel} data-tooltip={rollbackActionLabel} disabled={rollbackDisabled} onClick={() => currentRun ? openRollbackDialog(currentRun) : undefined}>
+                  <RotateCcw size={16} aria-hidden="true" />
+                  <span>Запросить rollback</span>
+                </button>
               </div>
-            </>
-          ) : <p className="empty-state" role="status" aria-live="polite">Выберите запуск dry-run</p>}
+            </div>
+          </section>
         </div>
       </div>
 

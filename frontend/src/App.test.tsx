@@ -9086,6 +9086,9 @@ describe('App', () => {
     expect(await within(importPanel).findByText('Не настроен')).toHaveAttribute('role', 'status')
     expect(within(importPanel).getByText('Фактическое чтение Access не подключено.')).toBeInTheDocument()
     expect(within(importPanel).getByLabelText('Требования reader Access')).toHaveTextContent('ACE OLE DB driver')
+    const importReport = within(importPanel).getByRole('region', { name: 'Отчет проверки' })
+    expect(within(importReport).getByLabelText('Действия с отчетом проверки')).toHaveTextContent('Скачать отчет JSON')
+    expect(within(importReport).getByText('Выберите запуск dry-run')).toHaveAttribute('role', 'status')
 
     const filePickerButton = within(importPanel).getByText('Выбрать .accdb или .mdb').closest('label')
     expect(filePickerButton).toHaveAttribute('title', 'Выбрать файл Access .accdb или .mdb')
@@ -9107,6 +9110,8 @@ describe('App', () => {
     expect(within(importSummary).getByText('2')).toBeInTheDocument()
     expect(within(importSummary).getByText('1')).toBeInTheDocument()
     expect(within(importSummary).getByText('0')).toBeInTheDocument()
+    expect(within(importReport).getByLabelText('Проверенный файл и результат')).toHaveTextContent('ГСК.accdb')
+    expect(within(importReport).getByLabelText('Проверенный файл и результат')).toHaveTextContent('2/3 · 1 предупреждение · 0 ошибок')
     expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
     expect(within(importPanel).getByText('Формат файла')).toBeInTheDocument()
     expect(within(importPanel).getAllByText('Пройдено').length).toBeGreaterThan(0)
@@ -9121,7 +9126,8 @@ describe('App', () => {
     expect((await within(importPanel).findAllByText('Dry-run завершен с предупреждениями.')).length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('Завершен').length).toBeGreaterThan(0)
     expect(within(importPanel).getAllByText('2/3 · 1 предупреждение · 0 ошибок').length).toBeGreaterThan(0)
-    expect(within(importPanel).getByText('ГСК.accdb · 2/3 · 1 предупреждение · 0 ошибок')).toHaveAttribute('role', 'status')
+    expect(within(importReport).getByRole('status')).toHaveTextContent('ГСК.accdb')
+    expect(within(importReport).getByRole('status')).toHaveTextContent('2/3 · 1 предупреждение · 0 ошибок')
     expect(within(importPanel).getAllByText('ГСК.accdb').length).toBeGreaterThan(0)
 
     const reportDownloadButton = within(importPanel).getByRole('button', { name: 'Скачать JSON-отчет dry-run ГСК.accdb' })
