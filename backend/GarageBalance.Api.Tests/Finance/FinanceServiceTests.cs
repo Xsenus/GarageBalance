@@ -2226,6 +2226,19 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public void RegularAccrualAutomationOptions_UsesShortRetryOnlyAfterTechnicalFailure()
+    {
+        var options = new RegularAccrualAutomationOptions
+        {
+            CheckIntervalMinutes = 360,
+            FailureRetryMinutes = 5
+        };
+
+        Assert.Equal(TimeSpan.FromHours(6), options.GetDelayAfterRun(failed: false));
+        Assert.Equal(TimeSpan.FromMinutes(5), options.GetDelayAfterRun(failed: true));
+    }
+
+    [Fact]
     public async Task GenerateFeeCampaignAccrualsAsync_CreatesAccrualsForActiveGaragesAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

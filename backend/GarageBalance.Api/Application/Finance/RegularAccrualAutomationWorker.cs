@@ -17,9 +17,9 @@ public sealed class RegularAccrualAutomationWorker(
             return;
         }
 
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_options.CheckIntervalMinutes));
         while (!stoppingToken.IsCancellationRequested)
         {
+            var failed = false;
             try
             {
                 using var scope = scopeFactory.CreateScope();
@@ -32,15 +32,16 @@ public sealed class RegularAccrualAutomationWorker(
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Regular accrual automation failed and will be retried on the next scheduled check.");
+                failed = true;
+                logger.LogError(
+                    exception,
+                    "Regular accrual automation failed and will be retried in {RetryMinutes} minutes.",
+                    _options.FailureRetryMinutes);
             }
 
             try
             {
-                if (!await timer.WaitForNextTickAsync(stoppingToken))
-                {
-                    break;
-                }
+                await Task.Delay(_options.GetDelayAfterRun(failed), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
