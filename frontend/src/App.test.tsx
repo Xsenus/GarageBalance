@@ -8707,6 +8707,7 @@ describe('App', () => {
       getOperations: async () => {
         throw new Error('preview unavailable')
       },
+      getAccruals: async () => [createAccrual({ id: 'available-preview-accrual', incomeTypeName: 'Доступное фоновое начисление' })],
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -8715,10 +8716,11 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    expect(await within(financePanel).findByText('Не удалось загрузить последние операции. Основная таблица платежей продолжает работать.')).toHaveAttribute('role', 'alert')
+    expect(await within(financePanel).findByText('Не удалось загрузить часть последних операций. Основная таблица платежей продолжает работать.')).toHaveAttribute('role', 'alert')
     expect(within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })).toBeInTheDocument()
     expect(within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })).toBeInTheDocument()
     expect(within(financePanel).queryByText('Операций пока нет.')).not.toBeInTheDocument()
+    expect(within(financePanel).getByText('Доступное фоновое начисление')).toBeInTheDocument()
   })
 
   it('refreshes payment summary totals from server when period filter changes', async () => {
