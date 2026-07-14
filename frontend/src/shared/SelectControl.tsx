@@ -10,11 +10,13 @@ export function SelectControl({
   'aria-label': ariaLabel,
   value,
   options,
+  disabled = false,
   onChange,
 }: {
   'aria-label': string
   value: string
   options: SelectControlOption[]
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -56,6 +58,7 @@ export function SelectControl({
         aria-expanded={open}
         aria-controls={listboxId}
         aria-activedescendant={open ? optionIds[activeIndex] : undefined}
+        disabled={disabled}
         onClick={() => open ? setOpen(false) : openList()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {

@@ -1733,8 +1733,11 @@ h1 {
   padding: 8px 10px;
 }
 
-.contractors-contacts-row input,
-.contractors-contacts-row select {
+.contractors-contacts-row--editable > span {
+  padding: 4px 5px;
+}
+
+.contractors-contacts-row input {
   width: 100%;
   min-height: 34px;
   border: 1px solid #d0d5dd;
@@ -1745,17 +1748,7 @@ h1 {
   padding: 6px 8px;
 }
 
-.contractors-contacts-row select {
-  appearance: none;
-  padding-right: 28px;
-  background-image: linear-gradient(45deg, transparent 50%, #475467 50%), linear-gradient(135deg, #475467 50%, transparent 50%);
-  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
-  background-repeat: no-repeat;
-  background-size: 5px 5px, 5px 5px;
-}
-
-.contractors-contacts-row input:disabled,
-.contractors-contacts-row select:disabled {
+.contractors-contacts-row input:disabled {
   background: #f2f4f7;
   color: #667085;
 }
@@ -4337,6 +4330,13 @@ h1 {
 .localized-date-picker:focus-within input {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.select-control__trigger:disabled {
+  cursor: not-allowed;
+  background: #f2f4f7;
+  color: #667085;
+  opacity: 0.72;
 }
 
 .select-control__list {

@@ -3201,10 +3201,13 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                   <span role="cell"><input aria-label={`Контакт ${index + 1}: телефон`} value={contact.phone} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { phone: event.target.value })} /></span>
                   <span role="cell"><input aria-label={`Контакт ${index + 1}: почта`} value={contact.email} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { email: event.target.value })} /></span>
                   <span role="cell">
-                    <select aria-label={`Контакт ${index + 1}: статус`} value={contact.status} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { status: event.target.value as ContractorSupplierContact['status'] })}>
-                      <option>Работает</option>
-                      <option>Не работает</option>
-                    </select>
+                    <SelectControl
+                      aria-label={`Контакт ${index + 1}: статус`}
+                      value={contact.status}
+                      options={[{ value: 'Работает', label: 'Работает' }, { value: 'Не работает', label: 'Не работает' }]}
+                      disabled={contact.isDeleted}
+                      onChange={(status) => updateContact(contact.id, { status: status as ContractorSupplierContact['status'] })}
+                    />
                   </span>
                   <span role="cell"><input aria-label={`Контакт ${index + 1}: комментарий`} value={contact.comment} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { comment: event.target.value })} /></span>
                 </div>

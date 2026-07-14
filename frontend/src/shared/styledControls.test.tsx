@@ -22,6 +22,16 @@ describe('styled form controls', () => {
     expect(control).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('keeps a disabled select closed', async () => {
+    const user = userEvent.setup()
+    render(<SelectControl aria-label="Статус" value="active" options={[{ value: 'active', label: 'Работает' }]} disabled onChange={() => undefined} />)
+
+    const control = screen.getByRole('combobox', { name: 'Статус' })
+    expect(control).toBeDisabled()
+    await user.click(control)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
   it('accepts localized dates and returns an ISO filter value', async () => {
     const user = userEvent.setup()
     function Example() {

@@ -154,6 +154,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(180px, 0.65fr) minmax(180px, 0.65fr) minmax(320px, 1.7fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.8fr) minmax(320px, 1.5fr);')
     expect(normalizedAppCss).toContain('.contractors-contacts-preview--editable {\n  min-height: 196px;\n  max-height: 280px;')
+    expect(normalizedAppCss).toContain('.contractors-contacts-row--editable > span {\n  padding: 4px 5px;')
     expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid,\n  .contractors-staff-fields {\n    grid-template-columns: 1fr;')
   })
 
