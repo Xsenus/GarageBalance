@@ -9,7 +9,6 @@ public interface IFundRepository
     Task<FundOperationPageData> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<Fund?> FindFundForUpdateAsync(Guid fundId, CancellationToken cancellationToken);
     Task<FundOperation?> FindOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<string>> GetNormalizedFundNamesAsync(CancellationToken cancellationToken);
     Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken);
     Task<decimal> GetActiveDepositTotalAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync(Guid fundId, bool trackChanges, CancellationToken cancellationToken);

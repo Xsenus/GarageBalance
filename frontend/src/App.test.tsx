@@ -31,7 +31,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
-import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient } from './services/fundsApi'
+import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -4302,6 +4302,46 @@ describe('App', () => {
     expect(within(fundsPanel).queryByText('Электроэнергия')).not.toBeInTheDocument()
     expect(within(fundsPanel).queryByRole('button', { name: 'Пополнить фонд Электроэнергия' })).not.toBeInTheDocument()
     expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('—')
+  })
+
+  it('shows shared fund skeletons and reveals each data region independently', async () => {
+    const user = userEvent.setup()
+    let resolveFunds!: (funds: FundDto[]) => void
+    let resolveOperations!: (page: FundOperationPageDto) => void
+    const getFunds = vi.fn(() => new Promise<FundDto[]>((resolve) => {
+      resolveFunds = resolve
+    }))
+    const getOperationsPage = vi.fn(() => new Promise<FundOperationPageDto>((resolve) => {
+      resolveOperations = resolve
+    }))
+    const fundsClient = createFundsClient({ getFunds, getOperationsPage })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    expect(within(fundsPanel).getByRole('status', { name: 'Загружаем фонды' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('status', { name: 'Загружаем сумму к распределению' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('status', { name: 'Загружаем операции фондов' })).toBeInTheDocument()
+    expect(within(fundsPanel).queryByText('Загружаем фонды...')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveFunds([createFund({ id: 'fund-electricity', name: 'Электроэнергия' })])
+    })
+
+    expect(await within(fundsPanel).findByRole('table', { name: 'Фонды и собранные суммы' })).toHaveTextContent('Электроэнергия')
+    expect(within(fundsPanel).queryByRole('status', { name: 'Загружаем фонды' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('status', { name: 'Загружаем операции фондов' })).toBeInTheDocument()
+
+    await act(async () => {
+      resolveOperations({ items: [], totalCount: 0, offset: 0, limit: 25 })
+    })
+
+    expect(await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).toHaveTextContent('Операций фондов пока нет.')
+    expect(within(fundsPanel).queryByRole('status', { name: 'Загружаем операции фондов' })).not.toBeInTheDocument()
   })
 
   it('lets administrator expand the sidebar and remembers the choice', async () => {

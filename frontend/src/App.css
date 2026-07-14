@@ -3432,6 +3432,14 @@ h1 {
   min-width: 980px;
 }
 
+.funds-table-skeleton {
+  width: 100%;
+}
+
+.funds-operations-skeleton {
+  min-width: 980px;
+}
+
 .funds-table {
   width: 100%;
   border-collapse: separate;
@@ -3570,6 +3578,11 @@ h1 {
 
 .funds-distribution strong {
   color: #101828;
+}
+
+.funds-distribution-skeleton {
+  width: 100%;
+  grid-column: 1 / -1;
 }
 
 .fund-operation-preview {

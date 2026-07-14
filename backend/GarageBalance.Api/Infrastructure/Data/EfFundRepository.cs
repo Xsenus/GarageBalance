@@ -83,22 +83,25 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .SingleOrDefaultAsync(operation => operation.Id == operationId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<string>> GetNormalizedFundNamesAsync(CancellationToken cancellationToken)
-    {
-        return await dbContext.Funds.Select(fund => fund.NormalizedName).ToListAsync(cancellationToken);
-    }
-
     public async Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken)
     {
-        var incomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var expenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var allocatedFundTotal = await dbContext.Funds.AsNoTracking()
-            .SumAsync(fund => (decimal?)fund.Balance, cancellationToken) ?? 0m;
-        return new FundTotalsData(incomeTotal, expenseTotal, allocatedFundTotal);
+        var totals = await dbContext.Funds.AsNoTracking()
+            .Select(_ => new
+            {
+                IncomeTotal = dbContext.FinancialOperations.AsNoTracking()
+                    .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+                    .Sum(operation => (decimal?)operation.Amount) ?? 0m,
+                ExpenseTotal = dbContext.FinancialOperations.AsNoTracking()
+                    .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
+                    .Sum(operation => (decimal?)operation.Amount) ?? 0m,
+                AllocatedFundTotal = dbContext.Funds.AsNoTracking()
+                    .Sum(fund => (decimal?)fund.Balance) ?? 0m
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return totals is null
+            ? new FundTotalsData(0m, 0m, 0m)
+            : new FundTotalsData(totals.IncomeTotal, totals.ExpenseTotal, totals.AllocatedFundTotal);
     }
 
     public async Task<decimal> GetActiveDepositTotalAsync(CancellationToken cancellationToken)

@@ -19,12 +19,15 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
 
     public async Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
     {
-        await EnsureDefaultFundsAsync(cancellationToken);
+        var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();
+        await EnsureDefaultFundsAsync(funds, cancellationToken);
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
 
-        var funds = await repository.GetFundsAsync(cancellationToken);
-
-        return funds.Select(fund => ToDto(fund, availableToDistribute)).ToList();
+        return funds
+            .OrderBy(fund => fund.SortOrder)
+            .ThenBy(fund => fund.Name)
+            .Select(fund => ToDto(fund, availableToDistribute))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
@@ -241,10 +244,9 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
         return FundResult<FundOperationDto>.Success(ToDto(operation));
     }
 
-    private async Task EnsureDefaultFundsAsync(CancellationToken cancellationToken)
+    private async Task EnsureDefaultFundsAsync(List<Fund> funds, CancellationToken cancellationToken)
     {
-        var existingNames = await repository.GetNormalizedFundNamesAsync(cancellationToken);
-        var existing = existingNames.ToHashSet(StringComparer.Ordinal);
+        var existing = funds.Select(fund => fund.NormalizedName).ToHashSet(StringComparer.Ordinal);
         var added = false;
 
         foreach (var definition in DefaultFunds)
@@ -255,14 +257,16 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
                 continue;
             }
 
-            repository.AddFund(new Fund
+            var fund = new Fund
             {
                 Name = definition.Name,
                 NormalizedName = normalizedName,
                 SortOrder = definition.SortOrder,
                 AllowOperations = definition.AllowOperations,
                 IsSystem = true
-            });
+            };
+            repository.AddFund(fund);
+            funds.Add(fund);
             added = true;
         }
 

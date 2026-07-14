@@ -38,6 +38,22 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FundDashboard_ReusesLoadedFundsAndAggregatesTotalsInOneDatabaseCommand()
+    {
+        var serviceSource = ReadApiSource("Application/Funds/FundService.cs");
+        var repositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
+        var totalsMethod = repositorySource[
+            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<decimal> GetActiveDepositTotalAsync", StringComparison.Ordinal)];
+
+        Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("EnsureDefaultFundsAsync(funds, cancellationToken)", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetNormalizedFundNamesAsync", serviceSource, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(totalsMethod, ".Sum("));
+        Assert.Equal(1, CountOccurrences(totalsMethod, ".FirstOrDefaultAsync(cancellationToken)"));
+        Assert.DoesNotContain("SumAsync", totalsMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinancialOperationRepository_UsesDatabaseCountOffsetAndLimitWithScopedSqliteFallback()
     {
         var source = ReadApiSource("Infrastructure/Data/EfFinancialOperationRepository.cs");

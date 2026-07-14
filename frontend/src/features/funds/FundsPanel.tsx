@@ -5,6 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { FundDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime, formatMoney } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -71,7 +72,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [statusAction, setStatusAction] = useState<FundOperationStatusDraft | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [fundsLoading, setFundsLoading] = useState(true)
+  const [operationsLoading, setOperationsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [savingOperation, setSavingOperation] = useState(false)
   const [savingStatusAction, setSavingStatusAction] = useState(false)
@@ -112,16 +114,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     let cancelled = false
 
     async function loadFunds() {
-      setIsLoading(true)
       setLoadError(null)
+      setFundsLoading(true)
       try {
-        const [funds, operations] = await Promise.all([
-          fundsClient.getFunds(auth.accessToken),
-          getOperationsPage(1, 25),
-        ])
+        const funds = await fundsClient.getFunds(auth.accessToken)
         if (!cancelled) {
           setRows(funds.map(mapFundDtoToPrototypeRow))
-          setOperationPage(operations)
           setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
         }
       } catch (error: unknown) {
@@ -130,12 +128,31 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         }
       } finally {
         if (!cancelled) {
-          setIsLoading(false)
+          setFundsLoading(false)
+        }
+      }
+    }
+
+    async function loadOperations() {
+      setOperationsLoading(true)
+      try {
+        const operations = await getOperationsPage(1, 25)
+        if (!cancelled) {
+          setOperationPage(operations)
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить операции фондов.')
+        }
+      } finally {
+        if (!cancelled) {
+          setOperationsLoading(false)
         }
       }
     }
 
     void loadFunds()
+    void loadOperations()
 
     return () => {
       cancelled = true
@@ -143,14 +160,14 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   }, [auth.accessToken, fundsClient, getOperationsPage])
 
   async function changeOperationsPage(pageNumber: number, limit = operationPage.limit) {
-    setIsLoading(true)
+    setOperationsLoading(true)
     setLoadError(null)
     try {
       setOperationPage(await getOperationsPage(pageNumber, limit))
     } catch (error: unknown) {
       setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить операции фондов.')
     } finally {
-      setIsLoading(false)
+      setOperationsLoading(false)
     }
   }
 
@@ -397,9 +414,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       </div>
 
       <div className="funds-sheet">
-        {isLoading ? <p className="prototype-status" role="status">Загружаем фонды...</p> : null}
         {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
-        <table className="funds-table" aria-label="Фонды и собранные суммы">
+        {fundsLoading ? (
+          <LoadingSkeleton className="funds-table-skeleton" label="Загружаем фонды" rows={7} columns={4} />
+        ) : (
+          <table className="funds-table" aria-label="Фонды и собранные суммы">
           <thead>
             <tr>
               <th scope="col">Фонд</th>
@@ -428,24 +447,35 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   )}
                 </td>
               </tr>
-            )) : !isLoading ? (
+            )) : (
               <tr>
                 <td colSpan={4}>Фонды пока не настроены.</td>
               </tr>
-            ) : null}
+            )}
           </tbody>
-        </table>
+          </table>
+        )}
       </div>
 
       <div className="funds-distribution" aria-label="Сумма к распределению">
-        <span>Сумма к распределению</span>
-        <strong>{availableToDistribute === null || availableToDistribute === 0 ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
+        {fundsLoading ? (
+          <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Загружаем сумму к распределению" rows={1} columns={2} />
+        ) : (
+          <>
+            <span>Сумма к распределению</span>
+            <strong>{availableToDistribute === null || availableToDistribute === 0 ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
+          </>
+        )}
       </div>
 
       {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
 
       <div className="funds-sheet funds-operations-sheet">
-        <table className="funds-table funds-operations-table" aria-label="Операции фондов">
+        {operationsLoading ? (
+          <LoadingSkeleton className="funds-table-skeleton funds-operations-skeleton" label="Загружаем операции фондов" rows={5} columns={7} />
+        ) : (
+          <>
+            <table className="funds-table funds-operations-table" aria-label="Операции фондов">
           <thead>
             <tr>
               <th scope="col">Дата</th>
@@ -492,24 +522,26 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   </div>
                 </td>
               </tr>
-            )) : !isLoading ? (
+            )) : (
               <tr>
                 <td colSpan={7}>Операций фондов пока нет.</td>
               </tr>
-            ) : null}
+            )}
           </tbody>
-        </table>
-        <TablePagination
-          ariaLabel="Пагинация операций фондов"
-          totalCount={operationPage.totalCount}
-          offset={operationPage.offset}
-          limit={operationPage.limit}
-          visibleCount={operationPage.items.length}
-          disabled={isLoading}
-          pageSizeLabel="Количество операций фондов"
-          onPageChange={(pageNumber) => void changeOperationsPage(pageNumber)}
-          onPageSizeChange={(limit) => void changeOperationsPage(1, limit)}
-        />
+            </table>
+            <TablePagination
+              ariaLabel="Пагинация операций фондов"
+              totalCount={operationPage.totalCount}
+              offset={operationPage.offset}
+              limit={operationPage.limit}
+              visibleCount={operationPage.items.length}
+              disabled={operationsLoading}
+              pageSizeLabel="Количество операций фондов"
+              onPageChange={(pageNumber) => void changeOperationsPage(pageNumber)}
+              onPageSizeChange={(limit) => void changeOperationsPage(1, limit)}
+            />
+          </>
+        )}
       </div>
 
       {operation ? (
