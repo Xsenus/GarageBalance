@@ -26,6 +26,7 @@ type AccrualBreakdown =
   | { kind: 'supplier'; accrual: SupplierAccrualDto }
 
 const financeScreenRequestLimit = 50
+const financePreviewRequestLimit = 8
 const dictionaryScreenRequestLimit = 100
 const paymentsFormStateScope = 'payments-prototype'
 
@@ -502,6 +503,10 @@ export function FinancePanel({
   const visibleAccruals = accruals.slice(0, 8)
   const visibleSupplierAccruals = supplierAccruals.slice(0, 8)
   const visibleMeterReadings = meterReadings.slice(0, 8)
+  const operationPreviewTotal = summary.incomeCount !== undefined && summary.expenseCount !== undefined
+    ? summary.incomeCount + summary.expenseCount
+    : summary.operationCount
+  const supplierAccrualPreviewTotal = summary.supplierAccrualCount ?? supplierAccruals.length
   const compatibleRegularTariffs = getCompatibleRegularTariffs(regularForm.incomeTypeId, incomeTypes, tariffs)
 
   useEffect(() => {
@@ -603,10 +608,10 @@ export function FinancePanel({
     let ignore = false
     const handle = window.setTimeout(() => {
       void Promise.all([
-        financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
-        financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
-        financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
-        financeClient.getMeterReadings(auth.accessToken, financeScreenRequestLimit),
+        financeClient.getOperations(auth.accessToken, financePreviewRequestLimit),
+        financeClient.getAccruals(auth.accessToken, financePreviewRequestLimit),
+        financeClient.getSupplierAccruals(auth.accessToken, financePreviewRequestLimit),
+        financeClient.getMeterReadings(auth.accessToken, financePreviewRequestLimit),
       ]).then(([loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings]) => {
         if (!ignore) {
           setOperations(loadedOperations)
@@ -2453,7 +2458,7 @@ export function FinancePanel({
               </span>
             </div>
           ))}
-          {operations.length > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operations.length, 'operations')}</p> : null}
+          {operationPreviewTotal > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operationPreviewTotal, 'operations')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('accruals')}>
@@ -2482,7 +2487,7 @@ export function FinancePanel({
               </span>
             </div>
           ))}
-          {accruals.length > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, accruals.length, 'accruals')}</p> : null}
+          {summary.accrualCount > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, summary.accrualCount, 'accruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('supplierAccruals')}>
@@ -2511,7 +2516,7 @@ export function FinancePanel({
               </span>
             </div>
           ))}
-          {supplierAccruals.length > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccruals.length, 'supplierAccruals')}</p> : null}
+          {supplierAccrualPreviewTotal > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccrualPreviewTotal, 'supplierAccruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('meterReadings')}>
@@ -2534,7 +2539,7 @@ export function FinancePanel({
               </span>
             </div>
           ))}
-          {meterReadings.length > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, meterReadings.length, 'meterReadings')}</p> : null}
+          {summary.meterReadingCount > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, summary.meterReadingCount, 'meterReadings')}</p> : null}
         </div>
       </div>
       {financeContextMenu ? (

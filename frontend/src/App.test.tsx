@@ -8533,13 +8533,26 @@ describe('App', () => {
       consumption: 401 + index,
     }))
     const requestedLimits: Record<string, number | undefined> = {}
+    const requestedPreviewLimits: Record<string, number | undefined> = {}
     const getMissingMeterReadings = vi.fn(async () => [] as MissingMeterReadingDto[])
     const toPage = <TItem,>(items: TItem[], offset = 0, limit = 25) => ({ items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit })
     const financeClient = createFinanceClient({
-      getOperations: async () => operations,
-      getAccruals: async () => accruals,
-      getSupplierAccruals: async () => supplierAccruals,
-      getMeterReadings: async () => meterReadings,
+      getOperations: async (_token, limit) => {
+        requestedPreviewLimits.operations = limit
+        return operations.slice(0, limit)
+      },
+      getAccruals: async (_token, limit) => {
+        requestedPreviewLimits.accruals = limit
+        return accruals.slice(0, limit)
+      },
+      getSupplierAccruals: async (_token, limit) => {
+        requestedPreviewLimits.supplierAccruals = limit
+        return supplierAccruals.slice(0, limit)
+      },
+      getMeterReadings: async (_token, limit) => {
+        requestedPreviewLimits.meterReadings = limit
+        return meterReadings.slice(0, limit)
+      },
       getOperationsPage: async (_token, params) => {
         const key = params?.operationKind === 'expense' ? 'expenseOperations' : 'incomeOperations'
         requestedLimits[key] = params?.limit
@@ -8587,6 +8600,7 @@ describe('App', () => {
     expect(await within(accrualsTable).findByText('Показано 8 из 9 начислений')).toHaveAttribute('role', 'status')
     expect(await within(supplierAccrualsTable).findByText('Показано 8 из 9 начислений поставщикам')).toHaveAttribute('role', 'status')
     expect(await within(meterReadingsTable).findByText('Показано 8 из 9 показаний')).toHaveAttribute('role', 'status')
+    expect(requestedPreviewLimits).toEqual({ operations: 8, accruals: 8, supplierAccruals: 8, meterReadings: 8 })
     const paymentPaginationCounter = within(financePanel).getByText('Показано 1-9 из 9')
     expect(paymentPaginationCounter).toHaveAttribute('role', 'status')
     expect(paymentPaginationCounter).toHaveAttribute('aria-live', 'polite')
