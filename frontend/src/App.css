@@ -3591,6 +3591,32 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.bank-deposit-dialog {
+  width: min(760px, 100%);
+}
+
+.bank-deposit-form {
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.bank-deposit-form .form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.bank-deposit-form__fund,
+.bank-deposit-form__comment,
+.bank-deposit-form > .loading-skeleton,
+.bank-deposit-form > .form-error {
+  grid-column: 1 / -1;
+}
+
+.bank-deposit-form__comment textarea {
+  min-height: 112px;
+}
+
 .funds-page {
   display: flex;
   min-height: 0;
@@ -4404,6 +4430,11 @@ h1 {
 .localized-date-picker__trigger:focus-visible {
   background: #eef4ff;
   color: #175cd3;
+}
+
+.localized-date-picker__trigger:disabled {
+  cursor: not-allowed;
+  color: #98a2b3;
 }
 
 .localized-date-picker__popover {
@@ -6940,6 +6971,17 @@ button.operation-row:focus-visible {
   .payments-prototype-modal-form label {
     display: grid;
     gap: 6px;
+  }
+
+  .bank-deposit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .bank-deposit-form__fund,
+  .bank-deposit-form__comment,
+  .bank-deposit-form > .loading-skeleton,
+  .bank-deposit-form > .form-error {
+    grid-column: 1;
   }
 
   .roadmap-grid {

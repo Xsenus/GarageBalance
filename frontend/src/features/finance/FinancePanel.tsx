@@ -4990,7 +4990,8 @@ function BankDepositPrototypeDialog({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const availableToDistribute = funds.length > 0 ? funds[0].availableToDistribute : null
+  const selectedFund = funds.find((fund) => fund.id === fundId) ?? null
+  const availableToDistribute = selectedFund?.availableToDistribute ?? null
   useEscapeKey(true, onClose)
 
   useEffect(() => {
@@ -5042,7 +5043,7 @@ function BankDepositPrototypeDialog({
       return
     }
     if (availableToDistribute !== null && parsedAmount > availableToDistribute) {
-      setError(`Сумма сдачи не может превышать доступную к распределению сумму ${formatMoney(availableToDistribute)} руб.`)
+      setError(`Сумма сдачи не может превышать доступную к распределению сумму ${formatPaymentMoney(availableToDistribute)} руб.`)
       return
     }
 
@@ -5068,7 +5069,7 @@ function BankDepositPrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="bank-deposit-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog bank-deposit-dialog" role="dialog" aria-modal="true" aria-labelledby="bank-deposit-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="bank-deposit-title">Учет суммы на счете в банке</h3>
@@ -5077,38 +5078,45 @@ function BankDepositPrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Фонд">
-            <select aria-label="Фонд для сдачи кассы" value={fundId} onChange={(event) => {
-              setFundId(event.target.value)
-              setError(null)
-            }} disabled={loading || saving}>
-              {funds.length > 0 ? funds.map((fund) => (
-                <option key={fund.id} value={fund.id}>{fund.name}</option>
-              )) : <option value="">Нет доступных фондов</option>}
-            </select>
+        <form className="dictionary-modal-form payments-prototype-modal-form bank-deposit-form" onSubmit={handleSubmit}>
+          <FormField className="bank-deposit-form__fund" label="Фонд">
+            <SelectControl
+              aria-label="Фонд для сдачи кассы"
+              value={fundId}
+              options={funds.length > 0
+                ? funds.map((fund) => ({ value: fund.id, label: fund.name }))
+                : [{ value: '', label: 'Нет доступных фондов' }]}
+              disabled={loading || saving}
+              onChange={(nextFundId) => {
+                setFundId(nextFundId)
+                setError(null)
+              }}
+            />
           </FormField>
-          <FormField label="Сумма">
+          <FormField
+            className="bank-deposit-form__amount"
+            label="Сумма"
+            hint={availableToDistribute !== null ? `Доступно к распределению: ${formatPaymentMoney(availableToDistribute)} руб.` : undefined}
+          >
             <input aria-label="Сумма в банке" inputMode="decimal" value={amount} onChange={(event) => {
               setAmount(event.target.value)
               setError(null)
-            }} disabled={saving} />
+            }} onBlur={() => setAmount(formatPaymentMoney(amount))} disabled={saving} />
           </FormField>
-          {availableToDistribute !== null ? <p className="form-hint">Доступно к распределению: {formatMoney(availableToDistribute)} руб.</p> : null}
-          <FormField label="Дата">
-            <input aria-label="Дата учета суммы в банке" type="date" value={operationDate} onChange={(event) => {
-              setOperationDate(event.target.value)
+          <FormField className="bank-deposit-form__date" label="Дата">
+            <LocalizedDatePicker ariaLabel="Дата учета суммы в банке" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
+              setOperationDate(nextOperationDate)
               setError(null)
-            }} disabled={saving} />
+            }} />
           </FormField>
-          <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к сумме в банке" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
+          <FormField className="bank-deposit-form__comment" label="Комментарий">
+            <textarea aria-label="Комментарий к сумме в банке" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
           {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем фонды для операции" rows={2} columns={2} /> : null}
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={loading || saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={loading || saving}><Save size={17} aria-hidden="true" /><span>{saving ? 'Сохраняем...' : 'Сохранить'}</span></button>
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>

@@ -8,11 +8,13 @@ export function LocalizedDatePicker({
   ariaLabel,
   value,
   mode,
+  disabled = false,
   onChange,
 }: {
   ariaLabel: string
   value: string
   mode: 'date' | 'month'
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -73,6 +75,7 @@ export function LocalizedDatePicker({
         inputMode="numeric"
         placeholder={mode === 'date' ? 'дд.мм.гггг' : 'мм.гггг'}
         value={draft}
+        disabled={disabled}
         onChange={(event) => commitDraft(event.target.value)}
         onBlur={() => setDraft(formatLocalizedValue(value, mode))}
       />
@@ -82,6 +85,7 @@ export function LocalizedDatePicker({
         aria-label={`Открыть календарь: ${ariaLabel}`}
         aria-expanded={open}
         aria-haspopup="dialog"
+        disabled={disabled}
         onClick={() => {
           const parsed = parseIsoValue(value, mode)
           if (parsed) setViewDate(parsed)

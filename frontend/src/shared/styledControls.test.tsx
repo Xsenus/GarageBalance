@@ -51,4 +51,15 @@ describe('styled form controls', () => {
     await user.click(screen.getByRole('button', { name: 'Открыть календарь: Дата события' }))
     expect(screen.getByRole('dialog', { name: 'Дата события: календарь' })).toBeInTheDocument()
   })
+
+  it('keeps a disabled localized date picker closed', async () => {
+    const user = userEvent.setup()
+    render(<LocalizedDatePicker ariaLabel="Дата операции" mode="date" value="2026-07-14" disabled onChange={() => undefined} />)
+
+    expect(screen.getByLabelText('Дата операции')).toBeDisabled()
+    const trigger = screen.getByRole('button', { name: 'Открыть календарь: Дата операции' })
+    expect(trigger).toBeDisabled()
+    await user.click(trigger)
+    expect(screen.queryByRole('dialog', { name: 'Дата операции: календарь' })).not.toBeInTheDocument()
+  })
 })
