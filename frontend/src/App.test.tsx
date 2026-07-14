@@ -1665,6 +1665,7 @@ describe('App', () => {
     await user.type(within(employeeDialog).getByLabelText('Ставка сотрудника'), '25000')
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
+    expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('25 000.00')).toBeInTheDocument()
     expect(addEmployeeButton).toHaveFocus()
 
     const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
@@ -1679,6 +1680,7 @@ describe('App', () => {
     await user.click(within(employeeRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Смирнов Алексей' }))
     const editEmployeeDialog = await screen.findByRole('dialog', { name: 'Смирнов Алексей' })
     expect(within(editEmployeeDialog).getByLabelText('Отдел сотрудника').tagName).toBe('BUTTON')
+    expect(within(editEmployeeDialog).getByLabelText('Ставка сотрудника')).toHaveValue('25 000.00')
     expect(within(editEmployeeDialog).getByRole('button', { name: 'Открыть фин. отчет' })).toHaveClass('contractors-report-button')
     expect(within(editEmployeeDialog).queryByRole('button', { name: 'Удалить сотрудника' })).not.toBeInTheDocument()
     await user.clear(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'))
@@ -1687,7 +1689,7 @@ describe('App', () => {
     const employeeChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения сотрудника' })
     expect(within(employeeChangeDialog).getByText('Смирнов Алексей')).toBeInTheDocument()
     expect(within(employeeChangeDialog).getByText('Ставка')).toBeInTheDocument()
-    expect(within(employeeChangeDialog).getByText(/25\s*000\s*->\s*30000/)).toBeInTheDocument()
+    expect(within(employeeChangeDialog).getByText(/25\s000\.00\s*->\s*30\s000\.00/)).toBeInTheDocument()
     const employeeChangeCancelButton = within(employeeChangeDialog).getByRole('button', { name: 'Отмена' })
     const employeeChangeSaveButton = within(employeeChangeDialog).getByRole('button', { name: 'Сохранить' })
     expect(Boolean(employeeChangeCancelButton.compareDocumentPosition(employeeChangeSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
@@ -1896,6 +1898,7 @@ describe('App', () => {
     editButton = within(staffRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Петрова Ольга' })
     await user.click(editButton)
     staffDialog = await screen.findByRole('dialog', { name: 'Петрова Ольга' })
+    expect(within(staffDialog).getByLabelText('Ставка сотрудника')).toHaveValue('40 000.00')
     await user.click(within(staffDialog).getByRole('combobox', { name: 'Отдел сотрудника' }))
     await user.click(within(staffDialog).getByRole('option', { name: nextDepartment.name }))
     await user.clear(within(staffDialog).getByLabelText('Ставка сотрудника'))
@@ -1908,7 +1911,7 @@ describe('App', () => {
     expect(confirmationDialog).toHaveTextContent('Отдел')
     expect(confirmationDialog).toHaveTextContent('Бухгалтерия -> Охрана')
     expect(confirmationDialog).toHaveTextContent('Ставка')
-    expect(confirmationDialog).toHaveTextContent(/40\s*000\s*->\s*45000/)
+    expect(confirmationDialog).toHaveTextContent(/40\s000\.00\s*->\s*45\s000\.00/)
     expect(updateStaffMember).not.toHaveBeenCalled()
     await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
@@ -1929,7 +1932,7 @@ describe('App', () => {
       throw new Error('Строка сотрудника Петрова Ольга не найдена после подтверждения.')
     }
     expect(updatedStaffRow).toHaveTextContent('Охрана')
-    expect(updatedStaffRow).toHaveTextContent(/45\s*000/)
+    expect(updatedStaffRow).toHaveTextContent('45 000.00')
   })
 
   it('opens financial reports for suppliers and staff from contractors tables', async () => {

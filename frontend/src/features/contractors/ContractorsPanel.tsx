@@ -18,6 +18,7 @@ import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFil
 import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
+import { formatStaffRate } from './staffRateFormatting'
 
 const contractorsFormStateScope = 'contractors-prototype'
 
@@ -560,7 +561,7 @@ function createStaffRowFromDto(member: StaffMemberDto): ContractorStaffRow {
     id: member.id,
     fullName: member.fullName,
     department: member.departmentName,
-    rate: formatPrototypeMoney(member.rate),
+    rate: formatStaffRate(member.rate),
     isDeleted: member.isArchived,
   }
 }
@@ -1953,7 +1954,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
                   <span role="cell">{row.fullName}</span>
                   <span role="cell">{row.department}</span>
-                  <span role="cell">{row.isDeleted ? 'Удален' : row.rate}</span>
+                  <span role="cell">{row.isDeleted ? 'Удален' : formatStaffRate(row.rate)}</span>
                   <span role="cell" className="contractors-row-actions">
                     {row.isDeleted ? (
                       <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
@@ -3336,7 +3337,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
   useEscapeKey(saveChanges.length === 0, onClose)
 
   function saveAndClose() {
-    onSave(form)
+    onSave({ ...form, rate: formatStaffRate(form.rate) })
     setSaveChanges([])
     onClose()
   }
@@ -3349,12 +3350,14 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
       return
     }
 
-    const changes = getEmployeePrototypeChanges(item, form)
+    const normalizedForm = { ...form, rate: formatStaffRate(form.rate) }
+    const changes = getEmployeePrototypeChanges(item, normalizedForm)
     if (changes.length === 0) {
       onClose()
       return
     }
 
+    setForm(normalizedForm)
     setSaveChanges(changes)
   }
 
@@ -3379,7 +3382,18 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
                   onChange={(department) => setForm({ ...form, department })}
                 />
               </FormField>
-              <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
+              <FormField label="Ставка">
+                <div className="contractors-inline-field">
+                  <input
+                    aria-label="Ставка сотрудника"
+                    inputMode="decimal"
+                    value={form.rate}
+                    onChange={(event) => setForm({ ...form, rate: event.target.value })}
+                    onBlur={() => setForm((current) => ({ ...current, rate: formatStaffRate(current.rate) }))}
+                  />
+                  <span>руб.</span>
+                </div>
+              </FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-staff-actions">
               <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
