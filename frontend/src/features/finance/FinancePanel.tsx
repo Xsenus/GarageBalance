@@ -5968,18 +5968,16 @@ function FullPaymentPrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Период">
-            <select aria-label="Период полной оплаты" value={period} onChange={(event) => {
-              const nextPeriod = event.target.value
-              setPeriod(nextPeriod)
-              setAmount(String(periodOptions.find((option) => option.value === nextPeriod)?.debt ?? 0))
-              setError(null)
-            }}>
-              {periodOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <SelectControl
+              aria-label="Период полной оплаты"
+              value={period}
+              options={periodOptions.map((option) => ({ value: option.value, label: option.label }))}
+              onChange={(nextPeriod) => {
+                setPeriod(nextPeriod)
+                setAmount(String(periodOptions.find((option) => option.value === nextPeriod)?.debt ?? 0))
+                setError(null)
+              }}
+            />
           </FormField>
           <FormField label="Сумма">
             <input aria-label="Сумма полной оплаты" inputMode="decimal" value={amount} readOnly />
