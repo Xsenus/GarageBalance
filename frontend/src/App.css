@@ -188,6 +188,19 @@
   flex: 0 0 auto;
 }
 
+.workspace--contractors {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.workspace--contractors > .topbar {
+  flex: 0 0 auto;
+}
+
 .auth-entry {
   min-height: 100vh;
   background: #ffffff;
@@ -606,6 +619,38 @@ h1 {
 .contractors-page {
   display: grid;
   gap: 18px;
+}
+
+.workspace--contractors > .contractors-page--directory {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.contractors-page--directory > .contractors-directory-card {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.contractors-page--directory > .contractors-directory-card > .contractors-directory-table {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {
+  flex: 0 0 auto;
+}
+
+.contractors-page--directory > .contractors-staff-directory-grid {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .contractors-heading {

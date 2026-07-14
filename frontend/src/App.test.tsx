@@ -1175,6 +1175,7 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
 
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(contractorsPanel.closest('.workspace')).toHaveClass('workspace--contractors')
     expect(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' })).toHaveAttribute('aria-selected', 'true')
     expect(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('tab', { name: 'Персонал' })).toBeInTheDocument()

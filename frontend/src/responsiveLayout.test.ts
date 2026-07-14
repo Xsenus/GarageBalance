@@ -79,6 +79,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.meter-readings-data-row > span:not(:first-child) {\n  display: block;\n  min-height: 32px;')
   })
 
+  it('keeps contractor pagination visible while the directory table scrolls', () => {
+    expect(normalizedAppCss).toContain('.workspace--contractors {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
+    expect(normalizedAppCss).toContain('.workspace--contractors > .contractors-page--directory {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;')
+    expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .contractors-directory-table {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow: auto;')
+    expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {\n  flex: 0 0 auto;')
+  })
+
   it('keeps settings navigation full-height and settings forms compact', () => {
     expect(normalizedAppCss).toContain('.settings-layout {\n  display: grid;\n  grid-template-columns: 240px minmax(0, 1fr);\n  gap: 18px;\n  min-height: calc(100dvh - 210px);')
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')

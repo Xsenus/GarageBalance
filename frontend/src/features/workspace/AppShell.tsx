@@ -98,6 +98,11 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
   const showSidebar = isAdministrator(auth)
   const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
+  const workspaceClassName = [
+    'workspace',
+    effectiveActiveSection === 'meterReadings' ? 'workspace--meter-readings' : '',
+    effectiveActiveSection === 'contractors' ? 'workspace--contractors' : '',
+  ].filter(Boolean).join(' ')
 
   function handleToggleSidebar() {
     setSidebarExpanded((current) => {
@@ -158,7 +163,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
         </aside>
       ) : null}
 
-      <section className={effectiveActiveSection === 'meterReadings' ? 'workspace workspace--meter-readings' : 'workspace'}>
+      <section className={workspaceClassName}>
         <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={onUserChanged} onLogout={onLogout} />
       </section>
     </main>
