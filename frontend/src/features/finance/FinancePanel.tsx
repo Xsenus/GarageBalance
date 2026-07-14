@@ -4356,7 +4356,7 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
                     <td>
                       {row.operation && canWritePayments ? (
-                        <div className="table-action-row">
+                        <div className="table-action-row payments-prototype-history-actions">
                           <button className="icon-button" type="button" title="Изменить платеж" aria-label={`Изменить платеж ${row.purpose}`} onClick={(event) => openHistoryEdit(row, event.currentTarget)}>
                             <Pencil size={16} aria-hidden="true" />
                           </button>

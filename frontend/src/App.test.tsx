@@ -3861,6 +3861,9 @@ describe('App', () => {
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200')).toBeInTheDocument()
+    const historyActions = within(historyTable).getByText('Серверная оплата').closest('tr')?.querySelector('.payments-prototype-history-actions')
+    expect(historyActions).not.toBeNull()
+    expect(within(historyActions as HTMLElement).getAllByRole('button')).toHaveLength(5)
 
     const printReceiptButton = within(historyTable).getByRole('button', { name: 'Сформировать квитанцию платежа Серверная оплата' })
     await user.click(printReceiptButton)

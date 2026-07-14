@@ -3211,7 +3211,9 @@ h1 {
 
 .payments-prototype-card--history {
   padding: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
 }
 
 .payments-prototype-garage-line {
@@ -3238,6 +3240,7 @@ h1 {
 
 .payments-prototype-mini-table {
   width: 100%;
+  min-width: 820px;
   border-collapse: separate;
   border-spacing: 0;
   color: #101828;
@@ -3263,6 +3266,27 @@ h1 {
 .payments-prototype-mini-table th:nth-child(4),
 .payments-prototype-mini-table td:nth-child(4) {
   text-align: left;
+}
+
+.payments-prototype-mini-table th:last-child,
+.payments-prototype-mini-table td:last-child {
+  width: 190px;
+  min-width: 190px;
+}
+
+.payments-prototype-history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: nowrap;
+  min-width: max-content;
+}
+
+.payments-prototype-history-actions .icon-button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
 }
 
 .payments-prototype-sheet {

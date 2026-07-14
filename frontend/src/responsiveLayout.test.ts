@@ -78,6 +78,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-selected-item {\n    max-width: none;\n    flex-basis: 100%;')
   })
 
+  it('keeps payment history actions compact and horizontal', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-card--history {\n  padding: 0;\n  overflow-x: auto;')
+    expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 820px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-history-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 4px;\n  flex-wrap: nowrap;')
+    expect(normalizedAppCss).toContain('.payments-prototype-history-actions .icon-button {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 32px;')
+  })
+
   it('keeps the yearly meter table inside the desktop workspace', () => {
     expect(normalizedAppCss).toContain('.workspace--meter-readings {\n  display: flex;\n  height: 100vh;')
     expect(normalizedAppCss).toContain('.meter-readings-page {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;')
