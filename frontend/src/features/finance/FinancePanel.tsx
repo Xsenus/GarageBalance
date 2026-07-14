@@ -18,6 +18,7 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 
@@ -5757,14 +5758,17 @@ function GarageAccrualPrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Вид начисления">
-            <select aria-label="Вид начисления гаража" value={incomeTypeId} onChange={(event) => {
-              setIncomeTypeId(event.target.value)
-              setError(null)
-            }}>
-              {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
-                <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
-              )) : <option value="">Нет видов поступлений</option>}
-            </select>
+            <SelectControl
+              aria-label="Вид начисления гаража"
+              value={incomeTypeId}
+              options={incomeTypes.length > 0
+                ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
+                : [{ value: '', label: 'Нет видов поступлений' }]}
+              onChange={(nextIncomeTypeId) => {
+                setIncomeTypeId(nextIncomeTypeId)
+                setError(null)
+              }}
+            />
           </FormField>
           <FormField label="Сумма">
             <input aria-label="Сумма начисления гаража" inputMode="decimal" value={amount} onChange={(event) => {
