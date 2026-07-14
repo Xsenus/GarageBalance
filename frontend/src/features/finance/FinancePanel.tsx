@@ -4360,7 +4360,7 @@ function PaymentsPrototypePanel({
                   <tr key={row.id}>
                     <td>{row.date}</td>
                     <td>{row.time}</td>
-                    <td>{formatPaymentPrototypeValue(row.amount)}</td>
+                    <td>{formatPaymentMoney(row.amount)}</td>
                     <td>{row.purpose}</td>
                     <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
                     <td>

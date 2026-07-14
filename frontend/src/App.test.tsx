@@ -3919,7 +3919,7 @@ describe('App', () => {
     const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
-    expect(within(historyTable).getByText('1 234')).toBeInTheDocument()
+    expect(within(historyTable).getByText('1 234.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200')).toBeInTheDocument()
     const historyActions = within(historyTable).getByText('Серверная оплата').closest('tr')?.querySelector('.payments-prototype-history-actions')
     expect(historyActions).not.toBeNull()
