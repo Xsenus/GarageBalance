@@ -38,6 +38,22 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FinanceSummary_UsesSingleAggregateQueryPerGrowingTable()
+    {
+        var operationSource = ReadApiSource("Infrastructure/Data/EfFinancialOperationRepository.cs");
+        var accrualSource = ReadApiSource("Infrastructure/Data/EfAccrualRepository.cs");
+        var supplierAccrualSource = ReadApiSource("Infrastructure/Data/EfSupplierAccrualRepository.cs");
+        var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
+
+        Assert.Contains("IncomeCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Income)", operationSource, StringComparison.Ordinal);
+        Assert.Contains("ExpenseCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Expense)", operationSource, StringComparison.Ordinal);
+        Assert.Contains(".SingleOrDefaultAsync(cancellationToken)", operationSource, StringComparison.Ordinal);
+        Assert.Contains("TotalAmount = group.Sum(accrual => (decimal?)accrual.Amount) ?? 0m", accrualSource, StringComparison.Ordinal);
+        Assert.Contains("CountActiveAsync", supplierAccrualSource, StringComparison.Ordinal);
+        Assert.Contains("supplierAccrualRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FundDashboard_ReusesLoadedFundsAndAggregatesTotalsInOneDatabaseCommand()
     {
         var serviceSource = ReadApiSource("Application/Funds/FundService.cs");
@@ -137,6 +153,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("ReadingMatchesSearch", source, StringComparison.Ordinal);
         Assert.Contains("GetForGaragePeriodAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetActiveByGarageIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("ToDictionaryAsync(reading => reading.GarageId", source, StringComparison.Ordinal);
         Assert.Contains("ActiveDuplicateExistsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetPreviousActiveAsync", source, StringComparison.Ordinal);
         Assert.Contains(".OrderByDescending(reading => reading.AccountingMonth)", source, StringComparison.Ordinal);
@@ -174,6 +192,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".ThenBy(accrual => accrual.Garage.Number)", source, StringComparison.Ordinal);
         Assert.Contains("GetTotalBeforeMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetTotalThroughMonthAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetActiveGarageIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("ToHashSetAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains(".SumAsync(accrual => accrual.Amount", source, StringComparison.Ordinal);
         Assert.Contains("GetMonthlyBucketsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
@@ -683,9 +703,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("SumAsync", document, StringComparison.Ordinal);
         Assert.Contains("browser console", document, StringComparison.Ordinal);
         Assert.Contains("realistic customer data", document, StringComparison.Ordinal);
-        Assert.Contains("postgresTcp=False", document, StringComparison.Ordinal);
-        Assert.Contains("psql=False", document, StringComparison.Ordinal);
-        Assert.Contains("docker=False", document, StringComparison.Ordinal);
+        Assert.Contains("psql` and Docker tooling", document, StringComparison.Ordinal);
+        Assert.Contains("authorized VPS", document, StringComparison.Ordinal);
+        Assert.Contains("Post-cleanup service checks passed", document, StringComparison.Ordinal);
     }
 
     private static string ReadApiSource(string relativePath)

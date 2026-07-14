@@ -7,7 +7,7 @@ import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/fina
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
@@ -730,7 +730,7 @@ type ContractorsPrototypeSavedState = {
 }
 
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
-  const [activeSection, setActiveSection] = useState<ContractorSection>('garages')
+  const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
   const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
   const [garages, setGarages] = useState<ContractorGarageRow[]>([])
@@ -777,6 +777,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [departmentDeleteTarget, setDepartmentDeleteTarget] = useState<ContractorDepartmentRow | null>(null)
   const [departmentDeleteReason, setDepartmentDeleteReason] = useState('')
   const openedInitialTargetRef = useRef<string | null>(null)
+  const loadedContractorSectionsRef = useRef<Record<ContractorSection, boolean>>({ garages: false, suppliers: false, staff: false })
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -831,60 +832,76 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [auth.accessToken, formStateClient])
 
   useEffect(() => {
+    if (loadedContractorSectionsRef.current[activeSection]) {
+      setContractorPageLoading((current) => ({ ...current, [activeSection]: false }))
+      return
+    }
+
     let cancelled = false
-
-    async function loadContractorsFromDictionaries() {
+    async function loadActiveContractorSection() {
+      setContractorPageLoading((current) => ({ ...current, [activeSection]: true }))
       try {
-        const [ownerRows, garageRows, groups, supplierRows, supplierContactRows, departmentRows, staffRows] = await Promise.all([
-          dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-          dictionaryClient.getGaragesPage
-            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
-            : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
-          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-          dictionaryClient.getSuppliersPage
-            ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
-            : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
-          dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
-          dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
-          dictionaryClient.getStaffMembersPage
-            ? dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
-            : dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
-        ])
-
-        if (cancelled) {
-          return
+        if (activeSection === 'garages') {
+          const [ownerRows, garageRows] = await Promise.all([
+            dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getGaragesPage
+              ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
+              : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
+          ])
+          if (!cancelled) {
+            setOwners(ownerRows)
+            setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownerRows)))
+            setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
+          }
+        } else if (activeSection === 'suppliers') {
+          const [groups, supplierRows, supplierContactRows] = await Promise.all([
+            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getSuppliersPage
+              ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
+              : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
+            dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+          ])
+          if (!cancelled) {
+            const nextSuppliers = supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
+            setSupplierGroups(groups)
+            setSuppliers(nextSuppliers)
+            setSupplierPage({ totalCount: supplierRows.totalCount, offset: supplierRows.offset, limit: supplierRows.limit })
+            setSupplierContacts(supplierContactRows)
+            setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
+          }
+        } else {
+          const [departmentRows, staffRows] = await Promise.all([
+            dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
+            dictionaryClient.getStaffMembersPage
+              ? dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
+              : dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
+          ])
+          if (!cancelled) {
+            setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
+            setStaff(staffRows.items.map(createStaffRowFromDto))
+            setStaffPage({ totalCount: staffRows.totalCount, offset: staffRows.offset, limit: staffRows.limit })
+          }
         }
 
-        const nextSuppliers = supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
-
-        setOwners(ownerRows)
-        setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownerRows)))
-        setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
-        setSupplierGroups(groups)
-        setSuppliers(nextSuppliers)
-        setSupplierPage({ totalCount: supplierRows.totalCount, offset: supplierRows.offset, limit: supplierRows.limit })
-        setSupplierContacts(supplierContactRows)
-        setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
-        setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
-        setStaff(staffRows.items.map(createStaffRowFromDto))
-        setStaffPage({ totalCount: staffRows.totalCount, offset: staffRows.offset, limit: staffRows.limit })
+        if (!cancelled) {
+          loadedContractorSectionsRef.current[activeSection] = true
+        }
       } catch (error) {
         if (!cancelled) {
           setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контрагентов из справочников.')
         }
       } finally {
         if (!cancelled) {
-          setContractorPageLoading({ garages: false, suppliers: false, staff: false })
+          setContractorPageLoading((current) => ({ ...current, [activeSection]: false }))
         }
       }
     }
 
-    void loadContractorsFromDictionaries()
-
+    void loadActiveContractorSection()
     return () => {
       cancelled = true
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [activeSection, auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     if (!initialTarget) {
@@ -1832,7 +1849,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
               </div>
             )) : null}
-            {contractorPageLoading.garages ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем гаражи" rows={6} columns={7} /> : null}
+            {contractorPageLoading.garages ? <TableLoadingState className="table-loading-state--compact" label="Загружаем гаражи" /> : null}
             {!contractorPageLoading.garages && visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">{showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
@@ -1906,7 +1923,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </div>
               )
             }) : null}
-            {contractorPageLoading.suppliers ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем поставщиков" rows={6} columns={7} /> : null}
+            {contractorPageLoading.suppliers ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поставщиков" /> : null}
             {!contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">{showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
@@ -1976,7 +1993,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                 </div>
               )) : null}
-              {contractorPageLoading.staff ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем персонал" rows={6} columns={4} /> : null}
+              {contractorPageLoading.staff ? <TableLoadingState className="table-loading-state--compact" label="Загружаем персонал" /> : null}
               {!contractorPageLoading.staff && visibleStaff.length === 0 ? (
                 <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                   <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>

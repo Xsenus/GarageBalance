@@ -1036,7 +1036,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("meterReadingRepository.GetPreviousActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetNextActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
-        Assert.Contains("meterReadingRepository.GetActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("meterReadingRepository.GetActiveByGarageIdsAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.Add(reading)", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.MeterReadings", service, StringComparison.Ordinal);
         Assert.DoesNotContain("private IQueryable<MeterReading> QueryMeterReadings", service, StringComparison.Ordinal);

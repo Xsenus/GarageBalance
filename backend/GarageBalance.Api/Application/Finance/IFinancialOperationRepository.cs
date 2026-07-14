@@ -47,5 +47,10 @@ public sealed record FinancialOperationPageData(IReadOnlyList<FinancialOperation
 public sealed record FinancialOperationBucketData(DateOnly AccountingMonth, decimal Amount);
 public sealed record FinancialOperationIncomeTypeBucketData(DateOnly AccountingMonth, Guid IncomeTypeId, string IncomeTypeName, string? IncomeTypeCode, decimal Amount);
 public sealed record FinancialOperationWorksheetData(IReadOnlyList<FinancialOperation> Expenses, IReadOnlyList<FinancialOperation> Incomes);
-public sealed record FinancialOperationSummaryData(decimal IncomeTotal, decimal ExpenseTotal, int Count);
+public sealed record FinancialOperationSummaryData(decimal IncomeTotal, decimal ExpenseTotal, int Count)
+{
+    public int IncomeCount { get; init; }
+
+    public int ExpenseCount { get; init; }
+}
 public sealed record FinancialOperationCashBalanceData(decimal IncomeTotal, decimal CashExpenseTotal);

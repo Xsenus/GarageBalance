@@ -536,6 +536,11 @@ public sealed class FinanceService(
             request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
             NormalizeSearch(request.Search),
             cancellationToken);
+        var supplierAccrualCount = await supplierAccrualRepository.CountActiveAsync(
+            request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
+            request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
+            NormalizeSearch(request.Search),
+            cancellationToken);
         return new FinanceSummaryDto(
             operationSummary.IncomeTotal,
             operationSummary.ExpenseTotal,
@@ -544,7 +549,12 @@ public sealed class FinanceService(
             accrualSummary.TotalAmount - operationSummary.IncomeTotal,
             operationSummary.Count,
             accrualSummary.Count,
-            meterReadingCount);
+            meterReadingCount)
+        {
+            IncomeCount = operationSummary.IncomeCount,
+            ExpenseCount = operationSummary.ExpenseCount,
+            SupplierAccrualCount = supplierAccrualCount
+        };
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1562,13 +1572,56 @@ public sealed class FinanceService(
                 "Выбранный тариф не подходит для этого вида регулярного начисления.");
         }
 
+        var existingAccrualCount = await accrualRepository.CountActiveForGenerationAsync(
+            incomeType.Id,
+            month,
+            AccrualSources.Regular,
+            cancellationToken);
+        if (existingAccrualCount > 0)
+        {
+            var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
+            if (activeGarageCount > 0 && existingAccrualCount >= activeGarageCount)
+            {
+                return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                    "regular_accruals_empty",
+                    $"Регулярные начисления за {month:MM.yyyy} уже сформированы для всех активных гаражей ({activeGarageCount}).");
+            }
+        }
+
         var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
+        IReadOnlySet<Guid> existingGarageIds = existingAccrualCount == 0
+            ? new HashSet<Guid>()
+            : await accrualRepository.GetActiveGarageIdsAsync(
+                incomeType.Id,
+                month,
+                AccrualSources.Regular,
+                cancellationToken);
+        var pendingGarageIds = garages
+            .Where(garage => !existingGarageIds.Contains(garage.Id))
+            .Select(garage => garage.Id)
+            .ToArray();
+        var meterKind = tariff.CalculationBase switch
+        {
+            TariffCalculationBases.MeterWater => MeterKinds.Water,
+            TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
+            _ => null
+        };
+        var meterReadings = meterKind is null
+            ? new Dictionary<Guid, MeterReading>()
+            : await meterReadingRepository.GetActiveByGarageIdsAsync(pendingGarageIds, meterKind, month, cancellationToken);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
 
         foreach (var garage in garages)
         {
-            var amountResult = await CalculateRegularAccrualAmountAsync(garage, tariff, month, cancellationToken);
+            if (existingGarageIds.Contains(garage.Id))
+            {
+                skipped.Add($"Гараж {garage.Number}: регулярное начисление уже есть.");
+                continue;
+            }
+
+            meterReadings.TryGetValue(garage.Id, out var meterReading);
+            var amountResult = CalculateRegularAccrualAmount(garage, tariff, meterReading);
             if (!amountResult.Succeeded)
             {
                 skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage}");
@@ -1579,19 +1632,6 @@ public sealed class FinanceService(
             if (amount <= 0)
             {
                 skipped.Add($"Гараж {garage.Number}: сумма начисления равна нулю.");
-                continue;
-            }
-
-            var duplicate = await accrualRepository.ActiveDuplicateExistsAsync(
-                null,
-                garage.Id,
-                incomeType.Id,
-                month,
-                AccrualSources.Regular,
-                cancellationToken);
-            if (duplicate)
-            {
-                skipped.Add($"Гараж {garage.Number}: регулярное начисление уже есть.");
                 continue;
             }
 
@@ -1614,7 +1654,14 @@ public sealed class FinanceService(
 
         if (created.Count == 0)
         {
-            return FinanceResult<RegularAccrualGenerationResultDto>.Failure("regular_accruals_empty", "Не создано ни одного начисления.");
+            var visibleReasons = skipped.Count == 0
+                ? "Нет активных гаражей для начисления."
+                : string.Join(" ", skipped.Take(10));
+            var remainingReasonCount = Math.Max(0, skipped.Count - 10);
+            var remainingReasons = remainingReasonCount > 0 ? $" Еще причин: {remainingReasonCount}." : null;
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                "regular_accruals_empty",
+                $"Не создано ни одного начисления. Причины: {visibleReasons}{remainingReasons}");
         }
 
         AddAudit(
@@ -1659,7 +1706,9 @@ public sealed class FinanceService(
         var settings = await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken);
         if (settings.Count == 0)
         {
-            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_empty", "В каталоге нет активных регулярных услуг.");
+            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure(
+                "regular_catalog_empty",
+                "Нет активных регулярных услуг. Откройте раздел «Тарифы и сборы», добавьте регулярную услугу и свяжите ее с видом начисления и тарифом.");
         }
 
         var serviceResults = new List<RegularAccrualGenerationResultDto>();
@@ -1695,7 +1744,12 @@ public sealed class FinanceService(
         var createdCount = serviceResults.Sum(result => result.CreatedCount);
         if (createdCount == 0)
         {
-            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_accruals_empty", "По каталогу услуг не создано ни одного начисления.");
+            var details = skippedServices.Count == 0
+                ? null
+                : $" Причины: {string.Join(" ", skippedServices)}";
+            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure(
+                "regular_catalog_accruals_empty",
+                $"По каталогу услуг не создано ни одного начисления.{details}");
         }
 
         var skippedCount = serviceResults.Sum(result => result.SkippedCount) + skippedServices.Count;
@@ -2181,14 +2235,14 @@ public sealed class FinanceService(
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
-    private async Task<AmountCalculationResult> CalculateRegularAccrualAmountAsync(Garage garage, Tariff tariff, DateOnly month, CancellationToken cancellationToken)
+    private static AmountCalculationResult CalculateRegularAccrualAmount(Garage garage, Tariff tariff, MeterReading? meterReading)
     {
         return tariff.CalculationBase switch
         {
             TariffCalculationBases.Fixed => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate)),
             TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount)),
-            TariffCalculationBases.MeterWater => await CalculateMeterAmountAsync(garage.Id, MeterKinds.Water, tariff.Rate, month, cancellationToken),
-            TariffCalculationBases.MeterElectricity => await CalculateElectricityMeterAmountAsync(garage.Id, tariff, month, cancellationToken),
+            TariffCalculationBases.MeterWater => CalculateMeterAmount(meterReading, tariff.Rate),
+            TariffCalculationBases.MeterElectricity => CalculateElectricityMeterAmount(meterReading, tariff),
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
         };
     }
@@ -2492,17 +2546,15 @@ public sealed class FinanceService(
         return comment is null ? baseComment : $"{baseComment}. {comment}";
     }
 
-    private async Task<AmountCalculationResult> CalculateMeterAmountAsync(Guid garageId, string meterKind, decimal rate, DateOnly month, CancellationToken cancellationToken)
+    private static AmountCalculationResult CalculateMeterAmount(MeterReading? reading, decimal rate)
     {
-        var reading = await meterReadingRepository.GetActiveAsync(garageId, meterKind, month, cancellationToken);
         return reading is null
             ? AmountCalculationResult.Failure("нет показания счетчика за месяц.")
             : AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * rate));
     }
 
-    private async Task<AmountCalculationResult> CalculateElectricityMeterAmountAsync(Guid garageId, Tariff tariff, DateOnly month, CancellationToken cancellationToken)
+    private static AmountCalculationResult CalculateElectricityMeterAmount(MeterReading? reading, Tariff tariff)
     {
-        var reading = await meterReadingRepository.GetActiveAsync(garageId, MeterKinds.Electricity, month, cancellationToken);
         if (reading is null)
         {
             return AmountCalculationResult.Failure("нет показания счетчика за месяц.");

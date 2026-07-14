@@ -30,12 +30,12 @@ const removedBareLoadingMessages = [
 ] as const
 
 describe('shared loading-state coverage', () => {
-  it.each(loadingFeatures)('%s uses skeletons for initial content loading', (relativePath, minimumCount) => {
+  it.each(loadingFeatures)('%s uses shared loaders for initial content loading', (relativePath, minimumCount) => {
     const source = readFileSync(resolve(process.cwd(), 'src', 'features', relativePath), 'utf8')
-    const skeletonCount = source.match(/<LoadingSkeleton\b/g)?.length ?? 0
+    const sharedLoaderCount = source.match(/<(?:LoadingSkeleton|TableLoadingState)\b/g)?.length ?? 0
 
     expect(source).toContain("from '../../shared/AsyncState'")
-    expect(skeletonCount).toBeGreaterThanOrEqual(minimumCount)
+    expect(sharedLoaderCount).toBeGreaterThanOrEqual(minimumCount)
   })
 
   it('does not restore the replaced bare table and form loading messages', () => {
@@ -46,13 +46,15 @@ describe('shared loading-state coverage', () => {
     removedBareLoadingMessages.forEach((message) => expect(source).not.toContain(message))
   })
 
-  it('keeps the shared skeleton accessible and motion-safe', () => {
+  it('keeps shared loading states accessible and motion-safe', () => {
     const component = readFileSync(resolve(process.cwd(), 'src', 'shared', 'AsyncState.tsx'), 'utf8')
     const css = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
 
     expect(component).toContain('role="status"')
     expect(component).toContain('aria-live="polite"')
     expect(component).toContain('aria-hidden="true"')
+    expect(component).toContain('return <LoadingSkeleton')
+    expect(component).not.toContain('table-loading-state-spinner')
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
@@ -76,8 +78,8 @@ describe('shared loading-state coverage', () => {
     ]
 
     expect(workspace).toContain("import { Suspense, useState } from 'react'")
-    expect(workspace).toContain('<Suspense fallback={<LoadingSkeleton label="Загружаем раздел" rows={5} columns={4} />}>')
-    expect(workspace).toContain('<AsyncErrorBoundary')
+    expect(workspace).toContain('<Suspense fallback={<TableLoadingState label="Загружаем выбранный раздел" />}>')
+    expect(workspace).toContain('<WorkspaceSectionErrorBoundary')
     expect(workspace).toContain('onPointerEnter={() => preloadWorkspaceSection(tile.section)}')
     expect(workspace).toContain('onFocus={() => preloadWorkspaceSection(tile.section)}')
     expect(appShell).toContain('onPointerEnter={() => preloadWorkspaceSection(item.section)}')
@@ -87,5 +89,14 @@ describe('shared loading-state coverage', () => {
       expect(loader).toContain(`lazy(${loaderName})`)
       expect(loader).not.toMatch(new RegExp(`^import .* from '../${modulePath.replace('/', '\\/')}'`, 'm'))
     }
+  })
+
+  it('does not regress to bare loading text in production feature panels', () => {
+    const source = loadingFeatures
+      .map(([relativePath]) => readFileSync(resolve(process.cwd(), 'src', 'features', relativePath), 'utf8'))
+      .join('\n')
+
+    expect(source).not.toMatch(/<span>\{loading \? ['"]Загрузка\.\.\./)
+    expect(source).not.toMatch(/<p[^>]*>\s*(?:Загрузка|Загружаем)/)
   })
 })

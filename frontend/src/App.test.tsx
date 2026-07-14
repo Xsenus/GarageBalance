@@ -30,7 +30,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -259,7 +259,7 @@ describe('App', () => {
     expect(within(roleMatrix).getByText('Бухгалтер')).toBeInTheDocument()
     expect(within(roleMatrix).getByText('История изменений')).toBeInTheDocument()
     expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы - разрешено' })).toHaveTextContent('Да')
-    expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
+    expect(await within(roleMatrix).findByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
     await openSection(user, 'Справочники')
 
@@ -565,7 +565,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
-    expect(within(feeCampaignsSection).getByText('Сбор на ворота')).toBeInTheDocument()
+    expect(await within(feeCampaignsSection).findByText('Сбор на ворота')).toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('Старый сбор')).toBeInTheDocument()
 
     await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
@@ -3216,7 +3216,7 @@ describe('App', () => {
     const garageSearchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
     expect(garageSearchInput).toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: /Поступления гаража/ })).not.toBeInTheDocument()
-    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+    await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск'))
 
     await user.type(garageSearchInput, 'Иванов')
     await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20))
@@ -3330,6 +3330,7 @@ describe('App', () => {
     regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
     expect(within(regularAccrualDialog).queryByLabelText('Вид регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).queryByLabelText('Тариф регулярного начисления')).not.toBeInTheDocument()
+    expect(within(regularAccrualDialog).getByText('Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».')).toBeInTheDocument()
     const regularAccrualMonth = within(regularAccrualDialog).getByLabelText('Месяц регулярного начисления')
     expect(regularAccrualMonth).toHaveValue('06.2026')
     expect(regularAccrualMonth.closest('.localized-date-picker')).not.toBeNull()
@@ -3346,6 +3347,7 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать начисления' })).not.toBeInTheDocument())
     await waitFor(() => expect(regularAccrualButton).toHaveFocus())
+    expect(within(prototype).getByText('Начисления сформированы: создано 1, пропущено 0, сумма 1 250.')).toHaveAttribute('role', 'status')
 
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
@@ -3782,7 +3784,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
 
-    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+    expect(await within(prototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
     expect(within(prototype).queryByText('Гараж 1 - Иванов Иван')).not.toBeInTheDocument()
     expect(within(prototype).queryByText('Старое демо-начисление')).not.toBeInTheDocument()
     expect(within(prototype).queryByText('Старый демо-платеж')).not.toBeInTheDocument()
@@ -4964,7 +4966,7 @@ describe('App', () => {
     await openSection(user, 'Настройки')
 
     const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
-    const statusStrip = within(integrationPanel).getByLabelText('Статус интеграции 1C Fresh')
+    const statusStrip = await within(integrationPanel).findByLabelText('Статус интеграции 1C Fresh')
     expect(within(statusStrip).getByText('Подготовлено')).toBeInTheDocument()
     expect(within(statusStrip).getByText('Ожидает адаптер')).toBeInTheDocument()
     expect(within(statusStrip).getByText('1 / 1')).toBeInTheDocument()
@@ -4994,7 +4996,7 @@ describe('App', () => {
     await waitFor(() => expect(updateProtectedSetting).toHaveBeenCalledTimes(1))
     expect(tokenInput).toHaveValue('')
     expect(oneCPanel).not.toHaveTextContent('private-one-c-token')
-    expect(within(oneCPanel).getByLabelText('Статус интеграции 1C Fresh')).toHaveTextContent('1 / 1')
+    expect(await within(oneCPanel).findByLabelText('Статус интеграции 1C Fresh')).toHaveTextContent('1 / 1')
 
     const receiptPanel = await screen.findByRole('region', { name: 'Печать чеков и квитанций' })
     const deviceInput = within(receiptPanel).getByLabelText('Новое подключение к устройству печати')
@@ -5072,7 +5074,7 @@ describe('App', () => {
     await openSection(user, 'Настройки')
 
     const integrationPanel = await screen.findByRole('region', { name: 'Интеграция 1C Fresh' })
-    const statusStrip = within(integrationPanel).getByLabelText('Статус интеграции 1C Fresh')
+    const statusStrip = await within(integrationPanel).findByLabelText('Статус интеграции 1C Fresh')
     expect(within(statusStrip).getByText('Не настроено')).toBeInTheDocument()
     expect(within(statusStrip).getByText('Ожидает адаптер')).toBeInTheDocument()
     expect(within(statusStrip).getByText('0 / 1')).toBeInTheDocument()
@@ -8320,7 +8322,7 @@ describe('App', () => {
     await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
     await waitFor(() => expect(restoreMeterReading).toHaveBeenCalledWith('token', 'meter-reading-canceled'))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть показание счетчика?' })).not.toBeInTheDocument())
-    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(2))
   })
 
   it('restores canceled payment and accrual records from payment context menu', async () => {
@@ -8702,12 +8704,26 @@ describe('App', () => {
       consumption: 401 + index,
     }))
     const requestedLimits: Record<string, number | undefined> = {}
+    const requestedPreviewLimits: Record<string, number | undefined> = {}
+    const getMissingMeterReadings = vi.fn(async () => [] as MissingMeterReadingDto[])
     const toPage = <TItem,>(items: TItem[], offset = 0, limit = 25) => ({ items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit })
     const financeClient = createFinanceClient({
-      getOperations: async () => operations,
-      getAccruals: async () => accruals,
-      getSupplierAccruals: async () => supplierAccruals,
-      getMeterReadings: async () => meterReadings,
+      getOperations: async (_token, limit) => {
+        requestedPreviewLimits.operations = limit
+        return operations.slice(0, limit)
+      },
+      getAccruals: async (_token, limit) => {
+        requestedPreviewLimits.accruals = limit
+        return accruals.slice(0, limit)
+      },
+      getSupplierAccruals: async (_token, limit) => {
+        requestedPreviewLimits.supplierAccruals = limit
+        return supplierAccruals.slice(0, limit)
+      },
+      getMeterReadings: async (_token, limit) => {
+        requestedPreviewLimits.meterReadings = limit
+        return meterReadings.slice(0, limit)
+      },
       getOperationsPage: async (_token, params) => {
         const key = params?.operationKind === 'expense' ? 'expenseOperations' : 'incomeOperations'
         requestedLimits[key] = params?.limit
@@ -8725,7 +8741,20 @@ describe('App', () => {
         requestedLimits.meterReadings = params?.limit
         return toPage(meterReadings, params?.offset, params?.limit)
       },
-      getSummary: async () => ({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }),
+      getMissingMeterReadings,
+      getSummary: async () => ({
+        incomeTotal: 0,
+        expenseTotal: 0,
+        accrualTotal: 0,
+        balance: 0,
+        debt: 0,
+        operationCount: operations.length,
+        accrualCount: accruals.length,
+        meterReadingCount: meterReadings.length,
+        incomeCount: operations.length,
+        expenseCount: 0,
+        supplierAccrualCount: supplierAccruals.length,
+      }),
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -8742,13 +8771,135 @@ describe('App', () => {
     expect(await within(accrualsTable).findByText('Показано 8 из 9 начислений')).toHaveAttribute('role', 'status')
     expect(await within(supplierAccrualsTable).findByText('Показано 8 из 9 начислений поставщикам')).toHaveAttribute('role', 'status')
     expect(await within(meterReadingsTable).findByText('Показано 8 из 9 показаний')).toHaveAttribute('role', 'status')
+    expect(requestedPreviewLimits).toEqual({ operations: 8, accruals: 8, supplierAccruals: 8, meterReadings: 8 })
     const paymentPaginationCounter = within(financePanel).getByText('Показано 1-9 из 9')
     expect(paymentPaginationCounter).toHaveAttribute('role', 'status')
     expect(paymentPaginationCounter).toHaveAttribute('aria-live', 'polite')
     expect(within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })).toBeInTheDocument()
     expect(within(operationsTable).getByText('Поступление 8')).toBeInTheDocument()
     expect(within(operationsTable).queryByText('Поступление 9')).not.toBeInTheDocument()
-    expect(requestedLimits).toEqual({ incomeOperations: 25, expenseOperations: 1, accruals: 1, supplierAccruals: 1, meterReadings: 1 })
+    expect(requestedLimits).toEqual({ incomeOperations: 25 })
+    expect(getMissingMeterReadings).not.toHaveBeenCalled()
+
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+    await waitFor(() => expect(requestedLimits.meterReadings).toBe(25))
+    expect(requestedLimits).toEqual({ incomeOperations: 25, meterReadings: 25 })
+    expect(getMissingMeterReadings).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the latest payment table response and loader during overlapping requests', async () => {
+    const user = userEvent.setup()
+    let resolveIncomePage!: (page: FinancePagedResult<FinancialOperationDto>) => void
+    const incomePage = new Promise<FinancePagedResult<FinancialOperationDto>>((resolve) => {
+      resolveIncomePage = resolve
+    })
+    const expenseOperation = createFinancialOperation({
+      id: 'latest-expense',
+      operationKind: 'expense',
+      documentNumber: 'RKO-LATEST',
+      amount: 410,
+    })
+    const staleIncomeOperation = createFinancialOperation({
+      id: 'stale-income',
+      operationKind: 'income',
+      documentNumber: 'PKO-STALE',
+      amount: 820,
+    })
+    const previewIncomeOperation = createFinancialOperation({
+      id: 'preview-income',
+      operationKind: 'income',
+      documentNumber: 'PKO-PREVIEW',
+      incomeTypeName: 'Фоновое поступление для превью',
+      amount: 120,
+    })
+    const readyPreviewAccrual = createAccrual({
+      id: 'ready-preview-accrual',
+      incomeTypeName: 'Готовое начисление без ожидания',
+    })
+    let resolvePreviewOperations!: (operations: FinancialOperationDto[]) => void
+    const previewOperations = new Promise<FinancialOperationDto[]>((resolve) => {
+      resolvePreviewOperations = resolve
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => {
+      if (params?.operationKind === 'income') {
+        return incomePage
+      }
+
+      return { items: [expenseOperation], totalCount: 1, offset: 0, limit: params?.limit ?? 25 }
+    })
+    const financeClient = createFinanceClient({
+      getOperations: async () => previewOperations,
+      getAccruals: async () => [readyPreviewAccrual],
+      getSupplierAccruals: async () => [],
+      getMeterReadings: async () => [],
+      getOperationsPage,
+      getSummary: async () => ({
+        incomeTotal: 0,
+        expenseTotal: 410,
+        accrualTotal: 0,
+        balance: -410,
+        debt: 0,
+        operationCount: 1,
+        accrualCount: 0,
+        meterReadingCount: 0,
+        incomeCount: 0,
+        expenseCount: 1,
+        supplierAccrualCount: 0,
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ operationKind: 'income' })))
+    expect(within(financePanel).getByLabelText('Загружаем таблицу платежей')).toHaveAttribute('role', 'status')
+    await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
+    const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
+    expect(await within(financeTableArea).findByText('RKO-LATEST')).toBeInTheDocument()
+    const recentOperationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
+    expect(within(recentOperationsTable).getByLabelText('Загружаем последние операции')).toHaveAttribute('role', 'status')
+    expect(within(recentOperationsTable).queryByText('Операций пока нет.')).not.toBeInTheDocument()
+    const recentAccrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    expect(await within(recentAccrualsTable).findByText('Готовое начисление без ожидания')).toBeInTheDocument()
+    expect(within(recentAccrualsTable).queryByLabelText('Загружаем последние начисления')).not.toBeInTheDocument()
+    expect(within(recentOperationsTable).getByLabelText('Загружаем последние операции')).toBeInTheDocument()
+
+    await act(async () => resolvePreviewOperations([previewIncomeOperation]))
+
+    expect(await within(financePanel).findByText('Фоновое поступление для превью')).toBeInTheDocument()
+    expect(within(recentOperationsTable).queryByLabelText('Загружаем последние операции')).not.toBeInTheDocument()
+    expect(within(financeTableArea).queryByText('Фоновое поступление для превью')).not.toBeInTheDocument()
+
+    await act(async () => resolveIncomePage({ items: [staleIncomeOperation], totalCount: 1, offset: 0, limit: 25 }))
+
+    expect(within(financeTableArea).getByText('RKO-LATEST')).toBeInTheDocument()
+    expect(within(financeTableArea).queryByText('PKO-STALE')).not.toBeInTheDocument()
+    expect(within(financePanel).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
+  })
+
+  it('keeps the main payment table available when recent previews fail', async () => {
+    const user = userEvent.setup()
+    const financeClient = createFinanceClient({
+      getOperations: async () => {
+        throw new Error('preview unavailable')
+      },
+      getAccruals: async () => [createAccrual({ id: 'available-preview-accrual', incomeTypeName: 'Доступное фоновое начисление' })],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    expect(await within(financePanel).findByText('Не удалось загрузить часть последних операций. Основная таблица платежей продолжает работать.')).toHaveAttribute('role', 'alert')
+    expect(within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })).toBeInTheDocument()
+    expect(within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })).toBeInTheDocument()
+    expect(within(financePanel).queryByText('Операций пока нет.')).not.toBeInTheDocument()
+    expect(within(financePanel).getByText('Доступное фоновое начисление')).toBeInTheDocument()
   })
 
   it('refreshes payment summary totals from server when period filter changes', async () => {
@@ -9418,7 +9569,7 @@ describe('App', () => {
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
-    const rollbackButton = within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })
+    const rollbackButton = await within(importPanel).findByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })
     expect(rollbackButton).toHaveAttribute('title', 'Запросить rollback импорта ГСК.accdb')
     expect(rollbackButton).toHaveAttribute('data-tooltip', 'Запросить rollback импорта ГСК.accdb')
     await user.click(rollbackButton)
@@ -9827,6 +9978,56 @@ describe('App', () => {
     expect(auditXlsxExportRequest?.search).toBe('import')
     expect(auditXlsxExportRequest?.limit).toBeUndefined()
     expect(await within(auditPanel).findByText('История изменений XLSX готова.')).toHaveAttribute('role', 'status')
+  })
+
+  it('debounces audit text filters together and resets journal pagination', async () => {
+    const user = userEvent.setup()
+    const requests: Array<Parameters<AuditClient['getEventsPage']>[1]> = []
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: { ...auth.user, permissions: [...auth.user.permissions, 'audit.read'] },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEventsPage: async (_token, params) => {
+        requests.push(params)
+        return {
+          items: [createAuditEvent({ id: `audit-${requests.length}`, summary: 'Проверка фильтров журнала.' })],
+          totalCount: 30,
+          offset: params?.offset ?? 0,
+          limit: params?.limit ?? 25,
+        }
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    await waitFor(() => expect(requests.some((request) => request?.offset === 0)).toBe(true))
+    const pagination = within(auditPanel).getByRole('navigation', { name: 'Пагинация истории изменений' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(requests.some((request) => request?.offset === 25)).toBe(true))
+
+    await user.type(within(auditPanel).getByLabelText('Поиск в истории изменений'), 'import')
+    await user.type(within(auditPanel).getByLabelText('ID пользователя истории изменений'), 'user-7')
+    await user.type(within(auditPanel).getByLabelText('Связанный гараж истории изменений'), '105')
+    await user.type(within(auditPanel).getByLabelText('Связанный контрагент истории изменений'), 'Иванов')
+    await user.type(within(auditPanel).getByLabelText('Связанный документ истории изменений'), 'PKO-7')
+
+    await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+      search: 'import',
+      actorUserId: 'user-7',
+      relatedGarage: '105',
+      relatedCounterparty: 'Иванов',
+      relatedDocument: 'PKO-7',
+      offset: 0,
+    })))
+    const filteredRequests = requests.filter((request) => request?.search || request?.actorUserId || request?.relatedGarage || request?.relatedCounterparty || request?.relatedDocument)
+    expect(filteredRequests).toHaveLength(1)
   })
 
   it('shows tariff changes in central audit and opens tariffs workspace', async () => {
@@ -11089,6 +11290,71 @@ describe('App', () => {
       { offset: 25, limit: 25, groupAccruals: false },
       { offset: 0, limit: 25, groupAccruals: true },
     ]))
+  })
+
+  it('debounces searchable report filters and resets pagination before loading', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    const garageRequests: Array<{ search?: string; offset?: number }> = []
+    const payoutSearches: string[] = []
+    const incomeSearches: string[] = []
+    const feeVariations: string[] = []
+    const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
+      garageRequests.push({ search: params?.search, offset: params?.offset })
+      return createGarageDetailReport({
+        rowCount: 30,
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      })
+    })
+    const getExpenseReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getExpenseReport']>[1]) => {
+      if (params?.offset !== undefined) {
+        payoutSearches.push(params.search ?? '')
+      }
+      return baseReportClient.getExpenseReport(token, params)
+    })
+    const getIncomeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
+      if (params?.offset !== undefined) {
+        incomeSearches.push(params.search ?? '')
+      }
+      return baseReportClient.getIncomeReport(token, params)
+    })
+    const getFeeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getFeeReport']>[1]) => {
+      feeVariations.push(params?.variation ?? '')
+      return baseReportClient.getFeeReport(token, params)
+    })
+    const reportClient = createReportClient({ getGarageReport, getExpenseReport, getIncomeReport, getFeeReport })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await waitFor(() => expect(garageRequests).toContainEqual({ search: undefined, offset: 0 }))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(garageRequests).toContainEqual({ search: undefined, offset: 25 }))
+    await user.type(within(reportsPanel).getByLabelText('Гаражи'), '105')
+    await waitFor(() => expect(garageRequests).toContainEqual({ search: '105', offset: 0 }))
+    expect(garageRequests.filter((request) => request.search).map((request) => request.search)).toEqual(['105'])
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    await user.type(within(reportsPanel).getByLabelText('Поставщики или сотрудники'), 'Иванов')
+    await waitFor(() => expect(payoutSearches).toContain('Иванов'))
+    expect(payoutSearches.filter(Boolean)).toEqual(['Иванов'])
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    await user.type(within(reportsPanel).getByLabelText('Гаражи по поступлениям'), '205')
+    await waitFor(() => expect(incomeSearches).toContain('205'))
+    expect(incomeSearches.filter(Boolean)).toEqual(['205'])
+
+    await openReportTab(user, reportsPanel, 'Сборы')
+    const feeFilter = within(reportsPanel).getByLabelText('Вариация сбора')
+    await user.clear(feeFilter)
+    await user.type(feeFilter, 'Ворота')
+    await waitFor(() => expect(feeVariations).toContain('Ворота'))
+    expect(feeVariations.filter((variation) => variation !== 'Сбор на ворота')).toEqual(['Ворота'])
   })
 
   it('shows loading and error states for the paged garage report', async () => {

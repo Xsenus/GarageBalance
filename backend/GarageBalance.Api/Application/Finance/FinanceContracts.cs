@@ -368,4 +368,11 @@ public sealed record FinanceSummaryDto(
     decimal Debt,
     int OperationCount,
     int AccrualCount,
-    int MeterReadingCount);
+    int MeterReadingCount)
+{
+    public int IncomeCount { get; init; }
+
+    public int ExpenseCount { get; init; }
+
+    public int SupplierAccrualCount { get; init; }
+}

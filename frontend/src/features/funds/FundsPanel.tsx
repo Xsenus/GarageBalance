@@ -5,7 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { FundDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime, formatMoney } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -417,7 +417,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         <div className="funds-sheet">
         {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
         {fundsLoading ? (
-          <LoadingSkeleton className="funds-table-skeleton" label="Загружаем фонды" rows={7} columns={4} />
+          <TableLoadingState label="Загружаем фонды" />
         ) : (
           <table className="funds-table" aria-label="Фонды и собранные суммы">
           <thead>
@@ -473,7 +473,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
 
         <div className="funds-sheet funds-operations-sheet">
         {operationsLoading ? (
-          <LoadingSkeleton className="funds-table-skeleton funds-operations-skeleton" label="Загружаем операции фондов" rows={5} columns={7} />
+          <TableLoadingState label="Загружаем операции фондов" />
         ) : (
           <>
             <div className="funds-operations-table-scroll">

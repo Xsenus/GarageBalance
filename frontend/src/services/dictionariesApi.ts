@@ -343,6 +343,18 @@ export type DictionaryClient = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const defaultDictionaryListLimit = 100
+const dictionaryResponseCacheLifetimeMs = 60_000
+
+type DictionaryCacheEntry = {
+  expiresAt: number
+  response: Promise<unknown>
+}
+
+const dictionaryResponseCache = new Map<string, DictionaryCacheEntry>()
+
+export function clearDictionaryResponseCache() {
+  dictionaryResponseCache.clear()
+}
 
 export class DictionaryApiError extends Error {
   readonly code: string | null
@@ -357,26 +369,54 @@ export class DictionaryApiError extends Error {
 }
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const method = init?.method?.toUpperCase() ?? 'GET'
+  const cacheKey = `${accessToken}\n${path}`
+  if (method === 'GET') {
+    const cached = dictionaryResponseCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.response as Promise<TResponse>
+    }
+    if (cached) {
+      dictionaryResponseCache.delete(cacheKey)
+    }
+  } else {
+    clearDictionaryResponseCache()
+  }
+
+  const responsePromise = fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
       ...init?.headers,
     },
+  }).then(async (response) => {
+    if (!response.ok) {
+      const problem = await response.json().catch(() => null)
+      const code = typeof problem?.code === 'string' ? problem.code : typeof problem?.title === 'string' ? problem.title : null
+      throw new DictionaryApiError(code, problem?.detail ?? 'Не удалось выполнить запрос.', response.status)
+    }
+
+    if (response.status === 204) {
+      return undefined as TResponse
+    }
+
+    return response.json() as Promise<TResponse>
   })
 
-  if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    const code = typeof problem?.code === 'string' ? problem.code : typeof problem?.title === 'string' ? problem.title : null
-    throw new DictionaryApiError(code, problem?.detail ?? 'Не удалось выполнить запрос.', response.status)
+  if (method === 'GET') {
+    dictionaryResponseCache.set(cacheKey, {
+      expiresAt: Date.now() + dictionaryResponseCacheLifetimeMs,
+      response: responsePromise,
+    })
+    responsePromise.catch(() => {
+      if (dictionaryResponseCache.get(cacheKey)?.response === responsePromise) {
+        dictionaryResponseCache.delete(cacheKey)
+      }
+    })
   }
 
-  if (response.status === 204) {
-    return undefined as TResponse
-  }
-
-  return response.json()
+  return responsePromise
 }
 
 function withQuery(path: string, params: Record<string, string | number | boolean | undefined>): string {

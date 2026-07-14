@@ -4765,6 +4765,22 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.table-loading-state {
+  display: grid;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 0;
+  align-content: stretch;
+  gap: 1px;
+  padding: 0;
+  background: #eaecf0;
+  text-align: left;
+}
+
+.table-loading-state--compact .loading-skeleton-row {
+  min-height: 39px;
+}
+
 @keyframes skeleton-shimmer {
   from { background-position: 100% 0; }
   to { background-position: -100% 0; }
@@ -4932,6 +4948,10 @@ h1 {
   border: 1px solid #e4e7ec;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.dictionary-table-scroll--loading > :not(.table-loading-state) {
+  display: none;
 }
 
 .dictionary-data-table {

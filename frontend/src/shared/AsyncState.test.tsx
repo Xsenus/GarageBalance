@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { AsyncErrorBoundary, EmptyState, LoadingSkeleton } from './AsyncState'
+import { AsyncErrorBoundary, EmptyState, LoadingSkeleton, TableLoadingState } from './AsyncState'
 
 describe('AsyncState', () => {
   it('announces loading without exposing decorative skeleton rows', () => {
@@ -48,5 +48,15 @@ describe('AsyncState', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
     expect(screen.getByText('Раздел восстановлен')).toBeInTheDocument()
     consoleError.mockRestore()
+  })
+
+  it('renders the shared table-shaped skeleton loader', () => {
+    const { container } = render(<TableLoadingState label="Загружаем таблицу" />)
+
+    expect(screen.getByRole('status', { name: 'Загружаем таблицу' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.loading-skeleton-row')).toHaveLength(4)
+    expect(container.querySelectorAll('.loading-skeleton-line')).toHaveLength(16)
+    expect(container.querySelector('.loading-skeleton-row')).toHaveAttribute('aria-hidden', 'true')
+    expect(container.querySelector('.table-loading-state-spinner')).not.toBeInTheDocument()
   })
 })

@@ -25,6 +25,11 @@ export function LoadingSkeleton({ label, rows = 3, columns = 1, className = '' }
   )
 }
 
+export function TableLoadingState({ label, className = '', rows, columns = 4 }: { label: string; className?: string; rows?: number; columns?: number }) {
+  const skeletonRows = rows ?? (className.includes('table-loading-state--compact') ? 2 : 4)
+  return <LoadingSkeleton className={`table-loading-state ${className}`.trim()} label={label} rows={skeletonRows} columns={columns} />
+}
+
 export function EmptyState({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <p className={`empty-state empty-state--spacious ${className}`.trim()} role="status" aria-live="polite">

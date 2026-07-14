@@ -10,6 +10,7 @@ public interface IGarageRepository
     Task<Garage?> FindActiveWithOwnerAsync(Guid id, CancellationToken cancellationToken);
     Task<Garage?> FindArchivedWithOwnerAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Garage>> GetAllActiveWithOwnerAsync(CancellationToken cancellationToken);
+    Task<int> CountActiveAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<Garage>> GetActiveByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveNumberExistsAsync(Guid? ignoredId, string number, CancellationToken cancellationToken);

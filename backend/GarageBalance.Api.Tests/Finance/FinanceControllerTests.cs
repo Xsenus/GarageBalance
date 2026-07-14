@@ -69,6 +69,35 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetSummary_ReturnsSectionCountsAndPassesFiltersToService()
+    {
+        var summary = new FinanceSummaryDto(1500m, 400m, 2000m, 1100m, 500m, 2, 1, 3)
+        {
+            IncomeCount = 1,
+            ExpenseCount = 1,
+            SupplierAccrualCount = 4
+        };
+        var service = new FakeFinanceService { SummaryResult = summary };
+        var controller = CreateController(service);
+
+        var result = await controller.GetSummary(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "income",
+            "гараж 12",
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(summary, ok.Value);
+        Assert.Equal(1, Assert.IsType<FinanceSummaryDto>(ok.Value).IncomeCount);
+        Assert.Equal(4, Assert.IsType<FinanceSummaryDto>(ok.Value).SupplierAccrualCount);
+        Assert.Equal(new DateOnly(2026, 6, 1), service.LastSummaryRequest?.DateFrom);
+        Assert.Equal(new DateOnly(2026, 6, 30), service.LastSummaryRequest?.DateTo);
+        Assert.Equal("income", service.LastSummaryRequest?.OperationKind);
+        Assert.Equal("гараж 12", service.LastSummaryRequest?.Search);
+    }
+
+    [Fact]
     public async Task GetMeterReadingYearPage_PassesCompactYearRequestToService()
     {
         var page = new MeterReadingYearPageDto([], [], 0, 25, 50);
@@ -1312,6 +1341,7 @@ public sealed class FinanceControllerTests
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
+        public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
         public GenerateRegularAccrualsRequest? LastRegularAccrualGenerationRequest { get; private set; }
         public GenerateRegularCatalogAccrualsRequest? LastRegularCatalogAccrualGenerationRequest { get; private set; }
@@ -1346,6 +1376,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> RestoreMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingYearPageDto> MeterReadingYearPageResult { get; init; } = FinanceResult<MeterReadingYearPageDto>.Failure("not_configured", "Not configured.");
+        public FinanceSummaryDto SummaryResult { get; init; } = new(0, 0, 0, 0, 0, 0, 0, 0);
 
         public Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
@@ -1429,7 +1460,8 @@ public sealed class FinanceControllerTests
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new FinanceSummaryDto(0, 0, 0, 0, 0, 0, 0, 0));
+            LastSummaryRequest = request;
+            return Task.FromResult(SummaryResult);
         }
 
         public Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

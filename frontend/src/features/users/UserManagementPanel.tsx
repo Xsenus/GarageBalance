@@ -4,7 +4,7 @@ import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucid
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { permissions, rolePermissionGroups } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
@@ -388,7 +388,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           <p className="eyebrow">Пользователи</p>
           <h2>Доступ в систему и роли сотрудников</h2>
         </div>
-        <span>{loading ? 'Загрузка...' : `${page.totalCount} пользователей`}</span>
+        {!loading ? <span>{page.totalCount} пользователей</span> : null}
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
@@ -449,7 +449,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 ) : null}
               </tbody>
             </table>
-            {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем пользователей" rows={6} columns={5} /> : null}
+            {loading ? <TableLoadingState label="Загружаем пользователей" /> : null}
           </div>
 
           <TablePagination
