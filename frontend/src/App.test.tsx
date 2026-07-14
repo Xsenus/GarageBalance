@@ -8641,6 +8641,10 @@ describe('App', () => {
       incomeTypeName: 'Фоновое поступление для превью',
       amount: 120,
     })
+    const readyPreviewAccrual = createAccrual({
+      id: 'ready-preview-accrual',
+      incomeTypeName: 'Готовое начисление без ожидания',
+    })
     let resolvePreviewOperations!: (operations: FinancialOperationDto[]) => void
     const previewOperations = new Promise<FinancialOperationDto[]>((resolve) => {
       resolvePreviewOperations = resolve
@@ -8654,7 +8658,7 @@ describe('App', () => {
     })
     const financeClient = createFinanceClient({
       getOperations: async () => previewOperations,
-      getAccruals: async () => [],
+      getAccruals: async () => [readyPreviewAccrual],
       getSupplierAccruals: async () => [],
       getMeterReadings: async () => [],
       getOperationsPage,
@@ -8687,6 +8691,10 @@ describe('App', () => {
     const recentOperationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
     expect(within(recentOperationsTable).getByLabelText('Загружаем последние операции')).toHaveAttribute('role', 'status')
     expect(within(recentOperationsTable).queryByText('Операций пока нет.')).not.toBeInTheDocument()
+    const recentAccrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    expect(await within(recentAccrualsTable).findByText('Готовое начисление без ожидания')).toBeInTheDocument()
+    expect(within(recentAccrualsTable).queryByLabelText('Загружаем последние начисления')).not.toBeInTheDocument()
+    expect(within(recentOperationsTable).getByLabelText('Загружаем последние операции')).toBeInTheDocument()
 
     await act(async () => resolvePreviewOperations([previewIncomeOperation]))
 
