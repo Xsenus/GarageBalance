@@ -17,13 +17,19 @@ describe('frontend test acceleration', () => {
   })
 
   it('keeps serial diagnostics and related-test development commands available', () => {
+    expect(packageJson.scripts['test:dev']).toBe('node scripts/run-vitest.mjs --quick')
+    expect(packageJson.scripts['test:dev:related']).toBe('node scripts/run-vitest.mjs --quick --related')
     expect(packageJson.scripts['test:serial']).toContain('--maxWorkers=1')
     expect(packageJson.scripts['test:related']).toBe('node scripts/run-vitest.mjs --related')
+    expect(packageJson.scripts['test:watch']).toContain('--exclude src/App.test.tsx')
+    expect(packageJson.scripts['test:watch:full']).toBe('vitest')
   })
 
   it('balances the monolithic App scenarios and always removes generated shards', () => {
     expect(runner).toContain('balanceTests(testStatements, shardCount)')
     expect(runner).toContain("['it', 'test', 'describe']")
+    expect(runner).toContain('Full App workflows are skipped.')
+    expect(runner).toContain('Math.min(8, availableParallelism())')
     expect(runner).toContain('finally {\n  cleanupGeneratedShards()')
     expect(runner).toContain('--slowTestThreshold=1000')
   })

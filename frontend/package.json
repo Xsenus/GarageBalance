@@ -10,9 +10,12 @@
     "lint": "eslint .",
     "test": "node scripts/run-vitest.mjs",
     "test:ci": "node scripts/run-vitest.mjs --ci",
+    "test:dev": "node scripts/run-vitest.mjs --quick",
+    "test:dev:related": "node scripts/run-vitest.mjs --quick --related",
     "test:serial": "vitest run --maxWorkers=1 --slowTestThreshold=1000",
     "test:related": "node scripts/run-vitest.mjs --related",
-    "test:watch": "vitest",
+    "test:watch": "vitest --exclude src/App.test.tsx",
+    "test:watch:full": "vitest",
     "preview": "vite preview"
   },
   "dependencies": {
