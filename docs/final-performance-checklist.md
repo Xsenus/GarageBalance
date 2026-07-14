@@ -172,3 +172,14 @@ No schema or cleanup-policy changes were introduced. The feature branch remains 
 - [x] The authorized VPS was checked read-only again: service active with zero restarts, nginx valid, direct/public health and frontend HTTP 200, zero warning-level journal lines, readable 435078-byte backup, nine tariffs and zero checked operational, staff, supplier, finance, fund, import and audit rows.
 
 No schema, data-cleanup policy or deployment configuration changed. The feature branch remains undeployed until it reaches `master` through the configured workflow.
+
+## Eighth independent-preview completion audit: 2026-07-14
+
+- [x] Rechecked every original performance, loading, data-cleanup and monthly-accrual requirement. Backend list paths remain bounded and protected by the performance guards; table loads use shared skeleton states; automatic regular accrual generation remains duplicate-safe and checks the current month every 15 minutes with a five-minute retry after technical failure.
+- [x] Removed the last avoidable wait between the four compact payment previews. Operations, garage accruals, supplier accruals and meter readings now complete independently, so a slow or stalled endpoint keeps only its own table loading and no longer delays already available neighboring tables.
+- [x] Extended workflow coverage to hold the operations preview pending while proving that a ready accrual preview is rendered and its own loader is removed. Partial preview failures continue to preserve the main paged payment table and every successful compact preview.
+- [x] Two clean complete verification runs passed with identical results: 1508 backend tests and 422 frontend tests. The focused performance, security and regular-accrual subset passed 48 tests; the new delayed-preview regression passed together with the existing partial-failure scenario.
+- [x] ESLint, production TypeScript build, bundle budget (`74.1 KiB` main JS, `16.9 KiB` CSS, `212.9 KiB` total gzip), backend formatting, Docker Compose, strict release/configuration JSON, whitespace checks and 114893-byte idempotent migration SQL generation passed.
+- [x] Rechecked the authorized VPS read-only: the service is active with zero restarts, nginx is valid, proxied/direct health and the frontend return HTTP 200, the warning journal is empty, and the verified 435078-byte backup remains readable. PostgreSQL retains nine tariffs and zero rows in every checked garage, owner, staff, supplier, payment, accrual, meter, fund, import, form-state, integration-setting and audit table.
+
+This audit introduces no schema, cleanup-policy or deployment-configuration changes. The feature branch remains undeployed because the staging workflow intentionally deploys only from `master`.
