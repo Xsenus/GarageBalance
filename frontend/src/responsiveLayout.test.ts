@@ -37,6 +37,10 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
   })
 
+  it('keeps the tariff threshold action at the left edge of its table cell', () => {
+    expect(normalizedAppCss).toContain('.tariffs-add-threshold-button {\n  justify-self: start;')
+  })
+
   it('keeps audit controls and event details readable at every supported width', () => {
     expect(normalizedAppCss).toContain('.select-control__trigger,\n.localized-date-picker input {\n  width: 100%;')
     expect(normalizedAppCss).toContain('.select-control__list {\n  position: absolute;')

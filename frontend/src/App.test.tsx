@@ -831,7 +831,9 @@ describe('App', () => {
     await user.click(within(thresholdNameConfirmDialog).getByRole('button', { name: 'Сохранить' }))
     expect(electricityThresholdNameInput).toHaveValue('От 2 кВт')
 
-    await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить порог' }))
+    const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
+    expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
+    await user.click(addThresholdButton)
     const customThresholdNameInput = within(tariffsPanel).getByLabelText('Электроэнергия: Порог 4: наименование')
     expect(customThresholdNameInput).toHaveValue('Порог 4')
     const electricityThresholdInput = within(tariffsPanel).getByLabelText('Электроэнергия: Порог 4: значение')

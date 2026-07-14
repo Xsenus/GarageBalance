@@ -1715,7 +1715,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 {row.id === lastElectricityThresholdRowId ? (
                   <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                     <span role="cell">
-                      <button className="link-button create-action-button create-action-button--subtle" type="button" onClick={addElectricityThreshold} disabled={!canManageTariffs}>
+                      <button className="link-button create-action-button create-action-button--subtle tariffs-add-threshold-button" type="button" onClick={addElectricityThreshold} disabled={!canManageTariffs}>
                         <FileSpreadsheet size={15} aria-hidden="true" />
                         <span>Добавить порог</span>
                       </button>

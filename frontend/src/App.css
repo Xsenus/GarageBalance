@@ -2562,6 +2562,10 @@ h1 {
   padding-block: 5px;
 }
 
+.tariffs-add-threshold-button {
+  justify-self: start;
+}
+
 .tariffs-page .contractors-bottom-grid {
   gap: 12px;
   align-items: stretch;
