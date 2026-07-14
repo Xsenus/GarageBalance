@@ -8,5 +8,8 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     globals: true,
     testTimeout: 15000,
+    fileParallelism: true,
+    maxWorkers: process.env.VITEST_MAX_WORKERS ?? '50%',
+    slowTestThreshold: 1000,
   },
 })

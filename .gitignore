@@ -11,6 +11,7 @@ node_modules/
 dist/
 coverage/
 logs/
+frontend/src/App.shard-*.test.tsx
 
 # Local configuration
 .env

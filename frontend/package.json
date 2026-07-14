@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "node scripts/run-vitest.mjs",
+    "test:ci": "node scripts/run-vitest.mjs --ci",
+    "test:serial": "vitest run --maxWorkers=1 --slowTestThreshold=1000",
+    "test:related": "node scripts/run-vitest.mjs --related",
     "test:watch": "vitest",
     "preview": "vite preview"
   },
