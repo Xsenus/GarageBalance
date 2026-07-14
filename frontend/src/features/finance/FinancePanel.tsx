@@ -39,6 +39,10 @@ class LatestRequestSequence {
     return this.currentRequestId
   }
 
+  invalidate() {
+    this.currentRequestId += 1
+  }
+
   isLatest(requestId: number) {
     return requestId === this.currentRequestId
   }
@@ -679,17 +683,6 @@ export function FinancePanel({
         meterReadings: loadedSummary.meterReadingCount,
       }))
       setSummary(loadedSummary)
-      if (section === 'income') {
-        setOperations(activePage.items as FinancialOperationDto[])
-      } else if (section === 'expense') {
-        setOperations(activePage.items as FinancialOperationDto[])
-      } else if (section === 'accruals') {
-        setAccruals(activePage.items as AccrualDto[])
-      } else if (section === 'supplierAccruals') {
-        setSupplierAccruals(activePage.items as SupplierAccrualDto[])
-      } else {
-        setMeterReadings(activePage.items as MeterReadingDto[])
-      }
       setFinancePage(activePage)
       if (loadedMissingMeterReadings) {
         setMissingMeterReadings(loadedMissingMeterReadings)
@@ -1083,6 +1076,7 @@ export function FinancePanel({
       }))
       setRegularStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
       setRegularForm((value) => ({ ...value, comment: '' }))
+      await loadFinanceWorkbench('accruals', 0, financePage.limit)
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
@@ -1521,7 +1515,14 @@ export function FinancePanel({
   }
 
   function selectFinanceSection(section: FinanceSectionKey) {
+    if (section === activeFinanceSection) {
+      return
+    }
+
+    financeWorkbenchRequests.invalidate()
     setFinanceContextMenu(null)
+    setWorkbenchLoading(true)
+    setFinancePage((current) => ({ items: [], totalCount: 0, offset: 0, limit: current.limit }))
     setActiveFinanceSection(section)
   }
 
@@ -1612,11 +1613,15 @@ export function FinancePanel({
     }
   }
 
-  const filteredIncomeOperations = operations.filter((operation) => operation.operationKind === 'income')
-  const filteredExpenseOperations = operations.filter((operation) => operation.operationKind === 'expense')
-  const filteredAccruals = accruals
-  const filteredSupplierAccruals = supplierAccruals
-  const filteredMeterReadings = meterReadings
+  const filteredIncomeOperations = activeFinanceSection === 'income'
+    ? (financePage.items as FinancialOperationDto[]).filter((operation) => operation.operationKind === 'income')
+    : []
+  const filteredExpenseOperations = activeFinanceSection === 'expense'
+    ? (financePage.items as FinancialOperationDto[]).filter((operation) => operation.operationKind === 'expense')
+    : []
+  const filteredAccruals = activeFinanceSection === 'accruals' ? financePage.items as AccrualDto[] : []
+  const filteredSupplierAccruals = activeFinanceSection === 'supplierAccruals' ? financePage.items as SupplierAccrualDto[] : []
+  const filteredMeterReadings = activeFinanceSection === 'meterReadings' ? financePage.items as MeterReadingDto[] : []
 
   function getActiveFinanceRowsCount() {
     return financePage.items.length

@@ -8620,6 +8620,13 @@ describe('App', () => {
       documentNumber: 'PKO-STALE',
       amount: 820,
     })
+    const previewIncomeOperation = createFinancialOperation({
+      id: 'preview-income',
+      operationKind: 'income',
+      documentNumber: 'PKO-PREVIEW',
+      incomeTypeName: 'Фоновое поступление для превью',
+      amount: 120,
+    })
     const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => {
       if (params?.operationKind === 'income') {
         return incomePage
@@ -8628,7 +8635,7 @@ describe('App', () => {
       return { items: [expenseOperation], totalCount: 1, offset: 0, limit: params?.limit ?? 25 }
     })
     const financeClient = createFinanceClient({
-      getOperations: async () => [],
+      getOperations: async () => [previewIncomeOperation],
       getAccruals: async () => [],
       getSupplierAccruals: async () => [],
       getMeterReadings: async () => [],
@@ -8657,12 +8664,15 @@ describe('App', () => {
     await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ operationKind: 'income' })))
     expect(within(financePanel).getByLabelText('Загружаем таблицу платежей')).toHaveAttribute('role', 'status')
     await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
-    expect(await within(financePanel).findByText('RKO-LATEST')).toBeInTheDocument()
+    const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
+    expect(await within(financeTableArea).findByText('RKO-LATEST')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('Фоновое поступление для превью')).toBeInTheDocument()
+    expect(within(financeTableArea).queryByText('Фоновое поступление для превью')).not.toBeInTheDocument()
 
     await act(async () => resolveIncomePage({ items: [staleIncomeOperation], totalCount: 1, offset: 0, limit: 25 }))
 
-    expect(within(financePanel).getByText('RKO-LATEST')).toBeInTheDocument()
-    expect(within(financePanel).queryByText('PKO-STALE')).not.toBeInTheDocument()
+    expect(within(financeTableArea).getByText('RKO-LATEST')).toBeInTheDocument()
+    expect(within(financeTableArea).queryByText('PKO-STALE')).not.toBeInTheDocument()
     expect(within(financePanel).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
   })
 
