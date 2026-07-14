@@ -18,6 +18,7 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
@@ -5777,8 +5778,8 @@ function GarageAccrualPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Месяц">
-            <input aria-label="Месяц начисления гаража" type="month" value={accountingMonth} onChange={(event) => {
-              setAccountingMonth(event.target.value)
+            <LocalizedDatePicker ariaLabel="Месяц начисления гаража" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
