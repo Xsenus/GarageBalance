@@ -388,6 +388,7 @@ describe('App', () => {
     const bottomGrid = within(tariffsPanel).getByText('Нерегулярные платежи').closest('.contractors-bottom-grid')
     expect(bottomGrid).not.toBeNull()
     expect(within(bottomGrid as HTMLElement).getByText('Объявленные сборы')).toBeInTheDocument()
+    expect(bottomGrid?.querySelectorAll('.tariffs-summary-card')).toHaveLength(2)
     for (const paginationName of ['Пагинация тарифов и услуг', 'Пагинация нерегулярных платежей', 'Пагинация объявленных сборов']) {
       const pagination = within(tariffsPanel).getByRole('navigation', { name: paginationName })
       expect(pagination.firstElementChild).toHaveClass('pagination-primary')
@@ -397,6 +398,7 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByText('x')).not.toBeInTheDocument()
 
     const addTariffServiceButton = within(tariffsPanel).getAllByRole('button', { name: 'Добавить услугу' })[0]
+    expect(addTariffServiceButton).toHaveClass('tariffs-action-button')
     await user.click(addTariffServiceButton)
     const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     expect(within(serviceDialog).getByLabelText('Стоимость услуги')).toBeInTheDocument()
@@ -423,6 +425,7 @@ describe('App', () => {
     await waitFor(() => expect(addTariffServiceButton).toHaveFocus())
 
     const addTariffFeeButton = within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0]
+    expect(addTariffFeeButton).toHaveClass('tariffs-action-button')
     await user.click(addTariffFeeButton)
     const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
     expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
@@ -765,15 +768,15 @@ describe('App', () => {
 
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const waterRateInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
-    expect(waterRateInput).toHaveValue('1250')
-    expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300')
+    expect(waterRateInput).toHaveValue('1 250.00')
+    expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300.00')
 
     await user.clear(waterRateInput)
     await user.type(waterRateInput, '1300{Enter}')
     const waterRateConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(waterRateConfirmDialog).getByText('Вода: Тариф на воду')).toBeInTheDocument()
     expect(within(waterRateConfirmDialog).getByText('Было')).toBeInTheDocument()
-    expect(within(waterRateConfirmDialog).getByText('1250')).toBeInTheDocument()
+    expect(within(waterRateConfirmDialog).getByText('1 250.00')).toBeInTheDocument()
     expect(within(waterRateConfirmDialog).getByText('Стало')).toBeInTheDocument()
     expect(within(waterRateConfirmDialog).getByText('1300')).toBeInTheDocument()
     const waterRateCancelButton = within(waterRateConfirmDialog).getByRole('button', { name: 'Отмена' })
@@ -792,13 +795,13 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
     await waitFor(() => expect(waterRateInput).toHaveFocus())
-    expect(waterRateInput).toHaveValue('1250')
+    expect(waterRateInput).toHaveValue('1 250.00')
 
     await user.clear(waterRateInput)
     await user.type(waterRateInput, '1300{Enter}')
     const reopenedWaterRateConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(reopenedWaterRateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(waterRateInput).toHaveValue('1300')
+    expect(waterRateInput).toHaveValue('1 300.00')
 
     const membershipDueDayInput = within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: день')
     const membershipDueMonthSelect = within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: месяц')
@@ -860,7 +863,7 @@ describe('App', () => {
     expect(within(entryFeeConfirmDialog).getByText('Вступительный взнос')).toBeInTheDocument()
     expect(within(entryFeeConfirmDialog).getByText('Сумма, руб.')).toBeInTheDocument()
     await user.click(within(entryFeeConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(entryFeeInput).toHaveValue('5500')
+    expect(entryFeeInput).toHaveValue('5 500.00')
 
     const oneTimeTable = within(tariffsPanel).getByRole('region', { name: 'Нерегулярные платежи' })
     expect(irregularPaymentListRequests[0]?.includeArchived).toBe(true)
@@ -2401,9 +2404,9 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
-    await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125'))
+    await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125.00'))
     expect(within(tariffsPanel).queryByText('Старый сбор')).not.toBeInTheDocument()
-    expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777')
+    expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777.00')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Периодичность: значение')).toHaveValue('12')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveValue('дек')
@@ -2505,7 +2508,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
-    expect(await within(tariffsPanel).findByLabelText('Вода: Быстрый тариф: значение')).toHaveValue('42')
+    expect(await within(tariffsPanel).findByLabelText('Вода: Быстрый тариф: значение')).toHaveValue('42.00')
     expect(within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })).toBeDisabled()
 
     await act(async () => resolveGarages([]))

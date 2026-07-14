@@ -29,16 +29,16 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                             "ElectricityFirstRate", "ElectricitySecondRate", "ElectricityThirdRate")
                         VALUES
                             (
-                                '8a92bf70-9339-4bbc-8e5d-a05cda185101', 'Тариф на воду', 'meter_water', 45.0000,
-                                DATE '2026-01-01', 'Демонстрационные данные этапа 8. Перед реальным учетом проверьте и замените ставку.',
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185101', 'Тариф на воду', 'meter_water', 100.6000,
+                                DATE '2026-01-01', 'Геленджик, 01.01-30.09.2026: питьевая вода для населения, решение Думы от 19.12.2025 № 304.',
                                 FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
                                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
                             ),
                             (
-                                '8a92bf70-9339-4bbc-8e5d-a05cda185102', 'Электроэнергия', 'meter_electricity', 6.2000,
-                                DATE '2026-01-01', 'Демонстрационные данные этапа 8. Перед реальным учетом проверьте и замените ставку.',
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185102', 'Электроэнергия', 'meter_electricity', 7.4700,
+                                DATE '2026-01-01', 'Краснодарский край, 01.01-30.09.2026: город без электроплит, приказ ДГРТ от 17.12.2025 № 18/2025-э.',
                                 FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
-                                1.0000, 3.0000, 'От 0 кВт', 'От 1 кВт', 'От 3 кВт', 6.2000, 6.2000, 6.2000
+                                1100.0000, 1700.0000, 'До 1 100 кВт·ч', 'От 1 100 до 1 700 кВт·ч', 'Свыше 1 700 кВт·ч', 7.4700, 10.1700, 14.8800
                             ),
                             (
                                 '8a92bf70-9339-4bbc-8e5d-a05cda185103', 'Сумма членского взноса', 'fixed', 500.0000,
@@ -53,8 +53,8 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
                             ),
                             (
-                                '8a92bf70-9339-4bbc-8e5d-a05cda185105', 'Ставка за вывоз мусора', 'people', 300.0000,
-                                DATE '2026-01-01', 'Демонстрационные данные из формы ГСК. Перед реальным учетом проверьте и замените ставку.',
+                                '8a92bf70-9339-4bbc-8e5d-a05cda185105', 'Ставка за вывоз мусора', 'people', 128.6900,
+                                DATE '2026-01-01', 'Геленджик, 01.01-30.09.2026: ежемесячная плата с человека в МКД, Новороссийская зона ООО «Южный региональный оператор».',
                                 FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z',
                                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
                             ),
@@ -129,9 +129,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         VALUES
                             ('c865fd0a-ae14-4de6-83ef-b5d692327101', 'Вступительный взнос', 5000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
                             ('c865fd0a-ae14-4de6-83ef-b5d692327102', 'Подключение канализации', 10000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
-                            ('c865fd0a-ae14-4de6-83ef-b5d692327103', 'Подключение линии электросети', 15000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
-                            ('c865fd0a-ae14-4de6-83ef-b5d692327104', 'Штраф за то', 500.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z'),
-                            ('c865fd0a-ae14-4de6-83ef-b5d692327105', 'Штраф за это', 1000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z');
+                            ('c865fd0a-ae14-4de6-83ef-b5d692327103', 'Подключение линии электросети', 15000.00, TRUE, FALSE, TIMESTAMPTZ '2026-07-13T06:52:13Z', TIMESTAMPTZ '2026-07-13T06:52:13Z');
 
                         INSERT INTO audit_events (
                             "Id", "CreatedAtUtc", "Action", "Section", "ActionKind", "EntityType", "EntityId",
@@ -141,7 +139,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                             'dictionary.demo_tariff_catalog_seeded', 'dictionary', 'create', 'demo_tariff_catalog',
                             'stage-8', 'Демонстрационные тарифы',
                             'Добавлены демонстрационные тарифы, настройки услуг и нерегулярные платежи для показа пустой установки.',
-                            '{"sources":["docs/stage-8-demo-test-data.json","customer tariff form screenshot"],"tariffCount":9,"serviceCount":6,"irregularPaymentCount":5}'
+                            '{"sources":["customer tariff form screenshot","Gelendzhik municipal decision 304/2025","Krasnodar DGRТ order 18/2025-e","Southern regional operator tariff 2026"],"tariffCount":9,"serviceCount":6,"irregularPaymentCount":3}'
                         );
                     END IF;
                 END $$;

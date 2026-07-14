@@ -1279,12 +1279,14 @@ public sealed class DictionaryServiceTests
         Assert.Contains("NOT EXISTS (SELECT 1 FROM tariffs)", migration, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS (SELECT 1 FROM charge_service_settings)", migration, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS (SELECT 1 FROM irregular_payments)", migration, StringComparison.Ordinal);
-        Assert.Contains("docs/stage-8-demo-test-data.json", migration, StringComparison.Ordinal);
-        Assert.Contains("'Тариф на воду', 'meter_water', 45.0000", migration, StringComparison.Ordinal);
-        Assert.Contains("'Электроэнергия', 'meter_electricity', 6.2000", migration, StringComparison.Ordinal);
+        Assert.Contains("Gelendzhik municipal decision 304/2025", migration, StringComparison.Ordinal);
+        Assert.Contains("'Тариф на воду', 'meter_water', 100.6000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Электроэнергия', 'meter_electricity', 7.4700", migration, StringComparison.Ordinal);
+        Assert.Contains("1100.0000, 1700.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("7.4700, 10.1700, 14.8800", migration, StringComparison.Ordinal);
         Assert.Contains("'Сумма членского взноса', 'fixed', 500.0000", migration, StringComparison.Ordinal);
         Assert.Contains("'Сумма целевого взноса', 'fixed', 1200.0000", migration, StringComparison.Ordinal);
-        Assert.Contains("'Ставка за вывоз мусора', 'people', 300.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("'Ставка за вывоз мусора', 'people', 128.6900", migration, StringComparison.Ordinal);
         Assert.Contains("'Наружное освещение', 'fixed', 300.0000", migration, StringComparison.Ordinal);
         Assert.Contains("NULL, '8a92bf70-9339-4bbc-8e5d-a05cda185106', FALSE, FALSE, 'руб.'", migration, StringComparison.Ordinal);
         Assert.Contains("'Электрики', 'fixed', 500.0000", migration, StringComparison.Ordinal);
@@ -1293,16 +1295,38 @@ public sealed class DictionaryServiceTests
         Assert.Contains("'Вступительный взнос', 5000.00", migration, StringComparison.Ordinal);
         Assert.Contains("'Подключение канализации', 10000.00", migration, StringComparison.Ordinal);
         Assert.Contains("'Подключение линии электросети', 15000.00", migration, StringComparison.Ordinal);
-        Assert.Contains("'Штраф за то', 500.00", migration, StringComparison.Ordinal);
-        Assert.Contains("'Штраф за это', 1000.00", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("'Штраф за то', 500.00", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("'Штраф за это', 1000.00", migration, StringComparison.Ordinal);
         Assert.Contains("dictionary.demo_tariff_catalog_seeded", migration, StringComparison.Ordinal);
-        Assert.Contains("Перед реальным учетом проверьте и замените ставку", migration, StringComparison.Ordinal);
-        Assert.Equal(4, CountOccurrences(migration, "Демонстрационные данные этапа 8."));
-        Assert.Equal(5, CountOccurrences(migration, "Демонстрационные данные из формы ГСК."));
+        Assert.Contains("решение Думы от 19.12.2025 № 304", migration, StringComparison.Ordinal);
+        Assert.Contains("приказ ДГРТ от 17.12.2025 № 18/2025-э", migration, StringComparison.Ordinal);
+        Assert.Contains("Южный региональный оператор", migration, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM charge_service_settings", migration, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM irregular_payments", migration, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM tariffs", migration, StringComparison.Ordinal);
         Assert.Contains("FROM accruals", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GelendzhikTariffDefaultsMigration_UpdatesOnlyKnownSeedValuesAndRemovesPlaceholderFines()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260714024144_ApplyGelendzhik2026TariffDefaults.cs"));
+
+        Assert.Contains("AND \"Rate\" = 45.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("AND \"Rate\" = 6.2000", migration, StringComparison.Ordinal);
+        Assert.Contains("AND \"Rate\" = 300.0000", migration, StringComparison.Ordinal);
+        Assert.Contains("\"Rate\" = 100.6000", migration, StringComparison.Ordinal);
+        Assert.Contains("\"ElectricityFirstRate\" = 7.4700", migration, StringComparison.Ordinal);
+        Assert.Contains("\"ElectricitySecondRate\" = 10.1700", migration, StringComparison.Ordinal);
+        Assert.Contains("\"ElectricityThirdRate\" = 14.8800", migration, StringComparison.Ordinal);
+        Assert.Contains("\"Rate\" = 128.6900", migration, StringComparison.Ordinal);
+        Assert.Contains("\"Id\" = 'c865fd0a-ae14-4de6-83ef-b5d692327104' AND \"Name\" = 'Штраф за то'", migration, StringComparison.Ordinal);
+        Assert.Contains("dictionary.gelendzhik_tariff_defaults_applied", migration, StringComparison.Ordinal);
     }
 
     [Fact]

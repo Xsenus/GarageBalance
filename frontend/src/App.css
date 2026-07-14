@@ -2364,6 +2364,74 @@ h1 {
   background: #ffffff;
 }
 
+.tariffs-page {
+  gap: 12px;
+}
+
+.tariffs-page .contractors-heading {
+  align-items: center;
+}
+
+.tariffs-page .contractors-sheet-header span,
+.tariffs-page .contractors-sheet-row > span {
+  padding: 7px 10px;
+}
+
+.tariffs-page .contractors-editable-input,
+.tariffs-page .contractors-editable-select {
+  min-height: 32px;
+}
+
+.tariffs-page .contractors-editable-input {
+  padding-block: 5px;
+}
+
+.tariffs-page .contractors-bottom-grid {
+  gap: 12px;
+  align-items: stretch;
+}
+
+.tariffs-summary-card {
+  display: flex;
+  min-height: 390px;
+  flex-direction: column;
+}
+
+.tariffs-summary-card > .dictionary-pagination {
+  margin-top: auto;
+}
+
+.tariffs-action-button {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease;
+}
+
+.tariffs-action-button:hover:not(:disabled),
+.tariffs-action-button:focus-visible {
+  filter: saturate(1.06);
+  box-shadow: 0 10px 22px rgba(29, 78, 216, 0.2);
+  transform: translateY(-2px);
+}
+
+.tariffs-action-button:active:not(:disabled) {
+  box-shadow: 0 4px 10px rgba(29, 78, 216, 0.16);
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tariffs-action-button {
+    transition: none;
+  }
+
+  .tariffs-action-button:hover:not(:disabled),
+  .tariffs-action-button:focus-visible,
+  .tariffs-action-button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 .release-editor__items {
   display: grid;
   gap: 10px;

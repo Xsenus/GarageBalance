@@ -18,6 +18,7 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../sh
 import { createClientPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getCompatibleRegularTariffs } from '../../shared/validation'
+import { formatTariffDecimal } from './tariffFormatting'
 
 const tariffsFormStateScope = 'tariffs-and-fees-prototype'
 const dictionaryScreenRequestLimit = 100
@@ -49,9 +50,9 @@ const contractorTariffRows: ContractorTariffRow[] = [
   { id: 'water-overdue-days', category: 'Вода', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: false },
   { id: 'waste-rate', group: 'Мусор', category: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'people' },
   { id: 'waste-overdue-days', category: 'Мусор', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'От 0 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1, electricitySecondThreshold: 3 },
-  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1, electricitySecondThreshold: 3 },
-  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'От 3 кВт', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1, electricitySecondThreshold: 3 },
+  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'До 1 100 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1100, electricitySecondThreshold: 1700 },
+  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 100 до 1 700 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1100, electricitySecondThreshold: 1700 },
+  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'Свыше 1 700 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1100, electricitySecondThreshold: 1700 },
   { id: 'electricity-overdue-days', category: 'Электроэнергия', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
   { id: 'membership-fee', group: 'Членский взнос', category: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
   { id: 'membership-due-date', category: 'Членский взнос', title: 'Оплата до', dateDay: '30', dateMonth: 'июн', byMeter: false, tiered: false },
@@ -135,19 +136,15 @@ function getContractorTariffDateError(day: string, month: string) {
 }
 
 function formatTariffNumber(value: number | null | undefined) {
-  return value == null ? '' : String(value)
+  return value == null ? '' : formatTariffDecimal(value)
 }
 
 function formatPrototypeAmount(value: number | null | undefined) {
-  if (value == null) {
-    return ''
-  }
-
-  return Number.isInteger(value) ? String(value) : String(value)
+  return value == null ? '' : formatTariffDecimal(value)
 }
 
 function parsePrototypeAmount(value: string) {
-  const normalized = value.replace(',', '.').trim()
+  const normalized = value.replace(/[\s\u00a0]+/g, '').replace(',', '.').trim()
   if (!normalized) {
     return null
   }
@@ -157,7 +154,7 @@ function parsePrototypeAmount(value: string) {
 }
 
 function parseTariffAmount(value: string) {
-  const normalized = value.replace(',', '.').trim()
+  const normalized = value.replace(/[\s\u00a0]+/g, '').replace(',', '.').trim()
   if (!normalized) {
     return null
   }
@@ -1547,7 +1544,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }
 
   return (
-    <section className="contractors-page" aria-label="Тарифы и сборы">
+    <section className="contractors-page tariffs-page" aria-label="Тарифы и сборы">
       <div className="contractors-heading">
         <div>
           <h1>Тарифы и сборы</h1>
@@ -1555,11 +1552,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           {tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
         </div>
         <div className="contractors-actions">
-          <button className="secondary-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>
+          <button className="secondary-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>
             <Plus size={17} />
             <span>Добавить услугу</span>
           </button>
-          <button className="primary-button contractors-primary-action" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('fee')}>
+          <button className="primary-button contractors-primary-action tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('fee')}>
             <Plus size={17} />
             <span>Объявить сбор</span>
           </button>
@@ -1753,7 +1750,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           />
 
           <div className="contractors-bottom-grid">
-            <section className="contractors-mini-table" aria-label="Нерегулярные платежи">
+            <section className="contractors-mini-table tariffs-summary-card" aria-label="Нерегулярные платежи">
               <div className="contractors-mini-title">Нерегулярные платежи</div>
               {oneTimeActionMessage ? <p className="contractors-action-message" role="alert">{oneTimeActionMessage}</p> : null}
               <div className="contractors-mini-header contractors-mini-header--editable">
@@ -1812,7 +1809,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               />
             </section>
 
-            <section className="contractors-mini-table" aria-label="Объявленные сборы">
+            <section className="contractors-mini-table tariffs-summary-card" aria-label="Объявленные сборы">
               <div className="contractors-mini-title">Объявленные сборы</div>
               {feeCampaignActionMessage ? <p className="contractors-action-message" role="alert">{feeCampaignActionMessage}</p> : null}
               <div className="contractors-mini-header contractors-mini-header--fees">
