@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 
 namespace GarageBalance.Api.Tests.Deployment;
 
@@ -25,7 +26,8 @@ public sealed class ArchivedRoadmapPolicyTests
 
     private static string ComputeSha256(string path)
     {
-        return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+        var normalizedContent = File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedContent)));
     }
 
     private static string FindRepositoryRoot()
