@@ -11064,6 +11064,71 @@ describe('App', () => {
     ]))
   })
 
+  it('debounces searchable report filters and resets pagination before loading', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    const garageRequests: Array<{ search?: string; offset?: number }> = []
+    const payoutSearches: string[] = []
+    const incomeSearches: string[] = []
+    const feeVariations: string[] = []
+    const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
+      garageRequests.push({ search: params?.search, offset: params?.offset })
+      return createGarageDetailReport({
+        rowCount: 30,
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      })
+    })
+    const getExpenseReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getExpenseReport']>[1]) => {
+      if (params?.offset !== undefined) {
+        payoutSearches.push(params.search ?? '')
+      }
+      return baseReportClient.getExpenseReport(token, params)
+    })
+    const getIncomeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
+      if (params?.offset !== undefined) {
+        incomeSearches.push(params.search ?? '')
+      }
+      return baseReportClient.getIncomeReport(token, params)
+    })
+    const getFeeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getFeeReport']>[1]) => {
+      feeVariations.push(params?.variation ?? '')
+      return baseReportClient.getFeeReport(token, params)
+    })
+    const reportClient = createReportClient({ getGarageReport, getExpenseReport, getIncomeReport, getFeeReport })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await waitFor(() => expect(garageRequests).toContainEqual({ search: undefined, offset: 0 }))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(garageRequests).toContainEqual({ search: undefined, offset: 25 }))
+    await user.type(within(reportsPanel).getByLabelText('Гаражи'), '105')
+    await waitFor(() => expect(garageRequests).toContainEqual({ search: '105', offset: 0 }))
+    expect(garageRequests.filter((request) => request.search).map((request) => request.search)).toEqual(['105'])
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    await user.type(within(reportsPanel).getByLabelText('Поставщики или сотрудники'), 'Иванов')
+    await waitFor(() => expect(payoutSearches).toContain('Иванов'))
+    expect(payoutSearches.filter(Boolean)).toEqual(['Иванов'])
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    await user.type(within(reportsPanel).getByLabelText('Гаражи по поступлениям'), '205')
+    await waitFor(() => expect(incomeSearches).toContain('205'))
+    expect(incomeSearches.filter(Boolean)).toEqual(['205'])
+
+    await openReportTab(user, reportsPanel, 'Сборы')
+    const feeFilter = within(reportsPanel).getByLabelText('Вариация сбора')
+    await user.clear(feeFilter)
+    await user.type(feeFilter, 'Ворота')
+    await waitFor(() => expect(feeVariations).toContain('Ворота'))
+    expect(feeVariations.filter((variation) => variation !== 'Сбор на ворота')).toEqual(['Ворота'])
+  })
+
   it('shows loading and error states for the paged garage report', async () => {
     const user = userEvent.setup()
     let rejectGarages: (reason?: unknown) => void = () => {}

@@ -100,6 +100,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [counterpartyFilter, setCounterpartyFilter] = useState('')
   const [incomeGarageFilter, setIncomeGarageFilter] = useState('')
   const [feeVariationFilter, setFeeVariationFilter] = useState('Сбор на ворота')
+  const [appliedGarageFilter, setAppliedGarageFilter] = useState('')
+  const [appliedCounterpartyFilter, setAppliedCounterpartyFilter] = useState('')
+  const [appliedIncomeGarageFilter, setAppliedIncomeGarageFilter] = useState('')
+  const [appliedFeeVariationFilter, setAppliedFeeVariationFilter] = useState('Сбор на ворота')
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
@@ -147,6 +151,39 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [fundChangePageRequest, setFundChangePageRequest] = useState({ offset: 0, limit: 25 })
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setAppliedGarageFilter(garageFilter)
+      setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [garageFilter])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setAppliedCounterpartyFilter(counterpartyFilter)
+      setPayoutPageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [counterpartyFilter])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setAppliedIncomeGarageFilter(incomeGarageFilter)
+      setIncomePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [incomeGarageFilter])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setAppliedFeeVariationFilter(feeVariationFilter)
+      setFeeSummaryPageNumber(1)
+      setFeeDetailPageNumber(1)
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [feeVariationFilter])
 
   useEffect(() => {
     let ignore = false
@@ -253,7 +290,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       setReportDataError(null)
       try {
         const report = await reportClient.getFeeReport(auth.accessToken, {
-          variation: feeVariationFilter.trim() || undefined,
+          variation: appliedFeeVariationFilter.trim() || undefined,
           limit: 100,
         })
         if (!ignore) {
@@ -274,7 +311,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, feeVariationFilter, reportClient])
+  }, [activeReportTab, appliedFeeVariationFilter, auth.accessToken, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'garages') {
@@ -291,7 +328,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getGarageReport(auth.accessToken, {
           monthFrom: getReportMonthStart(filter.monthFrom),
           monthTo: getReportMonthStart(filter.monthTo),
-          search: garageFilter.trim() || undefined,
+          search: appliedGarageFilter.trim() || undefined,
           groupAccruals: garageAccrualsGrouped,
           offset: garagePageRequest.offset,
           limit: garagePageRequest.limit,
@@ -315,7 +352,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, garageAccrualsGrouped, garageFilter, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient])
+  }, [activeReportTab, appliedGarageFilter, auth.accessToken, garageAccrualsGrouped, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'payouts') {
@@ -332,7 +369,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getExpenseReport(auth.accessToken, {
           dateFrom: getReportMonthStart(filter.monthFrom),
           dateTo: getReportMonthEnd(filter.monthTo),
-          search: counterpartyFilter.trim() || undefined,
+          search: appliedCounterpartyFilter.trim() || undefined,
           offset: payoutPageRequest.offset,
           limit: payoutPageRequest.limit,
         })
@@ -355,7 +392,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, counterpartyFilter, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient])
+  }, [activeReportTab, appliedCounterpartyFilter, auth.accessToken, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'income') {
@@ -372,7 +409,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getIncomeReport(auth.accessToken, {
           dateFrom: filter.dateFrom,
           dateTo: filter.dateTo,
-          search: incomeGarageFilter.trim() || undefined,
+          search: appliedIncomeGarageFilter.trim() || undefined,
           rowMode: 'payments',
           offset: incomePageRequest.offset,
           limit: incomePageRequest.limit,
@@ -396,7 +433,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.income, incomeGarageFilter, incomePageRequest.limit, incomePageRequest.offset, reportClient])
+  }, [activeReportTab, appliedIncomeGarageFilter, auth.accessToken, dateFilters.income, incomePageRequest.limit, incomePageRequest.offset, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -815,10 +852,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   aria-label="Гаражи"
                   list={garageOptionsId}
                   value={garageFilter}
-                  onChange={(event) => {
-                    setGaragePageRequest((current) => ({ ...current, offset: 0 }))
-                    setGarageFilter(event.target.value)
-                  }}
+                  onChange={(event) => setGarageFilter(event.target.value)}
                   placeholder="Гараж или номер"
                 />
               </label>
@@ -883,10 +917,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   aria-label="Поставщики или сотрудники"
                   list={supplierOptionsId}
                   value={counterpartyFilter}
-                  onChange={(event) => {
-                    setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
-                    setCounterpartyFilter(event.target.value)
-                  }}
+                  onChange={(event) => setCounterpartyFilter(event.target.value)}
                   placeholder="Поставщик или сотрудник"
                 />
               </label>
@@ -937,10 +968,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   aria-label="Гаражи по поступлениям"
                   list={garageOptionsId}
                   value={incomeGarageFilter}
-                  onChange={(event) => {
-                    setIncomePageRequest((current) => ({ ...current, offset: 0 }))
-                    setIncomeGarageFilter(event.target.value)
-                  }}
+                  onChange={(event) => setIncomeGarageFilter(event.target.value)}
                   placeholder="Гараж или номер"
                 />
               </label>
@@ -1037,6 +1065,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           aria-label={`Открыть детализацию сбора ${row.name}`}
           onClick={() => {
             setFeeVariationFilter(row.name)
+            setAppliedFeeVariationFilter(row.name)
+            setFeeSummaryPageNumber(1)
+            setFeeDetailPageNumber(1)
             setFeeDebtorsVisible(true)
             setFeeDetailMode('all')
           }}
