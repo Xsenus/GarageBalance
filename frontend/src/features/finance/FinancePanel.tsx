@@ -5595,18 +5595,21 @@ function SalaryAccrualPrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Группа">
-            <select aria-label="Группа для начисления зарплаты" value={supplierGroupId} onChange={(event) => {
-              setSupplierGroupId(event.target.value)
-              setError(null)
-            }}>
-              {supplierGroups.length > 0 ? supplierGroups.map((group) => (
-                <option key={group.id} value={group.id}>{group.name}</option>
-              )) : <option value="">Нет групп</option>}
-            </select>
+            <SelectControl
+              aria-label="Группа для начисления зарплаты"
+              value={supplierGroupId}
+              options={supplierGroups.length > 0
+                ? supplierGroups.map((group) => ({ value: group.id, label: group.name }))
+                : [{ value: '', label: 'Нет групп' }]}
+              disabled={saving}
+              onChange={(nextSupplierGroupId) => {
+                setSupplierGroupId(nextSupplierGroupId)
+                setError(null)
+              }} />
           </FormField>
           <FormField label="Месяц">
-            <input aria-label="Месяц начисления зарплаты" type="month" value={accountingMonth} onChange={(event) => {
-              setAccountingMonth(event.target.value)
+            <LocalizedDatePicker ariaLabel="Месяц начисления зарплаты" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
