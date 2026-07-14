@@ -4534,6 +4534,10 @@ h1 {
   padding-block: 8px;
 }
 
+.loading-skeleton--table-row {
+  grid-column: 1 / -1;
+}
+
 @keyframes skeleton-shimmer {
   from { background-position: 100% 0; }
   to { background-position: -100% 0; }

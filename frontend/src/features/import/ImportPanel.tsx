@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { DatabaseZap, FileText, RotateCcw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from '../../services/importApi'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { buildImportReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError } from '../../shared/formFeedback'
@@ -471,7 +472,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   </div>
                 ) : null}
               </>
-            ) : <p className="empty-state" role="status" aria-live="polite">Статус reader Access загружается...</p>}
+            ) : <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус reader Access" rows={3} columns={2} />}
           </div>
 
           <section className="dictionary-form import-report-card" aria-labelledby="import-report-title">
@@ -579,7 +580,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Уровень</span>
               <span role="columnheader">Сообщение</span>
             </div>
-            {loadingLog ? <p className="empty-state" role="status" aria-live="polite">Загрузка лога...</p> : null}
+            {loadingLog ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем лог импорта" rows={5} columns={3} /> : null}
             {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
             {logPage.items.map((entry) => (
               <div className="operation-row" role="row" key={entry.id}>
@@ -632,7 +633,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Источник</span>
               <span role="columnheader">Rollback</span>
             </div>
-            {loadingCreatedRecords ? <p className="empty-state" role="status" aria-live="polite">Загрузка созданных записей...</p> : null}
+            {loadingCreatedRecords ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем созданные импортом записи" rows={5} columns={3} /> : null}
             {!loadingCreatedRecords && createdRecords.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
             {createdPage.items.map((record) => (
               <div className="operation-row" role="row" key={record.id}>

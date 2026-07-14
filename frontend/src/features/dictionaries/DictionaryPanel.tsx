@@ -6,6 +6,7 @@ import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey } from '../../shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from '../../shared/dictionaryWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -1017,7 +1018,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
                 <tr>{renderHeaders()}</tr>
               </thead>
               <tbody>
-                {rows.map((item) => (
+                {!loading ? rows.map((item) => (
                   <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
                     if (!isArchivedRecord(item)) {
                       openEditor(activeSection, 'edit', item)
@@ -1031,9 +1032,10 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
                     </td>
                     <td className="dictionary-actions-column"><span className="dictionary-row-actions">{renderRowAction(item)}</span></td>
                   </tr>
-                ))}
+                )) : null}
               </tbody>
             </table>
+            {loading ? <LoadingSkeleton className="loading-skeleton--compact" label={`Загружаем справочник: ${activeOption.label}`} rows={6} columns={Math.max(3, getDictionaryTableHeaders(activeSection).length + 2)} /> : null}
             {!loading && rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">В этом справочнике пока нет записей</p> : null}
           </div>
 

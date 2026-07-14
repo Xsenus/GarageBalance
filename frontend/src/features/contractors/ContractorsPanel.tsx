@@ -7,6 +7,7 @@ import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/fina
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
@@ -1799,7 +1800,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
               ))}
             </div>
-            {visibleGarages.map((row) => (
+            {!contractorPageLoading.garages ? visibleGarages.map((row) => (
               <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openGarageContextMenu(event, row)}>
                 <span role="cell" className="contractors-directory-cell--center">{row.number}</span>
                 <span role="cell" className="contractors-directory-cell--center">{row.peopleCount}</span>
@@ -1829,10 +1830,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   )}
                 </span>
               </div>
-            ))}
-            {visibleGarages.length === 0 ? (
+            )) : null}
+            {contractorPageLoading.garages ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем гаражи" rows={6} columns={7} /> : null}
+            {!contractorPageLoading.garages && visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{contractorPageLoading.garages ? 'Загрузка гаражей...' : showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
               </div>
             ) : null}
           </div>
@@ -1869,7 +1871,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
               ))}
             </div>
-            {visibleSuppliers.map((row) => {
+            {!contractorPageLoading.suppliers ? visibleSuppliers.map((row) => {
               const primaryContact = getSupplierPrimaryContact(row)
               return (
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openSupplierContextMenu(event, row)}>
@@ -1902,10 +1904,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                 </div>
               )
-            })}
-            {visibleSuppliers.length === 0 ? (
+            }) : null}
+            {contractorPageLoading.suppliers ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем поставщиков" rows={6} columns={7} /> : null}
+            {!contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{contractorPageLoading.suppliers ? 'Загрузка поставщиков...' : showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
               </div>
             ) : null}
           </div>
@@ -1946,7 +1949,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                 ))}
               </div>
-              {visibleStaff.map((row) => (
+              {!contractorPageLoading.staff ? visibleStaff.map((row) => (
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
                   <span role="cell">{row.fullName}</span>
                   <span role="cell">{row.department}</span>
@@ -1971,10 +1974,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                     )}
                   </span>
                 </div>
-              ))}
-              {visibleStaff.length === 0 ? (
+              )) : null}
+              {contractorPageLoading.staff ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем персонал" rows={6} columns={4} /> : null}
+              {!contractorPageLoading.staff && visibleStaff.length === 0 ? (
                 <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                  <span className="contractors-directory-empty-cell" role="cell">{contractorPageLoading.staff ? 'Загрузка персонала...' : 'Сотрудники пока не настроены.'}</span>
+                  <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
                 </div>
               ) : null}
             </div>

@@ -10927,7 +10927,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По гаражам')
 
-    expect(await within(reportsPanel).findByText('Загружаем отчет по гаражам...')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчет по гаражам...' })).toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по гаражам' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
@@ -10959,7 +10959,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По выплатам')
 
-    expect(await within(reportsPanel).findByText('Загружаем выплаты...')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем выплаты...' })).toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по выплатам' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
@@ -10991,7 +10991,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Поступления')
 
-    expect(await within(reportsPanel).findByText('Загружаем поступления...')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем поступления...' })).toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по поступлениям' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
@@ -11020,7 +11020,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
 
-    expect(await within(reportsPanel).findByText('Загружаем оплаты из кассы...')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем оплаты из кассы...' })).toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по оплатам из кассы' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
@@ -11049,7 +11049,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
 
-    expect(await within(reportsPanel).findByText('Загружаем сдачу кассы в банк...')).toHaveAttribute('role', 'status')
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем сдачу кассы в банк...' })).toBeInTheDocument()
     expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по сдаче кассы в банк' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {

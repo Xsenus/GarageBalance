@@ -9,6 +9,7 @@ import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -4278,7 +4279,7 @@ function PaymentsPrototypePanel({
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
-      {garageWorksheetLoadingId ? <p className="form-status" role="status">Загружаем поступления выбранного гаража...</p> : null}
+      {garageWorksheetLoadingId ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем поступления выбранного гаража" rows={2} columns={4} /> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -4334,7 +4335,7 @@ function PaymentsPrototypePanel({
               <tbody>
                 {garagePaymentHistoryLoadingId === selectedGarage.id ? (
                   <tr>
-                    <td colSpan={6}>Загружаем историю платежей...</td>
+                    <td colSpan={6}><LoadingSkeleton className="loading-skeleton--compact" label="Загружаем историю платежей" rows={4} columns={6} /></td>
                   </tr>
                 ) : historyRows.length > 0 ? historyRows.map((row) => (
                   <tr key={row.id}>
@@ -4481,7 +4482,7 @@ function PaymentsPrototypePanel({
                   })}
                   {groupedGarageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? 'Загружаем поступления...' : 'Начислений и поступлений за выбранный период пока нет.'}</td>
+                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем начисления и поступления" rows={4} columns={8} /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -4527,7 +4528,6 @@ function PaymentsPrototypePanel({
                 </select>
               </label>
             </div>
-            {expenseWorksheetLoading ? <p className="form-status" role="status">Загружаем форму выплат...</p> : null}
             <div className="payments-prototype-table-scroll">
               <table className="payments-prototype-table" aria-label={`Форма выплат за ${expenseMonthLabel}`}>
                 <thead>
@@ -4577,7 +4577,7 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{expenseWorksheetLoading ? 'Загружаем форму выплат...' : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={8}>{expenseWorksheetLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем форму выплат" rows={5} columns={8} /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -5084,7 +5084,7 @@ function BankDepositPrototypeDialog({
           <FormField label="Комментарий">
             <textarea aria-label="Комментарий к сумме в банке" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
-          {loading ? <p className="form-hint" role="status">Загружаем фонды...</p> : null}
+          {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем фонды для операции" rows={2} columns={2} /> : null}
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={loading || saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>

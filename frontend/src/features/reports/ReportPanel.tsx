@@ -4,6 +4,7 @@ import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
@@ -780,7 +781,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </label>
             ),
           })}
-          {garageReportLoading ? <p className="prototype-status" role="status">Загружаем отчет по гаражам...</p> : null}
+          {garageReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем отчет по гаражам..." rows={6} columns={garageReportColumns.length} /> : null}
           {garageReportError ? <FormError>{garageReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
@@ -804,8 +805,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по гаражам',
             garageReportColumns,
-            reportRows.length > 0 ? reportRows : [emptyGarageRow],
-            garageReportFooter,
+            garageReportLoading ? [] : reportRows.length > 0 ? reportRows : [emptyGarageRow],
+            garageReportLoading ? undefined : garageReportFooter,
           )}
           <TablePagination ariaLabel="Пагинация отчета по гаражам" totalCount={garagePage.totalCount} offset={garagePage.offset} limit={garagePage.limit} visibleCount={garagePage.items.length} disabled={garageReportLoading} pageSizeLabel="Количество строк отчета по гаражам" onPageChange={(page) => setGaragePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setGaragePageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -848,7 +849,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </label>
             ),
           })}
-          {payoutReportLoading ? <p className="prototype-status" role="status">Загружаем выплаты...</p> : null}
+          {payoutReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем выплаты..." rows={6} columns={6} /> : null}
           {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
@@ -858,8 +859,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по выплатам',
             ['Месяц', 'Услуга', 'Поставщик/сотрудник', 'Начисления', 'Выплаты', 'Разница'],
-            reportRows.length > 0 ? reportRows : [['', '', counterpartyFilterLabel, 'Данных за период нет', '', '']],
-            payoutReport ? ['ИТОГО', '', '', formatMoney(payoutReport.accrualTotal), formatMoney(payoutReport.expenseTotal), formatMoney(payoutReport.difference)] : undefined,
+            payoutReportLoading ? [] : reportRows.length > 0 ? reportRows : [['', '', counterpartyFilterLabel, 'Данных за период нет', '', '']],
+            !payoutReportLoading && payoutReport ? ['ИТОГО', '', '', formatMoney(payoutReport.accrualTotal), formatMoney(payoutReport.expenseTotal), formatMoney(payoutReport.difference)] : undefined,
           )}
           <TablePagination ariaLabel="Пагинация отчета по выплатам" totalCount={payoutPage.totalCount} offset={payoutPage.offset} limit={payoutPage.limit} visibleCount={payoutPage.items.length} disabled={payoutReportLoading} pageSizeLabel="Количество строк отчета по выплатам" onPageChange={(page) => setPayoutPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setPayoutPageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -902,14 +903,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </label>
             ),
           })}
-          {incomeReportLoading ? <p className="prototype-status" role="status">Загружаем поступления...</p> : null}
+          {incomeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем поступления..." rows={6} columns={6} /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по поступлениям',
             ['Гараж', 'Дата', 'Время', 'Сумма платежа', 'Назначение платежа', 'Остаток долга после платежа'],
-            incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '', '']],
-            incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), '', ''] : undefined,
+            incomeReportLoading ? [] : incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '', '']],
+            !incomeReportLoading && incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), '', ''] : undefined,
           )}
           <TablePagination ariaLabel="Пагинация отчета по поступлениям" totalCount={incomePage.totalCount} offset={incomePage.offset} limit={incomePage.limit} visibleCount={incomePage.items.length} disabled={incomeReportLoading} pageSizeLabel="Количество строк отчета по поступлениям" onPageChange={(page) => setIncomePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setIncomePageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -933,7 +934,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
-          {cashPaymentReportLoading ? <p className="prototype-status" role="status">Загружаем оплаты из кассы...</p> : null}
+          {cashPaymentReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем оплаты из кассы..." rows={6} columns={5} /> : null}
           {cashPaymentReportError ? <FormError>{cashPaymentReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
             {renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}
@@ -943,8 +944,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по оплатам из кассы',
             ['Дата', 'Сумма', 'Наличие чека', 'Назначение', 'Комментарий'],
-            cashRows.length > 0 ? cashRows : [['', 'Операций за период нет', '', '', '']],
-            cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', `${cashPaymentReport.rowCount} операций`] : undefined,
+            cashPaymentReportLoading ? [] : cashRows.length > 0 ? cashRows : [['', 'Операций за период нет', '', '', '']],
+            !cashPaymentReportLoading && cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', `${cashPaymentReport.rowCount} операций`] : undefined,
           )}
           <TablePagination ariaLabel="Пагинация отчета по оплатам из кассы" totalCount={cashPaymentPage.totalCount} offset={cashPaymentPage.offset} limit={cashPaymentPage.limit} visibleCount={cashPaymentPage.items.length} disabled={cashPaymentReportLoading} pageSizeLabel="Количество строк отчета по оплатам из кассы" onPageChange={(page) => setCashPaymentPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setCashPaymentPageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -966,7 +967,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
-          {bankDepositReportLoading ? <p className="prototype-status" role="status">Загружаем сдачу кассы в банк...</p> : null}
+          {bankDepositReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем сдачу кассы в банк..." rows={6} columns={3} /> : null}
           {bankDepositReportError ? <FormError>{bankDepositReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
             {renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}
@@ -976,8 +977,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
             ['Дата', 'Сумма', 'Комментарий'],
-            bankRows.length > 0 ? bankRows : [['', 'Операций за период нет', '']],
-            bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), `${bankDepositReport.rowCount} операций`] : undefined,
+            bankDepositReportLoading ? [] : bankRows.length > 0 ? bankRows : [['', 'Операций за период нет', '']],
+            !bankDepositReportLoading && bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), `${bankDepositReport.rowCount} операций`] : undefined,
           )}
           <TablePagination ariaLabel="Пагинация отчета по сдаче кассы в банк" totalCount={bankDepositPage.totalCount} offset={bankDepositPage.offset} limit={bankDepositPage.limit} visibleCount={bankDepositPage.items.length} disabled={bankDepositReportLoading} pageSizeLabel="Количество строк отчета по сдаче кассы в банк" onPageChange={(page) => setBankDepositPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setBankDepositPageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -1129,7 +1130,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}
           {renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}
         </div>
-        {fundChangeReportLoading ? <p className="prototype-status" role="status">Загружаем изменения фондов...</p> : null}
+        {fundChangeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем изменения фондов..." rows={6} columns={8} /> : null}
         {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
         {fundChangeReport ? (
           <div className="report-workbook-summary-row">
@@ -1138,7 +1139,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             <strong>Операций: {fundChangeReport.rowCount}</strong>
           </div>
         ) : null}
-        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма', 'Сумма до', 'Сумма после', 'Пользователь', 'Комментарий'], visibleFundRows)}
+        {renderReportTable('Отчет по изменению фондов', ['Фонд', 'Дата', 'Изменение', 'Сумма', 'Сумма до', 'Сумма после', 'Пользователь', 'Комментарий'], fundChangeReportLoading ? [] : visibleFundRows)}
         <TablePagination ariaLabel="Пагинация отчета по изменению фондов" totalCount={fundPage.totalCount} offset={fundPage.offset} limit={fundPage.limit} visibleCount={fundPage.items.length} disabled={fundChangeReportLoading} pageSizeLabel="Количество строк отчета по изменению фондов" onPageChange={(page) => setFundChangePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setFundChangePageRequest({ offset: 0, limit })} />
       </ReportWorkbookSheet>
     )

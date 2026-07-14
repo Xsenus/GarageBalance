@@ -5,6 +5,7 @@ import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/au
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -443,7 +444,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               />
             </span>
           </label>
-          {paymentDisplaySettingsLoading ? <p className="form-hint" role="status">Загружаем настройку...</p> : null}
+          {paymentDisplaySettingsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем настройку отображения платежей" rows={2} columns={2} /> : null}
           {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
           {paymentDisplaySettingsMessage ? <div className="form-success" role="status" aria-live="polite">{paymentDisplaySettingsMessage}</div> : null}
           <button className="secondary-button" type="button" disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving} onClick={() => void savePaymentDisplaySettings()}>
@@ -463,7 +464,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <p>Статус подготовки будущей синхронизации показывается без раскрытия токенов и других защищенных настроек.</p>
           </div>
           {integrationError ? <FormError>{integrationError}</FormError> : null}
-          {integrationLoading ? <p className="empty-state" role="status" aria-live="polite">Загрузка статуса 1C Fresh...</p> : null}
+          {integrationLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус 1C Fresh" rows={3} columns={4} /> : null}
           {oneCFreshStatus ? (
             <div className="summary-strip" aria-label="Статус интеграции 1C Fresh">
               <div>
@@ -568,7 +569,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <p>Статус подготовки печати показывается без раскрытия параметров фискального оборудования и шаблонов.</p>
           </div>
           {receiptPrintingError ? <FormError>{receiptPrintingError}</FormError> : null}
-          {receiptPrintingLoading ? <p className="empty-state" role="status" aria-live="polite">Загрузка статуса печати...</p> : null}
+          {receiptPrintingLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус печати" rows={3} columns={4} /> : null}
           {receiptPrintingStatus ? (
             <div className="summary-strip" aria-label="Статус печати чеков и квитанций">
               <div>

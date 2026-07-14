@@ -4,6 +4,7 @@ import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucid
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { permissions, rolePermissionGroups } from '../../shared/accessControl'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
@@ -422,7 +423,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 </tr>
               </thead>
               <tbody>
-                {page.items.map((managedUser) => (
+                {!loading ? page.items.map((managedUser) => (
                   <tr
                     key={managedUser.id}
                     tabIndex={0}
@@ -438,7 +439,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     <td><span className={managedUser.isActive ? 'status-active' : 'status-disabled'}>{managedUser.isActive ? 'Активен' : 'Отключен'}</span></td>
                     <td>{managedUser.lastLoginAtUtc ? formatDateTime(managedUser.lastLoginAtUtc) : 'Не входил'}</td>
                   </tr>
-                ))}
+                )) : null}
                 {!loading && page.items.length === 0 ? (
                   <tr>
                     <td colSpan={5}>
@@ -448,7 +449,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 ) : null}
               </tbody>
             </table>
-            {loading ? <p className="empty-state" role="status" aria-live="polite">Загружаем пользователей...</p> : null}
+            {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем пользователей" rows={6} columns={5} /> : null}
           </div>
 
           <TablePagination
