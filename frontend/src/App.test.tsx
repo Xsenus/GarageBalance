@@ -635,7 +635,9 @@ describe('App', () => {
 
     await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
     const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
-    expect(within(generateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('2026-06')
+    const feeCampaignMonth = within(generateDialog).getByLabelText('Месяц начисления сбора')
+    expect(feeCampaignMonth).toHaveValue('06.2026')
+    expect(feeCampaignMonth.closest('.localized-date-picker')).not.toBeNull()
     const generateCancelButton = within(generateDialog).getByRole('button', { name: 'Отмена' })
     const generateConfirmButton = within(generateDialog).getByRole('button', { name: 'Начислить' })
     expect(Boolean(generateCancelButton.compareDocumentPosition(generateConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
@@ -646,7 +648,7 @@ describe('App', () => {
 
     await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
     const reopenedGenerateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
-    expect(within(reopenedGenerateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('2026-06')
+    expect(within(reopenedGenerateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('06.2026')
     await user.type(within(reopenedGenerateDialog).getByLabelText('Комментарий к начислению сбора'), 'Решение правления')
     await user.click(within(reopenedGenerateDialog).getByRole('button', { name: 'Начислить' }))
     await waitFor(() => expect(generateRequests).toHaveLength(1))

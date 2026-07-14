@@ -2182,7 +2182,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             </div>
             <p className="confirmation-text" id="fee-campaign-generate-description">Backend создаст начисления по активным гаражам и запишет действие в историю изменений.</p>
             <FormField label="Месяц начисления">
-              <input aria-label="Месяц начисления сбора" type="month" value={feeCampaignGenerateMonth} onChange={(event) => setFeeCampaignGenerateMonth(event.target.value)} />
+              <LocalizedDatePicker
+                ariaLabel="Месяц начисления сбора"
+                mode="month"
+                value={feeCampaignGenerateMonth}
+                disabled={feeCampaignSavingId === feeCampaignGenerateTarget.id}
+                onChange={setFeeCampaignGenerateMonth} />
             </FormField>
             <FormField label="Комментарий">
               <textarea aria-label="Комментарий к начислению сбора" value={feeCampaignGenerateComment} onChange={(event) => setFeeCampaignGenerateComment(event.target.value)} placeholder="Например: начисление по решению правления" />

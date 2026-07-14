@@ -22,21 +22,30 @@ export function SelectControl({
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const listboxId = useId()
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
   const selectedOption = options[selectedIndex] ?? options[0]
   const optionIds = options.map((_, index) => `${listboxId}-option-${index}`)
+  const effectiveOpen = open && !disabled && options.length > 0
+  const safeActiveIndex = Math.min(Math.max(activeIndex, 0), Math.max(options.length - 1, 0))
 
   useEffect(() => {
-    if (!open) return
+    if (!effectiveOpen) return
     const closeOnOutsidePointer = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', closeOnOutsidePointer)
     return () => document.removeEventListener('mousedown', closeOnOutsidePointer)
-  }, [open])
+  }, [effectiveOpen])
+
+  useEffect(() => {
+    if (!effectiveOpen) return
+    optionRefs.current[safeActiveIndex]?.scrollIntoView?.({ block: 'nearest' })
+  }, [effectiveOpen, safeActiveIndex])
 
   function openList() {
+    if (disabled || options.length === 0) return
     setActiveIndex(selectedIndex)
     setOpen(true)
   }
@@ -48,6 +57,16 @@ export function SelectControl({
     setOpen(false)
   }
 
+  function moveActive(direction: -1 | 1) {
+    if (options.length === 0) return
+    if (!effectiveOpen) {
+      setActiveIndex(Math.min(Math.max(selectedIndex + direction, 0), options.length - 1))
+      setOpen(true)
+      return
+    }
+    setActiveIndex((current) => Math.min(Math.max(current + direction, 0), options.length - 1))
+  }
+
   return (
     <div className="select-control" ref={rootRef}>
       <button
@@ -55,11 +74,11 @@ export function SelectControl({
         type="button"
         role="combobox"
         aria-label={ariaLabel}
-        aria-expanded={open}
+        aria-expanded={effectiveOpen}
         aria-controls={listboxId}
-        aria-activedescendant={open ? optionIds[activeIndex] : undefined}
-        disabled={disabled}
-        onClick={() => open ? setOpen(false) : openList()}
+        aria-activedescendant={effectiveOpen && optionIds[safeActiveIndex] ? optionIds[safeActiveIndex] : undefined}
+        disabled={disabled || options.length === 0}
+        onClick={() => effectiveOpen ? setOpen(false) : openList()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             setOpen(false)
@@ -67,30 +86,40 @@ export function SelectControl({
           }
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
-            if (!open) openList()
-            setActiveIndex((current) => event.key === 'ArrowDown'
-              ? Math.min(current + 1, options.length - 1)
-              : Math.max(current - 1, 0))
+            moveActive(event.key === 'ArrowDown' ? 1 : -1)
             return
           }
-          if ((event.key === 'Enter' || event.key === ' ') && open) {
+          if (effectiveOpen && (event.key === 'Home' || event.key === 'End')) {
             event.preventDefault()
-            selectOption(activeIndex)
+            setActiveIndex(event.key === 'Home' ? 0 : options.length - 1)
+            return
           }
+          if ((event.key === 'Enter' || event.key === ' ') && effectiveOpen) {
+            event.preventDefault()
+            selectOption(safeActiveIndex)
+            return
+          }
+          if ((event.key === 'Enter' || event.key === ' ') && !effectiveOpen) {
+            event.preventDefault()
+            openList()
+          }
+          if (event.key === 'Tab') setOpen(false)
         }}
       >
         <span>{selectedOption?.label ?? ''}</span>
         <ChevronDown size={16} aria-hidden="true" />
       </button>
-      {open ? (
+      {effectiveOpen ? (
         <div className="select-control__list" id={listboxId} role="listbox" aria-label={`${ariaLabel}: варианты`}>
           {options.map((option, index) => (
             <button
-              className={index === activeIndex ? 'select-control__option is-active' : 'select-control__option'}
+              className={index === safeActiveIndex ? 'select-control__option is-active' : 'select-control__option'}
               id={optionIds[index]}
               key={option.value || 'all'}
+              ref={(node) => { optionRefs.current[index] = node }}
               type="button"
               role="option"
+              tabIndex={-1}
               aria-selected={option.value === value}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => selectOption(index)}

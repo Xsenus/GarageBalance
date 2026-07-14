@@ -4505,15 +4505,30 @@ h1 {
   font-weight: 750;
 }
 
-.localized-date-picker__clear {
-  width: 100%;
+.localized-date-picker__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 10px;
+}
+
+.localized-date-picker__clear,
+.localized-date-picker__current {
+  border-radius: 7px;
   border: 0;
   background: transparent;
   color: #175cd3;
   cursor: pointer;
   padding: 6px;
   font-weight: 700;
+}
+
+.localized-date-picker__clear:hover,
+.localized-date-picker__clear:focus-visible,
+.localized-date-picker__current:hover,
+.localized-date-picker__current:focus-visible {
+  background: #eef4ff;
+  outline: none;
 }
 
 .compact-stack {
