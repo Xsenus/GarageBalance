@@ -22,6 +22,11 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("artifacts/api.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/frontend.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("secrets.VPS_SSH_KEY", workflow, StringComparison.Ordinal);
+        Assert.Contains("Host garagebalance-staging", workflow, StringComparison.Ordinal);
+        Assert.Contains("ControlMaster auto", workflow, StringComparison.Ordinal);
+        Assert.Contains("ControlPersist 120", workflow, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging:~/uploads/${RELEASE_ID}/api.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("ssh -O exit garagebalance-staging", workflow, StringComparison.Ordinal);
         Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply", workflow, StringComparison.Ordinal);
     }
 

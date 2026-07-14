@@ -117,19 +117,32 @@ jobs:
           printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/garagebalance_staging
           chmod 600 ~/.ssh/garagebalance_staging
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host garagebalance-staging
+            HostName ${{ secrets.VPS_HOST }}
+            User ${{ secrets.VPS_DEPLOY_USER }}
+            IdentityFile ~/.ssh/garagebalance_staging
+            ControlMaster auto
+            ControlPath ~/.ssh/garagebalance-staging-%C
+            ControlPersist 120
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: Upload artifacts to VPS
         run: |
-          ssh -i ~/.ssh/garagebalance_staging "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}" \
-            "mkdir -p ~/uploads/${RELEASE_ID}"
-          scp -i ~/.ssh/garagebalance_staging artifacts/api.tar.gz \
-            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}:~/uploads/${RELEASE_ID}/api.tar.gz"
-          scp -i ~/.ssh/garagebalance_staging artifacts/frontend.tar.gz \
-            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}:~/uploads/${RELEASE_ID}/frontend.tar.gz"
-          scp -i ~/.ssh/garagebalance_staging artifacts/deploy-migrations.sql \
-            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}:~/uploads/${RELEASE_ID}/deploy-migrations.sql"
+          ssh garagebalance-staging "mkdir -p ~/uploads/${RELEASE_ID}"
+          scp artifacts/api.tar.gz \
+            "garagebalance-staging:~/uploads/${RELEASE_ID}/api.tar.gz"
+          scp artifacts/frontend.tar.gz \
+            "garagebalance-staging:~/uploads/${RELEASE_ID}/frontend.tar.gz"
+          scp artifacts/deploy-migrations.sql \
+            "garagebalance-staging:~/uploads/${RELEASE_ID}/deploy-migrations.sql"
 
       - name: Apply release on VPS
         run: |
-          ssh -i ~/.ssh/garagebalance_staging "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}" \
+          ssh garagebalance-staging \
             "sudo /usr/local/bin/garagebalance-deploy-apply '${RELEASE_ID}'"
+          ssh -O exit garagebalance-staging || true
