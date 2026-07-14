@@ -683,9 +683,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("SumAsync", document, StringComparison.Ordinal);
         Assert.Contains("browser console", document, StringComparison.Ordinal);
         Assert.Contains("realistic customer data", document, StringComparison.Ordinal);
-        Assert.Contains("postgresTcp=False", document, StringComparison.Ordinal);
-        Assert.Contains("psql=False", document, StringComparison.Ordinal);
-        Assert.Contains("docker=False", document, StringComparison.Ordinal);
+        Assert.Contains("psql` and Docker tooling", document, StringComparison.Ordinal);
+        Assert.Contains("authorized VPS", document, StringComparison.Ordinal);
+        Assert.Contains("Post-cleanup service checks passed", document, StringComparison.Ordinal);
     }
 
     private static string ReadApiSource(string relativePath)
