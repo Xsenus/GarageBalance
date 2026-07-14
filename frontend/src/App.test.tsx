@@ -2697,6 +2697,8 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: 'Счётчики' }))
 
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
+    expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
     expect(within(readingsPanel).getByRole('status', { name: 'Загружаем гаражи и показания' })).toBeInTheDocument()
     await act(async () => resolveMeterReadingYearPage({
       garages: [

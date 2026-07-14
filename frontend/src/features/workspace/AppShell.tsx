@@ -158,7 +158,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
         </aside>
       ) : null}
 
-      <section className="workspace">
+      <section className={effectiveActiveSection === 'meterReadings' ? 'workspace workspace--meter-readings' : 'workspace'}>
         <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={onUserChanged} onLogout={onLogout} />
       </section>
     </main>

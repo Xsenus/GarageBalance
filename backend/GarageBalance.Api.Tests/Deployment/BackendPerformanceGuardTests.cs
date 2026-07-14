@@ -152,6 +152,8 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains("GetYearPageAsync", source, StringComparison.Ordinal);
         Assert.Contains(".Where(garage => !garage.IsArchived)", source, StringComparison.Ordinal);
+        Assert.Contains(".OrderBy(garage => garage.Number.Length)", source, StringComparison.Ordinal);
+        Assert.Contains(".ThenBy(garage => garage.Number)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains("new MeterReadingYearGarageData(garage.Id, garage.Number)", source, StringComparison.Ordinal);

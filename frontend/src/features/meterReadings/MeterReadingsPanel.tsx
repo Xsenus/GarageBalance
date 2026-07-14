@@ -341,7 +341,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
         <div>
           <h1>Показания</h1>
         </div>
-        <div className="meter-readings-controls">
+        <div className="meter-readings-controls" role="group" aria-label="Параметры показаний">
           <FormField label="Год">
             <input
               aria-label="Год показаний"

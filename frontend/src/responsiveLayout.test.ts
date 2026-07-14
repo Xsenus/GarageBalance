@@ -67,6 +67,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })
 
+  it('keeps the yearly meter table inside the desktop workspace', () => {
+    expect(normalizedAppCss).toContain('.workspace--meter-readings {\n  display: flex;\n  height: 100vh;')
+    expect(normalizedAppCss).toContain('.meter-readings-page {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;')
+    expect(normalizedAppCss).toContain('.meter-readings-table-shell {\n  min-height: 0;\n  flex: 1 1 0;\n  overflow: auto;\n  max-height: none;')
+    expect(normalizedAppCss).toContain('.meter-readings-controls .form-field {\n  display: flex;\n  align-items: center;')
+    expect(normalizedAppCss).toContain('.meter-readings-data-row > span:not(:first-child) {\n  display: block;\n  min-height: 32px;')
+  })
+
   it('keeps settings navigation full-height and settings forms compact', () => {
     expect(normalizedAppCss).toContain('.settings-layout {\n  display: grid;\n  grid-template-columns: 240px minmax(0, 1fr);\n  gap: 18px;\n  min-height: calc(100dvh - 210px);')
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')

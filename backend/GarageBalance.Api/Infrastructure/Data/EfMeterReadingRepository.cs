@@ -66,7 +66,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .Where(garage => !garage.IsArchived);
         var totalCount = await garageQuery.CountAsync(cancellationToken);
         var garages = await garageQuery
-            .OrderBy(garage => garage.Number)
+            .OrderBy(garage => garage.Number.Length)
+            .ThenBy(garage => garage.Number)
             .ThenBy(garage => garage.Id)
             .Skip(offset)
             .Take(limit)

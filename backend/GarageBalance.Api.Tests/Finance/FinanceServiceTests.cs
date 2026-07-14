@@ -473,6 +473,33 @@ public sealed class FinanceServiceTests
         Assert.DoesNotContain(result.Value.Garages, item => item.Id == fixtures.Garage.Id);
     }
 
+    [Fact]
+    public async Task GetMeterReadingYearPageAsync_SortsNumericGarageNumbersNaturallyBeforePaging()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        database.Context.Garages.AddRange(
+            new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "10", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "13", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "3", PeopleCount = 1, FloorCount = 1 });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var firstPage = await service.GetMeterReadingYearPageAsync(
+            new MeterReadingYearRequest(2026, "electricity", 3, 0),
+            CancellationToken.None);
+        var secondPage = await service.GetMeterReadingYearPageAsync(
+            new MeterReadingYearRequest(2026, "electricity", 3, 3),
+            CancellationToken.None);
+
+        Assert.True(firstPage.Succeeded);
+        Assert.True(secondPage.Succeeded);
+        Assert.Equal(["1", "2", "3"], firstPage.Value!.Garages.Select(garage => garage.Number));
+        Assert.Equal(["10", "12", "13"], secondPage.Value!.Garages.Select(garage => garage.Number));
+    }
+
     [Theory]
     [InlineData(1899, "electricity", "meter_reading_year_invalid")]
     [InlineData(2026, "gas", "meter_kind_invalid")]

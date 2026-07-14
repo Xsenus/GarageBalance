@@ -176,6 +176,18 @@
   padding: 18px;
 }
 
+.workspace--meter-readings {
+  display: flex;
+  height: 100vh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace--meter-readings > .topbar {
+  flex: 0 0 auto;
+}
+
 .auth-entry {
   min-height: 100vh;
   background: #ffffff;
@@ -2104,19 +2116,24 @@ h1 {
 }
 
 .meter-readings-page {
-  display: grid;
-  gap: 18px;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .meter-readings-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
 }
 
 .meter-readings-heading h1 {
   margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
 }
 
 .meter-readings-heading p {
@@ -2125,20 +2142,41 @@ h1 {
 }
 
 .meter-readings-controls {
-  display: grid;
-  grid-template-columns: 120px 210px;
-  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meter-readings-controls .form-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meter-readings-controls .form-field-label {
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.meter-readings-controls .form-field:first-child {
+  width: 126px;
+}
+
+.meter-readings-controls .form-field:last-child {
+  width: 226px;
 }
 
 .meter-readings-control {
   width: 100%;
-  min-height: 38px;
+  min-height: 34px;
   border: 1px solid #d0d5dd;
   border-radius: 7px;
   background: #ffffff;
   color: #101828;
   font: inherit;
-  padding: 7px 9px;
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 .meter-readings-control:hover {
@@ -2200,8 +2238,10 @@ h1 {
 }
 
 .meter-readings-table-shell {
+  min-height: 0;
+  flex: 1 1 0;
   overflow: auto;
-  max-height: calc(100vh - 170px);
+  max-height: none;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #ffffff;
@@ -2227,8 +2267,12 @@ h1 {
 }
 
 .meter-readings-title-row span {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
   border-bottom: 1px solid #d0d5dd;
-  padding: 10px 12px;
+  padding: 6px 10px;
   color: #344054;
   font-size: 12px;
   font-weight: 800;
@@ -2240,6 +2284,7 @@ h1 {
   left: 0;
   z-index: 4;
   background: #f8fafc;
+  justify-content: flex-start;
   text-align: left;
 }
 
@@ -2249,7 +2294,7 @@ h1 {
 
 .meter-readings-month-row {
   position: sticky;
-  top: 40px;
+  top: 32px;
   z-index: 3;
   background: #ffffff;
 }
@@ -2264,8 +2309,8 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
-  min-height: 36px;
-  padding: 7px 8px;
+  min-height: 32px;
+  padding: 5px 7px;
   color: #344054;
   font-size: 12px;
   font-weight: 750;
@@ -2291,17 +2336,17 @@ h1 {
   left: 0;
   z-index: 2;
   display: grid;
-  min-height: 36px;
+  min-height: 32px;
   place-items: center;
   background: #ffffff;
   color: #344054;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
 }
 
 .meter-readings-data-row > span:not(:first-child) {
   display: block;
-  min-height: 36px;
+  min-height: 32px;
 }
 
 .meter-readings-data-row input {
@@ -2311,8 +2356,8 @@ h1 {
   background: transparent;
   color: #101828;
   font: inherit;
-  font-size: 13px;
-  padding: 8px 6px;
+  font-size: 12px;
+  padding: 6px 5px;
   text-align: right;
 }
 
@@ -6317,6 +6362,13 @@ button.operation-row:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .workspace--meter-readings {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
   .payments-prototype-search-results {
     grid-template-columns: repeat(2, minmax(190px, 1fr));
   }
@@ -6442,8 +6494,20 @@ button.operation-row:focus-visible {
   }
 
   .meter-readings-controls {
+    display: grid;
     width: 100%;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .meter-readings-controls .form-field,
+  .meter-readings-controls .form-field:first-child,
+  .meter-readings-controls .form-field:last-child {
+    display: grid;
+    width: auto;
+  }
+
+  .meter-readings-table-shell {
+    max-height: calc(100vh - 260px);
   }
 
   .contractors-actions {
