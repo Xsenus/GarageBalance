@@ -9,7 +9,7 @@ import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -2059,6 +2059,7 @@ export function FinancePanel({
         garages={garages}
         incomeTypes={incomeTypes}
         integrationClient={integrationClient}
+        loading={loading}
         supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}
@@ -2824,6 +2825,7 @@ function PaymentsPrototypePanel({
   garages,
   incomeTypes,
   integrationClient,
+  loading,
   supplierGroups,
   suppliers,
   staffMembers,
@@ -2838,6 +2840,7 @@ function PaymentsPrototypePanel({
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
   integrationClient: IntegrationClient
+  loading: boolean
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
@@ -4279,7 +4282,7 @@ function PaymentsPrototypePanel({
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
-      {garageWorksheetLoadingId ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем поступления выбранного гаража" rows={2} columns={4} /> : null}
+      {garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -4293,7 +4296,9 @@ function PaymentsPrototypePanel({
       </div>
 
       {!selectedGarage ? (
-        <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
+        loading
+          ? <TableLoadingState label="Загружаем раздел платежей" />
+          : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
       ) : activeTab === 'income' ? (
         <>
           <div className="payments-prototype-owner-row" aria-label="Выбранный гараж">
@@ -4335,7 +4340,7 @@ function PaymentsPrototypePanel({
               <tbody>
                 {garagePaymentHistoryLoadingId === selectedGarage.id ? (
                   <tr>
-                    <td colSpan={6}><LoadingSkeleton className="loading-skeleton--compact" label="Загружаем историю платежей" rows={4} columns={6} /></td>
+                    <td colSpan={6}><TableLoadingState label="Загружаем историю платежей" /></td>
                   </tr>
                 ) : historyRows.length > 0 ? historyRows.map((row) => (
                   <tr key={row.id}>
@@ -4482,7 +4487,7 @@ function PaymentsPrototypePanel({
                   })}
                   {groupedGarageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем начисления и поступления" rows={4} columns={8} /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
+                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -4577,7 +4582,7 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{expenseWorksheetLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем форму выплат" rows={5} columns={8} /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={8}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">

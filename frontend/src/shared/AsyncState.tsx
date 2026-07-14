@@ -24,6 +24,15 @@ export function LoadingSkeleton({ label, rows = 3, columns = 1, className = '' }
   )
 }
 
+export function TableLoadingState({ label, className = '' }: { label: string; className?: string }) {
+  return (
+    <div className={`table-loading-state ${className}`.trim()} role="status" aria-live="polite" aria-label={label}>
+      <span className="table-loading-state-spinner" aria-hidden="true" />
+      <span className="table-loading-state-label">{label}</span>
+    </div>
+  )
+}
+
 export function EmptyState({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <p className={`empty-state empty-state--spacious ${className}`.trim()} role="status" aria-live="polite">

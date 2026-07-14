@@ -7,7 +7,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeC
 import type { FinanceClient } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
+import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
@@ -1572,7 +1572,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
             </div>
-            {tariffsLoading ? <LoadingSkeleton className="contractors-sheet-skeleton" label="Загружаем тарифы и услуги" rows={6} columns={5} /> : null}
+            {tariffsLoading ? <TableLoadingState label="Загружаем тарифы и услуги" /> : null}
             {!tariffsLoading ? tariffPage.items.map((row, pageIndex) => {
               const serviceSetting = row.backendServiceSettingId
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
@@ -1758,7 +1758,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Основание</span>
                 <span>Сумма, руб.</span>
               </div>
-              {tariffsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем нерегулярные платежи" rows={4} columns={2} /> : null}
+              {tariffsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
               {!tariffsLoading ? oneTimePage.items.map((row) => (
                 <div
                   aria-label={`Нерегулярный платеж ${row.name}`}
@@ -1821,7 +1821,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Период</span>
                 <span>Действия</span>
               </div>
-              {tariffsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем объявленные сборы" rows={4} columns={6} /> : null}
+              {tariffsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
               {!tariffsLoading ? feeCampaignPage.items.map((campaign) => (
                 <div
                   aria-label={`Объявленный сбор ${campaign.name}`}

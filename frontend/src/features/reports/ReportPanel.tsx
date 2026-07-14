@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
@@ -745,7 +745,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
-          {consolidatedReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем сводный отчёт" rows={6} columns={8} /> : null}
+          {consolidatedReportLoading ? <TableLoadingState label="Загружаем сводный отчёт" /> : null}
           {renderReportTable(
             'Консолидированный отчет',
             ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
@@ -824,7 +824,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </label>
             ),
           })}
-          {garageReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем отчет по гаражам..." rows={6} columns={garageReportColumns.length} /> : null}
+          {garageReportLoading ? <TableLoadingState label="Загружаем отчет по гаражам..." /> : null}
           {garageReportError ? <FormError>{garageReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
@@ -892,7 +892,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </label>
             ),
           })}
-          {payoutReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем выплаты..." rows={6} columns={6} /> : null}
+          {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
           {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
@@ -946,7 +946,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </label>
             ),
           })}
-          {incomeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем поступления..." rows={6} columns={6} /> : null}
+          {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
@@ -977,7 +977,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
-          {cashPaymentReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем оплаты из кассы..." rows={6} columns={5} /> : null}
+          {cashPaymentReportLoading ? <TableLoadingState label="Загружаем оплаты из кассы..." /> : null}
           {cashPaymentReportError ? <FormError>{cashPaymentReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
             {renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}
@@ -1010,7 +1010,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
-          {bankDepositReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем сдачу кассы в банк..." rows={6} columns={3} /> : null}
+          {bankDepositReportLoading ? <TableLoadingState label="Загружаем сдачу кассы в банк..." /> : null}
           {bankDepositReportError ? <FormError>{bankDepositReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
             {renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}
@@ -1065,7 +1065,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       const feeDetailTableName = feeDetailMode === 'debtors' ? 'Должники по сбору' : 'Гаражи по сбору'
       return (
         <ReportWorkbookSheet title="Отчёт по сборам">
-          {feeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем отчёт по сборам" rows={6} columns={4} /> : null}
+          {feeReportLoading ? <TableLoadingState label="Загружаем отчёт по сборам" /> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <label className="report-workbook-filter-wide">
               <span>Вариация сбора</span>
@@ -1174,7 +1174,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}
           {renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}
         </div>
-        {fundChangeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем изменения фондов..." rows={6} columns={8} /> : null}
+        {fundChangeReportLoading ? <TableLoadingState label="Загружаем изменения фондов..." /> : null}
         {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
         {fundChangeReport ? (
           <div className="report-workbook-summary-row">

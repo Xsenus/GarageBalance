@@ -3,7 +3,7 @@ import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -521,7 +521,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <span role="columnheader">Причина</span>
           <span role="columnheader">Карточка</span>
         </div>
-        {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем историю изменений" rows={6} columns={10} /> : null}
+        {loading ? <TableLoadingState label="Загружаем историю изменений" /> : null}
         {!loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
         {!loading ? page.items.map((auditEvent) => {
           const beforeAfter = getAuditBeforeAfter(auditEvent)

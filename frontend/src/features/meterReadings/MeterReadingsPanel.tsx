@@ -3,7 +3,7 @@ import { Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { TablePagination } from '../../shared/TablePagination'
 import { getLocalDateInputValue } from '../../shared/formatters'
@@ -119,7 +119,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
         {loading ? (
           <div className="meter-readings-loading-row" role="row">
             <span role="cell">
-              <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем гаражи и показания" rows={5} columns={6} />
+              <TableLoadingState label="Загружаем гаражи и показания" />
             </span>
           </div>
         ) : garages.length > 0 ? garages.map((garage) => (

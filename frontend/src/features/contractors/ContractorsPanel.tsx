@@ -7,7 +7,7 @@ import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/fina
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
@@ -1848,7 +1848,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
               </div>
             )) : null}
-            {contractorPageLoading.garages ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем гаражи" rows={6} columns={7} /> : null}
+            {contractorPageLoading.garages ? <TableLoadingState className="table-loading-state--compact" label="Загружаем гаражи" /> : null}
             {!contractorPageLoading.garages && visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">{showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
@@ -1922,7 +1922,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </div>
               )
             }) : null}
-            {contractorPageLoading.suppliers ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем поставщиков" rows={6} columns={7} /> : null}
+            {contractorPageLoading.suppliers ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поставщиков" /> : null}
             {!contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">{showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
@@ -1992,7 +1992,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                 </div>
               )) : null}
-              {contractorPageLoading.staff ? <LoadingSkeleton className="loading-skeleton--compact loading-skeleton--table-row" label="Загружаем персонал" rows={6} columns={4} /> : null}
+              {contractorPageLoading.staff ? <TableLoadingState className="table-loading-state--compact" label="Загружаем персонал" /> : null}
               {!contractorPageLoading.staff && visibleStaff.length === 0 ? (
                 <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                   <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
