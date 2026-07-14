@@ -1601,8 +1601,8 @@ h1 {
   max-height: min(860px, calc(100dvh - 48px));
 }
 
-.contractors-tariff-dialog {
-  width: min(560px, 100%);
+.detail-dialog.contractors-tariff-dialog {
+  width: min(1120px, calc(100vw - 48px));
 }
 
 .contractors-tariff-dialog .detail-dialog-header h3 {
@@ -1612,6 +1612,18 @@ h1 {
 
 .contractors-modal-form {
   gap: 14px;
+}
+
+.contractors-tariff-dialog .contractors-service-period-grid--catalogs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contractors-tariff-dialog .contractors-service-period-grid--schedule {
+  grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);
+}
+
+.contractors-tariff-dialog .contractors-inline-field--date .select-control {
+  flex: 1 1 auto;
 }
 
 .contractors-dialog--garage .contractors-modal-form {
@@ -6989,6 +7001,8 @@ button.operation-row:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .contractors-tariff-dialog .contractors-service-period-grid--catalogs,
+  .contractors-tariff-dialog .contractors-service-period-grid--schedule,
   .contractors-service-period-grid,
   .contractors-service-flags {
     grid-template-columns: 1fr;

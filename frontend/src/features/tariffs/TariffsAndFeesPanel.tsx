@@ -16,6 +16,7 @@ import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInp
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
 import { createClientPage } from '../../shared/pagination'
+import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getCompatibleRegularTariffs } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
@@ -2347,57 +2348,46 @@ function AddServicePrototypeDialog({
           </label>
           {isRegular ? (
             <>
-              <div className="contractors-service-period-grid">
+              <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
                 <FormField label="Вид начисления">
-                  <select
+                  <SelectControl
                     aria-label="Вид начисления регулярной услуги"
                     value={incomeTypeId}
-                    onChange={(event) => {
-                      const nextIncomeTypeId = event.target.value
+                    options={incomeTypes.length > 0
+                      ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
+                      : [{ value: '', label: 'Нет видов поступлений' }]}
+                    onChange={(nextIncomeTypeId) => {
                       setIncomeTypeId(nextIncomeTypeId)
                       setTariffId(chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs))
                       setError(null)
                     }}
-                  >
-                    {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
-                      <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
-                    )) : <option value="">Нет видов поступлений</option>}
-                  </select>
+                  />
                 </FormField>
                 <FormField label="Тариф">
-                  <select
+                  <SelectControl
                     aria-label="Тариф регулярной услуги"
                     value={tariffId}
-                    onChange={(event) => {
-                      setTariffId(event.target.value)
+                    options={compatibleTariffs.length > 0
+                      ? compatibleTariffs.map((tariff) => ({ value: tariff.id, label: tariff.name }))
+                      : [{ value: '', label: 'Нет совместимых тарифов' }]}
+                    onChange={(nextTariffId) => {
+                      setTariffId(nextTariffId)
                       setError(null)
                     }}
-                  >
-                    {compatibleTariffs.length > 0 ? compatibleTariffs.map((tariff) => (
-                      <option key={tariff.id} value={tariff.id}>{tariff.name}</option>
-                    )) : <option value="">Нет совместимых тарифов</option>}
-                  </select>
+                  />
                 </FormField>
               </div>
-              <div className="contractors-service-period-grid">
+              <div className="contractors-service-period-grid contractors-service-period-grid--schedule">
                 <FormField label="Периодичность">
                   <input aria-label="Периодичность" inputMode="numeric" value={periodicityMonths} onChange={(event) => setPeriodicityMonths(event.target.value)} />
                 </FormField>
                 <FormField label="Учитывать платеж с">
-                  <select aria-label="Учитывать платеж с" value={accrualStartMonth} onChange={(event) => setAccrualStartMonth(event.target.value)}>
-                    {contractorTariffMonthOptions.map((month) => (
-                      <option key={month.value} value={month.value}>{month.label}</option>
-                    ))}
-                  </select>
+                  <SelectControl aria-label="Учитывать платеж с" value={accrualStartMonth} options={contractorTariffMonthOptions} onChange={setAccrualStartMonth} />
                 </FormField>
                 <FormField label="Оплатить до">
                   <div className="contractors-inline-field contractors-inline-field--date">
                     <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} onChange={(event) => setPaymentDueDay(event.target.value)} />
-                    <select aria-label="Месяц оплаты" value={paymentDueMonth} onChange={(event) => setPaymentDueMonth(event.target.value)}>
-                      {contractorTariffMonthOptions.map((month) => (
-                        <option key={month.value} value={month.value}>{month.label}</option>
-                      ))}
-                    </select>
+                    <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} onChange={setPaymentDueMonth} />
                   </div>
                 </FormField>
               </div>
