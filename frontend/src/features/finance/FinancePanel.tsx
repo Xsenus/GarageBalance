@@ -689,6 +689,17 @@ export function FinancePanel({
       }))
       setSummary(loadedSummary)
       setFinancePage(activePage)
+      // The working table renders financePage directly. These copies only keep the compact
+      // recent-item previews current after a mutation and cannot replace the paged result.
+      if (section === 'income' || section === 'expense') {
+        setOperations(activePage.items as FinancialOperationDto[])
+      } else if (section === 'accruals') {
+        setAccruals(activePage.items as AccrualDto[])
+      } else if (section === 'supplierAccruals') {
+        setSupplierAccruals(activePage.items as SupplierAccrualDto[])
+      } else {
+        setMeterReadings(activePage.items as MeterReadingDto[])
+      }
       if (loadedMissingMeterReadings) {
         setMissingMeterReadings(loadedMissingMeterReadings)
       }

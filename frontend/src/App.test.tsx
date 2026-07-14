@@ -3634,7 +3634,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
 
-    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+    expect(await within(prototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
     expect(within(prototype).queryByText('Гараж 1 - Иванов Иван')).not.toBeInTheDocument()
     expect(within(prototype).queryByText('Старое демо-начисление')).not.toBeInTheDocument()
     expect(within(prototype).queryByText('Старый демо-платеж')).not.toBeInTheDocument()
